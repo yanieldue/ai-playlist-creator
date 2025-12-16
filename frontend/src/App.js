@@ -1,5 +1,8 @@
 import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import PlaylistGenerator from './components/PlaylistGenerator';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
 import './styles/App.css';
 
 function App() {
@@ -18,7 +21,14 @@ function App() {
 
   return (
     <div className="App">
-      <PlaylistGenerator />
+      <Router>
+        <Routes>
+          <Route path="/" element={<PlaylistGenerator />} />
+          <Route path="/login" element={<PlaylistGenerator />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+        </Routes>
+      </Router>
     </div>
   );
 }

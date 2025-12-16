@@ -36,8 +36,17 @@ db.exec(`
     updated_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    email TEXT PRIMARY KEY,
+    token TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
   CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
+  CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
 `);
 
 // User operations
@@ -135,6 +144,28 @@ const tokenOps = {
 
   // Get all tokens
   getAll: db.prepare(`SELECT * FROM tokens`)
+};
+
+// Password reset token operations
+const resetTokenOps = {
+  // Create or update reset token
+  set: db.prepare(`
+    INSERT INTO password_reset_tokens (email, token, expires_at, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET
+      token = excluded.token,
+      expires_at = excluded.expires_at,
+      created_at = excluded.created_at
+  `),
+
+  // Get reset token by token string
+  getByToken: db.prepare(`SELECT * FROM password_reset_tokens WHERE token = ?`),
+
+  // Delete reset token
+  delete: db.prepare(`DELETE FROM password_reset_tokens WHERE email = ?`),
+
+  // Clean up expired tokens
+  deleteExpired: db.prepare(`DELETE FROM password_reset_tokens WHERE expires_at < ?`)
 };
 
 // High-level API
@@ -266,6 +297,33 @@ class DatabaseService {
       };
     });
     return result;
+  }
+
+  // Password Reset Tokens
+  createResetToken(email, token, expiresAt) {
+    const createdAt = new Date().toISOString();
+    resetTokenOps.set.run(email, token, expiresAt, createdAt);
+  }
+
+  getResetToken(token) {
+    return resetTokenOps.getByToken.get(token);
+  }
+
+  deleteResetToken(email) {
+    resetTokenOps.delete.run(email);
+  }
+
+  cleanExpiredResetTokens() {
+    const now = new Date().toISOString();
+    resetTokenOps.deleteExpired.run(now);
+  }
+
+  updatePassword(email, newPassword) {
+    const updatedAt = new Date().toISOString();
+    const user = this.getUser(email);
+    if (user) {
+      userOps.update.run(newPassword, user.platform, user.userId, updatedAt, email);
+    }
   }
 
   // Close database connection

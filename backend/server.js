@@ -8,6 +8,8 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const { handleCriticalError } = require('./services/errorNotificationService');
 
 dotenv.config();
@@ -62,6 +64,23 @@ const spotifyApi = new SpotifyWebApi({
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
+
+// Configure email transporter
+// For development, use a test account or configure with real SMTP credentials
+let emailTransporter;
+if (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  emailTransporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT || 587,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    }
+  });
+} else {
+  console.log('Email not configured. Password reset emails will be logged to console.');
+}
 
 // Helper function to validate Spotify track URIs
 // Spotify track IDs should be 22 characters of valid base62 characters (0-9, a-z, A-Z)
@@ -472,6 +491,143 @@ app.post('/api/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({
       error: 'Failed to login',
+      details: error.message
+    });
+  }
+});
+
+// Request password reset
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await db.getUser(normalizedEmail);
+
+    // Always return success even if user doesn't exist (security best practice)
+    if (!user) {
+      return res.json({ success: true, message: 'If an account exists with that email, you will receive a password reset link.' });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
+
+    // Save reset token to database
+    await db.createResetToken(normalizedEmail, resetToken, expiresAt);
+
+    // Create reset link
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+
+    // Send email
+    if (emailTransporter) {
+      try {
+        await emailTransporter.sendMail({
+          from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+          to: normalizedEmail,
+          subject: 'Password Reset Request',
+          html: `
+            <h2>Password Reset Request</h2>
+            <p>You requested to reset your password. Click the link below to reset it:</p>
+            <p><a href="${resetLink}">${resetLink}</a></p>
+            <p>This link will expire in 1 hour.</p>
+            <p>If you didn't request this, please ignore this email.</p>
+          `
+        });
+        console.log(`Password reset email sent to ${normalizedEmail}`);
+      } catch (emailError) {
+        console.error('Failed to send email:', emailError);
+        // Log the reset link for development
+        console.log(`Password reset link for ${normalizedEmail}: ${resetLink}`);
+      }
+    } else {
+      // For development without email configured
+      console.log(`Password reset link for ${normalizedEmail}: ${resetLink}`);
+    }
+
+    res.json({ success: true, message: 'If an account exists with that email, you will receive a password reset link.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      error: 'Failed to process password reset request',
+      details: error.message
+    });
+  }
+});
+
+// Verify reset token
+app.get('/api/verify-reset-token/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const resetToken = await db.getResetToken(token);
+
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const now = new Date().toISOString();
+    if (resetToken.expires_at < now) {
+      await db.deleteResetToken(resetToken.email);
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    res.json({ success: true, email: resetToken.email });
+  } catch (error) {
+    console.error('Verify reset token error:', error);
+    res.status(500).json({
+      error: 'Failed to verify reset token',
+      details: error.message
+    });
+  }
+});
+
+// Reset password
+app.post('/api/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
+    const resetToken = await db.getResetToken(token);
+
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const now = new Date().toISOString();
+    if (resetToken.expires_at < now) {
+      await db.deleteResetToken(resetToken.email);
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    // Update password
+    await db.updatePassword(resetToken.email, newPassword);
+
+    // Delete the used reset token
+    await db.deleteResetToken(resetToken.email);
+
+    // Update in-memory cache
+    const user = await db.getUser(resetToken.email);
+    if (user) {
+      registeredUsers.set(resetToken.email, user);
+    }
+
+    res.json({ success: true, message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      error: 'Failed to reset password',
       details: error.message
     });
   }

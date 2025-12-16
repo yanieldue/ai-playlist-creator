@@ -240,6 +240,17 @@ const SignupForm = ({ onSignupComplete }) => {
               >
                 {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
               </button>
+
+              {isLoginMode && (
+                <button
+                  onClick={() => window.location.href = '/forgot-password'}
+                  className="text-toggle-button"
+                  type="button"
+                  style={{ marginTop: '8px', fontSize: '0.9rem', color: '#666' }}
+                >
+                  Forgot password?
+                </button>
+              )}
             </>
           )}
 

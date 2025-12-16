@@ -58,8 +58,16 @@ async function initializeTables() {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        token TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
+      CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
     `);
     console.log('PostgreSQL tables initialized');
   } finally {
@@ -261,6 +269,39 @@ class DatabaseService {
       };
     });
     return tokens;
+  }
+
+  // Password Reset Tokens
+  async createResetToken(email, token, expiresAt) {
+    await pool.query(`
+      INSERT INTO password_reset_tokens (email, token, expires_at, created_at)
+      VALUES ($1, $2, $3, NOW())
+      ON CONFLICT (email) DO UPDATE SET
+        token = $2,
+        expires_at = $3,
+        created_at = NOW()
+    `, [email, token, expiresAt]);
+  }
+
+  async getResetToken(token) {
+    const result = await pool.query(`
+      SELECT * FROM password_reset_tokens WHERE token = $1
+    `, [token]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  }
+
+  async deleteResetToken(email) {
+    await pool.query(`DELETE FROM password_reset_tokens WHERE email = $1`, [email]);
+  }
+
+  async cleanExpiredResetTokens() {
+    await pool.query(`DELETE FROM password_reset_tokens WHERE expires_at < NOW()`);
+  }
+
+  async updatePassword(email, newPassword) {
+    await pool.query(`
+      UPDATE users SET password = $1, updated_at = NOW() WHERE email = $2
+    `, [newPassword, email]);
   }
 
   // Close pool
