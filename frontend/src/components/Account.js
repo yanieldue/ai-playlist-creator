@@ -17,6 +17,12 @@ const Account = ({ onBack, showToast }) => {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
 
+  // Fallback toast function if not provided
+  const toast = showToast || ((message, type) => {
+    console.log(`[${type}] ${message}`);
+    alert(message);
+  });
+
   useEffect(() => {
     console.log('Account component mounted');
     const userEmail = localStorage.getItem('userEmail') || '';
@@ -79,7 +85,7 @@ const Account = ({ onBack, showToast }) => {
       localStorage.removeItem('connectingFromAccount');
       // Dispatch custom event to notify other components of platform changes
       window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-      showToast('Spotify connected successfully!', 'success');
+      toast('Spotify connected successfully!', 'success');
     } else {
       // Fetch platform status from backend (only if not handling OAuth callback)
       fetchPlatformStatus();
@@ -150,7 +156,7 @@ const Account = ({ onBack, showToast }) => {
         // Dispatch custom event to notify other components of platform changes
         window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
         const platformName = platform === 'spotify' ? 'Spotify' : 'Apple Music';
-        showToast(`${platformName} disconnected successfully`, 'success');
+        toast(`${platformName} disconnected successfully`, 'success');
       } else {
         // If connecting, trigger OAuth flow
         if (platform === 'spotify') {
@@ -206,7 +212,7 @@ const Account = ({ onBack, showToast }) => {
       localStorage.setItem('userEmail', newEmail);
       setAccountEmail(newEmail);
       closeEditEmailModal();
-      showToast('Email updated successfully', 'success');
+      toast('Email updated successfully', 'success');
     } catch (err) {
       setAccountError(err.response?.data?.error || 'Failed to update email');
     } finally {
@@ -235,7 +241,7 @@ const Account = ({ onBack, showToast }) => {
       setAccountError('');
       await playlistService.updatePassword(currentPassword, newPassword);
       closeEditPasswordModal();
-      showToast('Password updated successfully', 'success');
+      toast('Password updated successfully', 'success');
     } catch (err) {
       setAccountError(err.response?.data?.error || 'Failed to update password');
     } finally {

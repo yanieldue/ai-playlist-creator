@@ -46,10 +46,13 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // In production, reject unknown origins
+    // In production, log and reject unknown origins
+    console.log('CORS blocked origin:', origin);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
