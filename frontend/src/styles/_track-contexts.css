@@ -1,0 +1,207 @@
+/* TRACK CONTEXT MODIFIERS - Context-specific styling for different use cases */
+
+/* ============================================
+   MYPLAYLISTS CONTEXT - Track removal/management
+   ============================================ */
+
+.track-item {
+  display: flex;
+  align-items: center;
+  padding: 8px var(--space-lg);
+  border-radius: 0;
+  margin-bottom: 0;
+  transition: all 0.2s ease;
+  gap: 10px;
+  color: #1c1c1e;
+  background: #f2f2f7;
+}
+
+.track-item:hover {
+  background: #e5e5ea;
+}
+
+.track-item.selected-for-removal {
+  background: #fff5f5;
+  border-color: #ff3b30;
+}
+
+/* MyPlaylists removal context checkbox */
+.track-item .track-checkbox {
+  accent-color: #ff3b30;
+}
+
+/* Dark mode MyPlaylists */
+:root.dark-mode .track-item {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .track-item:hover {
+  background: #424245;
+}
+
+:root.dark-mode .track-item.selected-for-removal {
+  background: rgba(255, 59, 48, 0.1);
+  border-color: #ff3b30;
+}
+
+:root.dark-mode .track-item .track-checkbox {
+  accent-color: #ff3b30;
+}
+
+/* ============================================
+   PLAYLIST GENERATOR CONTEXT - Track selection
+   ============================================ */
+
+.generator-context .track-item {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-radius: 6px;
+  margin-bottom: 0;
+  transition: all 0.2s ease;
+  background: white;
+  gap: 10px;
+}
+
+.generator-context .track-item:hover {
+  background: #e5e5ea;
+}
+
+.generator-context .track-item.selected {
+  background: #e8edff;
+  border-left: 4px solid #fbbf24;
+}
+
+/* Generator selection context checkbox */
+.generator-context .track-checkbox {
+  accent-color: #fbbf24;
+}
+
+/* Dark mode generator context */
+:root.dark-mode .generator-context .track-item {
+  background: #3a3a3c;
+  color: #ffffff;
+}
+
+:root.dark-mode .generator-context .track-item:hover {
+  background: #424245;
+}
+
+:root.dark-mode .generator-context .track-item.selected {
+  background: rgba(251, 191, 36, 0.2);
+  border-left-color: #fbbf24;
+}
+
+:root.dark-mode .generator-context .track-checkbox {
+  accent-color: #fbbf24;
+}
+
+/* ============================================
+   APPLE THEME CONTEXT - Apple-styled tracks
+   ============================================ */
+
+.apple-theme .track-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 0.5px solid #d1d1d6;
+  transition: all 0.2s ease;
+  gap: 10px;
+}
+
+.apple-theme .track-item:last-child {
+  border-bottom: none;
+}
+
+/* Apple theme larger checkbox */
+.apple-theme .track-checkbox {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  border: 2px solid #c4c4c6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  accent-color: #fbbf24;
+  cursor: pointer;
+}
+
+.apple-theme .track-checkbox.selected {
+  background: #fbbf24;
+  border-color: #fbbf24;
+}
+
+.apple-theme .track-checkbox.selected::after {
+  content: '✓';
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* Dark mode Apple theme */
+:root.dark-mode .apple-theme .track-item {
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .apple-theme .track-checkbox {
+  border-color: #8e8e93;
+}
+
+:root.dark-mode .apple-theme .track-checkbox.selected {
+  background: #fbbf24;
+  border-color: #fbbf24;
+}
+
+/* ============================================
+   MODAL CONTEXT - Playlist modal tracks
+   ============================================ */
+
+.modal-context .track-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-radius: 0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background: white;
+}
+
+.modal-context .track-item:hover {
+  background: #e5e5ea;
+}
+
+.modal-context .track-item.selected {
+  background: #e8edff;
+  border-left: 4px solid #fbbf24;
+}
+
+/* Modal context image sizing */
+.modal-context .track-image {
+  width: 40px;
+  height: 40px;
+}
+
+/* Modal context checkbox */
+.modal-context .track-checkbox {
+  accent-color: #fbbf24;
+}
+
+/* Dark mode modal context */
+:root.dark-mode .modal-context .track-item {
+  background: #3a3a3c;
+  color: #ffffff;
+}
+
+:root.dark-mode .modal-context .track-item:hover {
+  background: #424245;
+}
+
+:root.dark-mode .modal-context .track-item.selected {
+  background: rgba(251, 191, 36, 0.2);
+  border-left-color: #fbbf24;
+}
+
+:root.dark-mode .modal-context .track-checkbox {
+  accent-color: #fbbf24;
+}

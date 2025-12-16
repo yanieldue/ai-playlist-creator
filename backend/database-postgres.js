@@ -1,0 +1,275 @@
+const { Pool } = require('pg');
+
+// Database connection pool
+let pool;
+
+// Initialize connection pool
+function initializePool() {
+  if (pool) return pool;
+
+  const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+  if (!connectionString) {
+    console.error('WARNING: No DATABASE_URL or POSTGRES_URL environment variable found.');
+    console.error('For local development, you can use SQLite (database.js) or set up a local PostgreSQL database.');
+    throw new Error('PostgreSQL connection string not configured');
+  }
+
+  pool = new Pool({
+    connectionString,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle PostgreSQL client', err);
+  });
+
+  return pool;
+}
+
+// Initialize tables
+async function initializeTables() {
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY,
+        password TEXT NOT NULL,
+        platform TEXT,
+        user_id TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS connected_platforms (
+        email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        spotify BOOLEAN DEFAULT FALSE,
+        apple BOOLEAN DEFAULT FALSE
+      );
+
+      CREATE TABLE IF NOT EXISTS tokens (
+        user_id TEXT PRIMARY KEY,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        developer_token TEXT,
+        platform TEXT,
+        email TEXT,
+        authorized_at TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
+      CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
+    `);
+    console.log('PostgreSQL tables initialized');
+  } finally {
+    client.release();
+  }
+}
+
+// High-level API
+class DatabaseService {
+  async initialize() {
+    pool = initializePool();
+    await initializeTables();
+  }
+
+  // Users
+  async getUser(email) {
+    const result = await pool.query(`
+      SELECT u.email, u.password, u.platform, u.user_id as "userId",
+             u.created_at as "createdAt", u.updated_at as "updatedAt",
+             COALESCE(cp.spotify, false) as spotify,
+             COALESCE(cp.apple, false) as apple
+      FROM users u
+      LEFT JOIN connected_platforms cp ON u.email = cp.email
+      WHERE u.email = $1
+    `, [email]);
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      email: row.email,
+      password: row.password,
+      platform: row.platform,
+      userId: row.userId,
+      createdAt: row.createdAt,
+      connectedPlatforms: {
+        spotify: row.spotify,
+        apple: row.apple
+      }
+    };
+  }
+
+  async createUser(email, password, platform, userId = null) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(`
+        INSERT INTO users (email, password, platform, user_id, created_at)
+        VALUES ($1, $2, $3, $4, NOW())
+      `, [email, password, platform, userId]);
+
+      await client.query(`
+        INSERT INTO connected_platforms (email, spotify, apple)
+        VALUES ($1, false, false)
+      `, [email]);
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async updateUser(email, data) {
+    await pool.query(`
+      UPDATE users
+      SET password = $1, platform = $2, user_id = $3, updated_at = NOW()
+      WHERE email = $4
+    `, [data.password, data.platform, data.userId, email]);
+  }
+
+  async updateUserId(email, userId) {
+    await pool.query(`
+      UPDATE users SET user_id = $1, updated_at = NOW() WHERE email = $2
+    `, [userId, email]);
+  }
+
+  async deleteUser(email) {
+    await pool.query(`DELETE FROM users WHERE email = $1`, [email]);
+  }
+
+  async getAllUsers() {
+    const result = await pool.query(`
+      SELECT u.email, u.password, u.platform, u.user_id as "userId",
+             u.created_at as "createdAt",
+             COALESCE(cp.spotify, false) as spotify,
+             COALESCE(cp.apple, false) as apple
+      FROM users u
+      LEFT JOIN connected_platforms cp ON u.email = cp.email
+    `);
+
+    return result.rows.map(row => ({
+      email: row.email,
+      password: row.password,
+      platform: row.platform,
+      userId: row.userId,
+      createdAt: row.createdAt,
+      connectedPlatforms: {
+        spotify: row.spotify,
+        apple: row.apple
+      }
+    }));
+  }
+
+  // Connected Platforms
+  async setConnectedPlatform(email, platform, connected) {
+    const column = platform === 'spotify' ? 'spotify' : 'apple';
+    await pool.query(`
+      INSERT INTO connected_platforms (email, ${column})
+      VALUES ($1, $2)
+      ON CONFLICT (email) DO UPDATE SET ${column} = $2
+    `, [email, connected]);
+  }
+
+  async setConnectedPlatforms(email, spotify, apple) {
+    await pool.query(`
+      INSERT INTO connected_platforms (email, spotify, apple)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (email) DO UPDATE SET
+        spotify = $2,
+        apple = $3
+    `, [email, spotify, apple]);
+  }
+
+  // Tokens
+  async getToken(userId) {
+    const result = await pool.query(`
+      SELECT user_id, access_token, refresh_token, developer_token,
+             platform, email, authorized_at
+      FROM tokens
+      WHERE user_id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    return {
+      access_token: row.access_token,
+      refresh_token: row.refresh_token,
+      developer_token: row.developer_token,
+      platform: row.platform,
+      email: row.email,
+      authorized_at: row.authorized_at
+    };
+  }
+
+  async setToken(userId, tokenData) {
+    await pool.query(`
+      INSERT INTO tokens (user_id, access_token, refresh_token, developer_token,
+                         platform, email, authorized_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        access_token = $2,
+        refresh_token = COALESCE($3, tokens.refresh_token),
+        developer_token = COALESCE($4, tokens.developer_token),
+        platform = COALESCE($5, tokens.platform),
+        email = COALESCE($6, tokens.email),
+        updated_at = NOW()
+    `, [
+      userId,
+      tokenData.access_token,
+      tokenData.refresh_token || null,
+      tokenData.developer_token || null,
+      tokenData.platform || null,
+      tokenData.email || null,
+      tokenData.authorized_at || new Date().toISOString()
+    ]);
+  }
+
+  async updateAccessToken(userId, accessToken) {
+    await pool.query(`
+      UPDATE tokens SET access_token = $1, updated_at = NOW() WHERE user_id = $2
+    `, [accessToken, userId]);
+  }
+
+  async deleteToken(userId) {
+    await pool.query(`DELETE FROM tokens WHERE user_id = $1`, [userId]);
+  }
+
+  async getAllTokens() {
+    const result = await pool.query(`
+      SELECT user_id, access_token, refresh_token, developer_token,
+             platform, email, authorized_at
+      FROM tokens
+    `);
+
+    const tokens = {};
+    result.rows.forEach(row => {
+      tokens[row.user_id] = {
+        access_token: row.access_token,
+        refresh_token: row.refresh_token,
+        developer_token: row.developer_token,
+        platform: row.platform,
+        email: row.email,
+        authorized_at: row.authorized_at
+      };
+    });
+    return tokens;
+  }
+
+  // Close pool
+  async close() {
+    if (pool) {
+      await pool.end();
+      pool = null;
+    }
+  }
+}
+
+module.exports = new DatabaseService();

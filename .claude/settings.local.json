@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-expo-app@latest:*)",
+      "Bash(curl:*)",
+      "Bash(done)",
+      "Bash(pkill:*)",
+      "Bash(npm run build:*)",
+      "Bash(lsof:*)",
+      "Bash(npm start)",
+      "Bash(find:*)",
+      "Bash(node:*)",
+      "Bash(xargs kill:*)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)",
+      "Bash(test:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

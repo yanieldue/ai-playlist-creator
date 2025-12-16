@@ -1,0 +1,5 @@
+node_modules/
+.env
+.tokens.json
+.playlists.json
+.users.json

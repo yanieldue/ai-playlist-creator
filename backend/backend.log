@@ -1,0 +1,16 @@
+
+> ai-playlist-creator-backend@1.0.0 start
+> node server.js
+
+Loaded 3 user sessions from file
+Loaded playlists for 3 users from file
+Loaded 32 registered users from file
+Loaded reactions for 0 playlists from file
+Loaded saved playlists for 1 users from file
+🎵 AI Playlist Creator Backend running on port 3001
+📝 Make sure to set up your .env file with API credentials
+Created user account without platform connection: { email: '1312@yahoo.com', userId: 'local_1764548550045' }
+📱 Signup request received: { email: 'now@yahoo.com', platform: 'spotify' }
+Created user account without platform connection: { email: 'now@yahoo.com', userId: 'local_1764548622058' }
+📱 Signup request received: { email: 'now2@yahoo.com', platform: 'spotify' }
+Created user account without platform connection: { email: 'now2@yahoo.com', userId: 'local_1764548758576' }

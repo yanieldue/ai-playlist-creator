@@ -1,0 +1,601 @@
+/* Edit Options Modal (iOS-style) */
+.edit-options-modal {
+  position: relative;
+  background: #f7fafc;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 500px;
+  min-width: 280px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: fadeIn 0.2s ease-out;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.edit-options-header {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 0;
+  z-index: 10;
+}
+
+.playlist-icon {
+  width: 60px;
+  height: 60px;
+  background: #2d3748;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  margin-bottom: var(--space-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.edit-options-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: var(--space-md) 0 0 0;
+  text-align: center;
+}
+
+.edit-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+  padding: var(--space-lg);
+}
+
+/* Modal Sections */
+.modal-section {
+  padding: var(--space-lg);
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-section:first-of-type {
+  border-top: none;
+  padding-top: var(--space-md);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.section-description {
+  font-size: 13px;
+  color: #718096;
+  margin: 0 0 var(--space-lg) 0;
+  line-height: 1.4;
+}
+
+/* Dropdown Section */
+.modal-section.dropdown-section {
+  padding: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-section.dropdown-section:first-of-type {
+  border-top: none;
+}
+
+.dropdown-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  background: none;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+}
+
+.dropdown-header:hover {
+  background: #f7fafc;
+}
+
+.dropdown-header:active {
+  background: #edf2f7;
+}
+
+.dropdown-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0;
+}
+
+.dropdown-arrow {
+  font-size: 12px;
+  color: #718096;
+  transition: transform 0.2s ease;
+  display: inline-block;
+  margin-left: var(--space-md);
+}
+
+.dropdown-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.dropdown-content {
+  padding: var(--space-xs) var(--space-md) var(--space-md) var(--space-md);
+  border-top: 1px solid #e2e8f0;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Remove gap between refresh mode options */
+.dropdown-content .form-group {
+  margin-bottom: var(--space-sm);
+}
+
+.dropdown-content .form-group:has(.refresh-option-item) {
+  gap: 0;
+  margin-bottom: 0;
+}
+
+/* Append Songs - First Option */
+.dropdown-content .form-group:nth-child(1):has(.refresh-option-item) {
+  margin-bottom: 0;
+}
+
+.dropdown-content .form-group:nth-child(1):has(.refresh-option-item) .refresh-option-item {
+  border-radius: 12px 12px 0 0;
+  margin-bottom: 0;
+}
+
+/* Replace All Songs - Second Option */
+.dropdown-content .form-group:nth-child(2):has(.refresh-option-item) {
+  margin-bottom: var(--space-lg);
+}
+
+.dropdown-content .form-group:nth-child(2):has(.refresh-option-item) .refresh-option-item {
+  border-radius: 0 0 12px 12px;
+  border-top: 1px solid #e2e8f0;
+  margin-bottom: 0;
+}
+
+/* New Artists Only - Fourth Option (standalone with rounded corners) */
+.dropdown-content .form-group:nth-child(4):has(.refresh-option-item) {
+  margin-bottom: 0;
+}
+
+.dropdown-content .form-group:nth-child(4):has(.refresh-option-item) .refresh-option-item {
+  border-radius: 12px;
+  margin-bottom: 0;
+}
+
+.dropdown-section .section-description {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+/* Form controls within sections */
+.modal-section select,
+.modal-section input[type="number"],
+.modal-section input[type="checkbox"] {
+  margin-bottom: var(--space-xs);
+}
+
+.modal-section label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-xs);
+}
+
+.form-help-text {
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-sm);
+  font-size: 13px;
+  color: #8e8e93;
+  line-height: 1.4;
+}
+
+.section-description {
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.edit-option-item {
+  background: white;
+  border: none;
+  border-radius: 12px;
+  padding: var(--space-lg) var(--space-xl);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 16px;
+  color: #1a202c;
+  font-weight: 500;
+  width: 100%;
+  text-align: left;
+}
+
+.edit-option-item:hover {
+  background: #f0f0f0;
+  transform: scale(1.02);
+}
+
+.edit-option-item:active {
+  transform: scale(0.98);
+}
+
+.option-icon {
+  width: 32px;
+  height: 32px;
+  background: #f7fafc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.option-text {
+  flex: 1;
+}
+
+.option-arrow {
+  color: #a0aec0;
+  font-size: 24px;
+  font-weight: 300;
+}
+
+.edit-options-cancel {
+  width: calc(100% - calc(2 * var(--space-xl)));
+  background: white;
+  border: none;
+  border-radius: 12px;
+  padding: var(--space-lg);
+  margin: 0 var(--space-xl) var(--space-xl) var(--space-xl);
+  font-size: 16px;
+  font-weight: 600;
+  color: #e53e3e;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.edit-options-cancel:hover {
+  background: #fee;
+}
+
+.edit-options-cancel:active {
+  transform: scale(0.98);
+}
+
+/* Modal Footer with Three Buttons */
+.modal-footer {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-lg) var(--space-lg);
+  border-top: 1px solid #e2e8f0;
+}
+
+.cancel-button {
+  flex: 1;
+  padding: var(--space-md) var(--space-lg);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #718096;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+  background: #f7fafc;
+  border-color: #cbd5e0;
+}
+
+.cancel-button:active {
+  transform: scale(0.98);
+}
+
+.save-settings-button {
+  flex: 1;
+  padding: var(--space-md) var(--space-lg);
+  background: #fbbf24;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #78350f;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.save-settings-button:hover:not(:disabled) {
+  background: #f59e0b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.save-settings-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.save-settings-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-confirm-button {
+  flex: 1;
+  padding: var(--space-md) var(--space-lg);
+  background: #fbbf24;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #78350f;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refresh-confirm-button:hover:not(:disabled) {
+  background: #f59e0b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+}
+
+.refresh-confirm-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.refresh-confirm-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Mobile responsive for edit options modal */
+@media (max-width: 768px) {
+  .edit-options-modal {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px;
+  }
+
+  .edit-options-header {
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .edit-options-header h3 {
+    font-size: 18px;
+  }
+
+  .edit-options-list {
+    padding: var(--space-md);
+  }
+
+  .edit-option-item {
+    padding: var(--space-md) var(--space-lg);
+    font-size: 15px;
+  }
+
+  .edit-options-cancel {
+    width: calc(100% - calc(2 * var(--space-md)));
+    margin: 0 var(--space-md) var(--space-md) var(--space-md);
+  }
+
+  .playlist-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+  }
+
+  /* Mobile Modal Sections */
+  .modal-section {
+    padding: var(--space-md);
+  }
+
+  .section-title {
+    font-size: 15px;
+  }
+
+  .section-description {
+    font-size: 12px;
+  }
+
+  /* Mobile Dropdown */
+  .dropdown-header {
+    padding: var(--space-md);
+  }
+
+  .dropdown-title {
+    font-size: 15px;
+  }
+
+  .dropdown-content {
+    padding: 0 var(--space-md) var(--space-md) var(--space-md);
+  }
+
+  /* Mobile Modal Footer */
+  .modal-footer {
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md) var(--space-md) var(--space-md);
+  }
+
+  .cancel-button,
+  .save-settings-button,
+  .refresh-confirm-button {
+    width: 100%;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 14px;
+  }
+}
+
+/* Dark mode support */
+:root.dark-mode .edit-options-modal {
+  background: #1c1c1e;
+}
+
+:root.dark-mode .edit-options-header {
+  background: #2c2c2e;
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .edit-options-title {
+  color: #ffffff;
+}
+
+:root.dark-mode .playlist-icon {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .edit-option-item {
+  background: #2c2c2e;
+  color: #ffffff;
+}
+
+:root.dark-mode .edit-option-item:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .edit-option-item:active {
+  background: #424245;
+}
+
+:root.dark-mode .option-icon {
+  background: #3a3a3c;
+  color: #8e8e93;
+}
+
+:root.dark-mode .option-text {
+  color: #ffffff;
+}
+
+:root.dark-mode .option-arrow {
+  color: #8e8e93;
+}
+
+:root.dark-mode .edit-options-cancel {
+  background: #2c2c2e;
+  color: #ff3b30;
+}
+
+:root.dark-mode .edit-options-cancel:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .edit-options-cancel:active {
+  background: #424245;
+}
+
+/* Dark mode - Modal Sections */
+:root.dark-mode .modal-section {
+  border-top-color: #424245;
+}
+
+:root.dark-mode .section-title {
+  color: #ffffff;
+}
+
+:root.dark-mode .section-description {
+  color: #a0aec0;
+}
+
+/* Dark mode - Dropdown */
+:root.dark-mode .dropdown-header {
+  color: #ffffff;
+}
+
+:root.dark-mode .dropdown-header:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .dropdown-header:active {
+  background: #424245;
+}
+
+:root.dark-mode .dropdown-title {
+  color: #ffffff;
+}
+
+:root.dark-mode .dropdown-arrow {
+  color: #8e8e93;
+}
+
+:root.dark-mode .dropdown-content {
+  border-top-color: #424245;
+}
+
+/* Dark mode - Modal Footer */
+:root.dark-mode .modal-footer {
+  border-top-color: #424245;
+}
+
+:root.dark-mode .cancel-button {
+  background: #2c2c2e;
+  border-color: #424245;
+  color: #a0aec0;
+}
+
+:root.dark-mode .cancel-button:hover {
+  background: #3a3a3c;
+  border-color: #424245;
+}
+
+:root.dark-mode .cancel-button:active {
+  background: #424245;
+}
+
+:root.dark-mode .save-settings-button {
+  background: #fbbf24;
+  color: #78350f;
+}
+
+:root.dark-mode .save-settings-button:hover:not(:disabled) {
+  background: #f59e0b;
+}
+
+:root.dark-mode .refresh-confirm-button {
+  background: #fbbf24;
+  color: #78350f;
+}
+
+:root.dark-mode .refresh-confirm-button:hover:not(:disabled) {
+  background: #f59e0b;
+}
