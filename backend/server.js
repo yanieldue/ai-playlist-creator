@@ -2402,6 +2402,8 @@ app.post('/api/create-playlist', async (req, res) => {
       isPublic: isPublic !== undefined ? isPublic : true,
       originalPrompt: prompt,
       refinementInstructions: [], // Initialize empty array for refinements
+      excludedSongs: [], // Track individual songs user removed (format: "trackId")
+      excludedArtists: [], // Track artists user doesn't want (auto-populated when all songs from artist removed)
       lastUpdated: null,
       nextUpdate: updateFrequency && updateFrequency !== 'never' ? calculateNextUpdate(updateFrequency, playlistData.body.id) : null,
       tracks: []
@@ -2958,6 +2960,119 @@ app.post('/api/playlists/:playlistId/refine', async (req, res) => {
     console.error('Error updating refinement instructions:', error);
     res.status(500).json({
       error: 'Failed to update refinement instructions',
+      details: error.message
+    });
+  }
+});
+
+// Exclude a song from playlist (immediate removal + learning)
+app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { userId, trackId, trackUri, artistName } = req.body;
+
+    if (!userId || !trackId) {
+      return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
+    }
+
+    // Get user's playlists
+    const userPlaylistsArray = userPlaylists.get(userId) || [];
+    const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    if (!playlist) {
+      return res.status(404).json({ error: 'Playlist not found' });
+    }
+
+    // Initialize exclusion arrays if they don't exist
+    if (!playlist.excludedSongs) playlist.excludedSongs = [];
+    if (!playlist.excludedArtists) playlist.excludedArtists = [];
+    if (!playlist.tracks) playlist.tracks = [];
+
+    // Add to excluded songs list (store trackId for permanent exclusion)
+    if (!playlist.excludedSongs.includes(trackId)) {
+      playlist.excludedSongs.push(trackId);
+      console.log(`[EXCLUDE] Added song to exclusion list: ${trackId}`);
+    }
+
+    // Remove from current playlist tracks
+    const trackIndex = playlist.tracks.findIndex(t => t.id === trackId);
+    if (trackIndex > -1) {
+      playlist.tracks.splice(trackIndex, 1);
+      console.log(`[EXCLUDE] Removed song from playlist tracks`);
+    }
+
+    // Remove from trackUris array
+    if (trackUri && playlist.trackUris) {
+      const uriIndex = playlist.trackUris.indexOf(trackUri);
+      if (uriIndex > -1) {
+        playlist.trackUris.splice(uriIndex, 1);
+        playlist.trackCount = playlist.trackUris.length;
+      }
+    }
+
+    // Smart artist exclusion: if user has excluded multiple songs from same artist, auto-exclude the artist
+    if (artistName) {
+      const artistLower = artistName.toLowerCase();
+      const songsFromArtistExcluded = playlist.excludedSongs.filter(songId => {
+        // Check if this excluded song is from the same artist
+        const track = playlist.tracks.find(t => t.id === songId);
+        return track && track.artists && track.artists.some(a => a.name.toLowerCase() === artistLower);
+      }).length;
+
+      // If user excluded 3+ songs from same artist, auto-exclude the artist
+      if (songsFromArtistExcluded >= 3 && !playlist.excludedArtists.some(a => a.toLowerCase() === artistLower)) {
+        playlist.excludedArtists.push(artistName);
+        console.log(`[EXCLUDE] Auto-excluded artist after ${songsFromArtistExcluded} song exclusions: ${artistName}`);
+      }
+    }
+
+    // Save changes
+    userPlaylists.set(userId, userPlaylistsArray);
+    savePlaylists();
+
+    // Also remove from Spotify if the playlist exists there
+    try {
+      const tokens = await getUserTokens(userId);
+      if (tokens && trackUri) {
+        const userSpotifyApi = new SpotifyWebApi({
+          clientId: process.env.SPOTIFY_CLIENT_ID,
+          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+        });
+        userSpotifyApi.setAccessToken(tokens.access_token);
+        userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+        // Refresh token if needed
+        try {
+          const refreshData = await userSpotifyApi.refreshAccessToken();
+          userSpotifyApi.setAccessToken(refreshData.body.access_token);
+          tokens.access_token = refreshData.body.access_token;
+          userTokens.set(userId, tokens);
+          await db.updateAccessToken(userId, refreshData.body.access_token);
+        } catch (refreshError) {
+          console.log('Token refresh not needed:', refreshError.message);
+        }
+
+        // Remove track from Spotify playlist
+        await userSpotifyApi.removeTracksFromPlaylist(playlistId, [{ uri: trackUri }]);
+        console.log(`[EXCLUDE] Removed track from Spotify playlist`);
+      }
+    } catch (spotifyError) {
+      console.error('Error removing from Spotify (non-critical):', spotifyError.message);
+      // Don't fail the request if Spotify removal fails
+    }
+
+    res.json({
+      success: true,
+      excludedSongs: playlist.excludedSongs,
+      excludedArtists: playlist.excludedArtists,
+      remainingTracks: playlist.tracks.length
+    });
+
+  } catch (error) {
+    console.error('Error excluding song:', error);
+    res.status(500).json({
+      error: 'Failed to exclude song',
       details: error.message
     });
   }
@@ -3624,6 +3739,12 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                     let excludedArtists = [];
                     const currentYear = new Date().getFullYear();
 
+                    // Add explicitly excluded artists from user feedback
+                    if (playlist.excludedArtists && playlist.excludedArtists.length > 0) {
+                      excludedArtists = [...playlist.excludedArtists.map(a => a.toLowerCase())];
+                      console.log(`[AUTO-UPDATE] User has excluded ${excludedArtists.length} artists via feedback: ${excludedArtists.join(', ')}`);
+                    }
+
                     // Helper function to parse constraints from text
                     const parseConstraints = (text, source) => {
                       const lowerText = text.toLowerCase();
@@ -3662,10 +3783,18 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                       });
                     }
 
-                    // Filter tracks based on year and artist exclusions
-                    if (minYear !== null || excludedArtists.length > 0) {
-                      const beforeYearFilter = genreFilteredResults.length;
+                    // Filter tracks based on year, artist exclusions, and song exclusions
+                    const excludedSongIds = new Set(playlist.excludedSongs || []);
+
+                    if (minYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0) {
+                      const beforeFilter = genreFilteredResults.length;
                       genreFilteredResults = genreFilteredResults.filter(track => {
+                        // Check if this specific song was excluded
+                        if (excludedSongIds.has(track.id)) {
+                          console.log(`[AUTO-UPDATE] Filtered out excluded song: ${track.name}`);
+                          return false;
+                        }
+
                         // Check year constraint
                         if (minYear !== null && track.album && track.album.release_date) {
                           const releaseYear = parseInt(track.album.release_date.substring(0, 4));
@@ -3686,7 +3815,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
 
                         return true;
                       });
-                      console.log(`[AUTO-UPDATE] Refinement filter: ${beforeYearFilter} tracks -> ${genreFilteredResults.length} tracks after applying constraints`);
+                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (excluded ${excludedSongIds.size} songs, ${excludedArtists.length} artists)`);
                     }
 
                     // Remove duplicates by both URI and normalized track name
