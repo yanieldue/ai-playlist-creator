@@ -570,8 +570,9 @@ app.get('/api/verify-reset-token/:token', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
 
-    const now = new Date().toISOString();
-    if (resetToken.expires_at < now) {
+    const now = new Date();
+    const expiresAt = new Date(resetToken.expires_at);
+    if (expiresAt < now) {
       await db.deleteResetToken(resetToken.email);
       return res.status(400).json({ error: 'Reset token has expired' });
     }
@@ -605,8 +606,9 @@ app.post('/api/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
 
-    const now = new Date().toISOString();
-    if (resetToken.expires_at < now) {
+    const now = new Date();
+    const expiresAt = new Date(resetToken.expires_at);
+    if (expiresAt < now) {
       await db.deleteResetToken(resetToken.email);
       return res.status(400).json({ error: 'Reset token has expired' });
     }
