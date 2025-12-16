@@ -3427,7 +3427,8 @@ DO NOT include any text outside the JSON.`
                       role: 'user',
                       content: `You are a music expert assistant. Based on the following user prompt for a playlist, generate a JSON response with search queries to find songs that match the prompt.
 
-User prompt: "${prompt}"
+Original prompt: "${playlist.originalPrompt || prompt}"
+${playlist.refinementInstructions && playlist.refinementInstructions.length > 0 ? `\nRefinement instructions: ${playlist.refinementInstructions.join('; ')}` : ''}
 
 IMPORTANT GUIDELINES:
 - The primary genre for this playlist is: ${genreData.primaryGenre || 'not specified'}
@@ -3438,6 +3439,9 @@ IMPORTANT GUIDELINES:
 - Mix specific artist searches with broader genre searches to get good variety within the correct genre
 - AVOID queries that would return songs from different genres
 - AVOID vague emotional queries alone - always ground them in the genre/style
+- CRITICAL: If the prompt specifies a time period (e.g., "last 5 years", "2020s"), only suggest recent/contemporary artists who are active in that timeframe
+- CRITICAL: If refinement instructions exclude specific artists, DO NOT include those artists in any search queries
+- Maintain ALL constraints from the original prompt while applying refinements
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -3615,29 +3619,46 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                       }
                     }
 
-                    // Parse refinement instructions to extract year constraints
+                    // Parse BOTH original prompt AND refinement instructions to extract constraints
                     let minYear = null;
                     let excludedArtists = [];
-                    if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
-                      const currentYear = new Date().getFullYear();
-                      playlist.refinementInstructions.forEach(instruction => {
-                        const lowerInstruction = instruction.toLowerCase();
+                    const currentYear = new Date().getFullYear();
 
-                        // Check for "last X years" or "past X years" pattern
-                        const yearsMatch = lowerInstruction.match(/(?:last|past|recent)\s+(\d+)\s+years?/);
-                        if (yearsMatch) {
-                          const years = parseInt(yearsMatch[1]);
-                          minYear = currentYear - years;
-                          console.log(`[AUTO-UPDATE] Year filter: only songs from ${minYear} or later (last ${years} years)`);
+                    // Helper function to parse constraints from text
+                    const parseConstraints = (text, source) => {
+                      const lowerText = text.toLowerCase();
+
+                      // Check for "last X years" or "past X years" pattern
+                      const yearsMatch = lowerText.match(/(?:last|past|recent)\s+(\d+)\s+years?/);
+                      if (yearsMatch) {
+                        const years = parseInt(yearsMatch[1]);
+                        const yearConstraint = currentYear - years;
+                        if (minYear === null || yearConstraint > minYear) {
+                          minYear = yearConstraint;
+                          console.log(`[AUTO-UPDATE] Year filter from ${source}: only songs from ${minYear} or later (last ${years} years)`);
                         }
+                      }
 
-                        // Check for "exclude [artist]" or "exclude [artist] songs" pattern
-                        const excludeMatch = lowerInstruction.match(/exclude\s+(.+?)(?:\s+songs?)?$/i);
-                        if (excludeMatch) {
-                          const artist = excludeMatch[1].trim().toLowerCase();
+                      // Check for "exclude [artist]" or "exclude [artist] songs" pattern
+                      const excludeMatches = lowerText.matchAll(/exclude\s+([^,\.;]+?)(?:\s+(?:songs?|tracks?|music))?(?:[,\.;]|$)/gi);
+                      for (const match of excludeMatches) {
+                        const artist = match[1].trim().toLowerCase();
+                        if (artist && !excludedArtists.includes(artist)) {
                           excludedArtists.push(artist);
-                          console.log(`[AUTO-UPDATE] Excluding artist: ${artist}`);
+                          console.log(`[AUTO-UPDATE] Excluding artist from ${source}: ${artist}`);
                         }
+                      }
+                    };
+
+                    // Parse original prompt for constraints
+                    if (playlist.originalPrompt) {
+                      parseConstraints(playlist.originalPrompt, 'original prompt');
+                    }
+
+                    // Parse refinement instructions for additional constraints
+                    if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
+                      playlist.refinementInstructions.forEach(instruction => {
+                        parseConstraints(instruction, 'refinement');
                       });
                     }
 
