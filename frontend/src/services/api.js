@@ -163,6 +163,17 @@ export const playlistService = {
     return response.data;
   },
 
+  // Exclude a song from playlist (immediate removal + learning)
+  excludeSong: async (playlistId, userId, trackId, trackUri, artistName) => {
+    const response = await api.post(`/api/playlists/${playlistId}/exclude-song`, {
+      userId,
+      trackId,
+      trackUri,
+      artistName,
+    });
+    return response.data;
+  },
+
   // Health check
   healthCheck: async () => {
     const response = await api.get('/api/health');
