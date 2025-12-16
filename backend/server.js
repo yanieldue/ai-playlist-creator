@@ -22,13 +22,30 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-// Allow all origins in development for mobile app support
+// Configure CORS for production and development
 app.use(cors({
   origin: function(origin, callback) {
+    const allowedOrigins = [
+      'https://ai-playlist-creator-7cgm.vercel.app',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000'
+    ];
+
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
-    // Allow all origins in development
-    return callback(null, true);
+
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Allow all other origins in development
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+
+    // In production, reject unknown origins
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true
 }));
