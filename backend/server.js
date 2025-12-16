@@ -177,6 +177,24 @@ function saveTokens() {
   // Database auto-saves, this function is kept for compatibility
 }
 
+// Helper function to get user tokens (from memory or database)
+async function getUserTokens(userId) {
+  // Try to get from memory first
+  let tokens = userTokens.get(userId);
+
+  // If not in memory, try loading from database
+  if (!tokens) {
+    console.log('Tokens not in memory, loading from database for userId:', userId);
+    tokens = await db.getToken(userId);
+    if (tokens) {
+      userTokens.set(userId, tokens);
+      console.log('Loaded tokens from database for userId:', userId);
+    }
+  }
+
+  return tokens;
+}
+
 // Load playlists from file on startup
 function loadPlaylists() {
   try {
@@ -938,10 +956,12 @@ app.get('/callback', async (req, res) => {
 
     // Use Spotify user ID as the userId for consistent identification
     const userId = `spotify_${spotifyUserId}`;
-    userTokens.set(userId, { access_token, refresh_token });
-    saveTokens(); // Persist to file
+    const tokenData = { access_token, refresh_token };
+    userTokens.set(userId, tokenData);
 
-    console.log('User authenticated:', userId);
+    // Save to database
+    await db.setToken(userId, tokenData);
+    console.log('User authenticated and tokens saved to database:', userId);
 
     // The 'state' parameter contains the user's email (from the auth request)
     let userEmail = state || '';
@@ -1075,7 +1095,7 @@ app.get('/api/top-artists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       // Return empty array for users without Spotify connection
       console.log('No tokens found for userId:', userId, '- returning empty artists array');
@@ -1097,7 +1117,8 @@ app.get('/api/top-artists/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1139,7 +1160,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       console.log('No tokens found for userId:', userId, '- returning empty new artists array');
       return res.json({ artists: [] });
@@ -1160,7 +1181,8 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1271,10 +1293,7 @@ app.get('/api/user-profile/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const tokens = userTokens.get(userId);
-
-    // If no tokens, user might be a local-only user (skipped all platforms)
-    // Return a basic profile for them
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       console.log('No tokens found for userId:', userId);
       // Return basic profile for users without platform connection
@@ -1304,7 +1323,8 @@ app.get('/api/user-profile/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1338,7 +1358,7 @@ app.post('/api/search-spotify', async (req, res) => {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -1358,7 +1378,8 @@ app.post('/api/search-spotify', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1416,7 +1437,7 @@ app.post('/api/generate-playlist', async (req, res) => {
     }
     
     // Get user tokens
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens && platform === 'spotify') {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2290,7 +2311,7 @@ app.post('/api/create-playlist', async (req, res) => {
       isPublic
     });
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       console.error('No tokens found for userId:', userId);
       console.log('Available userIds:', Array.from(userTokens.keys()));
@@ -2423,7 +2444,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
     const userPlaylistHistory = userPlaylists.get(userId) || [];
 
     // For each playlist, fetch current track details from Spotify
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2443,7 +2464,8 @@ app.get('/api/playlists/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2497,7 +2519,7 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2517,7 +2539,8 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2553,7 +2576,7 @@ app.post('/api/import-playlist', async (req, res) => {
   try {
     const { userId, playlistId } = req.body;
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2573,7 +2596,8 @@ app.post('/api/import-playlist', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2629,7 +2653,7 @@ app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2649,7 +2673,8 @@ app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2690,7 +2715,7 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       addSample: tracksToAdd?.slice(0, 2)
     });
 
-    const tokens = userTokens.get(userId);
+    const tokens = await getUserTokens(userId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2710,7 +2735,8 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      saveTokens();
+      // Save updated token to database
+      await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2806,7 +2832,7 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
 
     // If isPublic setting changed, update it on Spotify
     if (isPublic !== undefined && isPublic !== userPlaylistHistory[playlistIndex].isPublic) {
-      const tokens = userTokens.get(userId);
+      const tokens = await getUserTokens(userId);
       if (tokens) {
         const userSpotifyApi = new SpotifyWebApi({
           clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -3440,7 +3466,7 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
 
                   // Search Spotify for tracks matching the queries
                   const allSearchResults = [];
-                  const tokens = userTokens.get(userId);
+                  const tokens = await getUserTokens(userId);
 
                   if (tokens) {
                     const userSpotifyApi = new SpotifyWebApi({
@@ -3925,7 +3951,7 @@ Only include tracks that genuinely match "${genreData.primaryGenre}". DO NOT inc
                 }
 
                 // Get user tokens
-                const tokens = userTokens.get(userId);
+                const tokens = await getUserTokens(userId);
                 if (tokens && newTrackUris.length > 0) {
                   const userSpotifyApi = new SpotifyWebApi({
                     clientId: process.env.SPOTIFY_CLIENT_ID,
