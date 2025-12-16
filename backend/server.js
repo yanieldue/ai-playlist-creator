@@ -458,7 +458,9 @@ app.post('/api/login', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const user = registeredUsers.get(normalizedEmail);
+
+    // Get user from database (not cache) to ensure we have latest password
+    const user = await db.getUser(normalizedEmail);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -467,6 +469,9 @@ app.post('/api/login', async (req, res) => {
     if (user.password !== password) { // TODO: Use proper password hashing comparison
       return res.status(401).json({ error: 'Invalid email or password' });
     }
+
+    // Update in-memory cache with latest user data
+    registeredUsers.set(normalizedEmail, user);
 
     // Generate auth token
     const token = Buffer.from(`${normalizedEmail}:${Date.now()}`).toString('base64');
