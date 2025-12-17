@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
@@ -960,11 +961,24 @@ const PlaylistGenerator = () => {
   };
 
   const handleAddMoreSongs = async (retryCount = 0) => {
+    if (!userId) {
+      showToast('Error: Not logged in', 'error');
+      return;
+    }
+
     const maxRetries = 2; // Try up to 3 times total
 
     if (retryCount === 0) {
-      setLoadingMoreSongs(true);
-      setError('');
+      // Use flushSync to force immediate DOM update
+      flushSync(() => {
+        setLoadingMoreSongs(true);
+        setError('');
+      });
+
+      // Use requestAnimationFrame twice to ensure browser has painted
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      // Additional delay to ensure loading state is visible to user
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     try {
@@ -1824,11 +1838,25 @@ const PlaylistGenerator = () => {
                         <h3>Tracks ({generatedPlaylist.tracks.length})</h3>
                         <div className="tracks-header-buttons">
                           <button
-                            onClick={handleAddMoreSongs}
+                            onClick={() => {
+                              console.log('[BUTTON] Clicked, loadingMoreSongs:', loadingMoreSongs);
+                              handleAddMoreSongs();
+                            }}
                             disabled={loadingMoreSongs}
                             className="add-more-songs-button-small"
+                            type="button"
                           >
-                            {loadingMoreSongs ? 'Adding...' : '+ Add More'}
+                            {(() => {
+                              console.log('[BUTTON RENDER] loadingMoreSongs:', loadingMoreSongs);
+                              return loadingMoreSongs ? (
+                                <>
+                                  <span className="spinner-small"></span>
+                                  Adding...
+                                </>
+                              ) : (
+                                '+ Add More'
+                              );
+                            })()}
                           </button>
                         </div>
                       </div>

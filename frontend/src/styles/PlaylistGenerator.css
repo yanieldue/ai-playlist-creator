@@ -2152,6 +2152,23 @@
   cursor: not-allowed;
 }
 
+.spinner-small {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(120, 53, 15, 0.3);
+  border-top-color: #78350f;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 6px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .playlist-modal-tracks-list {
   flex: 1;
   overflow-y: auto;

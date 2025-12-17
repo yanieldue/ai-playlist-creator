@@ -1578,37 +1578,38 @@ app.post('/api/generate-playlist', async (req, res) => {
 
     console.log('Generating playlist for prompt:', prompt);
 
-    // Step 0: Use Claude to extract the genre, style, audio features, AND vibe/context/era from the prompt
+    // Step 0: Use Claude to extract the genre, style, audio features, AND all refinement constraints from the prompt
     const genreExtractionResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 800,
+      max_tokens: 1200,
       messages: [{
         role: 'user',
-        content: `Extract the primary genre, key musical characteristics, specific audio features, mood/atmosphere, era/decade, and cultural context from this playlist prompt.
+        content: `Extract ALL musical characteristics, constraints, and refinement preferences from this playlist prompt.
 
 Prompt: "${prompt}"
 
 Respond ONLY with valid JSON in this format:
 {
-  "primaryGenre": "the main genre (e.g., R&B, hip-hop, pop, rock, etc.) or null if not specified",
-  "subgenre": "specific subgenre if mentioned (e.g., '90s West Coast hip-hop', 'neo-soul', 'indie folk', 'trap') or null",
+  "primaryGenre": "the main genre or null",
+  "subgenre": "specific subgenre or null",
   "secondaryGenres": ["related genres"],
-  "keyCharacteristics": ["soulful", "upbeat", "melancholic", etc.],
-  "style": "The overall vibe/style (e.g., contemporary, vintage, indie, mainstream, etc.)",
-  "atmosphere": ["mood/atmosphere tags - pick from: melancholic, uplifting, aggressive, dreamy, intimate, energetic, relaxed, dark, bright, nostalgic, euphoric, contemplative, romantic, rebellious, peaceful"],
+  "keyCharacteristics": ["soulful", "upbeat", etc.],
+  "style": "overall vibe/style",
+  "atmosphere": ["mood tags"],
   "era": {
-    "decade": "specific decade if mentioned (e.g., '90s', '2000s', '2010s', '2020s') or null",
+    "decade": "specific decade or null",
     "yearRange": { "min": year or null, "max": year or null },
-    "descriptors": ["vintage", "classic", "modern", "contemporary", "retro", "current"] or []
+    "descriptors": ["vintage", "modern", etc.]
   },
   "culturalContext": {
-    "region": "geographic/cultural region if mentioned (e.g., 'West Coast', 'Atlanta', 'UK', 'Latin') or null",
-    "movement": "cultural movement if applicable (e.g., 'golden age hip-hop', 'Britpop', 'emo') or null",
-    "scene": "music scene if mentioned (e.g., 'underground', 'indie', 'mainstream', 'bedroom pop') or null"
+    "region": "geographic region or null",
+    "movement": "cultural movement or null",
+    "scene": "music scene or null",
+    "language": "language preference (e.g., 'English only', 'Spanish', 'Korean', 'any') or null"
   },
   "contextClues": {
-    "useCase": "intended use (e.g., 'focus', 'workout', 'party', 'sleep', 'study', 'driving', 'cooking') or null",
-    "avoidances": ["what NOT to include - e.g., 'no intense songs', 'no sad songs', 'not too aggressive']
+    "useCase": "intended use or null",
+    "avoidances": ["what NOT to include"]
   },
   "audioFeatures": {
     "bpm": { "min": number or null, "max": number or null, "target": number or null },
@@ -1616,26 +1617,96 @@ Respond ONLY with valid JSON in this format:
     "danceability": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
     "valence": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
     "acousticness": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null }
+  },
+  "trackConstraints": {
+    "popularity": { "min": 0-100 or null, "max": 0-100 or null, "preference": "mainstream/underground/balanced" or null },
+    "duration": { "min": seconds or null, "max": seconds or null },
+    "excludeVersions": ["live", "remix", "acoustic", "cover", "instrumental", "edit", "remaster"] or [],
+    "albumDiversity": { "maxPerAlbum": number or null, "preferDeepCuts": boolean, "preferSingles": boolean }
+  },
+  "artistConstraints": {
+    "vocalGender": "male/female/mixed/any" or null,
+    "artistType": "solo/band/any" or null,
+    "excludeFeatures": boolean
+  },
+  "productionStyle": {
+    "preference": "acoustic/produced/lofi/polished/raw" or null,
+    "avoidAutoTune": boolean
+  },
+  "lyricalContent": {
+    "themes": ["love", "party", "introspective", etc.] or [],
+    "avoid": ["breakup", "political", "explicit", etc.] or []
+  },
+  "discoveryBalance": {
+    "preference": "cohesive/varied/unexpected" or null
   }
 }
 
-IMPORTANT GUIDELINES:
-- Subgenre: Be VERY specific if a subgenre is mentioned or implied. "R&B" is too broad - look for "90s R&B", "neo-soul", "alternative R&B", "contemporary R&B"
-- Atmosphere: Select ALL that apply from the list provided. These describe the EMOTIONAL VIBE of the playlist.
-- Era: If user mentions "90s", "from the 2000s", "past 5 years", extract it here. For "past X years", calculate yearRange from current year 2025.
-- Cultural Context: Extract geographic regions (West Coast, Atlanta, UK), movements (golden age, new wave), or scenes (indie, underground)
-- Context Clues - Use Case: Infer from words like "focus", "workout", "party", "chill", "study" - these are CRITICAL for vibe
-- Context Clues - Avoidances: If prompt says "focus" or "study", user wants to AVOID intense/distracting songs even if they normally like them
-- Audio features remain the same as before
+EXTRACTION GUIDELINES:
 
-Audio features guidelines:
-- BPM: Extract specific BPM values (e.g., "100 bpm" = target: 100), ranges (e.g., "90-110 bpm"), or infer from descriptors ("fast" = 140-180, "slow" = 60-90, "moderate" = 90-120)
-- Energy: 0.0 = calm/quiet, 1.0 = intense/loud. Infer from words like "energetic", "chill", "intense", "relaxed"
-- Danceability: 0.0 = not danceable, 1.0 = very danceable. Look for "dance", "party", "club", "workout"
-- Valence: 0.0 = sad/negative, 1.0 = happy/positive. Infer from "happy", "sad", "upbeat", "melancholic"
-- Acousticness: 0.0 = electronic, 1.0 = acoustic. Look for "acoustic", "unplugged", "electronic", "produced"
+ERA & TIME:
+- "90s", "2000s", "2010s": Extract decade
+- "past 5 years", "last 3 years": Calculate from 2025
+- "from 2015 to 2020": Set min/max
+- "only 2020 songs": Set both min and max to same year
 
-Use null or [] for any feature not mentioned or implied.
+POPULARITY:
+- "mainstream hits", "popular songs": min: 70
+- "underground", "indie", "deep cuts": max: 40
+- "hidden gems", "lesser known": max: 50
+- "mix of popular and underground": preference: "balanced"
+
+SONG LENGTH:
+- "short songs", "under 3 minutes": max: 180
+- "longer tracks", "over 5 minutes": min: 300
+- "no songs over 4 minutes": max: 240
+- Convert minutes to seconds
+
+VERSION EXCLUSIONS:
+- "no live", "studio only": exclude ["live"]
+- "no remixes": exclude ["remix"]
+- "no covers": exclude ["cover"]
+- "original versions only": exclude ["live", "remix", "cover", "acoustic", "edit"]
+
+ALBUM DIVERSITY:
+- "no more than 2 per album": maxPerAlbum: 2
+- "album tracks", "deep cuts": preferDeepCuts: true
+- "singles only", "hits only": preferSingles: true
+
+VOCALS:
+- "female vocals", "female artists": vocalGender: "female"
+- "male vocals": vocalGender: "male"
+- "solo artists only": artistType: "solo"
+- "bands only": artistType: "band"
+- "no features", "no collaborations": excludeFeatures: true
+
+PRODUCTION:
+- "acoustic", "unplugged", "stripped": preference: "acoustic"
+- "produced", "polished": preference: "polished"
+- "lo-fi", "bedroom pop": preference: "lofi"
+- "raw", "live feel": preference: "raw"
+- "no auto-tune": avoidAutoTune: true
+
+LYRICAL CONTENT:
+- "uplifting lyrics": themes: ["uplifting"]
+- "love songs": themes: ["love", "romantic"]
+- "party themes": themes: ["party", "celebration"]
+- "no breakup songs": avoid: ["breakup"]
+- "no political": avoid: ["political"]
+
+DISCOVERY:
+- "cohesive", "similar sound": preference: "cohesive"
+- "variety", "eclectic": preference: "varied"
+- "surprise me", "unexpected picks": preference: "unexpected"
+
+AUDIO FEATURES:
+- BPM: "fast" = 140-180, "slow" = 60-90, "moderate" = 90-120
+- Energy: "energetic" = 0.7-1.0, "chill" = 0.0-0.4, "relaxed" = 0.3-0.6
+- Valence: "happy/upbeat" = 0.6-1.0, "sad/melancholic" = 0.0-0.4
+- Danceability: "danceable" = 0.6-1.0, "not danceable" = 0.0-0.4
+- Acousticness: "acoustic" = 0.6-1.0, "electronic" = 0.0-0.3
+
+Use null, [], or false for any feature not mentioned.
 
 DO NOT include any text outside the JSON.`
       }]
@@ -1656,7 +1727,8 @@ DO NOT include any text outside the JSON.`
       culturalContext: {
         region: null,
         movement: null,
-        scene: null
+        scene: null,
+        language: null
       },
       contextClues: {
         useCase: null,
@@ -1668,6 +1740,28 @@ DO NOT include any text outside the JSON.`
         danceability: { min: null, max: null },
         valence: { min: null, max: null },
         acousticness: { min: null, max: null }
+      },
+      trackConstraints: {
+        popularity: { min: null, max: null, preference: null },
+        duration: { min: null, max: null },
+        excludeVersions: [],
+        albumDiversity: { maxPerAlbum: null, preferDeepCuts: false, preferSingles: false }
+      },
+      artistConstraints: {
+        vocalGender: null,
+        artistType: null,
+        excludeFeatures: false
+      },
+      productionStyle: {
+        preference: null,
+        avoidAutoTune: false
+      },
+      lyricalContent: {
+        themes: [],
+        avoid: []
+      },
+      discoveryBalance: {
+        preference: null
       }
     };
     try {
@@ -1966,6 +2060,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
         // Filter tracks based on audio features
         const filteredTracks = [];
+        const albumTrackCount = {}; // Track how many songs per album
         for (let i = 0; i < allTracks.length; i++) {
           const track = allTracks[i];
           const features = audioFeaturesData[i];
@@ -2044,6 +2139,125 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
               if (releaseYear < minYear || releaseYear > maxYear) {
                 console.log(`"${track.name}" filtered out: Release year ${releaseYear} (range: ${minYear}-${maxYear})`);
                 passesFilters = false;
+              }
+            }
+          }
+
+          // Popularity filtering
+          if (genreData.trackConstraints.popularity.min !== null || genreData.trackConstraints.popularity.max !== null) {
+            const minPop = genreData.trackConstraints.popularity.min || 0;
+            const maxPop = genreData.trackConstraints.popularity.max || 100;
+            if (track.popularity < minPop || track.popularity > maxPop) {
+              console.log(`"${track.name}" filtered out: Popularity ${track.popularity} (range: ${minPop}-${maxPop})`);
+              passesFilters = false;
+            }
+          }
+
+          // Duration filtering (convert milliseconds to seconds)
+          if (genreData.trackConstraints.duration.min !== null || genreData.trackConstraints.duration.max !== null) {
+            const durationSec = track.duration_ms / 1000;
+            const minDur = genreData.trackConstraints.duration.min || 0;
+            const maxDur = genreData.trackConstraints.duration.max || 999999;
+            if (durationSec < minDur || durationSec > maxDur) {
+              console.log(`"${track.name}" filtered out: Duration ${Math.floor(durationSec)}s (range: ${minDur}-${maxDur}s)`);
+              passesFilters = false;
+            }
+          }
+
+          // Version exclusions (live, remix, acoustic, etc.)
+          if (genreData.trackConstraints.excludeVersions.length > 0) {
+            const trackNameLower = track.name.toLowerCase();
+            for (const excludeType of genreData.trackConstraints.excludeVersions) {
+              if (trackNameLower.includes(excludeType.toLowerCase())) {
+                console.log(`"${track.name}" filtered out: Excluded version type "${excludeType}"`);
+                passesFilters = false;
+                break;
+              }
+            }
+          }
+
+          // Artist features filtering (remove songs with "feat.", "ft.", "with", etc.)
+          if (genreData.artistConstraints.excludeFeatures) {
+            const trackNameLower = track.name.toLowerCase();
+            if (trackNameLower.includes('feat.') || trackNameLower.includes('ft.') ||
+                trackNameLower.includes(' with ') || trackNameLower.includes('featuring')) {
+              console.log(`"${track.name}" filtered out: Contains features/collaborations`);
+              passesFilters = false;
+            }
+          }
+
+          // Language filtering (based on market/available_markets)
+          if (passesFilters && genreData.culturalContext && genreData.culturalContext.language) {
+            const languagePrefs = genreData.culturalContext.language;
+
+            // Map language preferences to Spotify market codes
+            const languageToMarkets = {
+              'english': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE'],
+              'spanish': ['ES', 'MX', 'AR', 'CO', 'CL', 'PE'],
+              'french': ['FR', 'CA', 'BE', 'CH'],
+              'german': ['DE', 'AT', 'CH'],
+              'italian': ['IT'],
+              'portuguese': ['PT', 'BR'],
+              'japanese': ['JP'],
+              'korean': ['KR'],
+              'chinese': ['CN', 'TW', 'HK']
+            };
+
+            // Check if preference or restriction is specified
+            if (languagePrefs.prefer && languagePrefs.prefer.length > 0) {
+              // Get all preferred markets
+              let preferredMarkets = [];
+              languagePrefs.prefer.forEach(lang => {
+                const markets = languageToMarkets[lang.toLowerCase()];
+                if (markets) preferredMarkets.push(...markets);
+              });
+
+              // Check if track is available in any preferred market
+              if (preferredMarkets.length > 0 && track.available_markets) {
+                const hasPreferredMarket = preferredMarkets.some(market =>
+                  track.available_markets.includes(market)
+                );
+                if (!hasPreferredMarket) {
+                  console.log(`"${track.name}" filtered out: Not available in preferred language markets`);
+                  passesFilters = false;
+                }
+              }
+            }
+
+            if (languagePrefs.exclude && languagePrefs.exclude.length > 0) {
+              // Get all excluded markets
+              let excludedMarkets = [];
+              languagePrefs.exclude.forEach(lang => {
+                const markets = languageToMarkets[lang.toLowerCase()];
+                if (markets) excludedMarkets.push(...markets);
+              });
+
+              // Check if track is ONLY available in excluded markets
+              if (excludedMarkets.length > 0 && track.available_markets) {
+                const onlyInExcludedMarkets = track.available_markets.every(market =>
+                  excludedMarkets.includes(market)
+                );
+                if (onlyInExcludedMarkets) {
+                  console.log(`"${track.name}" filtered out: Only available in excluded language markets`);
+                  passesFilters = false;
+                }
+              }
+            }
+          }
+
+          // Album diversity filtering (limit songs per album)
+          if (passesFilters && genreData.trackConstraints.albumDiversity.maxPerAlbum !== null) {
+            const albumId = track.album?.id;
+            if (albumId) {
+              const currentCount = albumTrackCount[albumId] || 0;
+              const maxPerAlbum = genreData.trackConstraints.albumDiversity.maxPerAlbum;
+
+              if (currentCount >= maxPerAlbum) {
+                console.log(`"${track.name}" filtered out: Album "${track.album.name}" already has ${currentCount} tracks (max: ${maxPerAlbum})`);
+                passesFilters = false;
+              } else {
+                // Track this album
+                albumTrackCount[albumId] = currentCount + 1;
               }
             }
           }
@@ -2228,8 +2442,30 @@ ERA & CULTURAL CONTEXT:
 - Decade: ${genreData.era.decade || 'Not specified'} ${genreData.era.decade ? '← ONLY select songs from this era' : ''}
 - Year Range: ${genreData.era.yearRange.min || genreData.era.yearRange.max ? `${genreData.era.yearRange.min || 'any'} to ${genreData.era.yearRange.max || 'current'}` : 'Not specified'}
 - Cultural Region: ${genreData.culturalContext.region || 'Not specified'} ${genreData.culturalContext.region ? '← Prefer artists from this region' : ''}
+- Language: ${genreData.culturalContext.language?.prefer?.join(', ') || 'Not specified'} ${genreData.culturalContext.language?.exclude?.length ? `(Avoid: ${genreData.culturalContext.language.exclude.join(', ')})` : ''}
 - Movement: ${genreData.culturalContext.movement || 'Not specified'}
 - Scene: ${genreData.culturalContext.scene || 'Not specified'}
+
+TRACK PREFERENCES:
+- Popularity Level: ${genreData.trackConstraints.popularity.preference || (genreData.trackConstraints.popularity.min || genreData.trackConstraints.popularity.max) ? `${genreData.trackConstraints.popularity.min || 0}-${genreData.trackConstraints.popularity.max || 100}` : 'Not specified'} ${genreData.trackConstraints.popularity.preference === 'mainstream' ? '← Prefer well-known hits' : genreData.trackConstraints.popularity.preference === 'underground' ? '← Prefer lesser-known tracks' : ''}
+- Song Length: ${genreData.trackConstraints.duration.min || genreData.trackConstraints.duration.max ? `${genreData.trackConstraints.duration.min || 0}s to ${genreData.trackConstraints.duration.max || 600}s` : 'Not specified'}
+- Album Diversity: ${genreData.trackConstraints.albumDiversity.maxPerAlbum ? `Max ${genreData.trackConstraints.albumDiversity.maxPerAlbum} songs per album` : 'Not specified'} ${genreData.trackConstraints.albumDiversity.preferDeepCuts ? '(Prefer album deep cuts)' : genreData.trackConstraints.albumDiversity.preferSingles ? '(Prefer singles/hits)' : ''}
+
+ARTIST & VOCAL PREFERENCES:
+- Vocal Gender: ${genreData.artistConstraints.vocalGender || 'Not specified'} ${genreData.artistConstraints.vocalGender ? '← IMPORTANT: Prefer artists with this vocal type' : ''}
+- Artist Type: ${genreData.artistConstraints.artistType || 'Not specified'} ${genreData.artistConstraints.artistType ? '← Select based on artist type (solo, band, etc.)' : ''}
+- Features/Collaborations: ${genreData.artistConstraints.excludeFeatures ? 'NO collaborations/featured artists' : 'Allowed'}
+
+PRODUCTION & SOUND:
+- Production Style: ${genreData.productionStyle.preference || 'Not specified'} ${genreData.productionStyle.preference === 'acoustic' ? '← Prefer acoustic/unplugged versions' : genreData.productionStyle.preference === 'electronic' ? '← Prefer electronic production' : genreData.productionStyle.preference === 'live' ? '← Prefer live recordings' : genreData.productionStyle.preference === 'raw' ? '← Prefer raw/lo-fi production' : ''}
+- Auto-Tune: ${genreData.productionStyle.avoidAutoTune ? 'AVOID heavily auto-tuned vocals' : 'No restriction'}
+
+LYRICAL CONTENT:
+- Themes: ${genreData.lyricalContent.themes.join(', ') || 'Not specified'} ${genreData.lyricalContent.themes.length > 0 ? '← Prefer songs about these topics' : ''}
+- Avoid Themes: ${genreData.lyricalContent.avoid.join(', ') || 'Nothing'} ${genreData.lyricalContent.avoid.length > 0 ? '← IMPORTANT: Exclude songs about these topics' : ''}
+
+DISCOVERY BALANCE:
+- ${genreData.discoveryBalance.preference === 'familiar' ? 'PRIORITIZE well-known favorites and popular tracks' : genreData.discoveryBalance.preference === 'discovery' ? 'PRIORITIZE lesser-known artists and hidden gems for discovery' : genreData.discoveryBalance.preference === 'balanced' ? 'MIX both familiar favorites and new discoveries' : 'No specific preference'}
 
 ${hasAudioFeatureFilters ? `AUDIO FEATURES:
 - These songs have already been pre-filtered to match the requested audio characteristics (BPM, energy, danceability, etc.)` : ''}
@@ -2594,20 +2830,33 @@ app.get('/api/drafts/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Load from database to ensure cross-device sync
-    const allPlaylists = await db.getUserPlaylists(userId);
+    console.log(`[DRAFTS] Loading drafts for user ${userId}`);
 
-    // Filter for drafts only
-    const drafts = allPlaylists.filter(p => p.isDraft === true);
+    let allPlaylists;
 
-    console.log(`Retrieved ${drafts.length} drafts for user ${userId} from database`);
+    if (usePostgres) {
+      // PostgreSQL: Load from database to ensure cross-device sync
+      allPlaylists = await db.getUserPlaylists(userId);
+    } else {
+      // SQLite: Load from in-memory Map
+      allPlaylists = userPlaylists.get(userId) || [];
+    }
+
+    console.log(`[DRAFTS] Retrieved ${allPlaylists.length} total playlists`);
+
+    // Filter for drafts only - handle cases where isDraft might be undefined
+    const drafts = allPlaylists.filter(p => p && p.isDraft === true);
+
+    console.log(`[DRAFTS] Filtered to ${drafts.length} drafts for user ${userId}`);
 
     res.json({ drafts });
   } catch (error) {
-    console.error('Error retrieving drafts:', error);
+    console.error('[DRAFTS] Error retrieving drafts:', error);
+    console.error('[DRAFTS] Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to retrieve drafts',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -4131,6 +4380,83 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                         minYear = year;
                         maxYear = year;
                         console.log(`[AUTO-UPDATE] Single year filter from ${source}: ${year}`);
+                      }
+
+                      // Popularity patterns
+                      if (lowerText.match(/\b(mainstream|popular|well[- ]known|hits?|chart toppers?)\b/)) {
+                        console.log(`[AUTO-UPDATE] Popularity preference from ${source}: mainstream`);
+                      } else if (lowerText.match(/\b(underground|obscure|hidden gems?|lesser[- ]known|deep cuts?|indie)\b/)) {
+                        console.log(`[AUTO-UPDATE] Popularity preference from ${source}: underground`);
+                      }
+
+                      // Duration patterns
+                      const durationMatch = lowerText.match(/(?:songs?|tracks?)\s+(?:under|less than|shorter than|below)\s+(\d+)\s+(?:min(?:ute)?s?|seconds?)/);
+                      if (durationMatch) {
+                        const duration = parseInt(durationMatch[1]);
+                        console.log(`[AUTO-UPDATE] Duration filter from ${source}: under ${duration} minutes`);
+                      }
+
+                      // Version exclusion patterns
+                      if (lowerText.match(/\b(no|avoid|exclude|skip)\s+(live|acoustic|remix(?:es)?|cover|instrumental|edit)\s+(?:version|recording|track)?s?\b/)) {
+                        console.log(`[AUTO-UPDATE] Version exclusion from ${source}: detected`);
+                      }
+
+                      // Vocal/gender patterns
+                      if (lowerText.match(/\b(female|woman|women)\s+(?:vocal|singer|artist)s?\b/)) {
+                        console.log(`[AUTO-UPDATE] Vocal preference from ${source}: female`);
+                      } else if (lowerText.match(/\b(male|man|men)\s+(?:vocal|singer|artist)s?\b/)) {
+                        console.log(`[AUTO-UPDATE] Vocal preference from ${source}: male`);
+                      }
+
+                      // Collaboration/feature patterns
+                      if (lowerText.match(/\b(no|avoid|exclude)\s+(?:feature|feat|collaboration|collab)s?\b/)) {
+                        console.log(`[AUTO-UPDATE] Feature exclusion from ${source}: detected`);
+                      }
+
+                      // Production style patterns
+                      if (lowerText.match(/\b(acoustic|unplugged|stripped[- ]down|raw)\b/)) {
+                        console.log(`[AUTO-UPDATE] Production preference from ${source}: acoustic`);
+                      } else if (lowerText.match(/\b(electronic|synth|edm|produced)\b/)) {
+                        console.log(`[AUTO-UPDATE] Production preference from ${source}: electronic`);
+                      } else if (lowerText.match(/\b(live|concert|performance)\s+(?:recording|version)s?\b/)) {
+                        console.log(`[AUTO-UPDATE] Production preference from ${source}: live`);
+                      }
+
+                      // Auto-tune patterns
+                      if (lowerText.match(/\b(no|avoid|exclude|without)\s+auto[- ]?tune\b/)) {
+                        console.log(`[AUTO-UPDATE] Auto-tune avoidance from ${source}: detected`);
+                      }
+
+                      // Lyrical content patterns
+                      if (lowerText.match(/\b(?:about|themed?|focus(?:ed)? on)\s+([^,\.;]+)/)) {
+                        console.log(`[AUTO-UPDATE] Lyrical theme from ${source}: detected`);
+                      }
+                      if (lowerText.match(/\b(?:no|avoid|exclude|skip)\s+(?:songs? about|lyrics about|themes? of)\s+([^,\.;]+)/)) {
+                        console.log(`[AUTO-UPDATE] Lyrical avoidance from ${source}: detected`);
+                      }
+
+                      // Discovery balance patterns
+                      if (lowerText.match(/\b(?:familiar|favorites?|classics?|well[- ]known|songs? I know)\b/)) {
+                        console.log(`[AUTO-UPDATE] Discovery preference from ${source}: familiar`);
+                      } else if (lowerText.match(/\b(?:discover(?:y)?|new|explore|hidden gems?|lesser[- ]known|artists? I don't know)\b/)) {
+                        console.log(`[AUTO-UPDATE] Discovery preference from ${source}: discovery`);
+                      }
+
+                      // Language patterns
+                      const languageMatch = lowerText.match(/\b(english|spanish|french|german|italian|portuguese|japanese|korean|chinese)\s+(?:songs?|music|language)\b/);
+                      if (languageMatch) {
+                        console.log(`[AUTO-UPDATE] Language preference from ${source}: ${languageMatch[1]}`);
+                      }
+
+                      // Album diversity patterns
+                      const albumDiversityMatch = lowerText.match(/(?:no more than|max(?:imum)?|at most)\s+(\d+)\s+(?:songs?|tracks?)\s+(?:per|from each)\s+album/);
+                      if (albumDiversityMatch) {
+                        console.log(`[AUTO-UPDATE] Album diversity from ${source}: max ${albumDiversityMatch[1]} per album`);
+                      }
+                      if (lowerText.match(/\b(?:deep cuts?|album tracks?|b[- ]sides?)\b/)) {
+                        console.log(`[AUTO-UPDATE] Album preference from ${source}: deep cuts`);
+                      } else if (lowerText.match(/\b(?:singles?|hits?|chart)\b/)) {
+                        console.log(`[AUTO-UPDATE] Album preference from ${source}: singles`);
                       }
 
                       // Check for "exclude [artist]" or "exclude [artist] songs" pattern
