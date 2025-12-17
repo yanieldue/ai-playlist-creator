@@ -840,41 +840,43 @@ Generate songs that precisely match the genre, mood, and energy level indicated 
                           {track.image && (
                             <img src={track.image} alt={track.album} className="track-image" />
                           )}
-                          <div className="track-info">
-                            <div className="track-name">{track.name}</div>
-                            <div className="track-artist">{track.artist}</div>
+                          <div className="track-content">
+                            <div className="track-info">
+                              <div className="track-name">{track.name}</div>
+                              <div className="track-artist">{track.artist}</div>
+                            </div>
+                            <div className="track-actions">
+                              <button
+                                className={`track-reaction-button ${track.reaction === 'thumbsUp' ? 'active-thumbs-up' : ''}`}
+                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
+                                title="I like this! Add more songs like this"
+                              >
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                  <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+                                </svg>
+                              </button>
+                              <button
+                                className={`track-reaction-button ${track.reaction === 'thumbsDown' ? 'active-thumbs-down' : ''}`}
+                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
+                                title="Not for me. Exclude similar songs"
+                              >
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                  <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/>
+                                </svg>
+                              </button>
+                            </div>
                           </div>
-                          <div className="track-actions">
-                            <button
-                              className={`track-reaction-button ${track.reaction === 'thumbsUp' ? 'active-thumbs-up' : ''}`}
-                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                              title="I like this! Add more songs like this"
-                            >
-                              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                                <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
-                              </svg>
-                            </button>
-                            <button
-                              className={`track-reaction-button ${track.reaction === 'thumbsDown' ? 'active-thumbs-down' : ''}`}
-                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
-                              title="Not for me. Exclude similar songs"
-                            >
-                              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                                <path d="M15 3H6c-.83 0-1.54.5-1.84 1.22l-3.02 7.05c-.09.23-.14.47-.14.73v2c0 1.1.9 2 2 2h6.31l-.95 4.57-.03.32c0 .41.17.79.44 1.06L9.83 23l6.59-6.59c.36-.36.58-.86.58-1.41V5c0-1.1-.9-2-2-2zm4 0v12h4V3h-4z"/>
-                              </svg>
-                            </button>
-                            <a
-                              href={track.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="spotify-link-button"
-                              title="Open in Spotify"
-                            >
-                              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                              </svg>
-                            </a>
-                          </div>
+                          <a
+                            href={track.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="spotify-link-button"
+                            title="Open in Spotify"
+                          >
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                            </svg>
+                          </a>
                         </div>
                       ))
                     ) : (
