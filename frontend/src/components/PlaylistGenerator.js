@@ -1113,7 +1113,21 @@ const PlaylistGenerator = () => {
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
-      setGeneratedPlaylist(result);
+
+      // Store the original prompt with the playlist
+      const playlistWithPrompt = { ...result, originalPrompt: promptText };
+
+      // Auto-save draft to database for cross-device sync
+      try {
+        const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
+        playlistWithPrompt.draftId = draftResponse.draftId;
+        console.log('Draft saved successfully with ID:', draftResponse.draftId);
+      } catch (draftError) {
+        console.error('Failed to save draft:', draftError);
+        // Don't block the user if draft save fails
+      }
+
+      setGeneratedPlaylist(playlistWithPrompt);
 
       // Set default name and description
       setEditedPlaylistName(result.playlistName);
