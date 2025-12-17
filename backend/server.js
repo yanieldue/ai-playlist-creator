@@ -2404,7 +2404,7 @@ DO NOT include any text outside the JSON.`;
 // Create playlist on Spotify
 app.post('/api/create-playlist', async (req, res) => {
   try {
-    const { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt } = req.body;
+    const { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages } = req.body;
 
     console.log('Create playlist request:', {
       userId,
@@ -2505,7 +2505,8 @@ app.post('/api/create-playlist', async (req, res) => {
       updateMode: updateMode || 'append',
       isPublic: isPublic !== undefined ? isPublic : true,
       originalPrompt: prompt,
-      refinementInstructions: [], // Initialize empty array for refinements
+      chatMessages: chatMessages || [], // Store cumulative refinements from chat
+      refinementInstructions: [], // Legacy field for backwards compatibility
       excludedSongs: [], // Track individual songs user removed (format: "trackId")
       excludedArtists: [], // Track artists user doesn't want (auto-populated when all songs from artist removed)
       lastUpdated: null,
@@ -3760,8 +3761,19 @@ const scheduleAutoUpdates = () => {
                   prompt += `. Description: ${playlist.description}`;
                 }
 
-                // Add any refinement instructions the user has provided
-                if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
+                // Add cumulative refinements from chat history
+                if (playlist.chatMessages && playlist.chatMessages.length > 0) {
+                  const refinements = playlist.chatMessages
+                    .filter(msg => msg.role === 'user')
+                    .map(msg => msg.content)
+                    .join('. ');
+                  if (refinements) {
+                    prompt += `. Refinements: ${refinements}`;
+                    console.log(`[AUTO-UPDATE] Applied ${playlist.chatMessages.filter(m => m.role === 'user').length} refinement(s) from chat history`);
+                  }
+                }
+                // Fallback to old refinementInstructions if chatMessages not available
+                else if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
                   prompt += '. ' + playlist.refinementInstructions.join('. ');
                   console.log(`[AUTO-UPDATE] Applied ${playlist.refinementInstructions.length} refinement instruction(s)`);
                 }

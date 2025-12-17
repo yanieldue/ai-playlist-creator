@@ -887,8 +887,18 @@ const PlaylistGenerator = () => {
         ? ` Description: ${generatedPlaylist.description}`
         : '';
 
+      // Include cumulative refinements from chat history
+      const refinements = chatMessages
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.content)
+        .join('. ');
+
+      const refinementsContext = refinements
+        ? ` Refinements: ${refinements}.`
+        : '';
+
       const result = await playlistService.generatePlaylist(
-        `Based on this theme: "${promptToUse}".${descriptionContext} Add 10 more similar songs that match this exact vibe and description.`,
+        `Based on this theme: "${promptToUse}".${descriptionContext}${refinementsContext} Add 10 more similar songs that match this exact vibe and description.`,
         userId,
         'spotify',
         allowExplicit,
@@ -980,6 +990,11 @@ const PlaylistGenerator = () => {
     try {
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
+
+      // Pass the original prompt and chat history for storage
+      const promptToStore = generatedPlaylist.originalPrompt || editedPlaylistName.trim();
+      const chatMessagesToStore = chatMessages || [];
+
       const result = await playlistService.createPlaylist(
         userId,
         editedPlaylistName.trim(),
@@ -987,7 +1002,9 @@ const PlaylistGenerator = () => {
         trackUris,
         updateFrequency,
         updateMode,
-        isPublic
+        isPublic,
+        promptToStore,
+        chatMessagesToStore
       );
 
       if (result.success) {

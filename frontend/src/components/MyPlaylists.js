@@ -563,6 +563,17 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         playlistContext += ` Description: ${description}`;
       }
 
+      // Add cumulative refinements from chat history
+      if (editOptionsPlaylist.chatMessages && editOptionsPlaylist.chatMessages.length > 0) {
+        const refinements = editOptionsPlaylist.chatMessages
+          .filter(msg => msg.role === 'user')
+          .map(msg => msg.content)
+          .join('. ');
+        if (refinements) {
+          playlistContext += ` Refinements: ${refinements}`;
+        }
+      }
+
       let prompt;
       if (existingTracksInfo) {
         prompt = manualRefreshMode === 'replace'
@@ -575,7 +586,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
 IMPORTANT: Pay close attention to the original request and description to understand the exact genre and mood. Generate songs that precisely match the genre, mood, and energy level indicated by the playlist description.`;
       }
 
-      // Add refinement instructions if they exist (just like auto-update does)
+      // Add refinement instructions if they exist (fallback for old playlists that don't have chatMessages)
       if (refinementInstructions && refinementInstructions.length > 0) {
         prompt += '. ' + refinementInstructions.join('. ');
         console.log(`[MANUAL-REFRESH] Applied ${refinementInstructions.length} refinement instruction(s)`);
