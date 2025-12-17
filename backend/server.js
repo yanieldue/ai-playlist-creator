@@ -4075,6 +4075,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
 
                     // Parse BOTH original prompt AND refinement instructions to extract constraints
                     let minYear = null;
+                    let maxYear = null;
                     let excludedArtists = [];
                     const currentYear = new Date().getFullYear();
 
@@ -4095,8 +4096,41 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                         const yearConstraint = currentYear - years;
                         if (minYear === null || yearConstraint > minYear) {
                           minYear = yearConstraint;
-                          console.log(`[AUTO-UPDATE] Year filter from ${source}: only songs from ${minYear} or later (last ${years} years)`);
+                          maxYear = currentYear; // Also set max year to current year
+                          console.log(`[AUTO-UPDATE] Year filter from ${source}: only songs from ${minYear}-${maxYear} (last ${years} years)`);
                         }
+                      }
+
+                      // Check for specific year range "from YYYY to YYYY" or "YYYY-YYYY"
+                      const rangeMatch = lowerText.match(/(?:from\s+)?(\d{4})(?:\s*(?:to|-)\s*(\d{4}))/);
+                      if (rangeMatch) {
+                        const startYear = parseInt(rangeMatch[1]);
+                        const endYear = parseInt(rangeMatch[2]);
+                        minYear = Math.min(startYear, endYear);
+                        maxYear = Math.max(startYear, endYear);
+                        console.log(`[AUTO-UPDATE] Year range from ${source}: ${minYear}-${maxYear}`);
+                      }
+
+                      // Check for decade patterns "90s", "2000s", "2010s"
+                      const decadeMatch = lowerText.match(/\b(\d{2,4})s\b/);
+                      if (decadeMatch) {
+                        let decade = parseInt(decadeMatch[1]);
+                        // Handle both "90s" (90) and "1990s" (1990)
+                        if (decade < 100) {
+                          decade = decade >= 20 ? 1900 + decade : 2000 + decade;
+                        }
+                        minYear = Math.floor(decade / 10) * 10;
+                        maxYear = minYear + 9;
+                        console.log(`[AUTO-UPDATE] Decade filter from ${source}: ${minYear}-${maxYear}`);
+                      }
+
+                      // Check for "only songs from YYYY" pattern
+                      const singleYearMatch = lowerText.match(/(?:only|just)\s+(?:songs?|tracks?|music)\s+from\s+(\d{4})/);
+                      if (singleYearMatch) {
+                        const year = parseInt(singleYearMatch[1]);
+                        minYear = year;
+                        maxYear = year;
+                        console.log(`[AUTO-UPDATE] Single year filter from ${source}: ${year}`);
                       }
 
                       // Check for "exclude [artist]" or "exclude [artist] songs" pattern
@@ -4126,7 +4160,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                     const excludedSongIds = new Set((playlist.excludedSongs || []).map(s => s.id || s));
                     const dislikedSongIds = new Set((playlist.dislikedSongs || []).map(s => s.id));
 
-                    if (minYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0 || dislikedSongIds.size > 0) {
+                    if (minYear !== null || maxYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0 || dislikedSongIds.size > 0) {
                       const beforeFilter = genreFilteredResults.length;
                       genreFilteredResults = genreFilteredResults.filter(track => {
                         // Check if this specific song was excluded
@@ -4141,10 +4175,13 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                           return false;
                         }
 
-                        // Check year constraint
-                        if (minYear !== null && track.album && track.album.release_date) {
+                        // Check year constraint (both min and max)
+                        if ((minYear !== null || maxYear !== null) && track.album && track.album.release_date) {
                           const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                          if (releaseYear < minYear) {
+                          if (minYear !== null && releaseYear < minYear) {
+                            return false;
+                          }
+                          if (maxYear !== null && releaseYear > maxYear) {
                             return false;
                           }
                         }
@@ -4161,7 +4198,8 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
 
                         return true;
                       });
-                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (excluded ${excludedSongIds.size} songs, ${dislikedSongIds.size} disliked songs, ${excludedArtists.length} artists)`);
+                      const yearRangeLog = minYear !== null || maxYear !== null ? ` year range: ${minYear || 'any'}-${maxYear || 'current'},` : '';
+                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (${yearRangeLog} excluded ${excludedSongIds.size} songs, ${dislikedSongIds.size} disliked songs, ${excludedArtists.length} artists)`);
                     }
 
                     // Remove duplicates by both URI and normalized track name
