@@ -2542,6 +2542,84 @@ app.post('/api/create-playlist', async (req, res) => {
   }
 });
 
+// Save draft playlist (auto-save before creating in Spotify)
+app.post('/api/drafts/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { draftData } = req.body;
+
+    // Generate a unique draft ID if not provided
+    const draftId = draftData.draftId || `draft-${Date.now()}`;
+
+    // Save draft to database
+    await savePlaylist(userId, {
+      ...draftData,
+      playlistId: draftId,
+      isDraft: true
+    });
+
+    console.log(`Saved draft ${draftId} for user ${userId}`);
+
+    res.json({
+      success: true,
+      draftId,
+      message: 'Draft saved successfully'
+    });
+  } catch (error) {
+    console.error('Error saving draft:', error);
+    res.status(500).json({
+      error: 'Failed to save draft',
+      details: error.message
+    });
+  }
+});
+
+// Get user's draft playlists
+app.get('/api/drafts/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const userPlaylistHistory = userPlaylists.get(userId) || [];
+
+    // Filter for drafts only
+    const drafts = userPlaylistHistory.filter(p => p.isDraft === true);
+
+    console.log(`Retrieved ${drafts.length} drafts for user ${userId}`);
+
+    res.json({ drafts });
+  } catch (error) {
+    console.error('Error retrieving drafts:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve drafts',
+      details: error.message
+    });
+  }
+});
+
+// Delete draft playlist
+app.delete('/api/drafts/:userId/:draftId', async (req, res) => {
+  try {
+    const { userId, draftId } = req.params;
+
+    const userPlaylistHistory = userPlaylists.get(userId) || [];
+    const updatedPlaylists = userPlaylistHistory.filter(p => p.playlistId !== draftId);
+    userPlaylists.set(userId, updatedPlaylists);
+
+    // Also delete from database
+    await db.deletePlaylist(userId, draftId);
+
+    console.log(`Deleted draft ${draftId} for user ${userId}`);
+
+    res.json({ success: true, message: 'Draft deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting draft:', error);
+    res.status(500).json({
+      error: 'Failed to delete draft',
+      details: error.message
+    });
+  }
+});
+
 // Get user's playlist history
 app.get('/api/playlists/:userId', async (req, res) => {
   try {

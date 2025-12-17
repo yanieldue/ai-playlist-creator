@@ -286,6 +286,24 @@ export const playlistService = {
     });
     return response.data;
   },
+
+  // Draft playlist management
+  saveDraft: async (userId, draftData) => {
+    const response = await api.post(`/api/drafts/${userId}`, {
+      draftData,
+    });
+    return response.data;
+  },
+
+  getDrafts: async (userId) => {
+    const response = await api.get(`/api/drafts/${userId}`);
+    return response.data;
+  },
+
+  deleteDraft: async (userId, draftId) => {
+    const response = await api.delete(`/api/drafts/${userId}/${draftId}`);
+    return response.data;
+  },
 };
 
 export default playlistService;

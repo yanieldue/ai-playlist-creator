@@ -240,6 +240,28 @@ const PlaylistGenerator = () => {
     }
   }, [isAuthenticated, userId]);
 
+  // Load draft playlists when user is authenticated
+  useEffect(() => {
+    const loadDrafts = async () => {
+      if (isAuthenticated && userId) {
+        try {
+          const response = await playlistService.getDrafts(userId);
+          if (response.drafts && response.drafts.length > 0) {
+            // Load the most recent draft
+            const latestDraft = response.drafts[0];
+            setGeneratedPlaylist(latestDraft);
+            setEditedPlaylistName(latestDraft.playlistName);
+            setEditedDescription(latestDraft.description);
+            console.log('Loaded draft playlist:', latestDraft.playlistName);
+          }
+        } catch (error) {
+          console.error('Failed to load drafts:', error);
+        }
+      }
+    };
+    loadDrafts();
+  }, [isAuthenticated, userId]);
+
   // Watch for connected platforms changes (when user connects/disconnects from Account page)
   useEffect(() => {
     const handlePlatformsChanged = async (event) => {
@@ -633,8 +655,22 @@ const PlaylistGenerator = () => {
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
+
       // Store the original prompt with the playlist for "Add More" functionality
-      setGeneratedPlaylist({ ...result, originalPrompt: prompt.trim() });
+      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim() };
+
+      // Auto-save draft to database for cross-device sync
+      try {
+        const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
+        // Store the draftId so we can delete it later
+        playlistWithPrompt.draftId = draftResponse.draftId;
+        console.log('Draft saved successfully with ID:', draftResponse.draftId);
+      } catch (draftError) {
+        console.error('Failed to save draft:', draftError);
+        // Don't block the user if draft save fails
+      }
+
+      setGeneratedPlaylist(playlistWithPrompt);
 
       // Initialize playlist name and description
       setEditedPlaylistName(result.playlistName);
@@ -930,6 +966,16 @@ const PlaylistGenerator = () => {
       if (result.success) {
         showToast('Playlist created successfully! Opening Spotify...', 'success');
         window.open(result.playlistUrl, '_blank');
+
+        // Delete draft from database if it has a draftId
+        if (generatedPlaylist.draftId) {
+          try {
+            await playlistService.deleteDraft(userId, generatedPlaylist.draftId);
+            console.log('Deleted draft from database');
+          } catch (draftError) {
+            console.error('Failed to delete draft:', draftError);
+          }
+        }
 
         // Clear the current draft from the list
         const updatedDrafts = currentDraftId
