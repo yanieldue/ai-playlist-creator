@@ -6,7 +6,7 @@
 .my-playlists {
   min-height: 100%;
   background: #ffffff;
-  padding: 0 var(--space-lg) var(--space-lg) var(--space-lg);
+  padding: 0 2px var(--space-lg) 2px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
 }
 
@@ -479,7 +479,9 @@
 .track-content {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   min-width: 0;
 }
@@ -494,18 +496,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding: 4px;
   background: none;
   border: none;
   color: #8e8e93;
-  border-radius: 50%;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
 }
 
 .track-reaction-button:hover {
-  background: #f2f2f7;
   transform: scale(1.1);
 }
 
@@ -515,20 +515,10 @@
 
 .track-reaction-button.active-thumbs-up {
   color: #34C759;
-  background: #e8f5e9;
-}
-
-.track-reaction-button.active-thumbs-up:hover {
-  background: #d0f0d3;
 }
 
 .track-reaction-button.active-thumbs-down {
   color: #ff3b30;
-  background: #ffebee;
-}
-
-.track-reaction-button.active-thumbs-down:hover {
-  background: #ffd6d4;
 }
 
 .track-exclude-button {
@@ -1445,26 +1435,12 @@
   color: #8e8e93;
 }
 
-:root.dark-mode .track-reaction-button:hover {
-  background: #3a3a3c;
-}
-
 :root.dark-mode .track-reaction-button.active-thumbs-up {
   color: #32D74B;
-  background: rgba(50, 215, 75, 0.15);
-}
-
-:root.dark-mode .track-reaction-button.active-thumbs-up:hover {
-  background: rgba(50, 215, 75, 0.25);
 }
 
 :root.dark-mode .track-reaction-button.active-thumbs-down {
   color: #ff453a;
-  background: rgba(255, 69, 58, 0.15);
-}
-
-:root.dark-mode .track-reaction-button.active-thumbs-down:hover {
-  background: rgba(255, 69, 58, 0.25);
 }
 
 :root.dark-mode .track-exclude-button {
