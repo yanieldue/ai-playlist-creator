@@ -2404,7 +2404,7 @@ DO NOT include any text outside the JSON.`;
 // Create playlist on Spotify
 app.post('/api/create-playlist', async (req, res) => {
   try {
-    const { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages } = req.body;
+    const { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs } = req.body;
 
     console.log('Create playlist request:', {
       userId,
@@ -2507,7 +2507,7 @@ app.post('/api/create-playlist', async (req, res) => {
       originalPrompt: prompt,
       chatMessages: chatMessages || [], // Store cumulative refinements from chat
       refinementInstructions: [], // Legacy field for backwards compatibility
-      excludedSongs: [], // Track individual songs user removed (format: "trackId")
+      excludedSongs: excludedSongs || [], // Track individual songs user removed with minus button
       excludedArtists: [], // Track artists user doesn't want (auto-populated when all songs from artist removed)
       lastUpdated: null,
       nextUpdate: updateFrequency && updateFrequency !== 'never' ? calculateNextUpdate(updateFrequency, playlistData.body.id) : null,
@@ -4108,7 +4108,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                     }
 
                     // Filter tracks based on year, artist exclusions, song exclusions, and disliked songs
-                    const excludedSongIds = new Set(playlist.excludedSongs || []);
+                    const excludedSongIds = new Set((playlist.excludedSongs || []).map(s => s.id || s));
                     const dislikedSongIds = new Set((playlist.dislikedSongs || []).map(s => s.id));
 
                     if (minYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0 || dislikedSongIds.size > 0) {

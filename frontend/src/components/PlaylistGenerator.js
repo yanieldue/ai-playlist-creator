@@ -657,7 +657,7 @@ const PlaylistGenerator = () => {
       setShowGeneratingModal(false);
 
       // Store the original prompt with the playlist for "Add More" functionality
-      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), chatMessages: [] };
+      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), chatMessages: [], excludedSongs: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
@@ -711,12 +711,28 @@ const PlaylistGenerator = () => {
   };
 
   const removeTrackFromGenerated = (trackId) => {
+    // Find the track being removed to save its details
+    const removedTrack = generatedPlaylist.tracks.find(track => track.id === trackId);
+
     // Remove track from the generated playlist immediately
     const updatedTracks = generatedPlaylist.tracks.filter(track => track.id !== trackId);
+
+    // Track excluded songs so they won't be re-added in future operations
+    const excludedSongs = generatedPlaylist.excludedSongs || [];
+    if (removedTrack) {
+      excludedSongs.push({
+        id: removedTrack.id,
+        name: removedTrack.name,
+        artist: removedTrack.artists?.[0]?.name || removedTrack.artist,
+        uri: removedTrack.uri
+      });
+    }
+
     setGeneratedPlaylist({
       ...generatedPlaylist,
       tracks: updatedTracks,
-      trackCount: updatedTracks.length
+      trackCount: updatedTracks.length,
+      excludedSongs
     });
 
     showToast('Track removed', 'success');
@@ -844,6 +860,9 @@ const PlaylistGenerator = () => {
       // Use the current playlist's track count to maintain the same number of songs
       const currentTrackCount = generatedPlaylist.tracks?.length || songCount;
 
+      // Get excluded song URIs to avoid re-adding them
+      const excludedSongUris = (generatedPlaylist.excludedSongs || []).map(song => song.uri);
+
       // Call AI to adjust playlist based on user request
       const result = await playlistService.generatePlaylist(
         refinementPrompt,
@@ -851,14 +870,16 @@ const PlaylistGenerator = () => {
         'spotify',
         allowExplicit,
         newArtistsOnly,
-        currentTrackCount
+        currentTrackCount,
+        excludedSongUris
       );
 
-      // Preserve the original prompt and chat history when refining
+      // Preserve the original prompt, chat history, and excluded songs when refining
       setGeneratedPlaylist({
         ...result,
         originalPrompt: generatedPlaylist.originalPrompt,
-        chatMessages: [...chatMessages, { role: 'user', content: userMessage }]
+        chatMessages: [...chatMessages, { role: 'user', content: userMessage }],
+        excludedSongs: generatedPlaylist.excludedSongs || []
       });
 
       // Add AI response to chat
@@ -897,13 +918,17 @@ const PlaylistGenerator = () => {
         ? ` Refinements: ${refinements}.`
         : '';
 
+      // Get excluded song URIs to avoid re-adding them
+      const excludedSongUris = (generatedPlaylist.excludedSongs || []).map(song => song.uri);
+
       const result = await playlistService.generatePlaylist(
         `Based on this theme: "${promptToUse}".${descriptionContext}${refinementsContext} Add 10 more similar songs that match this exact vibe and description.`,
         userId,
         'spotify',
         allowExplicit,
         newArtistsOnly,
-        10
+        10,
+        excludedSongUris
       );
 
       // Append new tracks to existing playlist
@@ -991,9 +1016,10 @@ const PlaylistGenerator = () => {
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
 
-      // Pass the original prompt and chat history for storage
+      // Pass the original prompt, chat history, and excluded songs for storage
       const promptToStore = generatedPlaylist.originalPrompt || editedPlaylistName.trim();
       const chatMessagesToStore = chatMessages || [];
+      const excludedSongsToStore = generatedPlaylist.excludedSongs || [];
 
       const result = await playlistService.createPlaylist(
         userId,
@@ -1004,7 +1030,8 @@ const PlaylistGenerator = () => {
         updateMode,
         isPublic,
         promptToStore,
-        chatMessagesToStore
+        chatMessagesToStore,
+        excludedSongsToStore
       );
 
       if (result.success) {
@@ -1147,7 +1174,7 @@ const PlaylistGenerator = () => {
       setShowGeneratingModal(false);
 
       // Store the original prompt with the playlist
-      const playlistWithPrompt = { ...result, originalPrompt: promptText, chatMessages: [] };
+      const playlistWithPrompt = { ...result, originalPrompt: promptText, chatMessages: [], excludedSongs: [] };
 
       // Auto-save draft to database for cross-device sync
       try {

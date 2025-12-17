@@ -597,10 +597,20 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
 IMPORTANT: Pay close attention to the original request and description to understand the exact genre and mood. Generate songs that precisely match the genre, mood, and energy level indicated by the playlist description.`;
       }
 
-      // For replace mode, pass existing track URIs to exclude them from new generation
-      const excludeUris = manualRefreshMode === 'replace' && currentTracks && currentTracks.length > 0
-        ? currentTracks.map(track => track.uri)
-        : [];
+      // Build list of URIs to exclude from new generation
+      const excludeUris = [];
+
+      // For replace mode, exclude existing tracks
+      if (manualRefreshMode === 'replace' && currentTracks && currentTracks.length > 0) {
+        excludeUris.push(...currentTracks.map(track => track.uri));
+      }
+
+      // Always exclude songs that user removed with minus button
+      if (editOptionsPlaylist.excludedSongs && editOptionsPlaylist.excludedSongs.length > 0) {
+        const excludedSongUris = editOptionsPlaylist.excludedSongs.map(song => song.uri);
+        excludeUris.push(...excludedSongUris);
+        console.log(`[MANUAL-REFRESH] Excluding ${excludedSongUris.length} user-removed song(s)`);
+      }
 
       const result = await playlistService.generatePlaylist(
         prompt,
