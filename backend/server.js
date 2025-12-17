@@ -2580,12 +2580,13 @@ app.get('/api/drafts/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const userPlaylistHistory = userPlaylists.get(userId) || [];
+    // Load from database to ensure cross-device sync
+    const allPlaylists = await db.getUserPlaylists(userId);
 
     // Filter for drafts only
-    const drafts = userPlaylistHistory.filter(p => p.isDraft === true);
+    const drafts = allPlaylists.filter(p => p.isDraft === true);
 
-    console.log(`Retrieved ${drafts.length} drafts for user ${userId}`);
+    console.log(`Retrieved ${drafts.length} drafts for user ${userId} from database`);
 
     res.json({ drafts });
   } catch (error) {
