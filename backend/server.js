@@ -2582,15 +2582,31 @@ app.get('/api/playlists/:userId', async (req, res) => {
         try {
           // Get playlist details from Spotify
           const playlistDetails = await userSpotifyApi.getPlaylist(playlist.playlistId);
-          const tracks = playlistDetails.body.tracks.items.map(item => ({
-            id: item.track.id,
-            name: item.track.name,
-            artist: item.track.artists[0].name,
-            uri: item.track.uri,
-            album: item.track.album.name,
-            image: item.track.album.images[0]?.url,
-            externalUrl: item.track.external_urls.spotify
-          }));
+
+          // Create maps for quick lookup of reactions
+          const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
+          const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
+
+          const tracks = playlistDetails.body.tracks.items.map(item => {
+            const trackId = item.track.id;
+            let reaction = null;
+            if (likedSongsMap.has(trackId)) {
+              reaction = 'thumbsUp';
+            } else if (dislikedSongsMap.has(trackId)) {
+              reaction = 'thumbsDown';
+            }
+
+            return {
+              id: trackId,
+              name: item.track.name,
+              artist: item.track.artists[0].name,
+              uri: item.track.uri,
+              album: item.track.album.name,
+              image: item.track.album.images[0]?.url,
+              externalUrl: item.track.external_urls.spotify,
+              reaction: reaction
+            };
+          });
 
           return {
             ...playlist,
@@ -3210,20 +3226,10 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     // Initialize reaction arrays if they don't exist
     if (!playlist.likedSongs) playlist.likedSongs = [];
     if (!playlist.dislikedSongs) playlist.dislikedSongs = [];
-    if (!playlist.tracks) playlist.tracks = [];
-
-    // Find the track in the playlist
-    const track = playlist.tracks.find(t => t.id === trackId);
-    if (!track) {
-      return res.status(404).json({ error: 'Track not found in playlist' });
-    }
 
     // Remove from both arrays first (in case they're changing from one to another)
     playlist.likedSongs = playlist.likedSongs.filter(s => s.id !== trackId);
     playlist.dislikedSongs = playlist.dislikedSongs.filter(s => s.id !== trackId);
-
-    // Remove reaction from track
-    delete track.reaction;
 
     // Add to appropriate array based on new reaction
     if (reaction === 'thumbsUp') {
@@ -3234,7 +3240,6 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
         artist: artistName,
         reactedAt: new Date().toISOString()
       });
-      track.reaction = 'thumbsUp';
       console.log(`[REACTION] User liked song: ${trackName} by ${artistName}`);
     } else if (reaction === 'thumbsDown') {
       playlist.dislikedSongs.push({
@@ -3244,7 +3249,6 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
         artist: artistName,
         reactedAt: new Date().toISOString()
       });
-      track.reaction = 'thumbsDown';
       console.log(`[REACTION] User disliked song: ${trackName} by ${artistName}`);
     } else {
       console.log(`[REACTION] Removed reaction from song: ${trackName}`);
@@ -3252,7 +3256,9 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
 
     // Save changes
     userPlaylists.set(userId, userPlaylistsArray);
+    console.log(`[REACTION] Saving playlist with ${playlist.likedSongs.length} liked, ${playlist.dislikedSongs.length} disliked songs`);
     await savePlaylist(userId, playlist);
+    console.log(`[REACTION] Successfully saved reaction for ${trackName}`);
 
     res.json({
       success: true,
