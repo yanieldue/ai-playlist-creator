@@ -626,16 +626,21 @@ const PlaylistGenerator = () => {
     return messageMap.default;
   };
 
-  const handleGeneratePlaylist = async () => {
+  const handleGeneratePlaylist = async (retryCount = 0) => {
+    const maxRetries = 2; // Try up to 3 times total
+
     if (!prompt.trim()) {
       setError('Please enter a playlist description');
       return;
     }
 
-    setLoading(true);
-    setShowGeneratingModal(true);
-    setError('');
-    setGeneratedPlaylist(null);
+    // Only set initial state on first attempt
+    if (retryCount === 0) {
+      setLoading(true);
+      setShowGeneratingModal(true);
+      setError('');
+      setGeneratedPlaylist(null);
+    }
 
     // Get messages for this genre
     const messages = getGenreMessages(prompt);
@@ -689,24 +694,47 @@ const PlaylistGenerator = () => {
     } catch (err) {
       clearInterval(messageInterval);
       setGeneratingMessage('');
-      // If authentication failed, clear stored userId and prompt re-authentication
+
+      // If authentication failed, don't retry
       if (err.response?.status === 401) {
         localStorage.removeItem('userId');
         setUserId(null);
         setIsAuthenticated(false);
         setGeneratingError('Your session has expired. Please reconnect with Spotify.');
-      } else {
-        setGeneratingError('Something went wrong while generating your playlist. Please try again.');
+        setTimeout(() => {
+          setShowGeneratingModal(false);
+          setGeneratingError(null);
+        }, 3000);
+        setLoading(false);
+        return;
       }
-      console.error(err);
+
+      // Automatic retry with exponential backoff
+      if (retryCount < maxRetries) {
+        const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s
+        console.log(`Playlist generation failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+
+        setGeneratingMessage(`Request failed, retrying... (${retryCount + 1}/${maxRetries})`);
+
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return handleGeneratePlaylist(retryCount + 1);
+      }
+
+      // All retries exhausted
+      console.error('Playlist generation error:', err);
+      const errorMessage = err.response?.data?.error || err.message || 'Something went wrong while generating your playlist.';
+      setGeneratingError(`${errorMessage} Please try again.`);
+
       // Keep the modal visible for 3 seconds, then close
       setTimeout(() => {
         setShowGeneratingModal(false);
         setGeneratingError(null);
       }, 3000);
     } finally {
-      setLoading(false);
-      setGeneratingMessage('');
+      if (retryCount === 0 || retryCount >= maxRetries) {
+        setLoading(false);
+        setGeneratingMessage('');
+      }
     }
   };
 
@@ -830,15 +858,19 @@ const PlaylistGenerator = () => {
     }
   };
 
-  const handleChatSubmit = async () => {
+  const handleChatSubmit = async (retryCount = 0) => {
     if (!chatInput.trim() || chatLoading) return;
 
     const userMessage = chatInput.trim();
-    setChatInput('');
-    setChatLoading(true);
+    const maxRetries = 2; // Try up to 3 times total (initial + 2 retries)
 
-    // Add user message to chat
-    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    // Only clear input and add to chat on first attempt
+    if (retryCount === 0) {
+      setChatInput('');
+      setChatLoading(true);
+      // Add user message to chat
+      setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    }
 
     try {
       // Use original prompt and description to maintain playlist vibe during refinement
@@ -847,7 +879,7 @@ const PlaylistGenerator = () => {
         ? `\n\nPlaylist description: ${generatedPlaylist.description}`
         : '';
 
-      // Build cumulative refinements from chat history
+      // Build cumulative refinements from chat history (exclude the current message since it's already in state)
       const previousRefinements = chatMessages
         .filter(msg => msg.role === 'user')
         .map(msg => msg.content)
@@ -887,19 +919,53 @@ const PlaylistGenerator = () => {
         role: 'assistant',
         content: `I've updated your playlist! I ${userMessage.toLowerCase().includes('add') ? 'added' : userMessage.toLowerCase().includes('remove') ? 'removed' : 'adjusted'} the tracks based on your request.`
       }]);
+
+      // Show success toast
+      showToast('Playlist updated successfully!', 'success');
     } catch (err) {
+      console.error('Refinement error:', err);
+
+      // Automatic retry with exponential backoff
+      if (retryCount < maxRetries) {
+        const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Refinement failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+
+        // Show retry notification
+        showToast(`Request failed, retrying... (${retryCount + 1}/${maxRetries})`, 'info');
+
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return handleChatSubmit(retryCount + 1);
+      }
+
+      // All retries exhausted - show error
+      const errorMessage = err.response?.data?.error || err.message || 'Network error. Please check your connection and try again.';
+
+      // Remove the user message from chat since it failed
+      setChatMessages(prev => prev.slice(0, -1));
+
+      // Restore the input so user can try again
+      setChatInput(userMessage);
+
+      // Show error in chat
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Sorry, I couldn't process that request. ${err.response?.data?.error || 'Please try again.'}`
+        content: `Sorry, I couldn't process that request after ${maxRetries + 1} attempts. ${errorMessage}`
       }]);
+
+      // Show prominent error toast
+      showToast(`Failed to refine playlist: ${errorMessage}`, 'error');
     } finally {
       setChatLoading(false);
     }
   };
 
-  const handleAddMoreSongs = async () => {
-    setLoadingMoreSongs(true);
-    setError('');
+  const handleAddMoreSongs = async (retryCount = 0) => {
+    const maxRetries = 2; // Try up to 3 times total
+
+    if (retryCount === 0) {
+      setLoadingMoreSongs(true);
+      setError('');
+    }
 
     try {
       // Generate more songs using the original prompt and description to maintain consistency
@@ -943,9 +1009,28 @@ const PlaylistGenerator = () => {
         };
 
         setGeneratedPlaylist(updatedPlaylist);
+        showToast(`Added ${newTracks.length} new songs!`, 'success');
+      } else {
+        showToast('No new songs were added (all were duplicates)', 'info');
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to add more songs. Please try again.');
+      console.error('Add more songs error:', err);
+
+      // Automatic retry with exponential backoff
+      if (retryCount < maxRetries) {
+        const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s
+        console.log(`Add more failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+
+        showToast(`Request failed, retrying... (${retryCount + 1}/${maxRetries})`, 'info');
+
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        return handleAddMoreSongs(retryCount + 1);
+      }
+
+      // All retries exhausted
+      const errorMessage = err.response?.data?.error || err.message || 'Network error. Please try again.';
+      setError(`Failed to add more songs: ${errorMessage}`);
+      showToast(`Failed to add more songs: ${errorMessage}`, 'error');
     } finally {
       setLoadingMoreSongs(false);
     }
