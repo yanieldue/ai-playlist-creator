@@ -3761,21 +3761,26 @@ const scheduleAutoUpdates = () => {
                   prompt += `. Description: ${playlist.description}`;
                 }
 
-                // Add cumulative refinements from chat history
+                // Combine all refinements from both chat history and refinement instructions
+                const allRefinements = [];
+
+                // Add cumulative refinements from chat history (from initial generation modal)
                 if (playlist.chatMessages && playlist.chatMessages.length > 0) {
-                  const refinements = playlist.chatMessages
+                  const chatRefinements = playlist.chatMessages
                     .filter(msg => msg.role === 'user')
-                    .map(msg => msg.content)
-                    .join('. ');
-                  if (refinements) {
-                    prompt += `. Refinements: ${refinements}`;
-                    console.log(`[AUTO-UPDATE] Applied ${playlist.chatMessages.filter(m => m.role === 'user').length} refinement(s) from chat history`);
-                  }
+                    .map(msg => msg.content);
+                  allRefinements.push(...chatRefinements);
                 }
-                // Fallback to old refinementInstructions if chatMessages not available
-                else if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
-                  prompt += '. ' + playlist.refinementInstructions.join('. ');
-                  console.log(`[AUTO-UPDATE] Applied ${playlist.refinementInstructions.length} refinement instruction(s)`);
+
+                // Add refinements from Edit Playlist modal
+                if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
+                  allRefinements.push(...playlist.refinementInstructions);
+                }
+
+                // Add all refinements to prompt
+                if (allRefinements.length > 0) {
+                  prompt += `. Refinements: ${allRefinements.join('. ')}`;
+                  console.log(`[AUTO-UPDATE] Applied ${allRefinements.length} total refinement(s)`);
                 }
 
                 // Ensure tracks array exists

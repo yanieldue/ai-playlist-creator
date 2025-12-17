@@ -563,15 +563,26 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         playlistContext += ` Description: ${description}`;
       }
 
-      // Add cumulative refinements from chat history
+      // Combine all refinements from both chat history and refinement instructions
+      const allRefinements = [];
+
+      // Add cumulative refinements from chat history (from initial generation modal)
       if (editOptionsPlaylist.chatMessages && editOptionsPlaylist.chatMessages.length > 0) {
-        const refinements = editOptionsPlaylist.chatMessages
+        const chatRefinements = editOptionsPlaylist.chatMessages
           .filter(msg => msg.role === 'user')
-          .map(msg => msg.content)
-          .join('. ');
-        if (refinements) {
-          playlistContext += ` Refinements: ${refinements}`;
-        }
+          .map(msg => msg.content);
+        allRefinements.push(...chatRefinements);
+      }
+
+      // Add refinements from Edit Playlist modal
+      if (refinementInstructions && refinementInstructions.length > 0) {
+        allRefinements.push(...refinementInstructions);
+      }
+
+      // Add all refinements to context
+      if (allRefinements.length > 0) {
+        playlistContext += ` Refinements: ${allRefinements.join('. ')}`;
+        console.log(`[MANUAL-REFRESH] Applied ${allRefinements.length} total refinement(s)`);
       }
 
       let prompt;
@@ -584,12 +595,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         prompt = `${playlistContext ? playlistContext + '\n\n' : ''}Generate ${manualRefreshSongCount} songs for a playlist called "${playlistName}".
 
 IMPORTANT: Pay close attention to the original request and description to understand the exact genre and mood. Generate songs that precisely match the genre, mood, and energy level indicated by the playlist description.`;
-      }
-
-      // Add refinement instructions if they exist (fallback for old playlists that don't have chatMessages)
-      if (refinementInstructions && refinementInstructions.length > 0) {
-        prompt += '. ' + refinementInstructions.join('. ');
-        console.log(`[MANUAL-REFRESH] Applied ${refinementInstructions.length} refinement instruction(s)`);
       }
 
       // For replace mode, pass existing track URIs to exclude them from new generation
