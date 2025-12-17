@@ -174,6 +174,19 @@ export const playlistService = {
     return response.data;
   },
 
+  // React to a song (thumbs up/down for better recommendations)
+  reactToSong: async (playlistId, userId, trackId, trackUri, trackName, artistName, reaction) => {
+    const response = await api.post(`/api/playlists/${playlistId}/react-to-song`, {
+      userId,
+      trackId,
+      trackUri,
+      trackName,
+      artistName,
+      reaction, // 'thumbsUp', 'thumbsDown', or null to remove
+    });
+    return response.data;
+  },
+
   // Health check
   healthCheck: async () => {
     const response = await api.get('/api/health');

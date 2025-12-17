@@ -1686,6 +1686,46 @@ DO NOT include any text outside the JSON.`
 
     console.log('Extracted genre data:', genreData);
 
+    // Load existing playlist data if playlistId is provided (for refinements/refreshes)
+    let existingPlaylistData = null;
+    if (playlistId && userId) {
+      const userPlaylistsArray = userPlaylists.get(userId) || [];
+      existingPlaylistData = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    }
+
+    // Build context from liked/disliked songs if available
+    let userFeedbackContext = '';
+    if (existingPlaylistData) {
+      const likedSongs = existingPlaylistData.likedSongs || [];
+      const dislikedSongs = existingPlaylistData.dislikedSongs || [];
+
+      if (likedSongs.length > 0 || dislikedSongs.length > 0) {
+        userFeedbackContext = '\n\nUSER FEEDBACK FROM PREVIOUS SONGS:';
+
+        if (likedSongs.length > 0) {
+          userFeedbackContext += `\n\nSONGS THE USER LIKED (add more similar songs):`;
+          likedSongs.slice(0, 10).forEach(song => {
+            userFeedbackContext += `\n- "${song.name}" by ${song.artist}`;
+          });
+          if (likedSongs.length > 10) {
+            userFeedbackContext += `\n...and ${likedSongs.length - 10} more`;
+          }
+        }
+
+        if (dislikedSongs.length > 0) {
+          userFeedbackContext += `\n\nSONGS THE USER DISLIKED (avoid similar songs):`;
+          dislikedSongs.slice(0, 10).forEach(song => {
+            userFeedbackContext += `\n- "${song.name}" by ${song.artist}`;
+          });
+          if (dislikedSongs.length > 10) {
+            userFeedbackContext += `\n...and ${dislikedSongs.length - 10} more`;
+          }
+        }
+
+        userFeedbackContext += '\n\nIMPORTANT: Analyze the liked songs to understand what the user enjoys (tempo, energy, mood, subgenre) and incorporate that into your search queries. Avoid songs similar in style, tempo, or mood to the disliked songs.';
+      }
+    }
+
     // Step 1: Use Claude to analyze the prompt and generate search queries
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -1698,7 +1738,7 @@ DO NOT include any text outside the JSON.`
 3. 15-20 diverse search queries to find songs that match the prompt
 
 User prompt: "${prompt}"
-${newArtistsOnly ? '\nIMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists in your search queries.' : ''}
+${newArtistsOnly ? '\nIMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists in your search queries.' : ''}${userFeedbackContext}
 
 IMPORTANT GUIDELINES - Genre & Style:
 - Primary genre: ${genreData.primaryGenre || 'not specified'}
@@ -3142,6 +3182,92 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
   }
 });
 
+// React to a song (thumbs up/down for feedback)
+app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { userId, trackId, trackUri, trackName, artistName, reaction } = req.body;
+
+    if (!userId || !trackId) {
+      return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
+    }
+
+    // Validate reaction value
+    if (reaction !== null && reaction !== 'thumbsUp' && reaction !== 'thumbsDown') {
+      return res.status(400).json({ error: 'Invalid reaction value. Must be "thumbsUp", "thumbsDown", or null' });
+    }
+
+    // Get user's playlists
+    const userPlaylistsArray = userPlaylists.get(userId) || [];
+    const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    if (!playlist) {
+      return res.status(404).json({ error: 'Playlist not found' });
+    }
+
+    // Initialize reaction arrays if they don't exist
+    if (!playlist.likedSongs) playlist.likedSongs = [];
+    if (!playlist.dislikedSongs) playlist.dislikedSongs = [];
+    if (!playlist.tracks) playlist.tracks = [];
+
+    // Find the track in the playlist
+    const track = playlist.tracks.find(t => t.id === trackId);
+    if (!track) {
+      return res.status(404).json({ error: 'Track not found in playlist' });
+    }
+
+    // Remove from both arrays first (in case they're changing from one to another)
+    playlist.likedSongs = playlist.likedSongs.filter(s => s.id !== trackId);
+    playlist.dislikedSongs = playlist.dislikedSongs.filter(s => s.id !== trackId);
+
+    // Remove reaction from track
+    delete track.reaction;
+
+    // Add to appropriate array based on new reaction
+    if (reaction === 'thumbsUp') {
+      playlist.likedSongs.push({
+        id: trackId,
+        uri: trackUri,
+        name: trackName,
+        artist: artistName,
+        reactedAt: new Date().toISOString()
+      });
+      track.reaction = 'thumbsUp';
+      console.log(`[REACTION] User liked song: ${trackName} by ${artistName}`);
+    } else if (reaction === 'thumbsDown') {
+      playlist.dislikedSongs.push({
+        id: trackId,
+        uri: trackUri,
+        name: trackName,
+        artist: artistName,
+        reactedAt: new Date().toISOString()
+      });
+      track.reaction = 'thumbsDown';
+      console.log(`[REACTION] User disliked song: ${trackName} by ${artistName}`);
+    } else {
+      console.log(`[REACTION] Removed reaction from song: ${trackName}`);
+    }
+
+    // Save changes
+    userPlaylists.set(userId, userPlaylistsArray);
+    await savePlaylist(userId, playlist);
+
+    res.json({
+      success: true,
+      reaction: reaction,
+      likedSongsCount: playlist.likedSongs.length,
+      dislikedSongsCount: playlist.dislikedSongs.length
+    });
+
+  } catch (error) {
+    console.error('Error saving song reaction:', error);
+    res.status(500).json({
+      error: 'Failed to save song reaction',
+      details: error.message
+    });
+  }
+});
+
 // Search for users and playlists
 app.post('/api/search', async (req, res) => {
   try {
@@ -3551,10 +3677,33 @@ const scheduleAutoUpdates = () => {
                   playlist.tracks = [];
                 }
 
+                // Build context from liked/disliked songs for auto-update
+                let userFeedbackContext = '';
+                const likedSongs = playlist.likedSongs || [];
+                const dislikedSongs = playlist.dislikedSongs || [];
+
+                if (likedSongs.length > 0 || dislikedSongs.length > 0) {
+                  if (likedSongs.length > 0) {
+                    const likedTrackNames = likedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ');
+                    userFeedbackContext += ` User liked: ${likedTrackNames}.`;
+                    console.log(`[AUTO-UPDATE] Incorporating ${likedSongs.length} liked song(s) into prompt`);
+                  }
+                  if (dislikedSongs.length > 0) {
+                    const dislikedTrackNames = dislikedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ');
+                    userFeedbackContext += ` User disliked: ${dislikedTrackNames}.`;
+                    console.log(`[AUTO-UPDATE] Avoiding songs similar to ${dislikedSongs.length} disliked song(s)`);
+                  }
+                }
+
                 // If we have current tracks, enhance the prompt to make sure new songs are similar
                 if (playlist.tracks.length > 0) {
                   const topTracks = playlist.tracks.slice(0, 5).map(t => t.name).join(', ');
                   prompt = `${prompt}. Reference tracks: ${topTracks}`;
+                }
+
+                // Add user feedback context to prompt
+                if (userFeedbackContext) {
+                  prompt += userFeedbackContext;
                 }
 
                 // Generate new tracks using the same AI-based generation logic as the main endpoint
@@ -3847,15 +3996,22 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                       });
                     }
 
-                    // Filter tracks based on year, artist exclusions, and song exclusions
+                    // Filter tracks based on year, artist exclusions, song exclusions, and disliked songs
                     const excludedSongIds = new Set(playlist.excludedSongs || []);
+                    const dislikedSongIds = new Set((playlist.dislikedSongs || []).map(s => s.id));
 
-                    if (minYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0) {
+                    if (minYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0 || dislikedSongIds.size > 0) {
                       const beforeFilter = genreFilteredResults.length;
                       genreFilteredResults = genreFilteredResults.filter(track => {
                         // Check if this specific song was excluded
                         if (excludedSongIds.has(track.id)) {
                           console.log(`[AUTO-UPDATE] Filtered out excluded song: ${track.name}`);
+                          return false;
+                        }
+
+                        // Check if this specific song was disliked by user
+                        if (dislikedSongIds.has(track.id)) {
+                          console.log(`[AUTO-UPDATE] Filtered out disliked song: ${track.name}`);
                           return false;
                         }
 
@@ -3879,7 +4035,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
 
                         return true;
                       });
-                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (excluded ${excludedSongIds.size} songs, ${excludedArtists.length} artists)`);
+                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (excluded ${excludedSongIds.size} songs, ${dislikedSongIds.size} disliked songs, ${excludedArtists.length} artists)`);
                     }
 
                     // Remove duplicates by both URI and normalized track name
