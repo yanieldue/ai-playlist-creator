@@ -2180,6 +2180,43 @@
 
 /* Modal track item styles are now in _track-contexts.css with modal-context class */
 
+.track-actions-modal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.track-exclude-button-modal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: none;
+  border: none;
+  color: #ff3b30;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.track-exclude-button-modal:hover {
+  background: #ffebee;
+  transform: scale(1.1);
+}
+
+.track-exclude-button-modal:active {
+  transform: scale(0.95);
+}
+
+:root.dark-mode .track-exclude-button-modal {
+  color: #ff453a;
+}
+
+:root.dark-mode .track-exclude-button-modal:hover {
+  background: rgba(255, 69, 58, 0.1);
+}
+
 .spotify-link-modal {
   color: #1DB954;
   padding: 8px;

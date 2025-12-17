@@ -21,7 +21,6 @@ const PlaylistGenerator = () => {
   const [generatedPlaylist, setGeneratedPlaylist] = useState(null);
   const [error, setError] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
-  const [selectedTracks, setSelectedTracks] = useState(new Set());
   const [activeTab, setActiveTab] = useState('home');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
@@ -636,10 +635,6 @@ const PlaylistGenerator = () => {
       setShowGeneratingModal(false);
       setGeneratedPlaylist(result);
 
-      // Select all tracks by default
-      const allTrackIds = new Set(result.tracks.map(track => track.id));
-      setSelectedTracks(allTrackIds);
-
       // Initialize playlist name and description
       setEditedPlaylistName(result.playlistName);
       setEditedDescription(result.description);
@@ -678,32 +673,23 @@ const PlaylistGenerator = () => {
     }
   };
 
-  const toggleTrackSelection = (trackId) => {
-    const newSelected = new Set(selectedTracks);
-    if (newSelected.has(trackId)) {
-      newSelected.delete(trackId);
-    } else {
-      newSelected.add(trackId);
-    }
-    setSelectedTracks(newSelected);
-  };
+  const removeTrackFromGenerated = (trackId) => {
+    // Remove track from the generated playlist immediately
+    const updatedTracks = generatedPlaylist.tracks.filter(track => track.id !== trackId);
+    setGeneratedPlaylist({
+      ...generatedPlaylist,
+      tracks: updatedTracks,
+      trackCount: updatedTracks.length
+    });
 
-  const toggleSelectAll = () => {
-    if (selectedTracks.size === generatedPlaylist.tracks.length) {
-      // Deselect all
-      setSelectedTracks(new Set());
-    } else {
-      // Select all
-      const allTrackIds = new Set(generatedPlaylist.tracks.map(track => track.id));
-      setSelectedTracks(allTrackIds);
-    }
+    showToast('Track removed', 'success');
   };
 
   const handleCreatePlaylist = async () => {
     if (!generatedPlaylist) return;
 
-    if (selectedTracks.size === 0) {
-      setError('Please select at least one track');
+    if (generatedPlaylist.tracks.length === 0) {
+      setError('Please keep at least one track in the playlist');
       return;
     }
 
@@ -711,11 +697,8 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      // Only include selected tracks
-      const selectedTrackObjects = generatedPlaylist.tracks.filter(track =>
-        selectedTracks.has(track.id)
-      );
-      const trackUris = selectedTrackObjects.map(track => track.uri);
+      // Use all remaining tracks (user removed unwanted ones with minus button)
+      const trackUris = generatedPlaylist.tracks.map(track => track.uri);
       const result = await playlistService.createPlaylist(
         userId,
         generatedPlaylist.playlistName,
@@ -817,10 +800,6 @@ const PlaylistGenerator = () => {
 
       setGeneratedPlaylist(result);
 
-      // Update selected tracks
-      const allTrackIds = new Set(result.tracks.map(track => track.id));
-      setSelectedTracks(allTrackIds);
-
       // Add AI response to chat
       setChatMessages(prev => [...prev, {
         role: 'assistant',
@@ -863,10 +842,6 @@ const PlaylistGenerator = () => {
         };
 
         setGeneratedPlaylist(updatedPlaylist);
-
-        // Auto-select the new tracks
-        const newTrackIds = newTracks.map(track => track.id);
-        setSelectedTracks(prev => new Set([...prev, ...newTrackIds]));
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to add more songs. Please try again.');
@@ -876,8 +851,8 @@ const PlaylistGenerator = () => {
   };
 
   const handleModalNext = () => {
-    if (selectedTracks.size === 0) {
-      setError('Please select at least one track');
+    if (generatedPlaylist.tracks.length === 0) {
+      setError('Please keep at least one track in the playlist');
       return;
     }
     setError('');
@@ -899,7 +874,6 @@ const PlaylistGenerator = () => {
       const draft = {
         id: draftId,
         playlist: generatedPlaylist,
-        selectedTracks: Array.from(selectedTracks),
         chatMessages: chatMessages,
         editedPlaylistName: editedPlaylistName,
         editedDescription: editedDescription,
@@ -938,10 +912,8 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      const selectedTrackObjects = generatedPlaylist.tracks.filter(track =>
-        selectedTracks.has(track.id)
-      );
-      const trackUris = selectedTrackObjects.map(track => track.uri);
+      // Use all remaining tracks (user removed unwanted ones with minus button)
+      const trackUris = generatedPlaylist.tracks.map(track => track.uri);
       const result = await playlistService.createPlaylist(
         userId,
         editedPlaylistName.trim(),
@@ -961,7 +933,7 @@ const PlaylistGenerator = () => {
           ? draftPlaylists.filter(d => d.id !== currentDraftId)
           : draftPlaylists.filter(d =>
               !(d.playlist?.playlistName === editedPlaylistName &&
-                d.selectedTracks?.length === selectedTracks.size)
+                d.playlist?.tracks?.length === generatedPlaylist.tracks.length)
             );
         localStorage.setItem('draftPlaylists', JSON.stringify(updatedDrafts));
         setDraftPlaylists(updatedDrafts);
@@ -998,7 +970,6 @@ const PlaylistGenerator = () => {
 
     // Restore playlist state from draft
     setGeneratedPlaylist(draft.playlist);
-    setSelectedTracks(new Set(draft.selectedTracks));
     setChatMessages(draft.chatMessages || []);
     setEditedPlaylistName(draft.editedPlaylistName);
     setEditedDescription(draft.editedDescription);
@@ -1082,10 +1053,6 @@ const PlaylistGenerator = () => {
       setGeneratingMessage('');
       setShowGeneratingModal(false);
       setGeneratedPlaylist(result);
-
-      // Select all tracks by default
-      const allTrackIds = new Set(result.tracks.map(track => track.id));
-      setSelectedTracks(allTrackIds);
 
       // Set default name and description
       setEditedPlaylistName(result.playlistName);
@@ -1260,7 +1227,7 @@ const PlaylistGenerator = () => {
                             </div>
                             <div className="draft-card-info">
                               <div className="draft-card-name">{draft.playlist?.playlistName || 'Untitled Playlist'}</div>
-                              <div className="draft-card-meta">{draft.selectedTracks?.length || 0} tracks</div>
+                              <div className="draft-card-meta">{draft.playlist?.tracks?.length || 0} tracks</div>
                             </div>
                             <button
                               className="draft-card-delete"
@@ -1634,11 +1601,8 @@ const PlaylistGenerator = () => {
                     {/* Left: Track List */}
                     <div className="playlist-modal-tracks">
                       <div className="playlist-modal-tracks-header">
-                        <h3>Select Tracks ({selectedTracks.size}/{generatedPlaylist.trackCount})</h3>
+                        <h3>Tracks ({generatedPlaylist.tracks.length})</h3>
                         <div className="tracks-header-buttons">
-                          <button onClick={toggleSelectAll} className="select-all-button-modal">
-                            {selectedTracks.size === generatedPlaylist.tracks.length ? 'Deselect All' : 'Select All'}
-                          </button>
                           <button
                             onClick={handleAddMoreSongs}
                             disabled={loadingMoreSongs}
@@ -1651,13 +1615,7 @@ const PlaylistGenerator = () => {
 
                       <div className="playlist-modal-tracks-list">
                         {generatedPlaylist.tracks.map((track, index) => (
-                          <div key={track.id} className={`modal-context track-item ${selectedTracks.has(track.id) ? 'selected' : ''}`}>
-                            <input
-                              type="checkbox"
-                              checked={selectedTracks.has(track.id)}
-                              onChange={() => toggleTrackSelection(track.id)}
-                              className="track-checkbox"
-                            />
+                          <div key={track.id} className="modal-context track-item">
                             <span className="track-number">{index + 1}</span>
                             {track.image && (
                               <img src={track.image} alt={track.album} className="track-image" />
@@ -1666,17 +1624,29 @@ const PlaylistGenerator = () => {
                               <div className="track-name">{track.name}</div>
                               <div className="track-artist">{track.artist}</div>
                             </div>
-                            <a
-                              href={track.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="spotify-link-modal"
-                              title="Open in Spotify"
-                            >
-                              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                              </svg>
-                            </a>
+                            <div className="track-actions-modal">
+                              <button
+                                className="track-exclude-button-modal"
+                                onClick={() => removeTrackFromGenerated(track.id)}
+                                title="Remove from list"
+                              >
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/>
+                                  <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="2"/>
+                                </svg>
+                              </button>
+                              <a
+                                href={track.externalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="spotify-link-modal"
+                                title="Open in Spotify"
+                              >
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                  <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                </svg>
+                              </a>
+                            </div>
                           </div>
                         ))}
                       </div>
