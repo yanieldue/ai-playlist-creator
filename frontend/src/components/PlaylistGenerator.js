@@ -633,7 +633,8 @@ const PlaylistGenerator = () => {
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
-      setGeneratedPlaylist(result);
+      // Store the original prompt with the playlist for "Add More" functionality
+      setGeneratedPlaylist({ ...result, originalPrompt: prompt.trim() });
 
       // Initialize playlist name and description
       setEditedPlaylistName(result.playlistName);
@@ -798,7 +799,8 @@ const PlaylistGenerator = () => {
         songCount
       );
 
-      setGeneratedPlaylist(result);
+      // Preserve the original prompt when refining
+      setGeneratedPlaylist({ ...result, originalPrompt: generatedPlaylist.originalPrompt });
 
       // Add AI response to chat
       setChatMessages(prev => [...prev, {
@@ -820,9 +822,10 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      // Generate more songs with the same theme
+      // Generate more songs using the original prompt to maintain consistency
+      const promptToUse = generatedPlaylist.originalPrompt || generatedPlaylist.playlistName;
       const result = await playlistService.generatePlaylist(
-        `Add 10 more songs similar to: ${generatedPlaylist.playlistName}`,
+        `Based on this theme: "${promptToUse}", add 10 more similar songs`,
         userId,
         'spotify',
         allowExplicit,
