@@ -2034,6 +2034,20 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
             }
           }
 
+          // Year range filtering (for "last 5 years", "from 2020-2024", etc.)
+          if (genreData.era.yearRange.min !== null || genreData.era.yearRange.max !== null) {
+            if (track.album && track.album.release_date) {
+              const releaseYear = parseInt(track.album.release_date.substring(0, 4));
+              const minYear = genreData.era.yearRange.min || 0;
+              const maxYear = genreData.era.yearRange.max || 9999;
+
+              if (releaseYear < minYear || releaseYear > maxYear) {
+                console.log(`"${track.name}" filtered out: Release year ${releaseYear} (range: ${minYear}-${maxYear})`);
+                passesFilters = false;
+              }
+            }
+          }
+
           if (passesFilters) {
             // Add audio features to track for debugging
             filteredTracks.push({
