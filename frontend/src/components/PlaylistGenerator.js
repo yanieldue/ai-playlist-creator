@@ -833,6 +833,9 @@ const PlaylistGenerator = () => {
 
       const refinementPrompt = `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
 
+      // Use the current playlist's track count to maintain the same number of songs
+      const currentTrackCount = generatedPlaylist.tracks?.length || songCount;
+
       // Call AI to adjust playlist based on user request
       const result = await playlistService.generatePlaylist(
         refinementPrompt,
@@ -840,7 +843,7 @@ const PlaylistGenerator = () => {
         'spotify',
         allowExplicit,
         newArtistsOnly,
-        songCount
+        currentTrackCount
       );
 
       // Preserve the original prompt when refining
