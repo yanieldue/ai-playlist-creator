@@ -8,6 +8,7 @@
   background: #ffffff;
   padding: 0 2px var(--space-lg) 2px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
+  --track-bg-color: #f2f2f7;
 }
 
 .loading-container {
@@ -1239,6 +1240,7 @@
 :root.dark-mode .my-playlists {
   background: #1c1c1e;
   color: #ffffff;
+  --track-bg-color: #2c2c2e;
 }
 
 :root.dark-mode .loading-container {
