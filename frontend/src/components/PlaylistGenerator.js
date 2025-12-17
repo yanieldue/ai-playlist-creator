@@ -657,7 +657,7 @@ const PlaylistGenerator = () => {
       setShowGeneratingModal(false);
 
       // Store the original prompt with the playlist for "Add More" functionality
-      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim() };
+      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), chatMessages: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
@@ -831,7 +831,15 @@ const PlaylistGenerator = () => {
         ? `\n\nPlaylist description: ${generatedPlaylist.description}`
         : '';
 
-      const refinementPrompt = `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
+      // Build cumulative refinements from chat history
+      const previousRefinements = chatMessages
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.content)
+        .join('. ');
+
+      const refinementPrompt = previousRefinements
+        ? `Original request: "${originalPromptToUse}"${descriptionContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
+        : `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
 
       // Use the current playlist's track count to maintain the same number of songs
       const currentTrackCount = generatedPlaylist.tracks?.length || songCount;
@@ -846,8 +854,12 @@ const PlaylistGenerator = () => {
         currentTrackCount
       );
 
-      // Preserve the original prompt when refining
-      setGeneratedPlaylist({ ...result, originalPrompt: generatedPlaylist.originalPrompt });
+      // Preserve the original prompt and chat history when refining
+      setGeneratedPlaylist({
+        ...result,
+        originalPrompt: generatedPlaylist.originalPrompt,
+        chatMessages: [...chatMessages, { role: 'user', content: userMessage }]
+      });
 
       // Add AI response to chat
       setChatMessages(prev => [...prev, {
@@ -1118,7 +1130,7 @@ const PlaylistGenerator = () => {
       setShowGeneratingModal(false);
 
       // Store the original prompt with the playlist
-      const playlistWithPrompt = { ...result, originalPrompt: promptText };
+      const playlistWithPrompt = { ...result, originalPrompt: promptText, chatMessages: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
@@ -1139,6 +1151,7 @@ const PlaylistGenerator = () => {
       // Open the modal
       setShowPlaylistModal(true);
       setModalStep(1);
+      setChatMessages([]);
 
       console.log('Generated playlist for artist:', selectedArtist.name);
 
