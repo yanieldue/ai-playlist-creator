@@ -195,8 +195,29 @@ async function getUserTokens(userId) {
   return tokens;
 }
 
-// Load playlists from file on startup
-function loadPlaylists() {
+// Load playlists from database (for PostgreSQL) or file (for SQLite)
+async function loadPlaylistsFromDB() {
+  if (usePostgres) {
+    try {
+      const playlistsByUser = await db.getAllPlaylists();
+      const userPlaylistsMap = new Map();
+      for (const [userId, playlists] of Object.entries(playlistsByUser)) {
+        userPlaylistsMap.set(userId, playlists);
+      }
+      console.log('Loaded playlists for', userPlaylistsMap.size, 'users from database');
+      return userPlaylistsMap;
+    } catch (error) {
+      console.error('Error loading playlists from database:', error);
+      return new Map();
+    }
+  } else {
+    // Fallback to file-based storage for SQLite
+    return loadPlaylistsFromFile();
+  }
+}
+
+// Load playlists from file (SQLite fallback)
+function loadPlaylistsFromFile() {
   try {
     if (fs.existsSync(PLAYLISTS_FILE)) {
       const data = fs.readFileSync(PLAYLISTS_FILE, 'utf8');
@@ -205,18 +226,61 @@ function loadPlaylists() {
       return new Map(Object.entries(playlistsObj));
     }
   } catch (error) {
-    console.error('Error loading playlists:', error);
+    console.error('Error loading playlists from file:', error);
   }
   return new Map();
 }
 
-// Save playlists to file
-function savePlaylists() {
-  try {
-    const playlistsObj = Object.fromEntries(userPlaylists);
-    fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(playlistsObj, null, 2));
-  } catch (error) {
-    console.error('Error saving playlists:', error);
+// Save playlist to database or file
+async function savePlaylist(userId, playlistData) {
+  if (usePostgres) {
+    try {
+      await db.savePlaylist(userId, playlistData.playlistId, playlistData);
+    } catch (error) {
+      console.error('Error saving playlist to database:', error);
+    }
+  } else {
+    // Update in-memory map
+    const userPlaylistsArray = userPlaylists.get(userId) || [];
+    const existingIndex = userPlaylistsArray.findIndex(p => p.playlistId === playlistData.playlistId);
+    if (existingIndex >= 0) {
+      userPlaylistsArray[existingIndex] = playlistData;
+    } else {
+      userPlaylistsArray.push(playlistData);
+    }
+    userPlaylists.set(userId, userPlaylistsArray);
+    // Save to file
+    savePlaylistsToFile();
+  }
+}
+
+// Delete playlist from database or file
+async function deletePlaylist(userId, playlistId) {
+  if (usePostgres) {
+    try {
+      await db.deletePlaylist(userId, playlistId);
+    } catch (error) {
+      console.error('Error deleting playlist from database:', error);
+    }
+  } else {
+    // Remove from in-memory map
+    const userPlaylistsArray = userPlaylists.get(userId) || [];
+    const filtered = userPlaylistsArray.filter(p => p.playlistId !== playlistId);
+    userPlaylists.set(userId, filtered);
+    // Save to file
+    savePlaylistsToFile();
+  }
+}
+
+// Save all playlists to file (SQLite only)
+function savePlaylistsToFile() {
+  if (!usePostgres) {
+    try {
+      const playlistsObj = Object.fromEntries(userPlaylists);
+      fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(playlistsObj, null, 2));
+    } catch (error) {
+      console.error('Error saving playlists to file:', error);
+    }
   }
 }
 
@@ -404,8 +468,8 @@ const registeredUsers = {
   delete: (email) => db.deleteUser(email)
 };
 
-// Store user playlists (persisted to file)
-const userPlaylists = loadPlaylists();
+// Store user playlists (persisted to database in production, file in development)
+let userPlaylists = new Map();
 
 // Store playlist reactions (persisted to file)
 // Format: { playlistId: { thumbsUp: [userId1, userId2], thumbsDown: [userId3] } }
@@ -2413,7 +2477,7 @@ app.post('/api/create-playlist', async (req, res) => {
     const userPlaylistHistory = userPlaylists.get(userId) || [];
     userPlaylistHistory.push(playlistRecord);
     userPlaylists.set(userId, userPlaylistHistory);
-    savePlaylists();
+    await savePlaylist(userId, playlistRecord);
 
     console.log('Playlist saved to history');
 
@@ -2631,7 +2695,7 @@ app.post('/api/import-playlist', async (req, res) => {
 
     userPlaylistHistory.push(playlistRecord);
     userPlaylists.set(userId, userPlaylistHistory);
-    savePlaylists();
+    await savePlaylist(userId, playlistRecord);
 
     console.log('Playlist imported:', playlistId);
 
@@ -2801,7 +2865,7 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       userPlaylistsArray[playlistIndex].updatedAt = now;
       userPlaylistsArray[playlistIndex].lastUpdated = now;
       userPlaylists.set(userId, userPlaylistsArray);
-      savePlaylists();
+      await savePlaylist(userId, userPlaylistsArray[playlistIndex]);
       console.log(`Updated timestamp for playlist ${playlistId} - 24hr cooldown started`);
     }
 
@@ -2885,7 +2949,7 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
 
     // Save updated playlists
     userPlaylists.set(userId, userPlaylistHistory);
-    savePlaylists();
+    await savePlaylist(userId, userPlaylistHistory[playlistIndex]);
 
     console.log('Playlist settings updated successfully');
 
@@ -2949,7 +3013,7 @@ app.post('/api/playlists/:playlistId/refine', async (req, res) => {
 
     // Save the updated playlists
     userPlaylists.set(userId, userPlaylistsArray);
-    savePlaylists();
+    await savePlaylist(userId, playlist);
 
     res.json({
       success: true,
@@ -3028,7 +3092,7 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
 
     // Save changes
     userPlaylists.set(userId, userPlaylistsArray);
-    savePlaylists();
+    await savePlaylist(userId, playlist);
 
     // Also remove from Spotify if the playlist exists there
     try {
@@ -3403,7 +3467,7 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
 
     const deletedPlaylist = userPlaylistHistory.splice(playlistIndex, 1)[0];
     userPlaylists.set(userId, userPlaylistHistory);
-    savePlaylists();
+    await deletePlaylist(userId, playlistId);
 
     // Also remove from saved playlists if it exists there
     let savedPlaylists = userSavedPlaylists.get(userId) || [];
@@ -3464,7 +3528,7 @@ const scheduleAutoUpdates = () => {
                   playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
                   const updatedPlaylists = userPlaylists.get(userId);
                   userPlaylists.set(userId, updatedPlaylists);
-                  savePlaylists();
+                  await savePlaylist(userId, playlist);
 
                   continue; // Skip this playlist and move to the next one
                 }
@@ -4212,7 +4276,7 @@ Only include tracks that genuinely match "${genreData.primaryGenre}". DO NOT inc
                 playlist.lastUpdated = now;
                 playlist.updatedAt = now;
                 playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                savePlaylists();
+                await savePlaylist(userId, playlist);
 
               } catch (updateError) {
                 console.error(`[AUTO-UPDATE] Error updating playlist ${playlist.playlistName}:`, updateError.message);
@@ -4255,6 +4319,11 @@ async function startServer() {
       await db.initialize();
       console.log('✓ PostgreSQL database initialized');
     }
+
+    // Load playlists from database or file
+    console.log('Loading playlists...');
+    userPlaylists = await loadPlaylistsFromDB();
+    console.log('✓ Playlists loaded');
 
     app.listen(PORT, () => {
       console.log(`🎵 AI Playlist Creator Backend running on port ${PORT}`);

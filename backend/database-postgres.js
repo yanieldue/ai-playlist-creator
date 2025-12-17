@@ -65,9 +65,20 @@ async function initializeTables() {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS playlists (
+        user_id TEXT NOT NULL,
+        playlist_id TEXT NOT NULL,
+        playlist_data JSONB NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, playlist_id)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
       CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
+      CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id);
+      CREATE INDEX IF NOT EXISTS idx_playlists_updated_at ON playlists(updated_at);
     `);
     console.log('PostgreSQL tables initialized');
   } finally {
@@ -302,6 +313,79 @@ class DatabaseService {
     await pool.query(`
       UPDATE users SET password = $1, updated_at = NOW() WHERE email = $2
     `, [newPassword, email]);
+  }
+
+  // Playlists
+  async getUserPlaylists(userId) {
+    const result = await pool.query(`
+      SELECT playlist_id, playlist_data, created_at, updated_at
+      FROM playlists
+      WHERE user_id = $1
+      ORDER BY updated_at DESC
+    `, [userId]);
+
+    return result.rows.map(row => ({
+      playlistId: row.playlist_id,
+      ...row.playlist_data,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  }
+
+  async getPlaylist(userId, playlistId) {
+    const result = await pool.query(`
+      SELECT playlist_data, created_at, updated_at
+      FROM playlists
+      WHERE user_id = $1 AND playlist_id = $2
+    `, [userId, playlistId]);
+
+    if (result.rows.length === 0) return null;
+
+    return {
+      playlistId,
+      ...result.rows[0].playlist_data,
+      createdAt: result.rows[0].created_at,
+      updatedAt: result.rows[0].updated_at
+    };
+  }
+
+  async savePlaylist(userId, playlistId, playlistData) {
+    await pool.query(`
+      INSERT INTO playlists (user_id, playlist_id, playlist_data, created_at, updated_at)
+      VALUES ($1, $2, $3, NOW(), NOW())
+      ON CONFLICT (user_id, playlist_id) DO UPDATE SET
+        playlist_data = $3,
+        updated_at = NOW()
+    `, [userId, playlistId, JSON.stringify(playlistData)]);
+  }
+
+  async deletePlaylist(userId, playlistId) {
+    await pool.query(`
+      DELETE FROM playlists WHERE user_id = $1 AND playlist_id = $2
+    `, [userId, playlistId]);
+  }
+
+  async getAllPlaylists() {
+    const result = await pool.query(`
+      SELECT user_id, playlist_id, playlist_data, created_at, updated_at
+      FROM playlists
+      ORDER BY user_id, updated_at DESC
+    `);
+
+    const playlistsByUser = {};
+    result.rows.forEach(row => {
+      if (!playlistsByUser[row.user_id]) {
+        playlistsByUser[row.user_id] = [];
+      }
+      playlistsByUser[row.user_id].push({
+        playlistId: row.playlist_id,
+        ...row.playlist_data,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      });
+    });
+
+    return playlistsByUser;
   }
 
   // Close pool
