@@ -825,9 +825,17 @@ const PlaylistGenerator = () => {
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
     try {
+      // Use original prompt and description to maintain playlist vibe during refinement
+      const originalPromptToUse = generatedPlaylist.originalPrompt || generatedPlaylist.playlistName;
+      const descriptionContext = generatedPlaylist.description
+        ? `\n\nPlaylist description: ${generatedPlaylist.description}`
+        : '';
+
+      const refinementPrompt = `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
+
       // Call AI to adjust playlist based on user request
       const result = await playlistService.generatePlaylist(
-        `${generatedPlaylist.playlistName}: ${userMessage}`,
+        refinementPrompt,
         userId,
         'spotify',
         allowExplicit,
@@ -858,10 +866,14 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      // Generate more songs using the original prompt to maintain consistency
+      // Generate more songs using the original prompt and description to maintain consistency
       const promptToUse = generatedPlaylist.originalPrompt || generatedPlaylist.playlistName;
+      const descriptionContext = generatedPlaylist.description
+        ? ` Description: ${generatedPlaylist.description}`
+        : '';
+
       const result = await playlistService.generatePlaylist(
-        `Based on this theme: "${promptToUse}", add 10 more similar songs`,
+        `Based on this theme: "${promptToUse}".${descriptionContext} Add 10 more similar songs that match this exact vibe and description.`,
         userId,
         'spotify',
         allowExplicit,

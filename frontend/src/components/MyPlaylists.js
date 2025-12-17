@@ -550,26 +550,29 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       }
 
       // Build prompt based on available data
+      const description = editOptionsPlaylist.description || '';
+      const originalPrompt = editOptionsPlaylist.originalPrompt || '';
+      const playlistName = editOptionsPlaylist.playlistName;
+
+      // Build context about the playlist's intended vibe
+      let playlistContext = '';
+      if (originalPrompt) {
+        playlistContext = `Original request: "${originalPrompt}".`;
+      }
+      if (description) {
+        playlistContext += ` Description: ${description}`;
+      }
+
       let prompt;
       if (existingTracksInfo) {
         prompt = manualRefreshMode === 'replace'
-          ? `Generate ${manualRefreshSongCount} new songs similar in style and mood to this playlist called "${editOptionsPlaylist.playlistName}". Current songs include: ${existingTracksInfo}. Generate songs that match this vibe.`
-          : `Add ${manualRefreshSongCount} more songs to "${editOptionsPlaylist.playlistName}" that match these existing songs: ${existingTracksInfo}`;
+          ? `${playlistContext ? playlistContext + '\n\n' : ''}Generate ${manualRefreshSongCount} new songs similar in style and mood to this playlist called "${playlistName}". Current songs include: ${existingTracksInfo}. Generate songs that match this exact vibe and description.`
+          : `${playlistContext ? playlistContext + '\n\n' : ''}Add ${manualRefreshSongCount} more songs to "${playlistName}" that match these existing songs: ${existingTracksInfo}. Match the exact vibe and description.`;
       } else {
-        // Fallback when track details aren't available - extract genre/mood from name and description
-        const description = editOptionsPlaylist.description || '';
-        const playlistName = editOptionsPlaylist.playlistName;
+        // Fallback when track details aren't available
+        prompt = `${playlistContext ? playlistContext + '\n\n' : ''}Generate ${manualRefreshSongCount} songs for a playlist called "${playlistName}".
 
-        // Try to extract key descriptors from the name (e.g., "Velvet Vibes: R&B for Focus" -> "mellow R&B, focus")
-        prompt = `Generate ${manualRefreshSongCount} songs for a playlist called "${playlistName}". ${description}
-
-IMPORTANT: Pay close attention to the playlist name and description to understand the exact genre and mood:
-- If the name mentions "R&B", only include R&B songs
-- If it mentions "mellow", "smooth", "chill", or "focus", only include calm, relaxed songs (no upbeat or energetic tracks)
-- If it mentions "Focus", prioritize instrumental or low-key vocals
-- Match the EXACT vibe and energy level described in the name and description
-
-Generate songs that precisely match the genre, mood, and energy level indicated by the playlist name and description.`;
+IMPORTANT: Pay close attention to the original request and description to understand the exact genre and mood. Generate songs that precisely match the genre, mood, and energy level indicated by the playlist description.`;
       }
 
       // Add refinement instructions if they exist (just like auto-update does)

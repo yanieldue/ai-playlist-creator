@@ -3755,6 +3755,11 @@ const scheduleAutoUpdates = () => {
                 // Get the playlist's original prompt or use the name as fallback
                 let prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
 
+                // Add description to maintain playlist vibe
+                if (playlist.description) {
+                  prompt += `. Description: ${playlist.description}`;
+                }
+
                 // Add any refinement instructions the user has provided
                 if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
                   prompt += '. ' + playlist.refinementInstructions.join('. ');
