@@ -2882,7 +2882,10 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       // Separate remove and add operations
       // Remove tracks if specified
       if (tracksToRemove && tracksToRemove.length > 0) {
-        const validTracksToRemove = tracksToRemove.filter(isValidSpotifyTrackUri);
+        // tracksToRemove is expected to be in format [{ uri: 'spotify:track:...' }]
+        const validTracksToRemove = tracksToRemove.filter(track =>
+          track && track.uri && isValidSpotifyTrackUri(track.uri)
+        );
 
         if (validTracksToRemove.length > 0) {
           console.log(`Removing ${validTracksToRemove.length} tracks from playlist ${playlistId}`);
