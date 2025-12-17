@@ -3188,6 +3188,8 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     const { playlistId } = req.params;
     const { userId, trackId, trackUri, trackName, artistName, reaction } = req.body;
 
+    console.log(`[REACTION] Request received: playlistId=${playlistId}, userId=${userId}, trackId=${trackId}, reaction=${reaction}`);
+
     if (!userId || !trackId) {
       return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
     }

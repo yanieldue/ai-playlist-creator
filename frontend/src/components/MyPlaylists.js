@@ -279,6 +279,8 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       // Toggle reaction: if already set to this reaction, remove it
       const newReaction = track.reaction === reaction ? null : reaction;
 
+      console.log('Reacting to song:', { playlistId, trackId: track.id, trackName: track.name, reaction: newReaction });
+
       // Call reaction endpoint
       await playlistService.reactToSong(
         playlistId,
