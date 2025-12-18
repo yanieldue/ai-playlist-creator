@@ -2522,25 +2522,6 @@ DO NOT include any text outside the JSON array.`;
 
     console.log(`Selected ${selectedTracks.length} tracks for playlist`);
 
-    // If Claude selected fewer tracks than requested, fill up to songCount with remaining tracks
-    if (selectedTracks.length < songCount && tracksForSelection.length > selectedTracks.length) {
-      console.log(`Claude only selected ${selectedTracks.length}/${songCount} tracks. Auto-filling remaining slots...`);
-
-      // Get indices that were already selected
-      const selectedTrackNames = new Set(selectedTracks.map(t => t.name));
-
-      // Add remaining tracks that weren't selected until we hit songCount
-      for (const track of tracksForSelection) {
-        if (selectedTracks.length >= songCount) break;
-        if (!selectedTrackNames.has(track.name)) {
-          selectedTracks.push(track);
-          selectedTrackNames.add(track.name);
-        }
-      }
-
-      console.log(`Auto-filled to ${selectedTracks.length} tracks total`);
-    }
-
     // Step 4: VIBE CHECK - Review the selected tracks for coherence
     // This addresses the #1 complaint: AI missing the "vibe" even when genres match
     if (selectedTracks.length > 0 && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre)) {
@@ -2605,25 +2586,7 @@ DO NOT include any text outside the JSON.`;
             .map(index => selectedTracks[index - 1])
             .filter(track => track !== undefined);
 
-          console.log(`After vibe check: ${selectedTracks.length} tracks remain`);
-
-          // Auto-fill to requested count if vibe check removed tracks
-          if (selectedTracks.length < songCount && tracksForSelection.length > selectedTracks.length) {
-            console.log(`Vibe check reduced track count to ${selectedTracks.length}/${songCount}. Auto-filling remaining slots...`);
-
-            const selectedTrackNames = new Set(selectedTracks.map(t => t.name));
-
-            // Add remaining tracks that weren't selected until we hit songCount
-            for (const track of tracksForSelection) {
-              if (selectedTracks.length >= songCount) break;
-              if (!selectedTrackNames.has(track.name)) {
-                selectedTracks.push(track);
-                selectedTrackNames.add(track.name);
-              }
-            }
-
-            console.log(`Auto-filled to ${selectedTracks.length} tracks total after vibe check`);
-          }
+          console.log(`After vibe check: ${selectedTracks.length} tracks remain (curated selection only)`);
         } else {
           console.log('Vibe check passed - all tracks fit the intended atmosphere');
         }
