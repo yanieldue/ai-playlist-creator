@@ -925,13 +925,14 @@ const PlaylistGenerator = () => {
         excludedSongUris
       );
 
-      // Preserve the original prompt, requested count, chat history, and excluded songs when refining
+      // Preserve the original prompt, requested count, chat history, excluded songs, and draft ID when refining
       setGeneratedPlaylist({
         ...result,
         originalPrompt: generatedPlaylist.originalPrompt,
         requestedSongCount: generatedPlaylist.requestedSongCount,
         chatMessages: [...chatMessages, { role: 'user', content: userMessage }],
-        excludedSongs: generatedPlaylist.excludedSongs || []
+        excludedSongs: generatedPlaylist.excludedSongs || [],
+        playlistId: generatedPlaylist.playlistId // Preserve draft ID
       });
 
       // Add AI response to chat
@@ -1095,11 +1096,12 @@ const PlaylistGenerator = () => {
           ...generatedPlaylist,
           playlistName: editedPlaylistName,
           description: editedDescription,
-          chatMessages: chatMessages
+          chatMessages: chatMessages,
+          draftId: currentDraftId || generatedPlaylist.playlistId // Use existing draft ID if available
         };
 
         await playlistService.saveDraft(userId, updatedPlaylist);
-        console.log('Draft updated on close');
+        console.log('Draft updated on close with ID:', updatedPlaylist.draftId);
       } catch (error) {
         console.error('Failed to update draft on close:', error);
       }
