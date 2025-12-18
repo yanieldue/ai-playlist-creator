@@ -36,10 +36,7 @@ const PlaylistGenerator = () => {
   const [updateFrequency, setUpdateFrequency] = useState('never');
   const [updateMode, setUpdateMode] = useState('append');
   const [isPublic, setIsPublic] = useState(true);
-  const [draftPlaylists, setDraftPlaylists] = useState(() => {
-    const saved = localStorage.getItem('draftPlaylists');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [draftPlaylists, setDraftPlaylists] = useState([]);
   const [currentDraftId, setCurrentDraftId] = useState(null);
   const [generatingMessage, setGeneratingMessage] = useState('');
   const [showGeneratingModal, setShowGeneratingModal] = useState(false);
@@ -1090,7 +1087,6 @@ const PlaylistGenerator = () => {
         updatedDrafts = [draft, ...draftPlaylists];
       }
 
-      localStorage.setItem('draftPlaylists', JSON.stringify(updatedDrafts));
       setDraftPlaylists(updatedDrafts);
     }
 
@@ -1154,7 +1150,6 @@ const PlaylistGenerator = () => {
               !(d.playlist?.playlistName === editedPlaylistName &&
                 d.playlist?.tracks?.length === generatedPlaylist.tracks.length)
             );
-        localStorage.setItem('draftPlaylists', JSON.stringify(updatedDrafts));
         setDraftPlaylists(updatedDrafts);
 
         setShowPlaylistModal(false);
@@ -1199,7 +1194,6 @@ const PlaylistGenerator = () => {
 
   const handleDiscardDraft = (draftId) => {
     const updatedDrafts = draftPlaylists.filter(d => d.id !== draftId);
-    localStorage.setItem('draftPlaylists', JSON.stringify(updatedDrafts));
     setDraftPlaylists(updatedDrafts);
     if (currentDraftId === draftId) {
       setCurrentDraftId(null);
