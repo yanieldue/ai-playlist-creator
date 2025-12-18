@@ -2667,14 +2667,19 @@
   .playlist-modal-overlay {
     padding: 0;
     align-items: stretch;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 
   .playlist-modal-content {
     width: 100%;
-    max-height: 100vh;
-    height: 100vh;
+    height: 100%;
     border-radius: 0;
     max-width: none;
+    position: relative;
   }
 
   .playlist-modal-header {
