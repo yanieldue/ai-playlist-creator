@@ -785,6 +785,32 @@ const PlaylistGenerator = () => {
       if (result.success) {
         showToast('Playlist created successfully! Opening Spotify...', 'success');
         window.open(result.playlistUrl, '_blank');
+
+        // Delete draft from database if it has a draftId
+        if (generatedPlaylist.draftId) {
+          try {
+            await playlistService.deleteDraft(userId, generatedPlaylist.draftId);
+            console.log('Deleted draft from database');
+          } catch (draftError) {
+            console.error('Failed to delete draft:', draftError);
+          }
+        }
+
+        // Clear the current draft from the list
+        const updatedDrafts = currentDraftId
+          ? draftPlaylists.filter(d => (d.playlistId || d.id) !== currentDraftId)
+          : draftPlaylists.filter(d => (d.playlistId || d.id) !== generatedPlaylist.draftId);
+        setDraftPlaylists(updatedDrafts);
+
+        // Clear state
+        setShowPlaylistModal(false);
+        setModalStep(1);
+        setChatMessages([]);
+        setChatInput('');
+        setError('');
+        setGeneratedPlaylist(null);
+        setPrompt('');
+        setCurrentDraftId(null);
       }
     } catch (err) {
       // If authentication failed, clear stored userId and prompt re-authentication
