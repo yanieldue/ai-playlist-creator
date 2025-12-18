@@ -1973,39 +1973,41 @@ const PlaylistGenerator = () => {
 
                       {/* AI Chat - Below Track List */}
                       <div className="playlist-modal-chat-below">
-                        <div className="chat-input-container">
-                          <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter' && !chatLoading) {
-                                handleChatSubmit();
-                              }
-                            }}
-                            placeholder="Refine your playlist!"
-                            className="chat-input"
-                            disabled={chatLoading}
-                          />
-                          <button
-                            onClick={handleChatSubmit}
-                            disabled={chatLoading || !chatInput.trim()}
-                            className="music-note-button"
-                            title="Send Message"
-                          >
-                            {chatLoading ? (
-                              <div className="wave-loader">
-                                <div className="wave-bar"></div>
-                                <div className="wave-bar"></div>
-                                <div className="wave-bar"></div>
-                                <div className="wave-bar"></div>
-                              </div>
-                            ) : (
-                              <svg viewBox="0 0 24 24">
-                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                              </svg>
-                            )}
-                          </button>
+                        <div className="chat-and-next-container">
+                          <div className="chat-input-container">
+                            <input
+                              type="text"
+                              value={chatInput}
+                              onChange={(e) => setChatInput(e.target.value)}
+                              onKeyPress={(e) => {
+                                if (e.key === 'Enter' && !chatLoading) {
+                                  handleChatSubmit();
+                                }
+                              }}
+                              placeholder="Refine your playlist!"
+                              className="chat-input"
+                              disabled={chatLoading}
+                            />
+                            <button
+                              onClick={handleChatSubmit}
+                              disabled={chatLoading || !chatInput.trim()}
+                              className="music-note-button"
+                              title="Send Message"
+                            >
+                              {chatLoading ? (
+                                <div className="wave-loader">
+                                  <div className="wave-bar"></div>
+                                  <div className="wave-bar"></div>
+                                  <div className="wave-bar"></div>
+                                  <div className="wave-bar"></div>
+                                </div>
+                              ) : (
+                                <svg viewBox="0 0 24 24">
+                                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                           <button onClick={handleModalNext} className="modal-button-primary chat-next-button">
                             Next
                           </button>
