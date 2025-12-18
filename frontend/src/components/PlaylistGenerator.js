@@ -1180,22 +1180,32 @@ const PlaylistGenerator = () => {
     if (!draft) return;
 
     // Restore playlist state from draft
-    setGeneratedPlaylist(draft.playlist);
+    // Draft data is stored at the top level (playlistName, tracks, etc.)
+    setGeneratedPlaylist(draft);
     setChatMessages(draft.chatMessages || []);
-    setEditedPlaylistName(draft.editedPlaylistName);
-    setEditedDescription(draft.editedDescription);
+    setEditedPlaylistName(draft.playlistName);
+    setEditedDescription(draft.description);
     setModalStep(1);
     setCurrentDraftId(draftId);
     setShowPlaylistModal(true);
   };
 
-  const handleDiscardDraft = (draftId) => {
-    const updatedDrafts = draftPlaylists.filter(d => d.id !== draftId);
-    setDraftPlaylists(updatedDrafts);
-    if (currentDraftId === draftId) {
-      setCurrentDraftId(null);
+  const handleDiscardDraft = async (draftId) => {
+    try {
+      // Delete from database
+      await playlistService.deleteDraft(userId, draftId);
+
+      // Update local state
+      const updatedDrafts = draftPlaylists.filter(d => d.id !== draftId);
+      setDraftPlaylists(updatedDrafts);
+      if (currentDraftId === draftId) {
+        setCurrentDraftId(null);
+      }
+      showToast('Draft discarded', 'info');
+    } catch (error) {
+      console.error('Failed to delete draft:', error);
+      showToast('Failed to delete draft', 'error');
     }
-    showToast('Draft discarded', 'info');
   };
 
   // Scroll handlers for Top Artists carousel
@@ -1433,7 +1443,7 @@ const PlaylistGenerator = () => {
                     </div>
                     <div className="draft-cards-container">
                       {draftPlaylists.map((draft) => {
-                        const firstTrackImage = draft.playlist?.tracks?.[0]?.image;
+                        const firstTrackImage = draft.tracks?.[0]?.image;
                         return (
                           <div
                             key={draft.id}
@@ -1443,7 +1453,7 @@ const PlaylistGenerator = () => {
                           >
                             <div className="draft-card-image">
                               {firstTrackImage ? (
-                                <img src={firstTrackImage} alt={draft.playlist?.playlistName} />
+                                <img src={firstTrackImage} alt={draft.playlistName} />
                               ) : (
                                 <div className="draft-card-placeholder">
                                   <Icons.Playlist size={40} />
@@ -1451,8 +1461,8 @@ const PlaylistGenerator = () => {
                               )}
                             </div>
                             <div className="draft-card-info">
-                              <div className="draft-card-name">{draft.playlist?.playlistName || 'Untitled Playlist'}</div>
-                              <div className="draft-card-meta">{draft.playlist?.tracks?.length || 0} tracks</div>
+                              <div className="draft-card-name">{draft.playlistName || 'Untitled Playlist'}</div>
+                              <div className="draft-card-meta">{draft.tracks?.length || 0} tracks</div>
                             </div>
                             <button
                               className="draft-card-delete"
