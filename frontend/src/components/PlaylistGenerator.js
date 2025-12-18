@@ -1882,7 +1882,7 @@ const PlaylistGenerator = () => {
                           className="description-more"
                           onClick={() => setIsDescriptionExpanded(true)}
                         >
-                          MORE
+                          see more
                         </span>
                       </>
                     ) : (
@@ -1895,7 +1895,7 @@ const PlaylistGenerator = () => {
                               className="description-more"
                               onClick={() => setIsDescriptionExpanded(false)}
                             >
-                              LESS
+                              less
                             </span>
                           </>
                         )}
