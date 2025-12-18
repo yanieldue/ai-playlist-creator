@@ -2694,37 +2694,40 @@
   .playlist-modal-description {
     flex-shrink: 0;
     padding: 8px 20px;
-    overflow: hidden;
     position: relative;
-    line-height: 1.5;
+    line-height: 1.4;
     text-align: left;
     font-size: 0.9rem;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    color: #1c1c1e;
+  }
+
+  .playlist-modal-description:not(.expanded) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .playlist-modal-description.expanded {
-    white-space: normal;
-    overflow: visible;
+    display: block;
   }
 
   .description-toggle {
     background: none;
     border: none;
-    color: #666;
-    font-weight: 400;
-    font-size: 0.9rem;
+    color: #8e8e93;
+    font-weight: 600;
+    font-size: 0.85rem;
     cursor: pointer;
     padding: 0;
-    margin-left: 4px;
+    margin: 0;
     display: inline;
-    text-align: left;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
   }
 
-  .description-toggle:hover {
-    text-decoration: underline;
+  .description-toggle:active {
+    opacity: 0.6;
   }
 
   .playlist-modal-body,

@@ -1876,13 +1876,27 @@ const PlaylistGenerator = () => {
 
                   <div className={`playlist-modal-description ${isDescriptionExpanded ? 'expanded' : ''}`}>
                     {generatedPlaylist.description}
-                    {generatedPlaylist.description && generatedPlaylist.description.length > 80 && (
-                      <button
-                        className="description-toggle"
-                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                      >
-                        {isDescriptionExpanded ? 'LESS' : 'MORE'}
-                      </button>
+                    {generatedPlaylist.description && generatedPlaylist.description.length > 80 && !isDescriptionExpanded && (
+                      <>
+                        {' '}
+                        <button
+                          className="description-toggle"
+                          onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                        >
+                          MORE
+                        </button>
+                      </>
+                    )}
+                    {isDescriptionExpanded && (
+                      <>
+                        {' '}
+                        <button
+                          className="description-toggle"
+                          onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                        >
+                          LESS
+                        </button>
+                      </>
                     )}
                   </div>
 
