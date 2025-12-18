@@ -2699,7 +2699,7 @@
     text-align: left;
     font-size: 0.9rem;
     color: #1c1c1e;
-    max-height: 1.4em;
+    height: calc(0.9rem * 1.4);
     overflow: hidden;
     white-space: nowrap;
   }
@@ -2732,7 +2732,7 @@
   }
 
   .playlist-modal-description.expanded {
-    max-height: none;
+    height: auto;
     white-space: normal;
   }
 
