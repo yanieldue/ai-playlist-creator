@@ -1084,30 +1084,23 @@ const PlaylistGenerator = () => {
     }
   };
 
-  const closePlaylistModal = () => {
-    // Save draft if playlist exists and wasn't completed
-    if (generatedPlaylist) {
-      const draftId = currentDraftId || Date.now().toString();
-      const draft = {
-        id: draftId,
-        playlist: generatedPlaylist,
-        chatMessages: chatMessages,
-        editedPlaylistName: editedPlaylistName,
-        editedDescription: editedDescription,
-        modalStep: modalStep,
-        timestamp: Date.now()
-      };
+  const closePlaylistModal = async () => {
+    // Update draft in database if playlist exists and wasn't completed
+    if (generatedPlaylist && userId) {
+      try {
+        // Update the draft with current edits
+        const updatedPlaylist = {
+          ...generatedPlaylist,
+          playlistName: editedPlaylistName,
+          description: editedDescription,
+          chatMessages: chatMessages
+        };
 
-      let updatedDrafts;
-      if (currentDraftId) {
-        // Update existing draft
-        updatedDrafts = draftPlaylists.map(d => d.id === currentDraftId ? draft : d);
-      } else {
-        // Create new draft
-        updatedDrafts = [draft, ...draftPlaylists];
+        await playlistService.saveDraft(userId, updatedPlaylist);
+        console.log('Draft updated on close');
+      } catch (error) {
+        console.error('Failed to update draft on close:', error);
       }
-
-      setDraftPlaylists(updatedDrafts);
     }
 
     setShowPlaylistModal(false);
