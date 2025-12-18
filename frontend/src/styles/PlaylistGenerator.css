@@ -2771,10 +2771,13 @@
   .chat-input-container {
     background: #f2f2f7;
     border-radius: 20px;
-    padding: 8px 16px;
+    padding: 0 16px;
     gap: 12px;
     flex: 1;
     min-width: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
   }
 
   .chat-input {
@@ -2795,14 +2798,14 @@
   }
 
   .chat-next-button {
-    padding: 10px 16px;
+    padding: 0 16px;
     border-radius: 20px;
     font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
     width: auto;
-    height: 48px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
