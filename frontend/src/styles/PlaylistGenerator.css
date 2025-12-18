@@ -2688,6 +2688,7 @@
 
   .playlist-modal-description {
     flex-shrink: 0;
+    padding: 10px 20px;
   }
 
   .playlist-modal-body,
@@ -2696,6 +2697,7 @@
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    -webkit-overflow-scrolling: touch;
   }
 
   .playlist-modal-tracks {
@@ -2703,18 +2705,32 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    gap: 12px;
+  }
+
+  .playlist-modal-tracks-header {
+    flex-shrink: 0;
   }
 
   .playlist-modal-tracks-list {
     flex: 1;
-    min-height: 200px;
+    min-height: 150px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .playlist-modal-chat-below {
+    flex-shrink: 0;
+    padding-top: 12px;
+    margin-top: 0;
+    border-top: 2px solid #f0f0f0;
   }
 
   .playlist-modal-footer {
     padding: 15px 20px;
     flex-direction: column-reverse;
     flex-shrink: 0;
+    background: white;
   }
 
   .modal-button-secondary,
