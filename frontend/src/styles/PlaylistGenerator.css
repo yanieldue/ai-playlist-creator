@@ -2795,13 +2795,17 @@
   }
 
   .chat-next-button {
-    padding: 6px 12px;
+    padding: 10px 16px;
     border-radius: 20px;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
     width: auto;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }
 
