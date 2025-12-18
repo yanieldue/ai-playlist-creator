@@ -2741,6 +2741,10 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  .modal-context .track-item {
+    padding: 8px 0;
+  }
+
   .playlist-modal-chat-below {
     flex-shrink: 0;
     padding: 10px 20px 0;
