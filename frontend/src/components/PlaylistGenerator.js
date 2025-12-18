@@ -2006,6 +2006,9 @@ const PlaylistGenerator = () => {
                               </svg>
                             )}
                           </button>
+                          <button onClick={handleModalNext} className="modal-button-primary chat-next-button">
+                            Next
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -2013,12 +2016,6 @@ const PlaylistGenerator = () => {
                   </div>
 
                   {error && <div className="modal-error-message">{error}</div>}
-
-                  <div className="playlist-modal-footer">
-                    <button onClick={handleModalNext} className="modal-button-primary modal-button-single">
-                      Next
-                    </button>
-                  </div>
                 </>
               ) : (
                 <>

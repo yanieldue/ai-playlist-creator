@@ -2785,6 +2785,15 @@
     min-width: 32px;
     min-height: 32px;
   }
+
+  .chat-next-button {
+    margin-left: 8px;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
 }
 
 /* Artist Settings Modal */
