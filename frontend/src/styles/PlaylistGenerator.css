@@ -2695,11 +2695,13 @@
     flex-shrink: 0;
     padding: 8px 20px;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
     position: relative;
+    line-height: 1.5;
+    text-align: left;
+    font-size: 0.9rem;
   }
 
   .playlist-modal-description.expanded {
@@ -2711,12 +2713,14 @@
     background: none;
     border: none;
     color: #fbbf24;
-    font-weight: 600;
-    font-size: 0.85rem;
+    font-weight: 700;
+    font-size: 0.9rem;
     cursor: pointer;
-    padding: 5px 20px;
-    display: block;
+    padding: 0 20px 5px;
+    display: inline-block;
     text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .description-toggle:hover {
