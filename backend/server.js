@@ -2474,19 +2474,25 @@ ${hasAudioFeatureFilters ? `AUDIO FEATURES:
 Songs available:
 ${tracksForSelection.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist} (Album: ${t.album})${t.audioFeatures ? ` [BPM: ${t.audioFeatures.bpm}, Energy: ${t.audioFeatures.energy}, Dance: ${t.audioFeatures.danceability}]` : ''} [Artist genres: ${t.genres.join(', ') || 'Unknown'}]`).join('\n')}
 
-Respond ONLY with a JSON array of the indices (1-based) of the songs you select. Select songs that:
+Respond ONLY with a JSON array of the indices (1-based) of the songs you select.
+
+TARGET: Select as close to ${songCount} songs as possible. If the pool has enough quality tracks, aim for exactly ${songCount} songs.
+
+Select songs that:
 ${isSingleArtistPlaylist || hasSpecificArtists
   ? `- ONLY include songs by the EXACT artists mentioned in the prompt
 - Read the prompt carefully to identify which artists are requested
 - For example, if the prompt says "Justin Bieber and One Direction", ONLY select songs where the artist is "Justin Bieber" or "One Direction"
 - DO NOT include songs by related or similar artists (e.g., no Harry Styles if only One Direction is requested, no Ariana Grande if only Justin Bieber is requested)
 - STRICTLY filter by artist name - the artist field MUST exactly match one of the requested artists
-- Include exactly ${songCount} songs if available, or as many as possible from the specified artists`
+- Aim for exactly ${songCount} songs if available from the specified artists`
   : `- STRICTLY match the genre and style indicated in the playlist prompt
 - Provide good variety in artists and tempo
 - Have strong thematic coherence with the playlist`}
 - Are high quality and well-known tracks
 - AVOID selecting multiple versions of the same song (e.g., don't include both "Song Title" and "Song Title - Live Version" or "Song Title - A COLORS SHOW")
+
+IMPORTANT: Prioritize reaching the target of ${songCount} songs while maintaining quality. Only select fewer songs if there genuinely aren't enough quality matches in the pool.
 
 ${isSingleArtistPlaylist || hasSpecificArtists
   ? `CRITICAL: This is a specific-artist playlist. ONLY select songs where the artist name EXACTLY matches one of the artists mentioned in the prompt: "${prompt}". DO NOT include similar artists, related artists, or artists from the same genre. Be extremely strict about artist matching.`
