@@ -732,7 +732,7 @@ const PlaylistGenerator = () => {
     }
   };
 
-  const removeTrackFromGenerated = (trackId) => {
+  const removeTrackFromGenerated = async (trackId) => {
     // Find the track being removed to save its details
     const removedTrack = generatedPlaylist.tracks.find(track => track.id === trackId);
 
@@ -750,12 +750,25 @@ const PlaylistGenerator = () => {
       });
     }
 
-    setGeneratedPlaylist({
+    const updatedPlaylist = {
       ...generatedPlaylist,
       tracks: updatedTracks,
       trackCount: updatedTracks.length,
-      excludedSongs
-    });
+      excludedSongs,
+      chatMessages: chatMessages, // Preserve chat messages
+      draftId: generatedPlaylist.draftId || generatedPlaylist.playlistId
+    };
+
+    setGeneratedPlaylist(updatedPlaylist);
+
+    // Auto-save updated draft to database
+    try {
+      await playlistService.saveDraft(userId, updatedPlaylist);
+      console.log('Draft auto-saved after removing track');
+    } catch (draftError) {
+      console.error('Failed to auto-save draft after removing track:', draftError);
+      // Don't block the user if draft save fails
+    }
 
     showToast('Track removed', 'success');
   };
@@ -926,21 +939,38 @@ const PlaylistGenerator = () => {
         excludedSongUris
       );
 
+      // Add AI response to chat messages
+      const aiResponse = {
+        role: 'assistant',
+        content: `I've updated your playlist! I ${userMessage.toLowerCase().includes('add') ? 'added' : userMessage.toLowerCase().includes('remove') ? 'removed' : 'adjusted'} the tracks based on your request.`
+      };
+
+      const updatedChatMessages = [...chatMessages, { role: 'user', content: userMessage }, aiResponse];
+
       // Preserve the original prompt, requested count, chat history, excluded songs, and draft ID when refining
-      setGeneratedPlaylist({
+      const updatedPlaylist = {
         ...result,
         originalPrompt: generatedPlaylist.originalPrompt,
         requestedSongCount: generatedPlaylist.requestedSongCount,
-        chatMessages: [...chatMessages, { role: 'user', content: userMessage }],
+        chatMessages: updatedChatMessages,
         excludedSongs: generatedPlaylist.excludedSongs || [],
-        playlistId: generatedPlaylist.playlistId // Preserve draft ID
-      });
+        playlistId: generatedPlaylist.playlistId, // Preserve draft ID
+        draftId: generatedPlaylist.draftId || generatedPlaylist.playlistId
+      };
 
-      // Add AI response to chat
-      setChatMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `I've updated your playlist! I ${userMessage.toLowerCase().includes('add') ? 'added' : userMessage.toLowerCase().includes('remove') ? 'removed' : 'adjusted'} the tracks based on your request.`
-      }]);
+      setGeneratedPlaylist(updatedPlaylist);
+
+      // Update chat messages in state
+      setChatMessages(updatedChatMessages);
+
+      // Auto-save updated draft with chat messages to database
+      try {
+        await playlistService.saveDraft(userId, updatedPlaylist);
+        console.log('Draft auto-saved with chat messages');
+      } catch (draftError) {
+        console.error('Failed to auto-save draft after chat:', draftError);
+        // Don't block the user if draft save fails
+      }
 
       // Close chat modal after successful submission
       setShowChatModal(false);
@@ -1043,10 +1073,22 @@ const PlaylistGenerator = () => {
         const updatedPlaylist = {
           ...generatedPlaylist,
           tracks: [...generatedPlaylist.tracks, ...newTracks],
-          trackCount: generatedPlaylist.trackCount + newTracks.length
+          trackCount: generatedPlaylist.trackCount + newTracks.length,
+          chatMessages: chatMessages, // Preserve chat messages
+          draftId: generatedPlaylist.draftId || generatedPlaylist.playlistId
         };
 
         setGeneratedPlaylist(updatedPlaylist);
+
+        // Auto-save updated draft to database
+        try {
+          await playlistService.saveDraft(userId, updatedPlaylist);
+          console.log('Draft auto-saved after adding more songs');
+        } catch (draftError) {
+          console.error('Failed to auto-save draft after adding songs:', draftError);
+          // Don't block the user if draft save fails
+        }
+
         showToast(`Added ${newTracks.length} new songs!`, 'success');
       } else {
         showToast('No new songs were added (all were duplicates)', 'info');
