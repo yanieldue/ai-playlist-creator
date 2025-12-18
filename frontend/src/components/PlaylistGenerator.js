@@ -1874,26 +1874,32 @@ const PlaylistGenerator = () => {
                     </button>
                   </div>
 
-                  <div
-                    className={`playlist-modal-description ${isDescriptionExpanded ? 'expanded' : ''}`}
-                    onClick={() => {
-                      if (!isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80) {
-                        setIsDescriptionExpanded(true);
-                      }
-                    }}
-                    style={{ cursor: !isDescriptionExpanded && generatedPlaylist.description?.length > 80 ? 'pointer' : 'default' }}
-                  >
-                    {generatedPlaylist.description}
-                    {isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80 && (
-                      <button
-                        className="description-toggle"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsDescriptionExpanded(false);
-                        }}
-                      >
-                        LESS
-                      </button>
+                  <div className="playlist-modal-description">
+                    {!isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80 ? (
+                      <>
+                        <span>{generatedPlaylist.description.substring(0, 80)}...</span>{' '}
+                        <span
+                          className="description-more"
+                          onClick={() => setIsDescriptionExpanded(true)}
+                        >
+                          MORE
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {generatedPlaylist.description}
+                        {isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80 && (
+                          <>
+                            {' '}
+                            <span
+                              className="description-more"
+                              onClick={() => setIsDescriptionExpanded(false)}
+                            >
+                              LESS
+                            </span>
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
 
