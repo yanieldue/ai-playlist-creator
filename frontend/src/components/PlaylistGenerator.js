@@ -245,13 +245,9 @@ const PlaylistGenerator = () => {
         try {
           const response = await playlistService.getDrafts(userId);
           if (response.drafts && response.drafts.length > 0) {
-            // Load the most recent draft into state (for cross-device sync)
-            // but don't auto-open the modal - user must click to view
-            const latestDraft = response.drafts[0];
-            setGeneratedPlaylist(latestDraft);
-            setEditedPlaylistName(latestDraft.playlistName);
-            setEditedDescription(latestDraft.description);
-            console.log('Loaded draft playlist (background):', latestDraft.playlistName);
+            // Set the drafts array so they appear in the "Unfinished Playlists" section
+            setDraftPlaylists(response.drafts);
+            console.log('Loaded drafts:', response.drafts.length);
           }
         } catch (error) {
           console.error('Failed to load drafts:', error);
