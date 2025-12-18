@@ -656,8 +656,8 @@ const PlaylistGenerator = () => {
       setGeneratingMessage('');
       setShowGeneratingModal(false);
 
-      // Store the original prompt with the playlist for "Add More" functionality
-      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), chatMessages: [], excludedSongs: [] };
+      // Store the original prompt and requested song count with the playlist
+      const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), requestedSongCount: songCount, chatMessages: [], excludedSongs: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
@@ -884,8 +884,8 @@ const PlaylistGenerator = () => {
         ? `Original request: "${originalPromptToUse}"${descriptionContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
         : `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
 
-      // Use the current playlist's track count to maintain the same number of songs
-      const currentTrackCount = generatedPlaylist.tracks?.length || songCount;
+      // Use the originally requested song count to maintain consistency
+      const requestedCount = generatedPlaylist.requestedSongCount || songCount;
 
       // Get excluded song URIs to avoid re-adding them
       const excludedSongUris = (generatedPlaylist.excludedSongs || []).map(song => song.uri);
@@ -897,14 +897,15 @@ const PlaylistGenerator = () => {
         'spotify',
         allowExplicit,
         newArtistsOnly,
-        currentTrackCount,
+        requestedCount,
         excludedSongUris
       );
 
-      // Preserve the original prompt, chat history, and excluded songs when refining
+      // Preserve the original prompt, requested count, chat history, and excluded songs when refining
       setGeneratedPlaylist({
         ...result,
         originalPrompt: generatedPlaylist.originalPrompt,
+        requestedSongCount: generatedPlaylist.requestedSongCount,
         chatMessages: [...chatMessages, { role: 'user', content: userMessage }],
         excludedSongs: generatedPlaylist.excludedSongs || []
       });
@@ -1273,8 +1274,8 @@ const PlaylistGenerator = () => {
       setGeneratingMessage('');
       setShowGeneratingModal(false);
 
-      // Store the original prompt with the playlist
-      const playlistWithPrompt = { ...result, originalPrompt: promptText, chatMessages: [], excludedSongs: [] };
+      // Store the original prompt and requested song count with the playlist
+      const playlistWithPrompt = { ...result, originalPrompt: promptText, requestedSongCount: artistModalSongCount, chatMessages: [], excludedSongs: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
