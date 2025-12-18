@@ -1998,10 +1998,7 @@ const PlaylistGenerator = () => {
                   {error && <div className="modal-error-message">{error}</div>}
 
                   <div className="playlist-modal-footer">
-                    <button onClick={handleModalBack} className="modal-button-secondary">
-                      Cancel
-                    </button>
-                    <button onClick={handleModalNext} className="modal-button-primary">
+                    <button onClick={handleModalNext} className="modal-button-primary modal-button-single">
                       Next
                     </button>
                   </div>
