@@ -1176,7 +1176,7 @@ const PlaylistGenerator = () => {
   };
 
   const handleResumeDraft = (draftId) => {
-    const draft = draftPlaylists.find(d => d.id === draftId);
+    const draft = draftPlaylists.find(d => (d.playlistId || d.id) === draftId);
     if (!draft) return;
 
     // Restore playlist state from draft
@@ -1195,8 +1195,8 @@ const PlaylistGenerator = () => {
       // Delete from database
       await playlistService.deleteDraft(userId, draftId);
 
-      // Update local state
-      const updatedDrafts = draftPlaylists.filter(d => d.id !== draftId);
+      // Update local state - use playlistId if available, otherwise id
+      const updatedDrafts = draftPlaylists.filter(d => (d.playlistId || d.id) !== draftId);
       setDraftPlaylists(updatedDrafts);
       if (currentDraftId === draftId) {
         setCurrentDraftId(null);
@@ -1444,11 +1444,12 @@ const PlaylistGenerator = () => {
                     <div className="draft-cards-container">
                       {draftPlaylists.map((draft) => {
                         const firstTrackImage = draft.tracks?.[0]?.image;
+                        const draftId = draft.playlistId || draft.id;
                         return (
                           <div
-                            key={draft.id}
+                            key={draftId}
                             className="draft-card-apple"
-                            onClick={() => handleResumeDraft(draft.id)}
+                            onClick={() => handleResumeDraft(draftId)}
                             style={{ cursor: 'pointer' }}
                           >
                             <div className="draft-card-image">
@@ -1468,7 +1469,7 @@ const PlaylistGenerator = () => {
                               className="draft-card-delete"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleDiscardDraft(draft.id);
+                                handleDiscardDraft(draftId);
                               }}
                               title="Delete draft"
                             >
