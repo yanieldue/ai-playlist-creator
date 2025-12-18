@@ -1646,9 +1646,10 @@ EXTRACTION GUIDELINES:
 
 ERA & TIME:
 - "90s", "2000s", "2010s": Extract decade
-- "past 5 years", "last 3 years": Calculate from 2025
+- "past 5 years", "last 3 years", "recent": Calculate from ${new Date().getFullYear()} (e.g., "last 5 years" = ${new Date().getFullYear() - 5}-${new Date().getFullYear()})
 - "from 2015 to 2020": Set min/max
 - "only 2020 songs": Set both min and max to same year
+- "contemporary", "modern": Set min to ${new Date().getFullYear() - 5}
 
 POPULARITY:
 - "mainstream hits", "popular songs": min: 70
