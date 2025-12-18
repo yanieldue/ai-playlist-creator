@@ -2742,7 +2742,7 @@
 
   .playlist-modal-chat-below {
     flex-shrink: 0;
-    padding: 10px 15px 0;
+    padding: 10px 20px 0;
     margin-top: 0;
     border-top: 2px solid #f0f0f0;
   }
@@ -2804,7 +2804,7 @@
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
-    width: auto;
+    width: 70px;
     height: 32px;
     display: flex;
     align-items: center;
