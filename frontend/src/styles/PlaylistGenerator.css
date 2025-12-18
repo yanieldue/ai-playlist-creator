@@ -2693,7 +2693,7 @@
 
   .playlist-modal-description {
     flex-shrink: 0;
-    padding: 8px 20px;
+    padding: 8px 80px 8px 20px;
     position: relative;
     line-height: 1.4;
     text-align: left;
@@ -2701,6 +2701,8 @@
     color: #1c1c1e;
     max-height: 1.4em;
     overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .playlist-modal-description:not(.expanded)::after {
@@ -2720,6 +2722,8 @@
 
   .playlist-modal-description.expanded {
     max-height: none;
+    white-space: normal;
+    padding-right: 20px;
   }
 
   .description-toggle {
