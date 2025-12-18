@@ -2774,6 +2774,7 @@
     padding: 8px 16px;
     gap: 12px;
     flex: 1;
+    min-width: 0;
   }
 
   .chat-input {
@@ -2789,21 +2790,18 @@
 
   .chat-and-next-container {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     align-items: center;
   }
 
   .chat-next-button {
-    padding: 8px 10px;
-    border-radius: 16px;
+    padding: 6px 12px;
+    border-radius: 20px;
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
-  }
-
-  .chat-input-container {
-    min-width: 0;
+    width: auto;
   }
 }
 
