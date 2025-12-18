@@ -44,6 +44,7 @@ const PlaylistGenerator = () => {
   const [errorInfo, setErrorInfo] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [lastRetryFunction, setLastRetryFunction] = useState(null);
+  const [showChatModal, setShowChatModal] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -940,6 +941,9 @@ const PlaylistGenerator = () => {
         role: 'assistant',
         content: `I've updated your playlist! I ${userMessage.toLowerCase().includes('add') ? 'added' : userMessage.toLowerCase().includes('remove') ? 'removed' : 'adjusted'} the tracks based on your request.`
       }]);
+
+      // Close chat modal after successful submission
+      setShowChatModal(false);
 
       // Show success toast
       showToast('Playlist updated successfully!', 'success');
@@ -1974,39 +1978,18 @@ const PlaylistGenerator = () => {
                       {/* AI Chat - Below Track List */}
                       <div className="playlist-modal-chat-below">
                         <div className="chat-and-next-container">
-                          <div className="chat-input-container">
+                          <div className="chat-input-container" onClick={() => setShowChatModal(true)}>
                             <input
                               type="text"
-                              value={chatInput}
-                              onChange={(e) => setChatInput(e.target.value)}
-                              onKeyPress={(e) => {
-                                if (e.key === 'Enter' && !chatLoading) {
-                                  handleChatSubmit();
-                                }
-                              }}
+                              value=""
+                              readOnly
                               placeholder="Refine your playlist!"
                               className="chat-input"
-                              disabled={chatLoading}
+                              style={{ cursor: 'pointer' }}
                             />
-                            <button
-                              onClick={handleChatSubmit}
-                              disabled={chatLoading || !chatInput.trim()}
-                              className="music-note-button"
-                              title="Send Message"
-                            >
-                              {chatLoading ? (
-                                <div className="wave-loader">
-                                  <div className="wave-bar"></div>
-                                  <div className="wave-bar"></div>
-                                  <div className="wave-bar"></div>
-                                  <div className="wave-bar"></div>
-                                </div>
-                              ) : (
-                                <svg viewBox="0 0 24 24">
-                                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                                </svg>
-                              )}
-                            </button>
+                            <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93' }}>
+                              <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+                            </svg>
                           </div>
                           <button onClick={handleModalNext} className="modal-button-primary chat-next-button">
                             Next
@@ -2138,6 +2121,79 @@ const PlaylistGenerator = () => {
               )}
             </div>
           </div>
+          )}
+
+          {/* Chat Modal */}
+          {showChatModal && (
+            <div className="chat-modal-overlay" onClick={() => setShowChatModal(false)}>
+              <div className="chat-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="chat-modal-header">
+                  <h2>Refine Playlist</h2>
+                  <button onClick={() => setShowChatModal(false)} className="close-modal-button">
+                    ×
+                  </button>
+                </div>
+
+                <div className="chat-modal-body">
+                  {/* Original Prompt */}
+                  <div className="chat-message original-prompt">
+                    <div className="chat-message-label">Original Request</div>
+                    <div className="chat-message-content">
+                      {generatedPlaylist?.originalPrompt || generatedPlaylist?.playlistName}
+                    </div>
+                  </div>
+
+                  {/* Chat History */}
+                  <div className="chat-history">
+                    {chatMessages.map((msg, index) => (
+                      <div key={index} className={`chat-message ${msg.role}`}>
+                        <div className="chat-message-content">
+                          {msg.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Chat Input */}
+                <div className="chat-modal-input-area">
+                  <div className="chat-modal-input-container">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !chatLoading && chatInput.trim()) {
+                          handleChatSubmit();
+                        }
+                      }}
+                      placeholder="Add a refinement..."
+                      className="chat-modal-input"
+                      disabled={chatLoading}
+                    />
+                    <button
+                      onClick={handleChatSubmit}
+                      disabled={chatLoading || !chatInput.trim()}
+                      className="chat-modal-send-button"
+                      title="Send Message"
+                    >
+                      {chatLoading ? (
+                        <div className="wave-loader">
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                        </div>
+                      ) : (
+                        <svg viewBox="0 0 24 24">
+                          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Artist Settings Modal */}
