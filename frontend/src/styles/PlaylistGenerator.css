@@ -2789,17 +2789,21 @@
 
   .chat-and-next-container {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     align-items: center;
   }
 
   .chat-next-button {
-    padding: 8px 14px;
-    border-radius: 20px;
-    font-size: 14px;
+    padding: 8px 10px;
+    border-radius: 16px;
+    font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
+  }
+
+  .chat-input-container {
+    min-width: 0;
   }
 }
 
