@@ -720,11 +720,7 @@ const PlaylistGenerator = () => {
       const errorMessage = err.response?.data?.error || err.message || 'Something went wrong while generating your playlist.';
       setGeneratingError(`${errorMessage} Please try again.`);
 
-      // Keep the modal visible for 3 seconds, then close
-      setTimeout(() => {
-        setShowGeneratingModal(false);
-        setGeneratingError(null);
-      }, 3000);
+      // Don't auto-close on error - let user close manually
     } finally {
       if (retryCount === 0 || retryCount >= maxRetries) {
         setLoading(false);
@@ -1820,6 +1816,17 @@ const PlaylistGenerator = () => {
               <div className="generating-modal-content">
                 <div className="generating-modal-header">
                   <h2>Creating Your Playlist</h2>
+                  {generatingError && (
+                    <button
+                      onClick={() => {
+                        setShowGeneratingModal(false);
+                        setGeneratingError(null);
+                      }}
+                      className="close-modal-button"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
                 <div className="generating-modal-body">
                   {generatingError ? (
@@ -1828,6 +1835,16 @@ const PlaylistGenerator = () => {
                       <p className="generating-modal-message" style={{ color: '#ef4444' }}>
                         {generatingError}
                       </p>
+                      <button
+                        onClick={() => {
+                          setShowGeneratingModal(false);
+                          setGeneratingError(null);
+                        }}
+                        className="primary-button"
+                        style={{ marginTop: '20px' }}
+                      >
+                        Close
+                      </button>
                     </>
                   ) : (
                     <>
