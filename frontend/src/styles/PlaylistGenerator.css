@@ -2693,7 +2693,7 @@
 
   .playlist-modal-description {
     flex-shrink: 0;
-    padding: 8px 80px 8px 20px;
+    padding: 8px 20px;
     position: relative;
     line-height: 1.4;
     text-align: left;
@@ -2702,28 +2702,38 @@
     max-height: 1.4em;
     overflow: hidden;
     white-space: nowrap;
-    text-overflow: ellipsis;
+  }
+
+  .playlist-modal-description:not(.expanded)::before {
+    content: '';
+    position: absolute;
+    right: 90px;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 1));
+    pointer-events: none;
+    z-index: 1;
   }
 
   .playlist-modal-description:not(.expanded)::after {
     content: '... MORE';
     position: absolute;
-    bottom: 8px;
+    top: 8px;
     right: 20px;
     background: white;
-    padding-left: 8px;
     color: #8e8e93;
     font-weight: 600;
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.3px;
     pointer-events: none;
+    z-index: 2;
   }
 
   .playlist-modal-description.expanded {
     max-height: none;
     white-space: normal;
-    padding-right: 20px;
   }
 
   .description-toggle {
