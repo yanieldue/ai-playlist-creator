@@ -2773,6 +2773,7 @@
     border-radius: 20px;
     padding: 8px 16px;
     gap: 12px;
+    flex: 1;
   }
 
   .chat-input {
@@ -2793,13 +2794,12 @@
   }
 
   .chat-next-button {
-    padding: 8px 16px;
+    padding: 8px 12px;
     border-radius: 20px;
     font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
     flex-shrink: 0;
-    min-width: 60px;
   }
 }
 
