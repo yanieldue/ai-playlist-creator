@@ -2689,6 +2689,33 @@
   .playlist-modal-description {
     flex-shrink: 0;
     padding: 10px 20px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+  }
+
+  .playlist-modal-description.expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+
+  .description-toggle {
+    background: none;
+    border: none;
+    color: #fbbf24;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 5px 20px;
+    display: block;
+    text-align: left;
+  }
+
+  .description-toggle:hover {
+    text-decoration: underline;
   }
 
   .playlist-modal-body,

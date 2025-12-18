@@ -107,6 +107,7 @@ const PlaylistGenerator = () => {
 
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   // Example prompts for inspiration
   const examplePrompts = [
@@ -680,6 +681,7 @@ const PlaylistGenerator = () => {
       setModalStep(1);
       setShowPlaylistModal(true);
       setChatMessages([]);
+      setIsDescriptionExpanded(false);
 
       console.log('Generated playlist:', result);
 
@@ -1204,6 +1206,7 @@ const PlaylistGenerator = () => {
     setModalStep(1);
     setCurrentDraftId(draftId);
     setShowPlaylistModal(true);
+    setIsDescriptionExpanded(false);
   };
 
   const handleDiscardDraft = async (draftId) => {
@@ -1312,6 +1315,7 @@ const PlaylistGenerator = () => {
       setShowPlaylistModal(true);
       setModalStep(1);
       setChatMessages([]);
+      setIsDescriptionExpanded(false);
 
       console.log('Generated playlist for artist:', selectedArtist.name);
 
@@ -1868,7 +1872,17 @@ const PlaylistGenerator = () => {
                     </button>
                   </div>
 
-                  <p className="playlist-modal-description">{generatedPlaylist.description}</p>
+                  <p className={`playlist-modal-description ${isDescriptionExpanded ? 'expanded' : ''}`}>
+                    {generatedPlaylist.description}
+                  </p>
+                  {generatedPlaylist.description && generatedPlaylist.description.length > 100 && (
+                    <button
+                      className="description-toggle"
+                      onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                    >
+                      {isDescriptionExpanded ? 'See less' : 'See more'}
+                    </button>
+                  )}
 
                   <div className="playlist-modal-body">
                     {/* Left: Track List */}
