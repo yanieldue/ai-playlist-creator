@@ -250,6 +250,7 @@ const PlaylistGenerator = () => {
             setGeneratedPlaylist(latestDraft);
             setEditedPlaylistName(latestDraft.playlistName);
             setEditedDescription(latestDraft.description);
+            setShowPlaylistModal(true);
             console.log('Loaded draft playlist:', latestDraft.playlistName);
           }
         } catch (error) {
