@@ -2694,30 +2694,30 @@
   .playlist-modal-description {
     flex-shrink: 0;
     padding: 8px 20px;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
     overflow: hidden;
     position: relative;
     line-height: 1.5;
     text-align: left;
     font-size: 0.9rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .playlist-modal-description.expanded {
-    -webkit-line-clamp: unset;
+    white-space: normal;
     overflow: visible;
   }
 
   .description-toggle {
     background: none;
     border: none;
-    color: #fbbf24;
-    font-weight: 700;
+    color: #666;
+    font-weight: 400;
     font-size: 0.9rem;
     cursor: pointer;
-    padding: 0 20px 5px;
-    display: inline-block;
+    padding: 0;
+    margin-left: 4px;
+    display: inline;
     text-align: left;
     text-transform: uppercase;
     letter-spacing: 0.5px;
