@@ -2699,17 +2699,27 @@
     text-align: left;
     font-size: 0.9rem;
     color: #1c1c1e;
-  }
-
-  .playlist-modal-description:not(.expanded) {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
+    max-height: 2.8em;
     overflow: hidden;
   }
 
+  .playlist-modal-description:not(.expanded)::after {
+    content: '... MORE';
+    position: absolute;
+    bottom: 8px;
+    right: 20px;
+    background: white;
+    padding-left: 8px;
+    color: #8e8e93;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    pointer-events: none;
+  }
+
   .playlist-modal-description.expanded {
-    display: block;
+    max-height: none;
   }
 
   .description-toggle {
@@ -2720,7 +2730,7 @@
     font-size: 0.85rem;
     cursor: pointer;
     padding: 0;
-    margin: 0;
+    margin-left: 4px;
     display: inline;
     text-transform: uppercase;
     letter-spacing: 0.3px;

@@ -1874,29 +1874,26 @@ const PlaylistGenerator = () => {
                     </button>
                   </div>
 
-                  <div className={`playlist-modal-description ${isDescriptionExpanded ? 'expanded' : ''}`}>
+                  <div
+                    className={`playlist-modal-description ${isDescriptionExpanded ? 'expanded' : ''}`}
+                    onClick={() => {
+                      if (!isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80) {
+                        setIsDescriptionExpanded(true);
+                      }
+                    }}
+                    style={{ cursor: !isDescriptionExpanded && generatedPlaylist.description?.length > 80 ? 'pointer' : 'default' }}
+                  >
                     {generatedPlaylist.description}
-                    {generatedPlaylist.description && generatedPlaylist.description.length > 80 && !isDescriptionExpanded && (
-                      <>
-                        {' '}
-                        <button
-                          className="description-toggle"
-                          onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                        >
-                          MORE
-                        </button>
-                      </>
-                    )}
-                    {isDescriptionExpanded && (
-                      <>
-                        {' '}
-                        <button
-                          className="description-toggle"
-                          onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                        >
-                          LESS
-                        </button>
-                      </>
+                    {isDescriptionExpanded && generatedPlaylist.description && generatedPlaylist.description.length > 80 && (
+                      <button
+                        className="description-toggle"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsDescriptionExpanded(false);
+                        }}
+                      >
+                        LESS
+                      </button>
                     )}
                   </div>
 
