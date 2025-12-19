@@ -2733,7 +2733,14 @@
     opacity: 0.6;
   }
 
-  .playlist-modal-body,
+  .playlist-modal-body {
+    padding: 15px 0;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .playlist-modal-body-step2 {
     padding: 15px 20px;
     flex: 1;
