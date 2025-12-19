@@ -109,6 +109,8 @@ const PlaylistGenerator = () => {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [showTrackListMenu, setShowTrackListMenu] = useState(false);
+  const trackListMenuRef = useRef(null);
 
   // Example prompts for inspiration
   const examplePrompts = [
@@ -307,11 +309,14 @@ const PlaylistGenerator = () => {
       if (showOptionsMenu && optionsMenuRef.current && !optionsMenuRef.current.contains(event.target)) {
         setShowOptionsMenu(false);
       }
+      if (showTrackListMenu && trackListMenuRef.current && !trackListMenuRef.current.contains(event.target)) {
+        setShowTrackListMenu(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showProfileDropdown, showSearchResults, showOptionsMenu]);
+  }, [showProfileDropdown, showSearchResults, showOptionsMenu, showTrackListMenu]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -1954,28 +1959,40 @@ const PlaylistGenerator = () => {
                     <div className="playlist-modal-tracks">
                       <div className="playlist-modal-tracks-header">
                         <h3>Tracks ({generatedPlaylist.tracks.length})</h3>
-                        <div className="tracks-header-buttons">
+                        <div className="tracks-header-buttons" ref={trackListMenuRef}>
                           <button
-                            onClick={() => {
-                              console.log('[BUTTON] Clicked, loadingMoreSongs:', loadingMoreSongs);
-                              handleAddMoreSongs();
-                            }}
-                            disabled={loadingMoreSongs}
-                            className="add-more-songs-button-small"
+                            onClick={() => setShowTrackListMenu(!showTrackListMenu)}
+                            className="track-list-menu-button"
                             type="button"
                           >
-                            {(() => {
-                              console.log('[BUTTON RENDER] loadingMoreSongs:', loadingMoreSongs);
-                              return loadingMoreSongs ? (
-                                <>
-                                  <span className="spinner-small"></span>
-                                  Adding...
-                                </>
-                              ) : (
-                                '+ Add More'
-                              );
-                            })()}
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                              <circle cx="12" cy="5" r="2"/>
+                              <circle cx="12" cy="12" r="2"/>
+                              <circle cx="12" cy="19" r="2"/>
+                            </svg>
                           </button>
+                          {showTrackListMenu && (
+                            <div className="track-list-menu-dropdown">
+                              <button
+                                onClick={() => {
+                                  setShowTrackListMenu(false);
+                                  handleAddMoreSongs();
+                                }}
+                                disabled={loadingMoreSongs}
+                                className="track-list-menu-item"
+                                type="button"
+                              >
+                                {loadingMoreSongs ? (
+                                  <>
+                                    <span className="spinner-small"></span>
+                                    Adding...
+                                  </>
+                                ) : (
+                                  '+ Add More Songs'
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
