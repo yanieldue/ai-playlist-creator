@@ -2785,14 +2785,17 @@
 
   .playlist-modal-footer {
     padding: 12px 20px;
-    flex-direction: column-reverse;
+    flex-direction: row;
+    justify-content: space-between;
     flex-shrink: 0;
     background: white;
+    gap: 12px;
   }
 
   .modal-button-secondary,
   .modal-button-primary {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 
   .modal-button-single {
