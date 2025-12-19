@@ -2631,7 +2631,7 @@
 .modal-button-primary {
   background: #fbbf24;
   color: #78350f;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2640,7 +2640,7 @@
 
 .modal-button-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: none;
 }
 
 .modal-button-primary:disabled {
