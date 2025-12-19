@@ -2086,18 +2086,6 @@ const PlaylistGenerator = () => {
                       </div>
 
                       <div className="form-group">
-                        <label htmlFor="playlist-description">Description (Optional)</label>
-                        <textarea
-                          id="playlist-description"
-                          value={editedDescription}
-                          onChange={(e) => setEditedDescription(e.target.value)}
-                          placeholder="Add a description for your playlist"
-                          className="playlist-textarea"
-                          rows="4"
-                        />
-                      </div>
-
-                      <div className="form-group">
                         <label htmlFor="update-frequency">Auto-Update Frequency</label>
                         <select
                           id="update-frequency"
