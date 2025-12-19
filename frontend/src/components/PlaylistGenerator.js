@@ -2155,7 +2155,7 @@ const PlaylistGenerator = () => {
                           Creating...
                         </>
                       ) : (
-                        <><Icons.Check size={18} /> Create Playlist</>
+                        'Create'
                       )}
                     </button>
                   </div>
