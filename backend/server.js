@@ -1251,10 +1251,10 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
 
-    // Get user's top artists to understand their taste
+    // Get user's top artists to understand their taste - increased from 5 to 20
     let topArtistIds = [];
     try {
-      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 5, time_range: 'medium_term' });
+      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 20, time_range: 'medium_term' });
       topArtistIds = topArtistsData.body.items.map(artist => artist.id);
     } catch (err) {
       console.log('Could not fetch top artists for new artists recommendation:', err.message);
@@ -1276,24 +1276,37 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       // Continue without recently played data
     }
 
-    // Get recommendations based on seed artists
-    let recommendationsData;
-    try {
-      recommendationsData = await userSpotifyApi.getRecommendations({
-        seed_artists: topArtistIds.slice(0, 5),
-        limit: 50
-      });
-    } catch (err) {
-      console.log('Could not fetch recommendations:', err.message);
-      // If we can't get recommendations, return empty array
-      return res.json({ artists: [] });
+    // Get multiple batches of recommendations using different seed artists
+    let allRecommendations = [];
+
+    // Split top artists into groups of 5 (Spotify API limit for seed artists)
+    for (let i = 0; i < Math.min(topArtistIds.length, 15); i += 5) {
+      const seedBatch = topArtistIds.slice(i, i + 5);
+      if (seedBatch.length === 0) break;
+
+      try {
+        const recommendationsData = await userSpotifyApi.getRecommendations({
+          seed_artists: seedBatch,
+          limit: 100
+        });
+        allRecommendations.push(...recommendationsData.body.tracks);
+      } catch (err) {
+        console.log('Could not fetch recommendations batch:', err.message);
+        // Continue with next batch
+      }
     }
 
     // Filter out artists the user has already listened to
     const newArtists = [];
     const seenArtistIds = new Set();
 
-    for (const track of recommendationsData.body.tracks) {
+    // If no recommendations found, return empty array
+    if (allRecommendations.length === 0) {
+      console.log('No recommendations found from any seed artists');
+      return res.json({ artists: [] });
+    }
+
+    for (const track of allRecommendations) {
       for (const artist of track.artists) {
         // Only include if:
         // 1. Not in their top artists
@@ -1316,13 +1329,13 @@ app.get('/api/new-artists/:userId', async (req, res) => {
             });
             seenArtistIds.add(artist.id);
 
-            if (newArtists.length >= 10) break;
+            if (newArtists.length >= 20) break; // Increased from 10 to 20
           } catch (err) {
             console.log('Error fetching artist details:', err.message);
           }
         }
       }
-      if (newArtists.length >= 10) break;
+      if (newArtists.length >= 20) break; // Increased from 10 to 20
     }
 
     res.json({ artists: newArtists });
