@@ -98,6 +98,9 @@ const PlaylistGenerator = () => {
 
   // Edit password modal
   const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
+
+  // Ref to prevent duplicate playlist generation calls
+  const isGeneratingRef = useRef(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -636,10 +639,13 @@ const PlaylistGenerator = () => {
       return;
     }
 
-    // Prevent duplicate submissions if already generating
-    if (retryCount === 0 && loading) {
-      console.log('Already generating a playlist, ignoring duplicate request');
-      return;
+    // Prevent duplicate submissions using ref (more reliable than state)
+    if (retryCount === 0) {
+      if (isGeneratingRef.current) {
+        console.log('⚠️ DUPLICATE REQUEST BLOCKED - Already generating a playlist');
+        return;
+      }
+      isGeneratingRef.current = true;
     }
 
     // Only set initial state on first attempt
@@ -700,6 +706,9 @@ const PlaylistGenerator = () => {
       // Reset options to defaults after successful generation
       setNewArtistsOnly(false);
       setSongCount(30);
+
+      // Reset generation lock
+      isGeneratingRef.current = false;
     } catch (err) {
       clearInterval(messageInterval);
       setGeneratingMessage('');
@@ -735,6 +744,9 @@ const PlaylistGenerator = () => {
       setGeneratingError(`${errorMessage} Please try again.`);
 
       // Don't auto-close on error - let user close manually
+
+      // Reset generation lock on error
+      isGeneratingRef.current = false;
     } finally {
       if (retryCount === 0 || retryCount >= maxRetries) {
         setLoading(false);
