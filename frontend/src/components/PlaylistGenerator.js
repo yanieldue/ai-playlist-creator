@@ -1166,17 +1166,31 @@ const PlaylistGenerator = () => {
     // Update draft in database if playlist exists and wasn't completed
     if (generatedPlaylist && userId) {
       try {
+        // Use the correct draftId from generatedPlaylist (not playlistId!)
+        const draftId = currentDraftId || generatedPlaylist.draftId;
+
+        if (!draftId) {
+          console.warn('⚠️ No draftId found when closing modal, skipping draft save to prevent creating duplicate');
+          setShowPlaylistModal(false);
+          setModalStep(1);
+          setChatMessages([]);
+          setChatInput('');
+          setError('');
+          setCurrentDraftId(null);
+          return;
+        }
+
         // Update the draft with current edits
         const updatedPlaylist = {
           ...generatedPlaylist,
           playlistName: editedPlaylistName,
           description: editedDescription,
           chatMessages: chatMessages,
-          draftId: currentDraftId || generatedPlaylist.playlistId // Use existing draft ID if available
+          draftId: draftId
         };
 
         await playlistService.saveDraft(userId, updatedPlaylist);
-        console.log('Draft updated on close with ID:', updatedPlaylist.draftId);
+        console.log('✅ Draft updated on close with ID:', draftId);
       } catch (error) {
         console.error('Failed to update draft on close:', error);
       }
