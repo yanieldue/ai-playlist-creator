@@ -633,6 +633,8 @@ const PlaylistGenerator = () => {
 
   const handleGeneratePlaylist = async (retryCount = 0) => {
     const maxRetries = 2; // Try up to 3 times total
+    const callTimestamp = Date.now();
+    console.log(`🎵 handleGeneratePlaylist called at ${callTimestamp}, retryCount: ${retryCount}, isGeneratingRef.current: ${isGeneratingRef.current}`);
 
     if (!prompt.trim()) {
       setError('Please enter a playlist description');
@@ -642,9 +644,10 @@ const PlaylistGenerator = () => {
     // Prevent duplicate submissions using ref (more reliable than state)
     if (retryCount === 0) {
       if (isGeneratingRef.current) {
-        console.log('⚠️ DUPLICATE REQUEST BLOCKED - Already generating a playlist');
+        console.log(`⚠️ DUPLICATE REQUEST BLOCKED at ${callTimestamp} - Already generating a playlist`);
         return;
       }
+      console.log(`✅ First request proceeding at ${callTimestamp}, setting ref to true`);
       isGeneratingRef.current = true;
     }
 
@@ -678,15 +681,18 @@ const PlaylistGenerator = () => {
       // Store the original prompt and requested song count with the playlist
       const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), requestedSongCount: songCount, chatMessages: [], excludedSongs: [] };
 
-      // Auto-save draft to database for cross-device sync
-      try {
-        const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
-        // Store the draftId so we can delete it later
-        playlistWithPrompt.draftId = draftResponse.draftId;
-        console.log('Draft saved successfully with ID:', draftResponse.draftId);
-      } catch (draftError) {
-        console.error('Failed to save draft:', draftError);
-        // Don't block the user if draft save fails
+      // Auto-save draft to database for cross-device sync (only once per generation)
+      if (retryCount === 0) {
+        try {
+          console.log('Saving draft to database...');
+          const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
+          // Store the draftId so we can delete it later
+          playlistWithPrompt.draftId = draftResponse.draftId;
+          console.log('Draft saved successfully with ID:', draftResponse.draftId);
+        } catch (draftError) {
+          console.error('Failed to save draft:', draftError);
+          // Don't block the user if draft save fails
+        }
       }
 
       setGeneratedPlaylist(playlistWithPrompt);
