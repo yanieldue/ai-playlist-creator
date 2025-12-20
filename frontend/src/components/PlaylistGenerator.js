@@ -636,6 +636,12 @@ const PlaylistGenerator = () => {
       return;
     }
 
+    // Prevent duplicate submissions if already generating
+    if (retryCount === 0 && loading) {
+      console.log('Already generating a playlist, ignoring duplicate request');
+      return;
+    }
+
     // Only set initial state on first attempt
     if (retryCount === 0) {
       setLoading(true);
@@ -1610,7 +1616,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your listening monthly history</p>
+                            <p className="section-subtitle">Create a new playlist based on your last 3 months listening history</p>
                           </div>
                         </div>
                         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -1623,7 +1629,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your listening monthly history</p>
+                            <p className="section-subtitle">Create a new playlist based on your last 3 months listening history</p>
                           </div>
                         </div>
                         <div className="horizontal-scroll-container" ref={topArtistsScrollRef}>
@@ -1831,7 +1837,13 @@ const PlaylistGenerator = () => {
                   disabled={loading}
                 />
                 <button
-                  onClick={handleGeneratePlaylist}
+                  onClick={() => handleGeneratePlaylist()}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    if (!loading && prompt.trim()) {
+                      handleGeneratePlaylist();
+                    }
+                  }}
                   disabled={loading || !prompt.trim()}
                   className="chat-send-button"
                   title="Generate Playlist"
@@ -1843,7 +1855,7 @@ const PlaylistGenerator = () => {
                       <div className="wave-bar-3" style={{ width: '3px', height: '14px', backgroundColor: 'white', borderRadius: '1px' }}></div>
                     </div>
                   ) : (
-                    <svg viewBox="0 0 24 24">
+                    <svg viewBox="0 0 24 24" style={{ pointerEvents: 'none' }}>
                       <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
                     </svg>
                   )}
