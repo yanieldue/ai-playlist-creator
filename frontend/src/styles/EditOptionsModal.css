@@ -204,6 +204,8 @@
 
 .dropdown-section .section-description {
   margin: 0 0 var(--space-sm) 0;
+  padding-left: var(--space-lg);
+  padding-right: var(--space-lg);
 }
 
 /* Form controls within sections */
