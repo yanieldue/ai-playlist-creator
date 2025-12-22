@@ -1281,7 +1281,6 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     }
 
     // Get comprehensive list of all artists user has ever listened to
-    const tokens = await getUserTokens(userId);
     let allListenedArtistNames = new Set();
 
     // 1. Get artist history from our database (builds over time)
@@ -1293,52 +1292,30 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       console.log('Could not load artist history from database:', dbError.message);
     }
 
-    // 2. Supplement with Spotify API data
-    if (tokens && tokens.platform !== 'apple_music') {
-      try {
-        const userSpotifyApi = new SpotifyWebApi({
-          clientId: process.env.SPOTIFY_CLIENT_ID,
-          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-        });
-        userSpotifyApi.setAccessToken(tokens.access_token);
-        userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-        // Refresh token if needed
-        try {
-          const refreshData = await userSpotifyApi.refreshAccessToken();
-          userSpotifyApi.setAccessToken(refreshData.body.access_token);
-        } catch (refreshError) {
-          console.log('Token refresh failed or not needed:', refreshError.message);
-        }
-
-        // 1. Get top artists from long_term only (most comprehensive, fastest)
-        console.log('Fetching top artists from long term...');
-        try {
-          const topArtistsAllTime = await userSpotifyApi.getMyTopArtists({ limit: 50, time_range: 'long_term' });
-          topArtistsAllTime.body.items.forEach(artist => allListenedArtistNames.add(artist.name));
-          console.log(`Added ${topArtistsAllTime.body.items.length} artists from long_term`);
-        } catch (err) {
-          console.log(`Could not fetch top artists:`, err.message);
-        }
-
-        // 2. Get artists from recently played tracks (fast, single request)
-        console.log('Fetching recently played artists...');
-        try {
-          const recentlyPlayedData = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
-          recentlyPlayedData.body.items.forEach(item => {
-            item.track.artists.forEach(artist => allListenedArtistNames.add(artist.name));
-          });
-          console.log(`Added artists from ${recentlyPlayedData.body.items.length} recently played tracks`);
-        } catch (err) {
-          console.log('Could not fetch recently played tracks:', err.message);
-        }
-
-        console.log(`Total unique artists user has listened to: ${allListenedArtistNames.size}`);
-      } catch (err) {
-        console.log('Could not fetch listening history:', err.message);
-      }
+    // 2. Supplement with Spotify API data (reuse userSpotifyApi from above)
+    // Get top artists from long_term only (most comprehensive, fastest)
+    console.log('Fetching top artists from long term...');
+    try {
+      const topArtistsAllTime = await userSpotifyApi.getMyTopArtists({ limit: 50, time_range: 'long_term' });
+      topArtistsAllTime.body.items.forEach(artist => allListenedArtistNames.add(artist.name));
+      console.log(`Added ${topArtistsAllTime.body.items.length} artists from long_term`);
+    } catch (err) {
+      console.log(`Could not fetch top artists:`, err.message);
     }
+
+    // 3. Get artists from recently played tracks (fast, single request)
+    console.log('Fetching recently played artists...');
+    try {
+      const recentlyPlayedData = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
+      recentlyPlayedData.body.items.forEach(item => {
+        item.track.artists.forEach(artist => allListenedArtistNames.add(artist.name));
+      });
+      console.log(`Added artists from ${recentlyPlayedData.body.items.length} recently played tracks`);
+    } catch (err) {
+      console.log('Could not fetch recently played tracks:', err.message);
+    }
+
+    console.log(`Total unique artists user has listened to: ${allListenedArtistNames.size}`);
 
     // Combine with top artists for exclusion
     const allArtistsToExclude = [...new Set([...topArtistNames, ...Array.from(allListenedArtistNames)])];
