@@ -1469,9 +1469,25 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
         }
 
         if (spotifyArtist) {
+          // CRITICAL: Verify Spotify returned the correct artist (not a similar/related one)
+          const aiArtistName = artist.name.toLowerCase().trim();
+          const spotifyArtistName = spotifyArtist.name.toLowerCase().trim();
+
+          if (aiArtistName !== spotifyArtistName) {
+            console.log(`⚠️ SPOTIFY MISMATCH: AI suggested "${artist.name}" but Spotify returned "${spotifyArtist.name}" - skipping`);
+            continue;
+          }
+
           // Skip duplicate Spotify IDs
           if (seenArtistIds.has(spotifyArtist.id)) {
             console.log(`⊘ Skipping duplicate Spotify ID: ${artist.name}`);
+            continue;
+          }
+
+          // CRITICAL: Check if this Spotify artist is in the exclusion list
+          const spotifyNameLower = spotifyArtist.name.toLowerCase().trim();
+          if (allArtistsToExcludeLower.includes(spotifyNameLower)) {
+            console.log(`🚫 BLOCKED: Spotify returned excluded artist "${spotifyArtist.name}" - skipping`);
             continue;
           }
 
