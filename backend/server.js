@@ -1316,16 +1316,16 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     console.log('All excluded artists:', allArtistsToExclude);
 
     // Use AI to suggest artists to explore (ask for 20, we'll filter down to 10)
-    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 artists they should explore more deeply.
+    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 artists they should explore.
 
 CRITICAL INSTRUCTION: DO NOT include ANY of these artists: ${topArtistNames.join(', ')}.
 
 Focus on artists that are:
-- Lesser-known or emerging (not mainstream mega-stars)
-- In similar genres and styles
+- In similar genres and styles to their favorites
 - Artists with deep catalogs worth exploring
-- Hidden gems and underrated talent
-- Mix of established indie artists and rising stars
+- Well-regarded artists they may have missed
+- Mix of mainstream and indie artists that fit their taste
+- Artists that would naturally expand their musical horizons
 
 Return ONLY a valid JSON array in this exact format, with no additional text or markdown:
 [
@@ -1440,13 +1440,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
             continue;
           }
 
-          // Filter by popularity
           const popularity = spotifyArtist.popularity || 50;
-          if (popularity >= 70) {
-            console.log(`⊘ Skipping mainstream artist (popularity ${popularity}): ${artist.name}`);
-            continue;
-          }
-
           console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity})`);
           seenArtistIds.add(spotifyArtist.id);
           seenArtistNames.add(artist.name.toLowerCase());

@@ -422,15 +422,15 @@ body {
 
 .draft-card-apple {
   flex: 0 0 auto;
-  width: 120px;
+  width: 140px;
   text-align: center;
   scroll-snap-align: start;
   position: relative;
 }
 
 .draft-card-image {
-  width: 120px;
-  height: 120px;
+  width: 140px;
+  height: 140px;
   border-radius: 12px;
   background: #f2f2f7;
   display: flex;
@@ -988,6 +988,15 @@ body {
   }
 
   .artist-card-image {
+    width: 120px;
+    height: 120px;
+  }
+
+  .draft-card-apple {
+    width: 120px;
+  }
+
+  .draft-card-image {
     width: 120px;
     height: 120px;
   }

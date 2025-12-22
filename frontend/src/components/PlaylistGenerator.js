@@ -1690,7 +1690,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Artists You Should Explore</h2>
-                            <p className="section-subtitle">Lesser-known artists worth discovering based on your taste</p>
+                            <p className="section-subtitle">New artists recommended based on your listening history</p>
                           </div>
                         </div>
                         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -1703,7 +1703,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Artists You Should Explore</h2>
-                            <p className="section-subtitle">Lesser-known artists worth discovering based on your taste</p>
+                            <p className="section-subtitle">New artists recommended based on your listening history</p>
                           </div>
                         </div>
                         <div className="horizontal-scroll-container" ref={newArtistsScrollRef}>
