@@ -163,8 +163,8 @@
   z-index: 10;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  align-items: center;
+  gap: 4px;
 }
 
 .playlist-header-content {
