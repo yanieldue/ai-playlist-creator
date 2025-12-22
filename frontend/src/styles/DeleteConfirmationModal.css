@@ -15,7 +15,7 @@
 
 .delete-confirmation-modal {
   position: relative;
-  background: #1c1c1e;
+  background: #ffffff;
   border-radius: 16px;
   width: 90%;
   max-width: 320px;
@@ -101,7 +101,7 @@
 
 .delete-confirmation-confirm {
   background: #ff3b30;
-  color: #1c1c1e;
+  color: #ffffff;
 }
 
 .delete-confirmation-confirm:hover:not(:disabled) {
