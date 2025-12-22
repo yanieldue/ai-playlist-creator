@@ -1333,10 +1333,10 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     console.log(`   - ⚠️ JENNIE in exclusion list: ${hasJennie}`);
     console.log(`   - ⚠️ TWICE in exclusion list: ${hasTwice}`);
 
-    // Use AI to suggest artists to explore (ask for 20, we'll filter down to 10)
+    // Use AI to suggest artists to explore (ask for 30 to account for Spotify search mismatches)
     // Show more artists to exclude in the prompt to reduce AI errors
     const topExcludeForPrompt = allArtistsToExclude.slice(0, 30); // Show first 30 for context
-    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 NEW artists they should explore.
+    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 30 NEW artists they should explore.
 
 CRITICAL INSTRUCTION: The user has ALREADY listened to these ${allArtistsToExclude.length} artists. DO NOT suggest ANY of them:
 ${topExcludeForPrompt.join(', ')}${allArtistsToExclude.length > 30 ? `, and ${allArtistsToExclude.length - 30} more artists` : ''}.
@@ -1440,8 +1440,8 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       // Process artists in parallel batches for faster loading
       console.log(`Processing ${filteredArtists.length} AI-suggested artists in parallel...`);
 
-      // Search all artists in parallel (limited to first 15 to avoid overwhelming Spotify API)
-      const searchPromises = filteredArtists.slice(0, 15).map(async (artist) => {
+      // Search all artists in parallel (process up to 25 to ensure we get 10 valid matches)
+      const searchPromises = filteredArtists.slice(0, 25).map(async (artist) => {
         try {
           const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 1 });
           const timeoutPromise = new Promise((_, reject) =>
