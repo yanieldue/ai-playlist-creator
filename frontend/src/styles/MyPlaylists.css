@@ -277,9 +277,9 @@
 }
 
 .playlist-menu-button {
-  background: rgba(255, 255, 255, 0.9);
+  background: transparent;
   color: #8e8e93;
-  border: 1px solid #e5e5ea;
+  border: none;
   width: 36px;
   height: 36px;
   border-radius: 8px;
@@ -295,9 +295,8 @@
 }
 
 .playlist-menu-button:hover {
-  background: #f2f2f7;
+  background: rgba(0, 0, 0, 0.05);
   color: #1c1c1e;
-  transform: translateY(-1px);
 }
 
 .playlist-dropdown-menu {
@@ -1401,13 +1400,13 @@
 }
 
 :root.dark-mode .playlist-menu-button {
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
   color: #a0a0a0;
-  border-color: #424245;
+  border: none;
 }
 
 :root.dark-mode .playlist-menu-button:hover {
-  background: #2c2c2e;
+  background: rgba(255, 255, 255, 0.1);
   color: #ffffff;
 }
 
