@@ -438,3 +438,11 @@
   background: #f59e0b;
   border-color: #0dd9ff;
 }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .account-list {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
