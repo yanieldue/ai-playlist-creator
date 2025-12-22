@@ -695,6 +695,16 @@
 
   .playlist-header-content {
     gap: var(--space-md);
+    align-items: center;
+  }
+
+  .playlist-cover-image {
+    width: 50px;
+    height: 50px;
+  }
+
+  .expand-icon {
+    font-size: 16px;
   }
 
   .search-box {
