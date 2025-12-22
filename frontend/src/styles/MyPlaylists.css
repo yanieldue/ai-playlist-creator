@@ -201,9 +201,9 @@
 
 .playlist-meta {
   color: #8e8e93;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: var(--space-xs);
+  font-size: 12px;
+  font-weight: 400;
+  margin: 0;
 }
 
 .playlist-cover-image {
@@ -360,9 +360,11 @@
 }
 
 .expand-icon {
-  font-size: 20px;
+  font-size: 18px;
   color: #8e8e93;
   transition: transform 0.2s ease;
+  align-self: center;
+  margin-left: auto;
 }
 
 .playlist-details {

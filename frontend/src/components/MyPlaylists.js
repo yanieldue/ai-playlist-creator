@@ -880,7 +880,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       )}
                     </h2>
                     <p className="playlist-meta">
-                      {playlist.trackCount} tracks • {playlist.updatedAt ? `Updated ${formatDate(playlist.updatedAt)}` : `${playlist.imported ? 'Imported' : 'Created'} ${formatDate(playlist.createdAt)}`}
+                      {playlist.updatedAt ? `Updated ${formatDate(playlist.updatedAt)}` : `${playlist.imported ? 'Imported' : 'Created'} ${formatDate(playlist.createdAt)}`}
                       {playlist.error && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({playlist.error})</span>}
                     </p>
                   </div>
