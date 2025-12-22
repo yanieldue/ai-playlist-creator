@@ -261,6 +261,98 @@
   transform: translateY(-1px);
 }
 
+/* Three-dot menu styles */
+.playlist-menu-container {
+  position: relative;
+}
+
+.playlist-menu-button {
+  background: rgba(255, 255, 255, 0.9);
+  color: #8e8e93;
+  border: 1px solid #e5e5ea;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 24px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 1;
+  padding: 0;
+}
+
+.playlist-menu-button:hover {
+  background: #f2f2f7;
+  color: #1c1c1e;
+  transform: translateY(-1px);
+}
+
+.playlist-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: #ffffff;
+  border: 1px solid #e5e5ea;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 200px;
+  z-index: 1000;
+  overflow: hidden;
+  animation: dropdownFadeIn 0.2s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.playlist-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 400;
+  color: #1c1c1e;
+  text-align: left;
+  transition: background 0.15s ease;
+  border-bottom: 1px solid #e5e5ea;
+}
+
+.playlist-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.playlist-dropdown-item:hover {
+  background: #f2f2f7;
+}
+
+.playlist-dropdown-item svg {
+  flex-shrink: 0;
+}
+
+.playlist-dropdown-item.delete-item {
+  color: #ff3b30;
+}
+
+.playlist-dropdown-item.delete-item:hover {
+  background: #fff5f5;
+}
+
 .expand-icon {
   font-size: 20px;
   color: #8e8e93;
@@ -1286,6 +1378,40 @@
   background: #ff3b30;
   color: white;
   border-color: #ff3b30;
+}
+
+:root.dark-mode .playlist-menu-button {
+  background: rgba(255, 255, 255, 0.1);
+  color: #a0a0a0;
+  border-color: #424245;
+}
+
+:root.dark-mode .playlist-menu-button:hover {
+  background: #2c2c2e;
+  color: #ffffff;
+}
+
+:root.dark-mode .playlist-dropdown-menu {
+  background: #2c2c2e;
+  border-color: #424245;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+:root.dark-mode .playlist-dropdown-item {
+  color: #ffffff;
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .playlist-dropdown-item:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .playlist-dropdown-item.delete-item {
+  color: #ff453a;
+}
+
+:root.dark-mode .playlist-dropdown-item.delete-item:hover {
+  background: rgba(255, 69, 58, 0.1);
 }
 
 :root.dark-mode .error-message {
