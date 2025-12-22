@@ -168,6 +168,7 @@
   align-items: center;
   gap: var(--space-lg);
   width: 100%;
+  padding-left: 32px; /* Space for the expand icon */
   padding-right: 40px; /* Space for the menu button */
 }
 
@@ -360,11 +361,13 @@
 }
 
 .expand-icon {
+  position: absolute;
+  top: var(--space-sm);
+  left: var(--space-sm);
   font-size: 18px;
   color: #8e8e93;
   transition: transform 0.2s ease;
-  align-self: center;
-  margin-left: auto;
+  z-index: 10;
 }
 
 .playlist-details {
