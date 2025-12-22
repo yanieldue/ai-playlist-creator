@@ -3111,7 +3111,18 @@ app.get('/api/playlists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const userPlaylistHistory = userPlaylists.get(userId) || [];
+    let allPlaylists;
+
+    if (usePostgres) {
+      // PostgreSQL: Load from database to ensure cross-device sync
+      allPlaylists = await db.getUserPlaylists(userId);
+    } else {
+      // SQLite: Load from in-memory Map
+      allPlaylists = userPlaylists.get(userId) || [];
+    }
+
+    // Filter out drafts - only return playlists that have been published to Spotify
+    const userPlaylistHistory = allPlaylists.filter(p => p && p.isDraft !== true);
 
     // For each playlist, fetch current track details from Spotify
     const tokens = await getUserTokens(userId);
