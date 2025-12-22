@@ -151,18 +151,16 @@
 }
 
 .playlist-card-header {
-  padding: var(--space-lg);
+  padding: var(--space-md);
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
+  position: relative;
 }
 
 .playlist-header-top {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-  margin-bottom: 0;
+  position: absolute;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  z-index: 10;
 }
 
 .playlist-header-content {
@@ -170,6 +168,7 @@
   align-items: center;
   gap: var(--space-lg);
   width: 100%;
+  padding-right: 40px; /* Space for the menu button */
 }
 
 .playlist-info {
