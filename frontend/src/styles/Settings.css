@@ -281,4 +281,9 @@
   .settings-content {
     padding: 16px;
   }
+
+  .settings-list {
+    margin-left: 0;
+    margin-right: 0;
+  }
 }
