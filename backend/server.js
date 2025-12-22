@@ -2971,6 +2971,7 @@ app.post('/api/create-playlist', async (req, res) => {
       trackCount: trackUris.length,
       createdAt: new Date().toISOString(),
       spotifyUrl: playlistData.body.external_urls.spotify,
+      image: playlistData.body.images?.length > 0 ? playlistData.body.images[0].url : null,
       updateFrequency: updateFrequency || 'never',
       updateMode: updateMode || 'append',
       isPublic: isPublic !== undefined ? isPublic : true,
@@ -3174,7 +3175,8 @@ app.get('/api/playlists/:userId', async (req, res) => {
           return {
             ...playlist,
             tracks: tracks,
-            trackCount: tracks.length
+            trackCount: tracks.length,
+            image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : playlist.image
           };
         } catch (error) {
           console.error(`Error fetching playlist ${playlist.playlistId}:`, error.message);
