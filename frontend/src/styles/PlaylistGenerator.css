@@ -3062,12 +3062,13 @@
 
   .artist-settings-modal-footer {
     padding: 15px 20px;
-    flex-direction: column-reverse;
+    flex-direction: row;
+    gap: 12px;
   }
 
   .artist-settings-modal-footer .modal-button-secondary,
   .artist-settings-modal-footer .modal-button-primary {
-    width: 100%;
+    flex: 1;
   }
 }
 
