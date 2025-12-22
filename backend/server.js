@@ -1272,6 +1272,8 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     const topArtistNames = topArtists.map(a => a.name);
     const genres = [...new Set(topArtists.flatMap(a => a.genres || []))];
 
+    console.log('🎵 TOP 10 ARTISTS FOR EXCLUSION:', topArtistNames);
+
     // Track top artists in database for future filtering
     try {
       await db.trackArtists(userId, topArtistNames);
@@ -1320,10 +1322,16 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     // Combine with top artists for exclusion
     const allArtistsToExclude = [...new Set([...topArtistNames, ...Array.from(allListenedArtistNames)])];
 
-    console.log(`Using ${topArtistNames.length} top artists and ${genres.length} genres for AI recommendation`);
-    console.log('Top artists to exclude:', topArtistNames);
-    console.log(`Total artists to exclude: ${allArtistsToExclude.length}`);
-    console.log('All excluded artists:', allArtistsToExclude);
+    console.log(`\n🚫 EXCLUSION LIST:`);
+    console.log(`   - Top 10 artists: ${topArtistNames.join(', ')}`);
+    console.log(`   - Total artists to exclude: ${allArtistsToExclude.length}`);
+    console.log(`   - First 30 excluded artists: ${allArtistsToExclude.slice(0, 30).join(', ')}`);
+
+    // CRITICAL CHECK: Are JENNIE and TWICE in the exclusion list?
+    const hasJennie = allArtistsToExclude.some(name => name.toLowerCase().includes('jennie'));
+    const hasTwice = allArtistsToExclude.some(name => name.toLowerCase().includes('twice'));
+    console.log(`   - ⚠️ JENNIE in exclusion list: ${hasJennie}`);
+    console.log(`   - ⚠️ TWICE in exclusion list: ${hasTwice}`);
 
     // Use AI to suggest artists to explore (ask for 20, we'll filter down to 10)
     // Show more artists to exclude in the prompt to reduce AI errors
@@ -1376,7 +1384,16 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       return res.json({ artists: [] });
     }
 
-    console.log(`AI suggested ${suggestedArtists.length} artists:`, suggestedArtists.map(a => a.name));
+    console.log(`\n🤖 AI SUGGESTED ${suggestedArtists.length} artists:`, suggestedArtists.map(a => a.name));
+
+    // CRITICAL CHECK: Did AI suggest JENNIE or TWICE?
+    const aiSuggestedJennie = suggestedArtists.some(a => a.name.toLowerCase().includes('jennie'));
+    const aiSuggestedTwice = suggestedArtists.some(a => a.name.toLowerCase().includes('twice'));
+    if (aiSuggestedJennie || aiSuggestedTwice) {
+      console.log(`🚨 CRITICAL ERROR: AI IGNORED EXCLUSION INSTRUCTIONS!`);
+      console.log(`   - AI suggested JENNIE: ${aiSuggestedJennie}`);
+      console.log(`   - AI suggested TWICE: ${aiSuggestedTwice}`);
+    }
 
     // Filter out any artists that user has listened to (top artists + recently played)
     const allArtistsToExcludeLower = allArtistsToExclude.map(name => name.toLowerCase().trim());
@@ -1384,14 +1401,14 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       const artistNameLower = artist.name.toLowerCase().trim();
       const isListenedArtist = allArtistsToExcludeLower.includes(artistNameLower);
       if (isListenedArtist) {
-        console.log(`⊘ AI ERROR: Filtering out listened artist that should not have been suggested: ${artist.name}`);
+        console.log(`⊘ FILTERING OUT: "${artist.name}" (already in listening history)`);
       }
       return !isListenedArtist;
     });
 
-    console.log(`After filtering listened artists: ${filteredArtists.length} artists remain`);
+    console.log(`\n✅ After filtering: ${filteredArtists.length} artists remain`);
     if (suggestedArtists.length - filteredArtists.length > 0) {
-      console.log(`⚠️ WARNING: AI suggested ${suggestedArtists.length - filteredArtists.length} artists that user has already listened to!`);
+      console.log(`⚠️ Filtered out ${suggestedArtists.length - filteredArtists.length} artists from AI suggestions`);
     }
 
     // Try to fetch images and details from Spotify for the suggested artists
@@ -1504,7 +1521,21 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       });
     }
 
-    console.log(`Returning ${formattedArtists.length} AI-recommended artists (${formattedArtists.filter(a => a.image).length} with images)`);
+    // FINAL CHECK: Are JENNIE or TWICE in the final results?
+    const finalHasJennie = formattedArtists.some(a => a.name.toLowerCase().includes('jennie'));
+    const finalHasTwice = formattedArtists.some(a => a.name.toLowerCase().includes('twice'));
+
+    console.log(`\n📤 RETURNING ${formattedArtists.length} artists to frontend:`);
+    console.log(`   - Artists: ${formattedArtists.map(a => a.name).join(', ')}`);
+    console.log(`   - ${formattedArtists.filter(a => a.image).length} with images`);
+
+    if (finalHasJennie || finalHasTwice) {
+      console.log(`\n🚨🚨🚨 CRITICAL BUG: JENNIE OR TWICE IN FINAL RESULTS! 🚨🚨🚨`);
+      console.log(`   - JENNIE in results: ${finalHasJennie}`);
+      console.log(`   - TWICE in results: ${finalHasTwice}`);
+      console.log(`   - This should NEVER happen - filtering failed!`);
+    }
+
     res.json({ artists: formattedArtists });
   } catch (error) {
     console.error('Error fetching new artists:', error);
