@@ -462,8 +462,8 @@
   .save-settings-button,
   .refresh-confirm-button {
     flex: 1;
-    padding: var(--space-xs) var(--space-sm);
-    font-size: 14px;
+    padding: var(--space-md) var(--space-lg);
+    font-size: 15px;
   }
 }
 
