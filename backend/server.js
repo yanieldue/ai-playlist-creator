@@ -1737,7 +1737,18 @@ app.post('/api/generate-playlist', async (req, res) => {
       try {
         console.log('Fetching user listening history to filter out known artists...');
 
-        // Get user's top artists (all time, last 6 months, last 4 weeks)
+        // 1. Load artist history from our database (builds over time, unlimited)
+        try {
+          const artistHistory = await db.getArtistHistory(userId);
+          artistHistory.forEach(artist => {
+            knownArtists.add(artist.artistName.toLowerCase());
+          });
+          console.log(`Loaded ${artistHistory.length} artists from database history`);
+        } catch (dbError) {
+          console.log('Could not load artist history from database:', dbError.message);
+        }
+
+        // 2. Get user's top artists from Spotify (all time, last 6 months, last 4 weeks)
         const timeRanges = ['long_term', 'medium_term', 'short_term'];
         for (const timeRange of timeRanges) {
           try {
@@ -1753,7 +1764,7 @@ app.post('/api/generate-playlist', async (req, res) => {
           }
         }
 
-        // Get user's recently played tracks
+        // 3. Get user's recently played tracks from Spotify
         try {
           const recentlyPlayed = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
           recentlyPlayed.body.items.forEach(item => {
@@ -1765,7 +1776,7 @@ app.post('/api/generate-playlist', async (req, res) => {
           console.log('Failed to get recently played tracks:', err.message);
         }
 
-        console.log(`Found ${knownArtists.size} known artists to filter out`);
+        console.log(`Found ${knownArtists.size} total known artists to filter out`);
       } catch (error) {
         console.error('Error fetching listening history:', error);
         // Continue anyway - we'll just not filter
@@ -2799,6 +2810,18 @@ DO NOT include any text outside the JSON.`;
       }
     } else {
       console.log('Skipping vibe check (no specific atmosphere/context requirements)');
+    }
+
+    // Track artists from generated playlist to database for future filtering
+    if (userId && selectedTracks.length > 0) {
+      try {
+        const artistNames = [...new Set(selectedTracks.map(t => t.artist))];
+        await db.trackArtists(userId, artistNames);
+        console.log(`✓ Tracked ${artistNames.length} artists from generated playlist to database`);
+      } catch (trackError) {
+        console.log('Could not track artists to database:', trackError.message);
+        // Don't block playlist generation if tracking fails
+      }
     }
 
     res.json({
