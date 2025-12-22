@@ -1425,8 +1425,11 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       const seenArtistIds = new Set();
       const seenArtistNames = new Set();
 
-      for (let i = 0; i < Math.min(filteredArtists.length, 10); i++) {
-        const artist = filteredArtists[i];
+      // Loop through AI suggestions until we have 10 unique artists
+      let artistIndex = 0;
+      while (formattedArtists.length < 10 && artistIndex < filteredArtists.length) {
+        const artist = filteredArtists[artistIndex];
+        artistIndex++;
 
         // Skip if we've already seen this artist name
         if (seenArtistNames.has(artist.name.toLowerCase())) {
@@ -1434,7 +1437,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
           continue;
         }
 
-        console.log(`Searching Spotify for artist ${i + 1}/10: ${artist.name}`);
+        console.log(`Searching Spotify for artist ${formattedArtists.length + 1}/10: ${artist.name}`);
 
         try {
           // Search for the artist on Spotify with timeout
