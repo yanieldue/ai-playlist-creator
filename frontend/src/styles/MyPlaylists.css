@@ -154,9 +154,22 @@
   padding: var(--space-lg);
   cursor: pointer;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.playlist-header-top {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 0;
+}
+
+.playlist-header-content {
+  display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-lg);
+  width: 100%;
 }
 
 .playlist-info {
@@ -207,12 +220,6 @@
   font-size: 15px;
   margin-top: var(--space-xs);
   line-height: 1.3;
-}
-
-.playlist-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
 }
 
 .open-spotify-button {
@@ -682,13 +689,11 @@
   }
 
   .playlist-card-header {
-    flex-direction: column;
-    align-items: flex-start;
+    padding: var(--space-md);
   }
 
-  .playlist-actions {
-    width: 100%;
-    justify-content: space-between;
+  .playlist-header-content {
+    gap: var(--space-md);
   }
 
   .search-box {

@@ -831,25 +831,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 className="playlist-card-header"
                 onClick={() => togglePlaylist(playlist.playlistId)}
               >
-                {playlist.image && (
-                  <img src={playlist.image} alt={playlist.playlistName} className="playlist-cover-image" />
-                )}
-                <div className="playlist-info">
-                  <h2>
-                    {playlist.playlistName}
-                    {playlist.imported && (
-                      <span className="imported-badge">Imported</span>
-                    )}
-                    {playlist.error && (
-                      <span className="error-badge" title={playlist.error}>⚠️</span>
-                    )}
-                  </h2>
-                  <p className="playlist-meta">
-                    {playlist.trackCount} tracks • {playlist.updatedAt ? `Updated ${formatDate(playlist.updatedAt)}` : `${playlist.imported ? 'Imported' : 'Created'} ${formatDate(playlist.createdAt)}`}
-                    {playlist.error && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({playlist.error})</span>}
-                  </p>
-                </div>
-                <div className="playlist-actions">
+                <div className="playlist-header-top">
                   <div className="playlist-menu-container">
                     <button
                       className="playlist-menu-button"
@@ -881,6 +863,26 @@ IMPORTANT: Pay close attention to the original request and description to unders
                         </button>
                       </div>
                     )}
+                  </div>
+                </div>
+                <div className="playlist-header-content">
+                  {playlist.image && (
+                    <img src={playlist.image} alt={playlist.playlistName} className="playlist-cover-image" />
+                  )}
+                  <div className="playlist-info">
+                    <h2>
+                      {playlist.playlistName}
+                      {playlist.imported && (
+                        <span className="imported-badge">Imported</span>
+                      )}
+                      {playlist.error && (
+                        <span className="error-badge" title={playlist.error}>⚠️</span>
+                      )}
+                    </h2>
+                    <p className="playlist-meta">
+                      {playlist.trackCount} tracks • {playlist.updatedAt ? `Updated ${formatDate(playlist.updatedAt)}` : `${playlist.imported ? 'Imported' : 'Created'} ${formatDate(playlist.createdAt)}`}
+                      {playlist.error && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({playlist.error})</span>}
+                    </p>
                   </div>
                   <span className="expand-icon">
                     {expandedPlaylistId === playlist.playlistId ? '▼' : '▶'}
