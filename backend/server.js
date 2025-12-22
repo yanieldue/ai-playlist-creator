@@ -1316,9 +1316,12 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     console.log('All excluded artists:', allArtistsToExclude);
 
     // Use AI to suggest artists to explore (ask for 20, we'll filter down to 10)
-    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 artists they should explore.
+    // Show more artists to exclude in the prompt to reduce AI errors
+    const topExcludeForPrompt = allArtistsToExclude.slice(0, 30); // Show first 30 for context
+    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 NEW artists they should explore.
 
-CRITICAL INSTRUCTION: DO NOT include ANY of these artists: ${topArtistNames.join(', ')}.
+CRITICAL INSTRUCTION: The user has ALREADY listened to these ${allArtistsToExclude.length} artists. DO NOT suggest ANY of them:
+${topExcludeForPrompt.join(', ')}${allArtistsToExclude.length > 30 ? `, and ${allArtistsToExclude.length - 30} more artists` : ''}.
 
 Focus on artists that are:
 - In similar genres and styles to their favorites
@@ -1326,6 +1329,7 @@ Focus on artists that are:
 - Well-regarded artists they may have missed
 - Mix of mainstream and indie artists that fit their taste
 - Artists that would naturally expand their musical horizons
+- IMPORTANT: Artists they have NOT listened to yet
 
 Return ONLY a valid JSON array in this exact format, with no additional text or markdown:
 [
@@ -1365,16 +1369,20 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
     console.log(`AI suggested ${suggestedArtists.length} artists:`, suggestedArtists.map(a => a.name));
 
     // Filter out any artists that user has listened to (top artists + recently played)
-    const allArtistsToExcludeLower = allArtistsToExclude.map(name => name.toLowerCase());
+    const allArtistsToExcludeLower = allArtistsToExclude.map(name => name.toLowerCase().trim());
     const filteredArtists = suggestedArtists.filter(artist => {
-      const isListenedArtist = allArtistsToExcludeLower.includes(artist.name.toLowerCase());
+      const artistNameLower = artist.name.toLowerCase().trim();
+      const isListenedArtist = allArtistsToExcludeLower.includes(artistNameLower);
       if (isListenedArtist) {
-        console.log(`⊘ Filtering out listened artist: ${artist.name}`);
+        console.log(`⊘ AI ERROR: Filtering out listened artist that should not have been suggested: ${artist.name}`);
       }
       return !isListenedArtist;
     });
 
     console.log(`After filtering listened artists: ${filteredArtists.length} artists remain`);
+    if (suggestedArtists.length - filteredArtists.length > 0) {
+      console.log(`⚠️ WARNING: AI suggested ${suggestedArtists.length - filteredArtists.length} artists that user has already listened to!`);
+    }
 
     // Try to fetch images and details from Spotify for the suggested artists
     // (tokens already fetched above for recently played)
