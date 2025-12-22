@@ -453,7 +453,7 @@
 
   /* Mobile Modal Footer */
   .modal-footer {
-    flex-direction: column;
+    flex-direction: row;
     gap: var(--space-sm);
     padding: var(--space-sm) var(--space-md) var(--space-md) var(--space-md);
   }
@@ -461,7 +461,7 @@
   .cancel-button,
   .save-settings-button,
   .refresh-confirm-button {
-    width: 100%;
+    flex: 1;
     padding: var(--space-xs) var(--space-sm);
     font-size: 14px;
   }
