@@ -1226,17 +1226,50 @@ app.get('/api/new-artists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Get user's top artists (works cross-platform from our existing endpoint)
-    const topArtistsResponse = await fetch(`http://localhost:3001/api/top-artists/${userId}`);
-    const topArtistsData = await topArtistsResponse.json();
+    // Get user's tokens and top artists directly (no HTTP call)
+    const tokens = await getUserTokens(userId);
+    if (!tokens) {
+      console.log('No tokens found for user');
+      return res.json({ artists: [] });
+    }
 
-    if (!topArtistsData.artists || topArtistsData.artists.length === 0) {
+    const userSpotifyApi = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+    });
+    userSpotifyApi.setAccessToken(tokens.access_token);
+    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+    // Refresh token if needed
+    try {
+      const refreshData = await userSpotifyApi.refreshAccessToken();
+      userSpotifyApi.setAccessToken(refreshData.body.access_token);
+      tokens.access_token = refreshData.body.access_token;
+      userTokens.set(userId, tokens);
+      await db.updateAccessToken(userId, refreshData.body.access_token);
+    } catch (refreshError) {
+      console.log('Token refresh failed or not needed:', refreshError.message);
+    }
+
+    // Get top 10 artists
+    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
+
+    if (!topArtistsData.body.items || topArtistsData.body.items.length === 0) {
       console.log('No top artists found for user');
       return res.json({ artists: [] });
     }
 
-    const topArtists = topArtistsData.artists;
-    const topArtistNames = topArtists.map(a => a.name).slice(0, 10);
+    const topArtists = topArtistsData.body.items.map(artist => ({
+      id: artist.id,
+      name: artist.name,
+      image: artist.images[0]?.url,
+      genres: artist.genres,
+      popularity: artist.popularity,
+      uri: artist.uri
+    }));
+
+    const topArtistNames = topArtists.map(a => a.name);
     const genres = [...new Set(topArtists.flatMap(a => a.genres || []))];
 
     // Track top artists in database for future filtering
