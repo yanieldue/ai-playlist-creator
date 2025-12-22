@@ -142,7 +142,7 @@
 .playlist-card {
   background: #f2f2f7;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   transition: all 0.2s ease;
 }
 
@@ -154,6 +154,7 @@
   padding: var(--space-md);
   cursor: pointer;
   position: relative;
+  overflow: visible;
 }
 
 .playlist-header-actions {
