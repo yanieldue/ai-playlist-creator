@@ -1279,40 +1279,17 @@ app.get('/api/new-artists/:userId', async (req, res) => {
           console.log('Token refresh failed or not needed:', refreshError.message);
         }
 
-        // 1. Get top artists from all time ranges
-        console.log('Fetching top artists from all time ranges...');
-        const timeRanges = ['short_term', 'medium_term', 'long_term'];
-        for (const range of timeRanges) {
-          try {
-            const topArtistsAllTime = await userSpotifyApi.getMyTopArtists({ limit: 50, time_range: range });
-            topArtistsAllTime.body.items.forEach(artist => allListenedArtistNames.add(artist.name));
-            console.log(`Added ${topArtistsAllTime.body.items.length} artists from ${range}`);
-          } catch (err) {
-            console.log(`Could not fetch top artists (${range}):`, err.message);
-          }
+        // 1. Get top artists from long_term only (most comprehensive, fastest)
+        console.log('Fetching top artists from long term...');
+        try {
+          const topArtistsAllTime = await userSpotifyApi.getMyTopArtists({ limit: 50, time_range: 'long_term' });
+          topArtistsAllTime.body.items.forEach(artist => allListenedArtistNames.add(artist.name));
+          console.log(`Added ${topArtistsAllTime.body.items.length} artists from long_term`);
+        } catch (err) {
+          console.log(`Could not fetch top artists:`, err.message);
         }
 
-        // 2. Get artists from saved/liked tracks
-        console.log('Fetching artists from saved tracks...');
-        let offset = 0;
-        const limit = 50;
-        for (let batch = 0; batch < 10; batch++) {
-          try {
-            const savedTracks = await userSpotifyApi.getMySavedTracks({ limit, offset });
-            if (savedTracks.body.items.length === 0) break;
-
-            savedTracks.body.items.forEach(item => {
-              item.track.artists.forEach(artist => allListenedArtistNames.add(artist.name));
-            });
-            console.log(`Batch ${batch + 1}: Added artists from ${savedTracks.body.items.length} saved tracks`);
-            offset += limit;
-          } catch (err) {
-            console.log(`Could not fetch saved tracks batch ${batch}:`, err.message);
-            break;
-          }
-        }
-
-        // 3. Get recently played tracks
+        // 2. Get artists from recently played tracks (fast, single request)
         console.log('Fetching recently played artists...');
         try {
           const recentlyPlayedData = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
@@ -1425,76 +1402,68 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       const seenArtistIds = new Set();
       const seenArtistNames = new Set();
 
-      // Loop through AI suggestions until we have 10 unique artists
-      let artistIndex = 0;
-      while (formattedArtists.length < 10 && artistIndex < filteredArtists.length) {
-        const artist = filteredArtists[artistIndex];
-        artistIndex++;
+      // Process artists in parallel batches for faster loading
+      console.log(`Processing ${filteredArtists.length} AI-suggested artists in parallel...`);
 
-        // Skip if we've already seen this artist name
+      // Search all artists in parallel (limited to first 15 to avoid overwhelming Spotify API)
+      const searchPromises = filteredArtists.slice(0, 15).map(async (artist) => {
+        try {
+          const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 1 });
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Search timeout')), 5000)
+          );
+          const searchResult = await Promise.race([searchPromise, timeoutPromise]);
+          return { artist, spotifyArtist: searchResult.body.artists.items[0] };
+        } catch (error) {
+          return { artist, spotifyArtist: null, error };
+        }
+      });
+
+      const searchResults = await Promise.all(searchPromises);
+
+      // Process results and filter to get 10 unique artists
+      for (const result of searchResults) {
+        if (formattedArtists.length >= 10) break;
+
+        const { artist, spotifyArtist, error } = result;
+
+        // Skip duplicates
         if (seenArtistNames.has(artist.name.toLowerCase())) {
           console.log(`⊘ Skipping duplicate: ${artist.name}`);
           continue;
         }
 
-        console.log(`Searching Spotify for artist ${formattedArtists.length + 1}/10: ${artist.name}`);
-
-        try {
-          // Search for the artist on Spotify with timeout
-          const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 1 });
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Search timeout')), 5000)
-          );
-
-          const searchResult = await Promise.race([searchPromise, timeoutPromise]);
-          const spotifyArtist = searchResult.body.artists.items[0];
-
-          if (spotifyArtist) {
-            // Check if we've already added this Spotify artist ID
-            if (seenArtistIds.has(spotifyArtist.id)) {
-              console.log(`⊘ Skipping duplicate Spotify ID: ${artist.name}`);
-              continue;
-            }
-
-            // Filter by popularity - only include artists with popularity < 70 (lesser-known)
-            const popularity = spotifyArtist.popularity || 50;
-            if (popularity >= 70) {
-              console.log(`⊘ Skipping mainstream artist (popularity ${popularity}): ${artist.name}`);
-              continue;
-            }
-
-            console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity})`);
-            seenArtistIds.add(spotifyArtist.id);
-            seenArtistNames.add(artist.name.toLowerCase());
-
-            formattedArtists.push({
-              id: spotifyArtist.id,
-              name: spotifyArtist.name,
-              genres: spotifyArtist.genres || artist.genres || [],
-              description: artist.description,
-              image: spotifyArtist.images[0]?.url || null,
-              popularity: popularity,
-              uri: spotifyArtist.uri
-            });
-          } else {
-            console.log(`✗ Artist ${artist.name} not found on Spotify`);
-            seenArtistNames.add(artist.name.toLowerCase());
-
-            formattedArtists.push({
-              id: `ai-artist-${formattedArtists.length}`,
-              name: artist.name,
-              genres: artist.genres || [],
-              description: artist.description,
-              image: null,
-              popularity: 50,
-              uri: null
-            });
+        if (spotifyArtist) {
+          // Skip duplicate Spotify IDs
+          if (seenArtistIds.has(spotifyArtist.id)) {
+            console.log(`⊘ Skipping duplicate Spotify ID: ${artist.name}`);
+            continue;
           }
-        } catch (searchError) {
-          console.log(`✗ Search failed for ${artist.name}: ${searchError.message}`);
+
+          // Filter by popularity
+          const popularity = spotifyArtist.popularity || 50;
+          if (popularity >= 70) {
+            console.log(`⊘ Skipping mainstream artist (popularity ${popularity}): ${artist.name}`);
+            continue;
+          }
+
+          console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity})`);
+          seenArtistIds.add(spotifyArtist.id);
           seenArtistNames.add(artist.name.toLowerCase());
 
-          // Use AI data without Spotify details
+          formattedArtists.push({
+            id: spotifyArtist.id,
+            name: spotifyArtist.name,
+            genres: spotifyArtist.genres || artist.genres || [],
+            description: artist.description,
+            image: spotifyArtist.images[0]?.url || null,
+            popularity: popularity,
+            uri: spotifyArtist.uri
+          });
+        } else {
+          console.log(`✗ Artist ${artist.name} not found on Spotify${error ? ': ' + error.message : ''}`);
+          seenArtistNames.add(artist.name.toLowerCase());
+
           formattedArtists.push({
             id: `ai-artist-${formattedArtists.length}`,
             name: artist.name,
