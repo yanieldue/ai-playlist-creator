@@ -1786,21 +1786,7 @@ const PlaylistGenerator = () => {
                   </div>
                   <button
                     onClick={() => setShowOptionsMenu(false)}
-                    style={{
-                      background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '10px 16px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      width: '100%',
-                      marginTop: '8px',
-                      transition: 'background 0.2s'
-                    }}
-                    onMouseOver={(e) => e.target.style.background = 'linear-gradient(135deg, #00f2fe 0%, #0dd9ff 100%)'}
-                    onMouseOut={(e) => e.target.style.background = 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}
+                    className="options-menu-apply-button"
                   >
                     Apply
                   </button>

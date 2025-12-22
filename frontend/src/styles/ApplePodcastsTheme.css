@@ -792,10 +792,10 @@ body {
 /* Options Menu - Apple Style */
 .options-menu-apple {
   background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
-  padding: 8px;
-  width: 240px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  width: 280px;
   animation: fadeInUp 0.2s ease;
   z-index: 10001;
 }
@@ -815,7 +815,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 14px 16px;
   background: none;
   border: none;
   width: 100%;
@@ -823,12 +823,38 @@ body {
   font-size: 16px;
   color: #1c1c1e;
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.2s ease;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .options-menu-item:hover {
   background: #f2f2f7;
+}
+
+.options-menu-apply-button {
+  background: #fbbf24;
+  color: #78350f;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 12px;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.options-menu-apply-button:hover {
+  background: #f59e0b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+}
+
+.options-menu-apply-button:active {
+  transform: translateY(0);
 }
 
 /* Playlist Generation Results */
@@ -1250,6 +1276,15 @@ body {
 
 :root.dark-mode .options-menu-item:hover {
   background: #3a3a3c;
+}
+
+:root.dark-mode .options-menu-apply-button {
+  background: #fbbf24;
+  color: #78350f;
+}
+
+:root.dark-mode .options-menu-apply-button:hover {
+  background: #f59e0b;
 }
 
 :root.dark-mode .tab-bar {
