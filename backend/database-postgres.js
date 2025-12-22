@@ -74,11 +74,22 @@ async function initializeTables() {
         PRIMARY KEY (user_id, playlist_id)
       );
 
+      CREATE TABLE IF NOT EXISTS artist_history (
+        user_id TEXT NOT NULL,
+        artist_name TEXT NOT NULL,
+        artist_id TEXT,
+        first_seen TIMESTAMP NOT NULL DEFAULT NOW(),
+        last_seen TIMESTAMP NOT NULL DEFAULT NOW(),
+        play_count INTEGER DEFAULT 1,
+        PRIMARY KEY (user_id, artist_name)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
       CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
       CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id);
       CREATE INDEX IF NOT EXISTS idx_playlists_updated_at ON playlists(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_artist_history_user_id ON artist_history(user_id);
     `);
     console.log('PostgreSQL tables initialized');
   } finally {
@@ -386,6 +397,43 @@ class DatabaseService {
     });
 
     return playlistsByUser;
+  }
+
+  // Artist History
+  async trackArtists(userId, artistNames) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const artistName of artistNames) {
+        await client.query(`
+          INSERT INTO artist_history (user_id, artist_name, last_seen, play_count)
+          VALUES ($1, $2, NOW(), 1)
+          ON CONFLICT (user_id, artist_name)
+          DO UPDATE SET
+            last_seen = NOW(),
+            play_count = artist_history.play_count + 1
+        `, [userId, artistName]);
+      }
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getArtistHistory(userId) {
+    const result = await pool.query(`
+      SELECT artist_name as "artistName", artist_id as "artistId",
+             first_seen as "firstSeen", last_seen as "lastSeen", play_count as "playCount"
+      FROM artist_history
+      WHERE user_id = $1
+      ORDER BY last_seen DESC
+    `, [userId]);
+    return result.rows;
   }
 
   // Close pool

@@ -1187,8 +1187,8 @@ app.get('/api/top-artists/:userId', async (req, res) => {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
 
-    // Get top 10 artists from the last month
-    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'short_term' });
+    // Get top 10 artists from the last 3 months
+    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
 
     const topArtists = topArtistsData.body.items.map(artist => ({
       id: artist.id,
@@ -1221,124 +1221,307 @@ app.get('/api/top-artists/:userId', async (req, res) => {
 
 // Get new artist recommendations based on listening history
 app.get('/api/new-artists/:userId', async (req, res) => {
+  console.log('=== NEW ARTISTS ENDPOINT CALLED ===');
+  console.log('UserId:', req.params.userId);
   try {
     const { userId } = req.params;
 
+    // Get user's top artists (works cross-platform from our existing endpoint)
+    const topArtistsResponse = await fetch(`http://localhost:3001/api/top-artists/${userId}`);
+    const topArtistsData = await topArtistsResponse.json();
+
+    if (!topArtistsData.artists || topArtistsData.artists.length === 0) {
+      console.log('No top artists found for user');
+      return res.json({ artists: [] });
+    }
+
+    const topArtists = topArtistsData.artists;
+    const topArtistNames = topArtists.map(a => a.name).slice(0, 10);
+    const genres = [...new Set(topArtists.flatMap(a => a.genres || []))];
+
+    // Track top artists in database for future filtering
+    try {
+      await db.trackArtists(userId, topArtistNames);
+      console.log('✓ Tracked top artists to database');
+    } catch (trackError) {
+      console.log('Could not track artists to database:', trackError.message);
+    }
+
+    // Get comprehensive list of all artists user has ever listened to
     const tokens = await getUserTokens(userId);
-    if (!tokens) {
-      console.log('No tokens found for userId:', userId, '- returning empty new artists array');
-      return res.json({ artists: [] });
-    }
+    let allListenedArtistNames = new Set();
 
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-    // Refresh token if needed
+    // 1. Get artist history from our database (builds over time)
     try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
+      const artistHistory = await db.getArtistHistory(userId);
+      artistHistory.forEach(artist => allListenedArtistNames.add(artist.artistName));
+      console.log(`Loaded ${artistHistory.length} artists from database history`);
+    } catch (dbError) {
+      console.log('Could not load artist history from database:', dbError.message);
     }
 
-    // Get user's top artists to understand their taste - increased from 5 to 20
-    let topArtistIds = [];
-    try {
-      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 20, time_range: 'medium_term' });
-      topArtistIds = topArtistsData.body.items.map(artist => artist.id);
-    } catch (err) {
-      console.log('Could not fetch top artists for new artists recommendation:', err.message);
-      // If we can't get top artists, return empty array
-      return res.json({ artists: [] });
-    }
-
-    // Get user's recently played tracks to find artists they've listened to
-    let listenedArtistIds = new Set();
-    try {
-      const recentlyPlayedData = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
-      listenedArtistIds = new Set(
-        recentlyPlayedData.body.items.flatMap(item =>
-          item.track.artists.map(artist => artist.id)
-        )
-      );
-    } catch (err) {
-      console.log('Could not fetch recently played tracks (user may have no listening history):', err.message);
-      // Continue without recently played data
-    }
-
-    // Get multiple batches of recommendations using different seed artists
-    let allRecommendations = [];
-
-    // Split top artists into groups of 5 (Spotify API limit for seed artists)
-    for (let i = 0; i < Math.min(topArtistIds.length, 15); i += 5) {
-      const seedBatch = topArtistIds.slice(i, i + 5);
-      if (seedBatch.length === 0) break;
-
+    // 2. Supplement with Spotify API data
+    if (tokens && tokens.platform !== 'apple_music') {
       try {
-        const recommendationsData = await userSpotifyApi.getRecommendations({
-          seed_artists: seedBatch,
-          limit: 100
+        const userSpotifyApi = new SpotifyWebApi({
+          clientId: process.env.SPOTIFY_CLIENT_ID,
+          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
         });
-        allRecommendations.push(...recommendationsData.body.tracks);
-      } catch (err) {
-        console.log('Could not fetch recommendations batch:', err.message);
-        // Continue with next batch
-      }
-    }
+        userSpotifyApi.setAccessToken(tokens.access_token);
+        userSpotifyApi.setRefreshToken(tokens.refresh_token);
 
-    // Filter out artists the user has already listened to
-    const newArtists = [];
-    const seenArtistIds = new Set();
+        // Refresh token if needed
+        try {
+          const refreshData = await userSpotifyApi.refreshAccessToken();
+          userSpotifyApi.setAccessToken(refreshData.body.access_token);
+        } catch (refreshError) {
+          console.log('Token refresh failed or not needed:', refreshError.message);
+        }
 
-    // If no recommendations found, return empty array
-    if (allRecommendations.length === 0) {
-      console.log('No recommendations found from any seed artists');
-      return res.json({ artists: [] });
-    }
-
-    for (const track of allRecommendations) {
-      for (const artist of track.artists) {
-        // Only include if:
-        // 1. Not in their top artists
-        // 2. Not in their recently played
-        // 3. Haven't already added this artist
-        if (!topArtistIds.includes(artist.id) &&
-            !listenedArtistIds.has(artist.id) &&
-            !seenArtistIds.has(artist.id)) {
-
-          // Get full artist details
+        // 1. Get top artists from all time ranges
+        console.log('Fetching top artists from all time ranges...');
+        const timeRanges = ['short_term', 'medium_term', 'long_term'];
+        for (const range of timeRanges) {
           try {
-            const artistData = await userSpotifyApi.getArtist(artist.id);
-            newArtists.push({
-              id: artistData.body.id,
-              name: artistData.body.name,
-              image: artistData.body.images[0]?.url,
-              genres: artistData.body.genres,
-              popularity: artistData.body.popularity,
-              uri: artistData.body.uri
-            });
-            seenArtistIds.add(artist.id);
-
-            if (newArtists.length >= 20) break; // Increased from 10 to 20
+            const topArtistsAllTime = await userSpotifyApi.getMyTopArtists({ limit: 50, time_range: range });
+            topArtistsAllTime.body.items.forEach(artist => allListenedArtistNames.add(artist.name));
+            console.log(`Added ${topArtistsAllTime.body.items.length} artists from ${range}`);
           } catch (err) {
-            console.log('Error fetching artist details:', err.message);
+            console.log(`Could not fetch top artists (${range}):`, err.message);
           }
         }
+
+        // 2. Get artists from saved/liked tracks
+        console.log('Fetching artists from saved tracks...');
+        let offset = 0;
+        const limit = 50;
+        for (let batch = 0; batch < 10; batch++) {
+          try {
+            const savedTracks = await userSpotifyApi.getMySavedTracks({ limit, offset });
+            if (savedTracks.body.items.length === 0) break;
+
+            savedTracks.body.items.forEach(item => {
+              item.track.artists.forEach(artist => allListenedArtistNames.add(artist.name));
+            });
+            console.log(`Batch ${batch + 1}: Added artists from ${savedTracks.body.items.length} saved tracks`);
+            offset += limit;
+          } catch (err) {
+            console.log(`Could not fetch saved tracks batch ${batch}:`, err.message);
+            break;
+          }
+        }
+
+        // 3. Get recently played tracks
+        console.log('Fetching recently played artists...');
+        try {
+          const recentlyPlayedData = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
+          recentlyPlayedData.body.items.forEach(item => {
+            item.track.artists.forEach(artist => allListenedArtistNames.add(artist.name));
+          });
+          console.log(`Added artists from ${recentlyPlayedData.body.items.length} recently played tracks`);
+        } catch (err) {
+          console.log('Could not fetch recently played tracks:', err.message);
+        }
+
+        console.log(`Total unique artists user has listened to: ${allListenedArtistNames.size}`);
+      } catch (err) {
+        console.log('Could not fetch listening history:', err.message);
       }
-      if (newArtists.length >= 20) break; // Increased from 10 to 20
     }
 
-    res.json({ artists: newArtists });
+    // Combine with top artists for exclusion
+    const allArtistsToExclude = [...new Set([...topArtistNames, ...Array.from(allListenedArtistNames)])];
+
+    console.log(`Using ${topArtistNames.length} top artists and ${genres.length} genres for AI recommendation`);
+    console.log('Top artists to exclude:', topArtistNames);
+    console.log(`Total artists to exclude: ${allArtistsToExclude.length}`);
+    console.log('All excluded artists:', allArtistsToExclude);
+
+    // Use AI to suggest artists to explore (ask for 20, we'll filter down to 10)
+    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 20 artists they should explore more deeply.
+
+CRITICAL INSTRUCTION: DO NOT include ANY of these artists: ${topArtistNames.join(', ')}.
+
+Focus on artists that are:
+- Lesser-known or emerging (not mainstream mega-stars)
+- In similar genres and styles
+- Artists with deep catalogs worth exploring
+- Hidden gems and underrated talent
+- Mix of established indie artists and rising stars
+
+Return ONLY a valid JSON array in this exact format, with no additional text or markdown:
+[
+  {"name": "Artist Name", "genres": ["genre1", "genre2"], "description": "Brief description"},
+  ...
+]`;
+
+    console.log('Sending request to AI...');
+    const aiResponse = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{
+        role: 'user',
+        content: aiPrompt
+      }]
+    });
+
+    const aiContent = aiResponse.content[0].text.trim();
+    console.log('AI Response received');
+
+    // Parse AI response
+    let suggestedArtists;
+    try {
+      // Remove markdown code blocks if present
+      const jsonMatch = aiContent.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        suggestedArtists = JSON.parse(jsonMatch[0]);
+      } else {
+        suggestedArtists = JSON.parse(aiContent);
+      }
+    } catch (parseError) {
+      console.error('Failed to parse AI response:', parseError);
+      console.error('AI Content:', aiContent);
+      return res.json({ artists: [] });
+    }
+
+    console.log(`AI suggested ${suggestedArtists.length} artists:`, suggestedArtists.map(a => a.name));
+
+    // Filter out any artists that user has listened to (top artists + recently played)
+    const allArtistsToExcludeLower = allArtistsToExclude.map(name => name.toLowerCase());
+    const filteredArtists = suggestedArtists.filter(artist => {
+      const isListenedArtist = allArtistsToExcludeLower.includes(artist.name.toLowerCase());
+      if (isListenedArtist) {
+        console.log(`⊘ Filtering out listened artist: ${artist.name}`);
+      }
+      return !isListenedArtist;
+    });
+
+    console.log(`After filtering listened artists: ${filteredArtists.length} artists remain`);
+
+    // Try to fetch images and details from Spotify for the suggested artists
+    // (tokens already fetched above for recently played)
+    const formattedArtists = [];
+
+    if (tokens && tokens.platform !== 'apple_music') {
+      // User has Spotify - fetch artist images from Spotify
+      console.log('Fetching artist images from Spotify for', filteredArtists.length, 'artists...');
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        userSpotifyApi.setAccessToken(refreshData.body.access_token);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      const seenArtistIds = new Set();
+      const seenArtistNames = new Set();
+
+      for (let i = 0; i < Math.min(filteredArtists.length, 10); i++) {
+        const artist = filteredArtists[i];
+
+        // Skip if we've already seen this artist name
+        if (seenArtistNames.has(artist.name.toLowerCase())) {
+          console.log(`⊘ Skipping duplicate: ${artist.name}`);
+          continue;
+        }
+
+        console.log(`Searching Spotify for artist ${i + 1}/10: ${artist.name}`);
+
+        try {
+          // Search for the artist on Spotify with timeout
+          const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 1 });
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Search timeout')), 5000)
+          );
+
+          const searchResult = await Promise.race([searchPromise, timeoutPromise]);
+          const spotifyArtist = searchResult.body.artists.items[0];
+
+          if (spotifyArtist) {
+            // Check if we've already added this Spotify artist ID
+            if (seenArtistIds.has(spotifyArtist.id)) {
+              console.log(`⊘ Skipping duplicate Spotify ID: ${artist.name}`);
+              continue;
+            }
+
+            // Filter by popularity - only include artists with popularity < 70 (lesser-known)
+            const popularity = spotifyArtist.popularity || 50;
+            if (popularity >= 70) {
+              console.log(`⊘ Skipping mainstream artist (popularity ${popularity}): ${artist.name}`);
+              continue;
+            }
+
+            console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity})`);
+            seenArtistIds.add(spotifyArtist.id);
+            seenArtistNames.add(artist.name.toLowerCase());
+
+            formattedArtists.push({
+              id: spotifyArtist.id,
+              name: spotifyArtist.name,
+              genres: spotifyArtist.genres || artist.genres || [],
+              description: artist.description,
+              image: spotifyArtist.images[0]?.url || null,
+              popularity: popularity,
+              uri: spotifyArtist.uri
+            });
+          } else {
+            console.log(`✗ Artist ${artist.name} not found on Spotify`);
+            seenArtistNames.add(artist.name.toLowerCase());
+
+            formattedArtists.push({
+              id: `ai-artist-${formattedArtists.length}`,
+              name: artist.name,
+              genres: artist.genres || [],
+              description: artist.description,
+              image: null,
+              popularity: 50,
+              uri: null
+            });
+          }
+        } catch (searchError) {
+          console.log(`✗ Search failed for ${artist.name}: ${searchError.message}`);
+          seenArtistNames.add(artist.name.toLowerCase());
+
+          // Use AI data without Spotify details
+          formattedArtists.push({
+            id: `ai-artist-${formattedArtists.length}`,
+            name: artist.name,
+            genres: artist.genres || [],
+            description: artist.description,
+            image: null,
+            popularity: 50,
+            uri: null
+          });
+        }
+      }
+      console.log(`Finished fetching images, got ${formattedArtists.length} unique artists`);
+    } else {
+      // No platform tokens or Apple Music user - return AI data only
+      console.log('No Spotify tokens available, returning AI data without images');
+      filteredArtists.slice(0, 10).forEach((artist, index) => {
+        formattedArtists.push({
+          id: `ai-artist-${index}`,
+          name: artist.name,
+          genres: artist.genres || [],
+          description: artist.description,
+          image: null,
+          popularity: 50,
+          uri: null
+        });
+      });
+    }
+
+    console.log(`Returning ${formattedArtists.length} AI-recommended artists (${formattedArtists.filter(a => a.image).length} with images)`);
+    res.json({ artists: formattedArtists });
   } catch (error) {
     console.error('Error fetching new artists:', error);
     console.error('Error status code:', error.statusCode);

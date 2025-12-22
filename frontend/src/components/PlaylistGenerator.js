@@ -1689,8 +1689,8 @@ const PlaylistGenerator = () => {
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
-                            <h2 className="section-title">New Artists For You</h2>
-                            <p className="section-subtitle">Discover artists you haven't listened to yet</p>
+                            <h2 className="section-title">Artists You Should Explore</h2>
+                            <p className="section-subtitle">Lesser-known artists worth discovering based on your taste</p>
                           </div>
                         </div>
                         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -1702,8 +1702,8 @@ const PlaylistGenerator = () => {
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
-                            <h2 className="section-title">New Artists For You</h2>
-                            <p className="section-subtitle">Discover artists you haven't listened to yet</p>
+                            <h2 className="section-title">Artists You Should Explore</h2>
+                            <p className="section-subtitle">Lesser-known artists worth discovering based on your taste</p>
                           </div>
                         </div>
                         <div className="horizontal-scroll-container" ref={newArtistsScrollRef}>
