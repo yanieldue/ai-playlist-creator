@@ -156,11 +156,15 @@
   position: relative;
 }
 
-.playlist-header-top {
+.playlist-header-actions {
   position: absolute;
   top: var(--space-sm);
   right: var(--space-sm);
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .playlist-header-content {
@@ -168,7 +172,7 @@
   align-items: center;
   gap: var(--space-lg);
   width: 100%;
-  padding-right: 40px; /* Space for the menu button */
+  padding-right: 50px; /* Space for the actions */
 }
 
 .playlist-info {
@@ -360,11 +364,11 @@
 }
 
 .expand-icon {
-  font-size: 18px;
+  font-size: 16px;
   color: #8e8e93;
   transition: transform 0.2s ease;
-  margin-left: auto;
-  flex-shrink: 0;
+  cursor: pointer;
+  padding: 4px;
 }
 
 .playlist-details {

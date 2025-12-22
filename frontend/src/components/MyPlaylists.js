@@ -831,7 +831,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 className="playlist-card-header"
                 onClick={() => togglePlaylist(playlist.playlistId)}
               >
-                <div className="playlist-header-top">
+                <div className="playlist-header-actions">
                   <div className="playlist-menu-container">
                     <button
                       className="playlist-menu-button"
@@ -864,6 +864,9 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       </div>
                     )}
                   </div>
+                  <span className="expand-icon" onClick={(e) => e.stopPropagation()}>
+                    {expandedPlaylistId === playlist.playlistId ? '▼' : '▶'}
+                  </span>
                 </div>
                 <div className="playlist-header-content">
                   {playlist.image && (
@@ -884,9 +887,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       {playlist.error && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({playlist.error})</span>}
                     </p>
                   </div>
-                  <span className="expand-icon">
-                    {expandedPlaylistId === playlist.playlistId ? '▼' : '▶'}
-                  </span>
                 </div>
               </div>
 
