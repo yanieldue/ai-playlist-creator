@@ -4,9 +4,10 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: transparent;
   z-index: 10000;
   animation: fadeIn 0.3s ease;
+  pointer-events: none;
 }
 
 @keyframes fadeIn {
@@ -20,24 +21,35 @@
 
 .product-tour-highlight {
   position: fixed;
-  background: rgba(255, 255, 255, 0.1);
-  border: 2px solid #fbbf24;
+  background: transparent;
+  border: 3px solid #fbbf24;
   border-radius: 8px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
-              0 0 20px rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.85),
+              0 0 25px rgba(251, 191, 36, 0.8);
   z-index: 10001;
   pointer-events: none;
   animation: pulse 2s ease-in-out infinite;
 }
 
+.product-tour-spotlight {
+  position: fixed;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  border-radius: 8px;
+  z-index: 10002;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
 @keyframes pulse {
   0%, 100% {
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
-                0 0 20px rgba(251, 191, 36, 0.5);
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.85),
+                0 0 25px rgba(251, 191, 36, 0.8);
   }
   50% {
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7),
-                0 0 30px rgba(251, 191, 36, 0.8);
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.85),
+                0 0 40px rgba(251, 191, 36, 1);
   }
 }
 

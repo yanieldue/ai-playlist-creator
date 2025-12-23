@@ -173,15 +173,26 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
     <div className="product-tour-overlay">
       {/* Highlight target element */}
       {highlightPos && (
-        <div
-          className="product-tour-highlight"
-          style={{
-            top: `${highlightPos.top}px`,
-            left: `${highlightPos.left}px`,
-            width: `${highlightPos.width}px`,
-            height: `${highlightPos.height}px`
-          }}
-        />
+        <>
+          <div
+            className="product-tour-highlight"
+            style={{
+              top: `${highlightPos.top}px`,
+              left: `${highlightPos.left}px`,
+              width: `${highlightPos.width}px`,
+              height: `${highlightPos.height}px`
+            }}
+          />
+          <div
+            className="product-tour-spotlight"
+            style={{
+              top: `${highlightPos.top}px`,
+              left: `${highlightPos.left}px`,
+              width: `${highlightPos.width}px`,
+              height: `${highlightPos.height}px`
+            }}
+          />
+        </>
       )}
 
       {/* Tooltip */}
