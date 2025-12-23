@@ -69,13 +69,13 @@
 
 /* Modal Sections */
 .modal-section {
-  padding: var(--space-lg);
+  padding: var(--space-md);
   border-top: 1px solid #e2e8f0;
 }
 
 .modal-section:first-of-type {
   border-top: none;
-  padding-top: var(--space-md);
+  padding-top: var(--space-sm);
 }
 
 .section-title {
@@ -107,7 +107,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-lg);
+  padding: var(--space-md);
   background: none;
   border: none;
   border-radius: 12px;
@@ -204,8 +204,8 @@
 
 .dropdown-section .section-description {
   margin: 0 0 var(--space-sm) 0;
-  padding-left: var(--space-lg);
-  padding-right: var(--space-lg);
+  padding-left: var(--space-md);
+  padding-right: var(--space-md);
 }
 
 /* Form controls within sections */

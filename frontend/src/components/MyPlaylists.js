@@ -71,6 +71,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   const [refinementInstructions, setRefinementInstructions] = useState([]);
   const [refinementInput, setRefinementInput] = useState('');
   const [addingRefinement, setAddingRefinement] = useState(false);
+  const [showRefinementModal, setShowRefinementModal] = useState(false);
 
   // Helper function to calculate next update time
   const getNextUpdateTime = (frequency) => {
@@ -1459,40 +1460,28 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </div>
                 )}
 
-                <div className="chat-input-container" style={{ display: 'flex', gap: '8px' }}>
+                <div className="chat-input-container" onClick={() => setShowRefinementModal(true)}>
                   <input
                     type="text"
-                    value={refinementInput}
-                    onChange={(e) => setRefinementInput(e.target.value)}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !addingRefinement) {
-                        handleAddRefinement();
-                      }
-                    }}
-                    placeholder="e.g., Only include songs from the last 5 years"
+                    value=""
+                    readOnly
+                    placeholder="Refine your playlist!"
                     className="chat-input"
-                    disabled={addingRefinement}
-                    style={{ flex: 1 }}
+                    style={{ cursor: 'pointer' }}
                   />
-                  <button
-                    onClick={handleAddRefinement}
-                    disabled={addingRefinement || !refinementInput.trim()}
-                    className="music-note-button"
-                    title="Add instruction"
-                  >
-                    {addingRefinement ? (
+                  <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93' }}>
+                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+                  </svg>
+                  {addingRefinement && (
+                    <div style={{ position: 'absolute', right: '50px' }}>
                       <div className="wave-loader">
                         <div className="wave-bar"></div>
                         <div className="wave-bar"></div>
                         <div className="wave-bar"></div>
                         <div className="wave-bar"></div>
                       </div>
-                    ) : (
-                      <svg viewBox="0 0 24 24">
-                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                      </svg>
-                    )}
-                  </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1513,6 +1502,90 @@ IMPORTANT: Pay close attention to the original request and description to unders
         </div>
       )}
 
+
+      {/* Refinement Modal */}
+      {showRefinementModal && editOptionsPlaylist && (
+        <div className="chat-modal-overlay" onClick={() => setShowRefinementModal(false)}>
+          <div className="chat-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="chat-modal-header">
+              <h2>Refine Playlist</h2>
+              <button onClick={() => setShowRefinementModal(false)} className="close-modal-button">
+                ×
+              </button>
+            </div>
+
+            <div className="chat-modal-body">
+              {/* Original Prompt */}
+              <div className="chat-message original-prompt">
+                <div className="chat-message-label">Original Request</div>
+                <div className="chat-message-content">
+                  {editOptionsPlaylist.originalPrompt || editOptionsPlaylist.playlistName}
+                </div>
+              </div>
+
+              {/* Chat History */}
+              <div className="chat-history">
+                {editOptionsPlaylist.chatMessages && editOptionsPlaylist.chatMessages.map((msg, index) => (
+                  <div key={index} className={`chat-message ${msg.role}`}>
+                    <div className="chat-message-content">
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                {refinementInstructions && refinementInstructions.map((instruction, index) => (
+                  <div key={`refinement-${index}`} className="chat-message user">
+                    <div className="chat-message-content">
+                      {instruction.instruction}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Chat Input */}
+            <div className="chat-modal-input-area">
+              <div className="chat-modal-input-container">
+                <input
+                  type="text"
+                  value={refinementInput}
+                  onChange={(e) => setRefinementInput(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !addingRefinement && refinementInput.trim()) {
+                      handleAddRefinement();
+                      setShowRefinementModal(false);
+                    }
+                  }}
+                  placeholder="Add a refinement..."
+                  className="chat-modal-input"
+                  disabled={addingRefinement}
+                />
+                <button
+                  onClick={() => {
+                    handleAddRefinement();
+                    setShowRefinementModal(false);
+                  }}
+                  disabled={addingRefinement || !refinementInput.trim()}
+                  className="chat-modal-send-button"
+                  title="Send Message"
+                >
+                  {addingRefinement ? (
+                    <div className="wave-loader">
+                      <div className="wave-bar"></div>
+                      <div className="wave-bar"></div>
+                      <div className="wave-bar"></div>
+                      <div className="wave-bar"></div>
+                    </div>
+                  ) : (
+                    <svg viewBox="0 0 24 24">
+                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
