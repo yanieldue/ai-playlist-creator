@@ -2602,10 +2602,7 @@ const PlaylistGenerator = () => {
       <ProductTour
         isOpen={showProductTour}
         onClose={() => setShowProductTour(false)}
-        onComplete={() => {
-          setShowProductTour(false);
-          showToast('Tour completed! Start creating your playlists.', 'success');
-        }}
+        onComplete={() => setShowProductTour(false)}
       />
         </>
       ) : inSignupFlow ? (
