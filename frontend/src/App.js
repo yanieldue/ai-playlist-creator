@@ -4,6 +4,7 @@ import PlaylistGenerator from './components/PlaylistGenerator';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import Account from './components/Account';
+import FAQ from './components/FAQ';
 import './styles/App.css';
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/faq" element={<FAQ />} />
         </Routes>
       </Router>
     </div>

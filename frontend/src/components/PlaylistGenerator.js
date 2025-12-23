@@ -4,6 +4,7 @@ import playlistService from '../services/api';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
 import Account from './Account';
+import FAQ from './FAQ';
 import SignupForm from './SignupForm';
 import PlatformSelection from './PlatformSelection';
 import Toast from './Toast';
@@ -1526,6 +1527,19 @@ const PlaylistGenerator = () => {
                     <span className="dropdown-icon"><Icons.Settings size={18} /></span>
                     Settings
                   </button>
+                  <button className="dropdown-item" onClick={() => {
+                    setShowProfileDropdown(false);
+                    setActiveTab('faq');
+                  }}>
+                    <span className="dropdown-icon">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                      </svg>
+                    </span>
+                    FAQ
+                  </button>
                   <button className="dropdown-item logout" onClick={handleLogout}>
                     <span className="dropdown-icon"><Icons.Logout size={18} /></span>
                     Log Out
@@ -1746,6 +1760,10 @@ const PlaylistGenerator = () => {
 
             {activeTab === 'account' && (
               <Account onBack={() => setActiveTab('home')} showToast={showToast} />
+            )}
+
+            {activeTab === 'faq' && (
+              <FAQ onBack={() => setActiveTab('home')} />
             )}
           </div>
 

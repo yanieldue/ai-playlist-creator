@@ -16,41 +16,6 @@ const Account = ({ onBack, showToast }) => {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
-  const [expandedFaqId, setExpandedFaqId] = useState(null);
-
-  // FAQ data
-  const faqs = [
-    {
-      id: 1,
-      question: "How do I connect my Spotify account?",
-      answer: "Click on 'Connected Music Platforms' above, then click the 'Connect' button next to Spotify. You'll be redirected to Spotify to authorize the connection."
-    },
-    {
-      id: 2,
-      question: "Can I connect multiple music platforms?",
-      answer: "Yes! You can connect both Spotify and Apple Music to your account. Your playlists will be synced to whichever platform you choose when generating or refreshing a playlist."
-    },
-    {
-      id: 3,
-      question: "How do automatic playlist refreshes work?",
-      answer: "When you enable auto-refresh for a playlist, we'll automatically update it with new songs based on your chosen frequency (daily, weekly, or monthly). The playlist will maintain its vibe while introducing fresh tracks."
-    },
-    {
-      id: 4,
-      question: "What happens if I disconnect a music platform?",
-      answer: "Disconnecting a platform will prevent new playlists from being created on that service, but your existing playlists will remain on the platform. You can reconnect at any time to resume playlist creation."
-    },
-    {
-      id: 5,
-      question: "How do I change my email or password?",
-      answer: "Click on 'Email' or 'Password' in the account settings above. You'll need to confirm your current password to make changes for security purposes."
-    },
-    {
-      id: 6,
-      question: "Can I refine playlists after they're created?",
-      answer: "Absolutely! Go to 'My Playlists', click on any playlist, and use the 'Refine Playlist' option. You can chat with our AI to adjust the vibe, add or remove genres, change tempo, and more."
-    }
-  ];
 
   // Fallback toast function if not provided
   const toast = showToast || ((message, type) => {
@@ -154,10 +119,6 @@ const Account = ({ onBack, showToast }) => {
 
   const togglePlatformsDropdown = () => {
     setShowPlatformsDropdown(!showPlatformsDropdown);
-  };
-
-  const toggleFaq = (faqId) => {
-    setExpandedFaqId(expandedFaqId === faqId ? null : faqId);
   };
 
   const handleTogglePlatform = async (platform) => {
@@ -384,40 +345,6 @@ const Account = ({ onBack, showToast }) => {
               </div>
             </div>
           )}
-        </div>
-
-        {/* FAQ Section */}
-        <div className="account-list" style={{ marginTop: '24px' }}>
-          <div className="account-section-header">
-            <span className="account-list-label" style={{ fontSize: '13px', fontWeight: '600', color: '#8e8e93', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Frequently Asked Questions
-            </span>
-          </div>
-
-          {faqs.map((faq) => (
-            <div key={faq.id}>
-              <button
-                className="account-list-item faq-item"
-                onClick={() => toggleFaq(faq.id)}
-              >
-                <span className="account-list-label">{faq.question}</span>
-                <Icons.ChevronRight
-                  size={20}
-                  color="#c7c7cc"
-                  style={{
-                    transform: expandedFaqId === faq.id ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s'
-                  }}
-                />
-              </button>
-
-              {expandedFaqId === faq.id && (
-                <div className="faq-answer">
-                  {faq.answer}
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       </div>
 
