@@ -10,6 +10,7 @@ import PlatformSelection from './PlatformSelection';
 import Toast from './Toast';
 import Icons from './Icons';
 import ErrorMessage from './ErrorMessage';
+import ProductTour from './ProductTour';
 import '../styles/PlaylistGenerator.css';
 import '../styles/ApplePodcastsTheme.css';
 import '../styles/AccountModal.css';
@@ -46,6 +47,7 @@ const PlaylistGenerator = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [lastRetryFunction, setLastRetryFunction] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showProductTour, setShowProductTour] = useState(false);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,6 +245,15 @@ const PlaylistGenerator = () => {
       fetchTopArtists();
       fetchNewArtists();
       fetchUserProfile();
+
+      // Check if user has completed the tour
+      const tourCompleted = localStorage.getItem('productTourCompleted');
+      if (!tourCompleted) {
+        // Show tour after a brief delay to let the UI settle
+        setTimeout(() => {
+          setShowProductTour(true);
+        }, 1000);
+      }
     }
   }, [isAuthenticated, userId]);
 
@@ -1540,6 +1551,19 @@ const PlaylistGenerator = () => {
                     </span>
                     FAQ
                   </button>
+                  <button className="dropdown-item" onClick={() => {
+                    setShowProfileDropdown(false);
+                    setShowProductTour(true);
+                  }}>
+                    <span className="dropdown-icon">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M12 16v-4"></path>
+                        <path d="M12 8h.01"></path>
+                      </svg>
+                    </span>
+                    Start Tour
+                  </button>
                   <button className="dropdown-item logout" onClick={handleLogout}>
                     <span className="dropdown-icon"><Icons.Logout size={18} /></span>
                     Log Out
@@ -2573,6 +2597,16 @@ const PlaylistGenerator = () => {
           ))}
         </div>
       )}
+
+      {/* Product Tour */}
+      <ProductTour
+        isOpen={showProductTour}
+        onClose={() => setShowProductTour(false)}
+        onComplete={() => {
+          setShowProductTour(false);
+          showToast('Tour completed! Start creating your playlists.', 'success');
+        }}
+      />
         </>
       ) : inSignupFlow ? (
         <PlatformSelection
