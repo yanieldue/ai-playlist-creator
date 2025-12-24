@@ -291,12 +291,14 @@
   }
 
   .tour-buttons {
-    flex-direction: column-reverse;
+    flex-direction: row;
+    gap: 8px;
   }
 
   .tour-button {
-    width: 100%;
-    justify-content: center;
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 14px;
   }
 
   .tour-progress {
