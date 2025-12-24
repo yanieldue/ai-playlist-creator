@@ -63,6 +63,7 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
   z-index: 10002;
   animation: slideIn 0.3s ease;
+  pointer-events: auto;
 }
 
 .product-tour-tooltip.center {
