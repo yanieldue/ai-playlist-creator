@@ -13,9 +13,9 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
     },
     {
       title: "Generate Playlists",
-      description: "Describe the kind of music you want in natural language. Try something like 'upbeat 80s pop songs' or 'relaxing acoustic music for studying'. Our AI will create a personalized playlist for you!",
+      description: "Describe the kind of music you want in natural language. Be specific with artist names, genres, energy level, or time periods. For example: '25 upbeat indie songs like Phantogram from the past 5 years'",
       target: ".chat-input-container-apple",
-      position: "top"
+      position: "bottom"
     },
     {
       title: "My Playlists",
@@ -87,6 +87,7 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
   };
 
   const handleSkip = () => {
+    localStorage.setItem('productTourCompleted', 'true');
     onClose();
     setCurrentStep(0);
   };
