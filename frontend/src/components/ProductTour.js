@@ -453,8 +453,11 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         <div className="modal-overlay tour-demo-modal" style={{ zIndex: 10005, pointerEvents: 'none', background: 'transparent' }}>
           <div className="edit-options-modal tour-demo-edit-modal" style={{ pointerEvents: 'none', minHeight: '500px' }}>
             <div className="edit-options-header">
-              <div className="playlist-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-                🎵
+              <div className="playlist-icon" style={{
+                backgroundImage: 'url(https://i.scdn.co/image/ab67616d0000b273bb54dde68cd23e2a268ae0f5)',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center'
+              }}>
               </div>
               <h2 className="edit-options-title">Upbeat Pop Hits</h2>
             </div>
