@@ -373,7 +373,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
       {/* Demo Playlist - Rendered in React */}
       {showDemoPlaylist && currentTab === 'playlists' && (
-        <div style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px', background: '#f5f5f7' }}>
+        <div className="tour-demo-playlist-container" style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px' }}>
           <div style={{ paddingTop: '80px', maxWidth: '100%', margin: '0 auto' }}>
             <div className={`playlist-card tour-demo-playlist-card ${isDemoExpanded ? 'expanded' : ''}`} style={{ pointerEvents: 'none', marginBottom: '16px' }}>
               <div className="playlist-card-header">
