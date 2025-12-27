@@ -92,11 +92,11 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         onNavigateToPlaylists();
       }
 
-      // Steps 4-6 need demo playlist
-      if (currentStep >= 3 && currentStep <= 5) {
+      // Steps 3-6 need demo playlist
+      if (currentStep >= 2 && currentStep <= 5) {
         setShowDemoPlaylist(true);
-        // Step 4 needs expanded playlist (currentStep === 3)
-        setIsDemoExpanded(currentStep === 3);
+        // Step 3: collapsed, Steps 4-6: expanded
+        setIsDemoExpanded(currentStep >= 3);
         // Steps 5-6 need demo modal
         setShowDemoModal(currentStep >= 4 && currentStep <= 5);
       } else {
@@ -115,17 +115,40 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     }
   }, [isOpen, currentStep, onNavigateToPlaylists, onNavigateHome]);
 
-  // Force re-render after refs are attached
+  // Track if layout is ready - triggers re-render after demo content loads
   useEffect(() => {
-    if (isDemoExpanded || showDemoModal) {
-      // Wait for next frame to ensure refs are attached and layout is complete
-      requestAnimationFrame(() => {
+    // For steps with highlights, trigger re-render after layout settles
+    if (currentStep >= 1 && currentStep <= 5) {
+      // Extra delay for step 4 to ensure Edit button is positioned
+      if (currentStep === 3) {
         requestAnimationFrame(() => {
-          forceRender(prev => prev + 1);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                forceRender(prev => prev + 1);
+              }, 100);
+            });
+          });
         });
-      });
+      } else {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            forceRender(prev => prev + 1);
+          });
+        });
+      }
     }
-  }, [isDemoExpanded, showDemoModal]);
+  }, [currentStep, showDemoPlaylist, showDemoModal, isDemoExpanded]);
+
+  // Lock scroll position during tour
+  useEffect(() => {
+    if (isOpen && currentStep >= 2) {
+      window.scrollTo(0, 0);
+      const handleScroll = () => window.scrollTo(0, 0);
+      window.addEventListener('scroll', handleScroll);
+      return () => window.removeEventListener('scroll', handleScroll);
+    }
+  }, [isOpen, currentStep]);
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -232,7 +255,9 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     if (!targetElement) return null;
 
     const rect = targetElement.getBoundingClientRect();
-    const padding = 12;
+
+    // Use smaller padding for step 4 (Edit button) to fit tighter
+    const padding = currentStep === 3 ? 8 : 12;
 
     // Calculate intended position with padding
     const intendedTop = rect.top - padding;
@@ -291,10 +316,17 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         {/* Tooltip */}
         <div
           className={`product-tour-tooltip ${isCenterStep ? 'center' : ''}`}
-          style={isCenterStep ? {} : tooltipPos ? {
-            top: `${tooltipPos.top}px`,
-            left: `${tooltipPos.left}px`
-          } : {}}
+          style={
+            isCenterStep ? {} :
+            (currentStep >= 1 && currentStep <= 5) ? {
+              position: 'fixed',
+              bottom: '20px',
+              right: '20px',
+              top: 'auto',
+              left: 'auto',
+              transform: 'none'
+            } : {}
+          }
         >
           <div className="product-tour-header">
             <h3>{step.title}</h3>
@@ -341,8 +373,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
       {/* Demo Playlist - Rendered in React */}
       {showDemoPlaylist && currentTab === 'playlists' && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'auto', padding: '0 2px' }}>
-          <div style={{ paddingTop: '140px', maxWidth: '100%', margin: '0 auto' }}>
+        <div style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px', background: '#f5f5f7' }}>
+          <div style={{ paddingTop: '80px', maxWidth: '100%', margin: '0 auto' }}>
             <div className={`playlist-card tour-demo-playlist-card ${isDemoExpanded ? 'expanded' : ''}`} style={{ pointerEvents: 'none', marginBottom: '16px' }}>
               <div className="playlist-card-header">
                 <div className="playlist-header-actions">
@@ -354,7 +386,11 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                   <span className="expand-icon">{isDemoExpanded ? '▼' : '▶'}</span>
                 </div>
                 <div className="playlist-header-content">
-                  <div className="playlist-cover-image" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}></div>
+                  <div className="playlist-cover-image" style={{
+                    backgroundImage: 'url(https://i.scdn.co/image/ab67616d0000b273bb54dde68cd23e2a268ae0f5)',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center'
+                  }}></div>
                   <div className="playlist-info">
                     <h2>Upbeat Pop Hits</h2>
                     <p className="playlist-meta">Created just now</p>
@@ -365,13 +401,13 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
               {isDemoExpanded && (
                 <div className="playlist-details">
                   <div className="playlist-controls">
-                    <button ref={editButtonRef} className="edit-button tour-demo-edit-button">
+                    <button ref={editButtonRef} className="edit-button tour-demo-edit-button" style={{ width: 'auto', minWidth: 'fit-content' }}>
                       Edit Playlist
                     </button>
                   </div>
                   <div className="tracks-list">
                     <div className="track-item">
-                      <div className="track-image" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', width: '48px', height: '48px', borderRadius: '4px', flexShrink: 0 }}></div>
+                      <img src="https://i.scdn.co/image/ab67616d0000b273bb54dde68cd23e2a268ae0f5" alt="Midnights" className="track-image" />
                       <div className="track-content">
                         <div className="track-info">
                           <div className="track-name">Anti-Hero</div>
@@ -380,16 +416,16 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                       </div>
                     </div>
                     <div className="track-item">
-                      <div className="track-image" style={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', width: '48px', height: '48px', borderRadius: '4px', flexShrink: 0 }}></div>
+                      <img src="https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36" alt="After Hours" className="track-image" />
                       <div className="track-content">
                         <div className="track-info">
-                          <div className="track-name">Levitating</div>
-                          <div className="track-artist">Dua Lipa</div>
+                          <div className="track-name">Blinding Lights</div>
+                          <div className="track-artist">The Weeknd</div>
                         </div>
                       </div>
                     </div>
                     <div className="track-item">
-                      <div className="track-image" style={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', width: '48px', height: '48px', borderRadius: '4px', flexShrink: 0 }}></div>
+                      <img src="https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" alt="1989" className="track-image" />
                       <div className="track-content">
                         <div className="track-info">
                           <div className="track-name">Shake It Off</div>
@@ -398,16 +434,16 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                       </div>
                     </div>
                     <div className="track-item">
-                      <div className="track-image" style={{ background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', width: '48px', height: '48px', borderRadius: '4px', flexShrink: 0 }}></div>
+                      <img src="https://i.scdn.co/image/ab67616d0000b27356ac7b86e090f307e218e9c8" alt="thank u, next" className="track-image" />
                       <div className="track-content">
                         <div className="track-info">
-                          <div className="track-name">Don't Start Now</div>
-                          <div className="track-artist">Dua Lipa</div>
+                          <div className="track-name">thank u, next</div>
+                          <div className="track-artist">Ariana Grande</div>
                         </div>
                       </div>
                     </div>
                     <div className="track-item">
-                      <div className="track-image" style={{ background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', width: '48px', height: '48px', borderRadius: '4px', flexShrink: 0 }}></div>
+                      <img src="https://i.scdn.co/image/ab67616d0000b273e787cffec20aa2a396a61647" alt="1989" className="track-image" />
                       <div className="track-content">
                         <div className="track-info">
                           <div className="track-name">Blank Space</div>
@@ -426,7 +462,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       {/* Demo Modal - Rendered in React */}
       {showDemoModal && currentTab === 'playlists' && (
         <div className="modal-overlay tour-demo-modal" style={{ zIndex: 10005, pointerEvents: 'none', background: 'transparent' }}>
-          <div className="edit-options-modal tour-demo-edit-modal" style={{ pointerEvents: 'none' }}>
+          <div className="edit-options-modal tour-demo-edit-modal" style={{ pointerEvents: 'none', minHeight: '500px' }}>
             <div className="edit-options-header">
               <div className="playlist-icon" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
                 🎵
@@ -438,30 +474,26 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
               <div ref={refineInputRef} className={`modal-section ${currentStep === 4 ? 'tour-refine-section' : ''}`} style={currentStep === 4 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Refine Playlist</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Add instructions to customize future auto-updates</p>
-                {currentStep === 4 && (
-                  <div className="chat-input-container tour-demo-chat-input" style={{ position: 'relative' }}>
-                    <input type="text" placeholder="Refine your playlist!" className="chat-input" readOnly style={{ cursor: 'default', paddingRight: '40px' }}/>
-                    <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93', position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                      <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-                    </svg>
-                  </div>
-                )}
+                <div className="chat-input-container tour-demo-chat-input" style={{ position: 'relative', display: currentStep === 4 ? 'block' : 'none' }}>
+                  <input type="text" placeholder="Refine your playlist!" className="chat-input" readOnly style={{ cursor: 'default', paddingRight: '40px' }}/>
+                  <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93', position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+                  </svg>
+                </div>
               </div>
 
               <div ref={autoRefreshRef} className={`modal-section ${currentStep === 5 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 5 ? { background: '#eff6ff', borderRadius: '8px', border: '2px solid #3b82f6', padding: '16px' } : {}}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Auto-Update Settings</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Automatically refresh your playlist on schedule</p>
-                {currentStep === 5 && (
-                  <div className="form-group">
-                    <label htmlFor="update-frequency" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#1a202c' }}>Auto-Update Frequency</label>
-                    <select id="update-frequency" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
-                      <option>Never</option>
-                      <option selected>Daily</option>
-                      <option>Weekly</option>
-                      <option>Monthly</option>
-                    </select>
-                  </div>
-                )}
+                <div className="form-group" style={{ display: currentStep === 5 ? 'block' : 'none' }}>
+                  <label htmlFor="update-frequency" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#1a202c' }}>Auto-Update Frequency</label>
+                  <select id="update-frequency" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
+                    <option>Never</option>
+                    <option selected>Daily</option>
+                    <option>Weekly</option>
+                    <option>Monthly</option>
+                  </select>
+                </div>
               </div>
 
               <div className="modal-section">
