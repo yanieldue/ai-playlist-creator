@@ -328,6 +328,23 @@
   border-color: #3b82f6 !important;
 }
 
+:root.dark-mode .tour-demo-select {
+  background: #2c2c2e !important;
+  color: #ffffff !important;
+  border-color: #424245 !important;
+}
+
+:root.dark-mode .tour-demo-chat-input input {
+  background: #2c2c2e !important;
+  color: #ffffff !important;
+  border-color: #424245 !important;
+}
+
+:root.dark-mode .tour-refine-section label,
+:root.dark-mode .tour-auto-refresh-section label {
+  color: #ffffff !important;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .product-tour-tooltip {
