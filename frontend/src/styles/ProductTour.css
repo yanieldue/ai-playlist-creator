@@ -326,7 +326,7 @@
 }
 
 :root.dark-mode .tour-demo-chat-input input {
-  background: #2c2c2e !important;
+  background: transparent !important;
   color: #ffffff !important;
   border-color: #424245 !important;
 }
