@@ -2603,6 +2603,9 @@ const PlaylistGenerator = () => {
         isOpen={showProductTour}
         onClose={() => setShowProductTour(false)}
         onComplete={() => setShowProductTour(false)}
+        onNavigateHome={() => setActiveTab('home')}
+        onNavigateToPlaylists={() => setActiveTab('playlists')}
+        currentTab={activeTab}
       />
         </>
       ) : inSignupFlow ? (

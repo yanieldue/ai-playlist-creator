@@ -44,9 +44,17 @@ db.exec(`
     FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS artist_recommendations_cache (
+    user_id TEXT PRIMARY KEY,
+    artists_json TEXT NOT NULL,
+    cached_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
   CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
   CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
+  CREATE INDEX IF NOT EXISTS idx_artist_cache_expires ON artist_recommendations_cache(expires_at);
 `);
 
 // User operations
@@ -166,6 +174,28 @@ const resetTokenOps = {
 
   // Clean up expired tokens
   deleteExpired: db.prepare(`DELETE FROM password_reset_tokens WHERE expires_at < ?`)
+};
+
+// Artist recommendations cache operations
+const artistCacheOps = {
+  // Get cached artists
+  get: db.prepare(`SELECT * FROM artist_recommendations_cache WHERE user_id = ? AND expires_at > ?`),
+
+  // Set cached artists
+  set: db.prepare(`
+    INSERT INTO artist_recommendations_cache (user_id, artists_json, cached_at, expires_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      artists_json = excluded.artists_json,
+      cached_at = excluded.cached_at,
+      expires_at = excluded.expires_at
+  `),
+
+  // Delete expired cache entries
+  deleteExpired: db.prepare(`DELETE FROM artist_recommendations_cache WHERE expires_at < ?`),
+
+  // Delete cache for specific user
+  delete: db.prepare(`DELETE FROM artist_recommendations_cache WHERE user_id = ?`)
 };
 
 // High-level API
@@ -324,6 +354,44 @@ class DatabaseService {
     if (user) {
       userOps.update.run(newPassword, user.platform, user.userId, updatedAt, email);
     }
+  }
+
+  // Artist Recommendations Cache
+  getCachedArtists(userId) {
+    const now = new Date().toISOString();
+    const cached = artistCacheOps.get.get(userId, now);
+    if (!cached) return null;
+
+    try {
+      return JSON.parse(cached.artists_json);
+    } catch (error) {
+      console.error('Error parsing cached artists:', error);
+      return null;
+    }
+  }
+
+  setCachedArtists(userId, artists) {
+    const now = new Date();
+    const cachedAt = now.toISOString();
+
+    // Calculate next 12 AM UTC
+    const nextMidnight = new Date(now);
+    nextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight UTC
+    const expiresAt = nextMidnight.toISOString();
+
+    const artistsJson = JSON.stringify(artists);
+    artistCacheOps.set.run(userId, artistsJson, cachedAt, expiresAt);
+
+    console.log(`Cached artists for ${userId}, expires at ${expiresAt}`);
+  }
+
+  deleteCachedArtists(userId) {
+    artistCacheOps.delete.run(userId);
+  }
+
+  cleanExpiredArtistCache() {
+    const now = new Date().toISOString();
+    artistCacheOps.deleteExpired.run(now);
   }
 
   // Close database connection

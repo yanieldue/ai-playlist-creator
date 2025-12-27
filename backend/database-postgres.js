@@ -84,12 +84,20 @@ async function initializeTables() {
         PRIMARY KEY (user_id, artist_name)
       );
 
+      CREATE TABLE IF NOT EXISTS artist_recommendations_cache (
+        user_id TEXT PRIMARY KEY,
+        artists_json JSONB NOT NULL,
+        cached_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
       CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
       CREATE INDEX IF NOT EXISTS idx_playlists_user_id ON playlists(user_id);
       CREATE INDEX IF NOT EXISTS idx_playlists_updated_at ON playlists(updated_at);
       CREATE INDEX IF NOT EXISTS idx_artist_history_user_id ON artist_history(user_id);
+      CREATE INDEX IF NOT EXISTS idx_artist_cache_expires ON artist_recommendations_cache(expires_at);
     `);
     console.log('PostgreSQL tables initialized');
   } finally {
@@ -434,6 +442,72 @@ class DatabaseService {
       ORDER BY last_seen DESC
     `, [userId]);
     return result.rows;
+  }
+
+  // Artist Recommendations Cache
+  async getCachedArtists(userId) {
+    try {
+      const result = await pool.query(`
+        SELECT artists_json
+        FROM artist_recommendations_cache
+        WHERE user_id = $1 AND expires_at > NOW()
+      `, [userId]);
+
+      if (result.rows.length === 0) return null;
+
+      return result.rows[0].artists_json;
+    } catch (error) {
+      console.error('Error getting cached artists:', error);
+      return null;
+    }
+  }
+
+  async setCachedArtists(userId, artists) {
+    try {
+      // Calculate next 12 AM UTC
+      const now = new Date();
+      const nextMidnight = new Date(now);
+      nextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight UTC
+
+      await pool.query(`
+        INSERT INTO artist_recommendations_cache (user_id, artists_json, cached_at, expires_at)
+        VALUES ($1, $2, NOW(), $3)
+        ON CONFLICT (user_id) DO UPDATE SET
+          artists_json = EXCLUDED.artists_json,
+          cached_at = EXCLUDED.cached_at,
+          expires_at = EXCLUDED.expires_at
+      `, [userId, JSON.stringify(artists), nextMidnight]);
+
+      console.log(`Cached artists for ${userId}, expires at ${nextMidnight.toISOString()}`);
+    } catch (error) {
+      console.error('Error setting cached artists:', error);
+      throw error;
+    }
+  }
+
+  async deleteCachedArtists(userId) {
+    try {
+      await pool.query(`
+        DELETE FROM artist_recommendations_cache
+        WHERE user_id = $1
+      `, [userId]);
+    } catch (error) {
+      console.error('Error deleting cached artists:', error);
+      throw error;
+    }
+  }
+
+  async cleanExpiredArtistCache() {
+    try {
+      const result = await pool.query(`
+        DELETE FROM artist_recommendations_cache
+        WHERE expires_at < NOW()
+      `);
+      return result.rowCount;
+    } catch (error) {
+      console.error('Error cleaning expired artist cache:', error);
+      throw error;
+    }
   }
 
   // Close pool

@@ -1226,6 +1226,15 @@ app.get('/api/new-artists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
 
+    // Check cache first
+    const cachedArtists = db.getCachedArtists(userId);
+    if (cachedArtists) {
+      console.log(`✓ Returning ${cachedArtists.length} cached artists for ${userId}`);
+      return res.json({ artists: cachedArtists, cached: true });
+    }
+
+    console.log('No valid cache found, fetching fresh artist recommendations...');
+
     // Get user's tokens and top artists directly (no HTTP call)
     const tokens = await getUserTokens(userId);
     if (!tokens) {
@@ -1448,7 +1457,23 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
             setTimeout(() => reject(new Error('Search timeout')), 5000)
           );
           const searchResult = await Promise.race([searchPromise, timeoutPromise]);
-          return { artist, spotifyArtist: searchResult.body.artists.items[0] };
+          let spotifyArtist = searchResult.body.artists.items[0];
+
+          // If we found an artist but it has no image, try fetching full artist details by ID
+          if (spotifyArtist && (!spotifyArtist.images || spotifyArtist.images.length === 0)) {
+            try {
+              console.log(`Fetching full details for ${spotifyArtist.name} to get image...`);
+              const fullArtistData = await userSpotifyApi.getArtist(spotifyArtist.id);
+              if (fullArtistData.body.images && fullArtistData.body.images.length > 0) {
+                spotifyArtist = fullArtistData.body;
+                console.log(`✓ Got image from full artist data for ${spotifyArtist.name}`);
+              }
+            } catch (artistError) {
+              console.log(`Could not fetch full artist details: ${artistError.message}`);
+            }
+          }
+
+          return { artist, spotifyArtist };
         } catch (error) {
           return { artist, spotifyArtist: null, error };
         }
@@ -1492,7 +1517,15 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
           }
 
           const popularity = spotifyArtist.popularity || 50;
-          console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity})`);
+          const artistImage = spotifyArtist.images && spotifyArtist.images.length > 0
+            ? spotifyArtist.images[0].url
+            : null;
+
+          console.log(`✓ Found ${artist.name} on Spotify (popularity: ${popularity}, has image: ${!!artistImage})`);
+          if (!artistImage) {
+            console.log(`⚠️ No image found for ${artist.name}, images array:`, spotifyArtist.images);
+          }
+
           seenArtistIds.add(spotifyArtist.id);
           seenArtistNames.add(artist.name.toLowerCase());
 
@@ -1501,7 +1534,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
             name: spotifyArtist.name,
             genres: spotifyArtist.genres || artist.genres || [],
             description: artist.description,
-            image: spotifyArtist.images[0]?.url || null,
+            image: artistImage,
             popularity: popularity,
             uri: spotifyArtist.uri
           });
@@ -1552,7 +1585,18 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       console.log(`   - This should NEVER happen - filtering failed!`);
     }
 
-    res.json({ artists: formattedArtists });
+    // Cache the results for 24 hours (expires at next 12 AM UTC)
+    if (formattedArtists.length > 0) {
+      try {
+        db.setCachedArtists(userId, formattedArtists);
+        console.log('✓ Cached artist recommendations for user');
+      } catch (cacheError) {
+        console.error('Failed to cache artists:', cacheError.message);
+        // Don't fail the request if caching fails
+      }
+    }
+
+    res.json({ artists: formattedArtists, cached: false });
   } catch (error) {
     console.error('Error fetching new artists:', error);
     console.error('Error status code:', error.statusCode);
@@ -5211,6 +5255,17 @@ async function startServer() {
       // Start the auto-update scheduler
       scheduleAutoUpdates();
       console.log(`⏰ Auto-update scheduler started`);
+
+      // Clean up expired artist cache every hour
+      setInterval(() => {
+        try {
+          db.cleanExpiredArtistCache();
+          console.log('🧹 Cleaned up expired artist cache entries');
+        } catch (error) {
+          console.error('Error cleaning artist cache:', error.message);
+        }
+      }, 60 * 60 * 1000); // Run every hour
+      console.log(`🧹 Artist cache cleanup scheduler started (runs hourly)`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
