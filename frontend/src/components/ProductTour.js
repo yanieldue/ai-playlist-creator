@@ -9,6 +9,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
   // Refs for demo elements
   const editButtonRef = useRef(null);
+  const trackActionsRef = useRef(null);
   const refineInputRef = useRef(null);
   const autoRefreshRef = useRef(null);
 
@@ -43,6 +44,13 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       target: null,
       targetRef: editButtonRef,
       position: "bottom"
+    },
+    {
+      title: "Like or Dislike Songs",
+      description: "Use the thumbs up to add more songs like this, or thumbs down to remove it and avoid similar tracks in future updates.",
+      target: null,
+      targetRef: trackActionsRef,
+      position: "left"
     },
     {
       title: "Refine Your Playlists",
@@ -86,19 +94,19 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   useEffect(() => {
     if (!isOpen) return;
 
-    // Steps 3-7 need playlists page
-    if (currentStep >= 2 && currentStep <= 5) {
+    // Steps 3-8 need playlists page
+    if (currentStep >= 2 && currentStep <= 6) {
       if (onNavigateToPlaylists) {
         onNavigateToPlaylists();
       }
 
-      // Steps 3-6 need demo playlist
-      if (currentStep >= 2 && currentStep <= 5) {
+      // Steps 3-7 need demo playlist
+      if (currentStep >= 2 && currentStep <= 6) {
         setShowDemoPlaylist(true);
-        // Step 3: collapsed, Steps 4-6: expanded
+        // Step 3: collapsed, Steps 4-7: expanded
         setIsDemoExpanded(currentStep >= 3);
-        // Steps 5-6 need demo modal
-        setShowDemoModal(currentStep >= 4 && currentStep <= 5);
+        // Steps 6-7 need demo modal (Refine and Auto-Refresh)
+        setShowDemoModal(currentStep >= 5 && currentStep <= 6);
       } else {
         setShowDemoPlaylist(false);
         setIsDemoExpanded(false);
@@ -289,8 +297,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   return (
     <>
       <div className="product-tour-overlay">
-        {/* Highlight target element - skip for steps 4 and 5 (they have inline styled borders) */}
-        {highlightPos && currentStep !== 4 && currentStep !== 5 && (
+        {/* Highlight target element - skip for steps 5 and 6 (they have inline styled borders) */}
+        {highlightPos && currentStep !== 5 && currentStep !== 6 && (
           <div
             className="product-tour-highlight"
             style={{
@@ -307,7 +315,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
           className={`product-tour-tooltip ${isCenterStep ? 'center' : ''}`}
           style={
             isCenterStep ? {} :
-            (currentStep >= 1 && currentStep <= 5) ? {
+            (currentStep >= 1 && currentStep <= 6) ? {
               position: 'fixed',
               bottom: '20px',
               right: '20px',
@@ -402,6 +410,18 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                           <div className="track-name">Anti-Hero</div>
                           <div className="track-artist">Taylor Swift</div>
                         </div>
+                        <div className={`track-actions ${currentStep === 4 ? 'tour-highlight-reactions' : ''}`} ref={trackActionsRef}>
+                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                          </button>
+                          <button className="track-reaction-button" title="Not for me. Exclude similar songs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="track-item">
@@ -410,6 +430,18 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                         <div className="track-info">
                           <div className="track-name">Blinding Lights</div>
                           <div className="track-artist">The Weeknd</div>
+                        </div>
+                        <div className="track-actions">
+                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                          </button>
+                          <button className="track-reaction-button" title="Not for me. Exclude similar songs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                            </svg>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -420,6 +452,18 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                           <div className="track-name">Shake It Off</div>
                           <div className="track-artist">Taylor Swift</div>
                         </div>
+                        <div className="track-actions">
+                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                          </button>
+                          <button className="track-reaction-button" title="Not for me. Exclude similar songs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="track-item">
@@ -429,6 +473,18 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                           <div className="track-name">thank u, next</div>
                           <div className="track-artist">Ariana Grande</div>
                         </div>
+                        <div className="track-actions">
+                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                          </button>
+                          <button className="track-reaction-button" title="Not for me. Exclude similar songs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="track-item">
@@ -437,6 +493,18 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                         <div className="track-info">
                           <div className="track-name">Blank Space</div>
                           <div className="track-artist">Taylor Swift</div>
+                        </div>
+                        <div className="track-actions">
+                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                            </svg>
+                          </button>
+                          <button className="track-reaction-button" title="Not for me. Exclude similar songs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                            </svg>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -463,21 +531,21 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             </div>
 
             <div className="edit-options-list">
-              <div ref={refineInputRef} className={`modal-section ${currentStep === 4 ? 'tour-refine-section' : ''}`} style={currentStep === 4 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
+              <div ref={refineInputRef} className={`modal-section ${currentStep === 5 ? 'tour-refine-section' : ''}`} style={currentStep === 5 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Refine Playlist</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Add instructions to customize future auto-updates</p>
-                <div className="chat-input-container tour-demo-chat-input" style={{ position: 'relative', display: currentStep === 4 ? 'block' : 'none' }}>
-                  <input type="text" placeholder="Refine your playlist!" className="chat-input" readOnly style={{ cursor: 'default', paddingRight: '40px' }}/>
-                  <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93', position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <div className="chat-input-container tour-demo-chat-input" style={{ display: currentStep === 5 ? 'flex' : 'none', position: 'relative' }}>
+                  <input type="text" placeholder="Refine your playlist!" className="chat-input" readOnly style={{ cursor: 'default', flex: 1, border: 'none', background: 'transparent' }}/>
+                  <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93', flexShrink: 0 }}>
                     <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
                   </svg>
                 </div>
               </div>
 
-              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 5 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 5 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
+              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 6 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 6 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Auto-Update Settings</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Automatically refresh your playlist on schedule</p>
-                <div className="form-group" style={{ display: currentStep === 5 ? 'block' : 'none' }}>
+                <div className="form-group" style={{ display: currentStep === 6 ? 'block' : 'none' }}>
                   <label htmlFor="update-frequency" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#1a202c' }}>Auto-Update Frequency</label>
                   <select id="update-frequency" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
                     <option>Never</option>

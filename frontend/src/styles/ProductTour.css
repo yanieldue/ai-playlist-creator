@@ -306,8 +306,7 @@
 }
 
 :root.dark-mode .modal-section.tour-refine-section {
-  background: #3a3a3c !important;
-  border-color: #fbbf24 !important;
+  border: 2px solid #fbbf24 !important;
 }
 
 :root.dark-mode .modal-section:not(.tour-refine-section):not(.tour-auto-refresh-section) {
@@ -315,8 +314,7 @@
 }
 
 :root.dark-mode .tour-auto-refresh-section {
-  background: #3a3a3c !important;
-  border-color: #fbbf24 !important;
+  border: 2px solid #fbbf24 !important;
 }
 
 :root.dark-mode .tour-demo-select {
@@ -328,16 +326,29 @@
   color: #ffffff !important;
 }
 
+:root.dark-mode .tour-demo-chat-input {
+  background: #2c2c2e !important;
+  border: 1px solid #424245 !important;
+  border-radius: 20px !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  position: relative !important;
+}
+
 :root.dark-mode .tour-demo-chat-input input {
   background: transparent !important;
   color: #ffffff !important;
-  border-color: #424245 !important;
+  border: none !important;
 }
 
 :root.dark-mode .tour-refine-section label,
 :root.dark-mode .tour-auto-refresh-section label {
   color: #ffffff !important;
 }
+
+/* Highlight track reaction buttons during tour */
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
