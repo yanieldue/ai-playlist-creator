@@ -291,26 +291,15 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       <div className="product-tour-overlay">
         {/* Highlight target element - skip for steps 4 and 5 (they have inline styled borders) */}
         {highlightPos && currentStep !== 4 && currentStep !== 5 && (
-          <>
-            <div
-              className="product-tour-highlight"
-              style={{
-                top: `${highlightPos.top}px`,
-                left: `${highlightPos.left}px`,
-                width: `${highlightPos.width}px`,
-                height: `${highlightPos.height}px`
-              }}
-            />
-            <div
-              className="product-tour-spotlight"
-              style={{
-                top: `${highlightPos.top}px`,
-                left: `${highlightPos.left}px`,
-                width: `${highlightPos.width}px`,
-                height: `${highlightPos.height}px`
-              }}
-            />
-          </>
+          <div
+            className="product-tour-highlight"
+            style={{
+              top: `${highlightPos.top}px`,
+              left: `${highlightPos.left}px`,
+              width: `${highlightPos.width}px`,
+              height: `${highlightPos.height}px`
+            }}
+          />
         )}
 
         {/* Tooltip */}
