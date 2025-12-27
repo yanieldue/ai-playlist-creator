@@ -268,6 +268,47 @@
   background: #4a4a4d;
 }
 
+/* Demo Playlist Dark Mode */
+:root.dark-mode .tour-demo-playlist-card {
+  background: #2c2c2e !important;
+  border-color: #424245 !important;
+}
+
+:root.dark-mode .tour-demo-playlist-card h2 {
+  color: #ffffff !important;
+}
+
+:root.dark-mode .tour-demo-playlist-card .playlist-meta {
+  color: #8e8e93 !important;
+}
+
+:root.dark-mode .tour-demo-playlist-card .track-name {
+  color: #ffffff !important;
+}
+
+:root.dark-mode .tour-demo-playlist-card .track-artist {
+  color: #8e8e93 !important;
+}
+
+:root.dark-mode .tour-demo-edit-button {
+  background: #3a3a3c !important;
+  color: #ffffff !important;
+}
+
+:root.dark-mode .tour-demo-edit-modal {
+  background: #2c2c2e !important;
+  color: #ffffff !important;
+}
+
+:root.dark-mode .tour-demo-edit-modal h2,
+:root.dark-mode .tour-demo-edit-modal h3 {
+  color: #ffffff !important;
+}
+
+:root.dark-mode .tour-demo-edit-modal p {
+  color: #8e8e93 !important;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .product-tour-tooltip {
