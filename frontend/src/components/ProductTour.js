@@ -471,7 +471,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                 </div>
               </div>
 
-              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 5 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 5 ? { background: '#eff6ff', borderRadius: '8px', border: '2px solid #3b82f6', padding: '16px' } : {}}>
+              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 5 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 5 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Auto-Update Settings</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Automatically refresh your playlist on schedule</p>
                 <div className="form-group" style={{ display: currentStep === 5 ? 'block' : 'none' }}>

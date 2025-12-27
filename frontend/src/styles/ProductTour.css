@@ -311,8 +311,8 @@
 }
 
 :root.dark-mode .tour-auto-refresh-section {
-  background: #1e293b !important;
-  border-color: #3b82f6 !important;
+  background: #3a3a3c !important;
+  border-color: #fbbf24 !important;
 }
 
 :root.dark-mode .tour-demo-select {
