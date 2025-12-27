@@ -305,9 +305,13 @@
   color: #8e8e93 !important;
 }
 
-:root.dark-mode .tour-refine-section {
+:root.dark-mode .modal-section.tour-refine-section {
   background: #3a3a3c !important;
   border-color: #fbbf24 !important;
+}
+
+:root.dark-mode .modal-section:not(.tour-refine-section):not(.tour-auto-refresh-section) {
+  background: transparent !important;
 }
 
 :root.dark-mode .tour-auto-refresh-section {
