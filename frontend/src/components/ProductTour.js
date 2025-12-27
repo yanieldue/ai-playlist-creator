@@ -460,7 +460,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             </div>
 
             <div className="edit-options-list">
-              <div ref={refineInputRef} className={`modal-section ${currentStep === 4 ? 'tour-refine-section' : ''}`} style={currentStep === 4 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
+              <div ref={refineInputRef} className={`modal-section ${currentStep === 4 ? 'tour-refine-section' : ''}`} style={currentStep === 4 ? { background: '#fff7ed', borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Refine Playlist</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Add instructions to customize future auto-updates</p>
                 <div className="chat-input-container tour-demo-chat-input" style={{ position: 'relative', display: currentStep === 4 ? 'block' : 'none' }}>
