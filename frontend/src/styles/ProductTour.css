@@ -24,10 +24,8 @@
   background: transparent;
   border: 3px solid #fbbf24;
   border-radius: 8px;
-  box-shadow: 0 0 25px rgba(251, 191, 36, 0.8);
   z-index: 10001;
   pointer-events: none;
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .product-tour-spotlight {
@@ -37,34 +35,6 @@
   z-index: 10002;
   pointer-events: none;
   mix-blend-mode: screen;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    border-color: #fbbf24;
-    box-shadow: 0 0 25px rgba(251, 191, 36, 0.8);
-  }
-  50% {
-    border-color: #f59e0b;
-    box-shadow: 0 0 40px rgba(251, 191, 36, 1);
-  }
-}
-
-.product-tour-highlight.blue-highlight {
-  border-color: #3b82f6;
-  box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
-  animation: pulseBlue 2s ease-in-out infinite;
-}
-
-@keyframes pulseBlue {
-  0%, 100% {
-    border-color: #3b82f6;
-    box-shadow: 0 0 25px rgba(59, 130, 246, 0.8);
-  }
-  50% {
-    border-color: #2563eb;
-    box-shadow: 0 0 40px rgba(59, 130, 246, 1);
-  }
 }
 
 .product-tour-tooltip {
