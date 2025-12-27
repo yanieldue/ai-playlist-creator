@@ -293,7 +293,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         {highlightPos && (
           <>
             <div
-              className="product-tour-highlight"
+              className={`product-tour-highlight ${currentStep === 5 ? 'blue-highlight' : ''}`}
               style={{
                 top: `${highlightPos.top}px`,
                 left: `${highlightPos.left}px`,
