@@ -371,6 +371,7 @@
   .product-tour-tooltip.tour-modal-steps-mobile {
     top: 80px !important;
     bottom: auto !important;
+    z-index: 10011 !important; /* Above demo modal (10005) and highlight (10001) */
   }
 
   /* Reduce tooltip width on small screens for better margins */
