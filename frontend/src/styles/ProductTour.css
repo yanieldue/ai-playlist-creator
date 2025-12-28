@@ -361,6 +361,33 @@
     max-width: calc(100% - 32px);
   }
 
+  /* Step 2 - Position at top to avoid blocking chat input */
+  .product-tour-tooltip.tour-step-2-mobile {
+    top: 80px !important;
+    bottom: auto !important;
+  }
+
+  /* Steps 6-7 (modal steps) - Position at top to avoid blocking modal footer */
+  .product-tour-tooltip.tour-modal-steps-mobile {
+    top: 80px !important;
+    bottom: auto !important;
+  }
+
+  /* Reduce tooltip width on small screens for better margins */
+  .product-tour-tooltip:not(.center) {
+    max-width: calc(100% - 40px);
+  }
+
+  /* Increase touch target size for track reaction buttons */
+  .track-reaction-button {
+    padding: 12px !important;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .product-tour-header h3 {
     font-size: 18px;
   }

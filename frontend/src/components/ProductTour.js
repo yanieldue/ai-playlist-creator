@@ -312,7 +312,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
         {/* Tooltip */}
         <div
-          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''}`}
+          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${currentStep === 1 ? 'tour-step-2-mobile' : ''} ${(currentStep === 5 || currentStep === 6) ? 'tour-modal-steps-mobile' : ''}`}
           style={
             isCenterStep ? {} :
             (currentStep >= 1 && currentStep <= 6) ? {
