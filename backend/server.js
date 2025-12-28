@@ -1227,10 +1227,14 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     const { userId } = req.params;
 
     // Check cache first
-    const cachedArtists = db.getCachedArtists(userId);
-    if (cachedArtists) {
+    const cachedArtists = await db.getCachedArtists(userId);
+    if (cachedArtists && Array.isArray(cachedArtists) && cachedArtists.length > 0) {
       console.log(`✓ Returning ${cachedArtists.length} cached artists for ${userId}`);
       return res.json({ artists: cachedArtists, cached: true });
+    }
+
+    if (cachedArtists && !Array.isArray(cachedArtists)) {
+      console.log('⚠️ Cached artists is not an array, invalidating cache');
     }
 
     console.log('No valid cache found, fetching fresh artist recommendations...');
@@ -1449,15 +1453,52 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       // Process artists in parallel batches for faster loading
       console.log(`Processing ${filteredArtists.length} AI-suggested artists in parallel...`);
 
-      // Search all artists in parallel (process up to 25 to ensure we get 10 valid matches)
-      const searchPromises = filteredArtists.slice(0, 25).map(async (artist) => {
+      // Search all artists in parallel (process up to 30 to ensure we get 10 valid matches)
+      const searchPromises = filteredArtists.slice(0, 30).map(async (artist) => {
         try {
-          const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 1 });
+          // Search with limit 5 to get multiple candidates
+          const searchPromise = userSpotifyApi.searchArtists(artist.name, { limit: 5 });
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Search timeout')), 5000)
           );
           const searchResult = await Promise.race([searchPromise, timeoutPromise]);
-          let spotifyArtist = searchResult.body.artists.items[0];
+          const candidates = searchResult.body.artists.items;
+
+          if (!candidates || candidates.length === 0) {
+            return { artist, spotifyArtist: null };
+          }
+
+          // Normalize name for comparison
+          const normalizeArtistName = (name) => {
+            return name
+              .toLowerCase()
+              .trim()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '') // Remove accents
+              .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+              .replace(/\s+/g, ' '); // Normalize spaces
+          };
+
+          const targetName = normalizeArtistName(artist.name);
+
+          // Find best match from candidates
+          let spotifyArtist = null;
+          for (const candidate of candidates) {
+            const candidateName = normalizeArtistName(candidate.name);
+            const namesMatch = targetName === candidateName ||
+                              targetName.includes(candidateName) ||
+                              candidateName.includes(targetName);
+
+            if (namesMatch) {
+              spotifyArtist = candidate;
+              break;
+            }
+          }
+
+          // If no exact match found, skip this artist entirely (don't use first result)
+          if (!spotifyArtist) {
+            return { artist, spotifyArtist: null };
+          }
 
           // If we found an artist but it has no image, try fetching full artist details by ID
           if (spotifyArtist && (!spotifyArtist.images || spotifyArtist.images.length === 0)) {
@@ -1494,14 +1535,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
         }
 
         if (spotifyArtist) {
-          // CRITICAL: Verify Spotify returned the correct artist (not a similar/related one)
-          const aiArtistName = artist.name.toLowerCase().trim();
-          const spotifyArtistName = spotifyArtist.name.toLowerCase().trim();
-
-          if (aiArtistName !== spotifyArtistName) {
-            console.log(`⚠️ SPOTIFY MISMATCH: AI suggested "${artist.name}" but Spotify returned "${spotifyArtist.name}" - skipping`);
-            continue;
-          }
+          // Name matching already done in search phase, so spotifyArtist is pre-validated
 
           // Skip duplicate Spotify IDs
           if (seenArtistIds.has(spotifyArtist.id)) {
@@ -1588,7 +1622,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
     // Cache the results for 24 hours (expires at next 12 AM UTC)
     if (formattedArtists.length > 0) {
       try {
-        db.setCachedArtists(userId, formattedArtists);
+        await db.setCachedArtists(userId, formattedArtists);
         console.log('✓ Cached artist recommendations for user');
       } catch (cacheError) {
         console.error('Failed to cache artists:', cacheError.message);
@@ -1620,6 +1654,19 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       error: 'Failed to fetch new artists',
       details: error.message
     });
+  }
+});
+
+// Clear artist cache for a user (development/admin endpoint)
+app.delete('/api/new-artists/cache/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await db.deleteCachedArtists(userId);
+    console.log(`Cleared artist cache for ${userId}`);
+    res.json({ success: true, message: 'Artist cache cleared' });
+  } catch (error) {
+    console.error('Error clearing artist cache:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
   }
 });
 
