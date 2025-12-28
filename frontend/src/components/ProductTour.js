@@ -518,7 +518,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
       {/* Demo Modal - Rendered in React */}
       {showDemoModal && currentTab === 'playlists' && (
-        <div className="modal-overlay tour-demo-modal" style={{ zIndex: 10005, pointerEvents: 'none', background: 'transparent' }}>
+        <div className="modal-overlay tour-demo-modal" style={{ zIndex: 9999, pointerEvents: 'none', background: 'transparent' }}>
           <div className="edit-options-modal tour-demo-edit-modal" style={{ pointerEvents: 'none', minHeight: '500px' }}>
             <div className="edit-options-header">
               <div className="playlist-icon" style={{
