@@ -264,8 +264,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
     const rect = targetElement.getBoundingClientRect();
 
-    // Use smaller padding for step 2 (chat input) and step 4 (Edit button) to fit tighter
-    const padding = currentStep === 1 ? 6 : currentStep === 3 ? 8 : 12;
+    // Use smaller padding for steps 2, 4, and 5 to fit tighter around compact UI elements
+    const padding = currentStep === 1 ? 6 : (currentStep === 3 || currentStep === 4) ? 6 : 12;
 
     // Calculate intended position with padding
     const intendedTop = rect.top - padding;
