@@ -8,3 +8,4 @@ root.render(
     <App />
   </React.StrictMode>
 );
+// Trigger deployment - Sun Dec 28 15:25:24 PST 2025
