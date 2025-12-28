@@ -367,11 +367,11 @@
     bottom: auto !important;
   }
 
-  /* Steps 6-7 (modal steps) - Position at top to avoid blocking modal footer */
+  /* Steps 6-7 (modal steps) - Position at bottom on mobile to avoid blocking modal content */
   .product-tour-tooltip.tour-modal-steps-mobile {
-    top: 80px !important;
-    bottom: auto !important;
-    z-index: 10011 !important; /* Above demo modal (10005) and highlight (10001) */
+    top: auto !important;
+    bottom: 20px !important;
+    z-index: 10011 !important; /* Above demo modal (9999) */
   }
 
   /* Reduce tooltip width on small screens for better margins */
