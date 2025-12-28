@@ -913,9 +913,12 @@ const PlaylistGenerator = () => {
   };
 
   const fetchNewArtists = async () => {
+    console.log('[fetchNewArtists] Starting fetch for userId:', userId);
     setLoadingNewArtists(true);
     try {
       const data = await playlistService.getNewArtists(userId);
+      console.log('[fetchNewArtists] Received data:', data);
+      console.log('[fetchNewArtists] Number of artists:', data.artists?.length || 0);
       setNewArtists(data.artists);
     } catch (err) {
       console.log('Failed to fetch new artists (non-critical):', err.message);
