@@ -78,6 +78,7 @@ const PlaylistGenerator = () => {
   // New artists
   const [newArtists, setNewArtists] = useState([]);
   const [loadingNewArtists, setLoadingNewArtists] = useState(false);
+  const [newArtistsFetched, setNewArtistsFetched] = useState(false);
   const newArtistsScrollRef = useRef(null);
 
   // Connected platforms
@@ -241,10 +242,12 @@ const PlaylistGenerator = () => {
 
   // Fetch top artists and new artists when user is authenticated
   useEffect(() => {
-    if (isAuthenticated && userId && topArtists.length === 0) {
-      fetchTopArtists();
+    if (isAuthenticated && userId && !newArtistsFetched) {
+      if (topArtists.length === 0) {
+        fetchTopArtists();
+        fetchUserProfile();
+      }
       fetchNewArtists();
-      fetchUserProfile();
 
       // Check if user has completed the tour
       const tourCompleted = localStorage.getItem('productTourCompleted');
@@ -920,6 +923,7 @@ const PlaylistGenerator = () => {
       console.log('[fetchNewArtists] Received data:', data);
       console.log('[fetchNewArtists] Number of artists:', data.artists?.length || 0);
       setNewArtists(data.artists);
+      setNewArtistsFetched(true);
     } catch (err) {
       console.log('Failed to fetch new artists (non-critical):', err.message);
       console.error('Error details:', err.response?.data);
@@ -930,6 +934,7 @@ const PlaylistGenerator = () => {
       }
 
       setNewArtists([]);
+      setNewArtistsFetched(true);
     } finally {
       setLoadingNewArtists(false);
     }
