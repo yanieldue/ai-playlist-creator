@@ -270,19 +270,29 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     // Calculate intended position with padding
     const intendedTop = rect.top - padding;
     const intendedLeft = rect.left - padding;
+    const intendedWidth = rect.width + (padding * 2);
+    const intendedHeight = rect.height + (padding * 2);
 
     // Clamp to viewport
     const top = Math.max(0, intendedTop);
     const left = Math.max(0, intendedLeft);
 
-    // Adjust height if top was clipped
+    // Adjust dimensions if clipped at edges
     const topClipped = intendedTop < 0 ? -intendedTop : 0;
-    const height = rect.height + (padding * 2) - topClipped;
+    const leftClipped = intendedLeft < 0 ? -intendedLeft : 0;
+
+    // Ensure highlight doesn't extend beyond right edge
+    const maxWidth = window.innerWidth - left;
+    const width = Math.min(intendedWidth - leftClipped, maxWidth);
+
+    // Ensure highlight doesn't extend beyond bottom edge
+    const maxHeight = window.innerHeight - top;
+    const height = Math.min(intendedHeight - topClipped, maxHeight);
 
     return {
       top,
       left,
-      width: rect.width + (padding * 2),
+      width,
       height
     };
   };
