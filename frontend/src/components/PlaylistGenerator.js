@@ -243,6 +243,9 @@ const PlaylistGenerator = () => {
       storedUserId
     });
 
+    // Check if we're in OAuth flow BEFORE clearing URL params
+    const isInOAuthFlow = success === 'true' || spotifyConnected;
+
     if ((userIdParam && success === 'true') || spotifyConnected) {
       // Set a flag to skip validation on the next page load
       localStorage.setItem('skipValidation', 'true');
@@ -276,7 +279,6 @@ const PlaylistGenerator = () => {
 
     // Load connected platforms from backend (get authoritative data)
     // Skip validation if we're in the middle of OAuth flow to avoid race conditions
-    const isInOAuthFlow = success === 'true' || spotifyConnected;
     const skipValidation = localStorage.getItem('skipValidation') === 'true';
 
     // Clear the skipValidation flag after a delay to allow for page redirects
