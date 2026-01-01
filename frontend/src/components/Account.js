@@ -80,9 +80,20 @@ const Account = ({ onBack, showToast }) => {
         localStorage.setItem('activePlatform', 'spotify');
       }
 
+      // Get current platforms from localStorage to preserve other platform connections
+      const storedPlatforms = localStorage.getItem('connectedPlatforms');
+      let currentPlatforms = { spotify: false, apple: false };
+      if (storedPlatforms) {
+        try {
+          currentPlatforms = JSON.parse(storedPlatforms);
+        } catch (e) {
+          console.error('Error parsing stored platforms:', e);
+        }
+      }
+
       const updatedPlatforms = {
-        spotify: true,
-        apple: false
+        ...currentPlatforms,
+        spotify: true
       };
       console.log('Updated platforms:', updatedPlatforms);
       setConnectedPlatforms(updatedPlatforms);
@@ -151,10 +162,12 @@ const Account = ({ onBack, showToast }) => {
           return;
         }
         console.log('Disconnecting from', platform, 'using email:', emailToUse);
+        console.log('Current connectedPlatforms state:', connectedPlatforms);
         const updatedPlatforms = {
           ...connectedPlatforms,
           [platform]: false
         };
+        console.log('Updated platforms after disconnect:', updatedPlatforms);
         console.log('Sending updatePlatforms API call with:', {
           email: emailToUse,
           platforms: updatedPlatforms
