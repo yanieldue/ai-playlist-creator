@@ -3048,128 +3048,74 @@ app.post('/api/create-playlist', async (req, res) => {
     const tokens = await getUserTokens(userId);
     if (!tokens) {
       console.error('No tokens found for userId:', userId);
-      console.log('Available userIds:', Array.from(userTokens.keys()));
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    console.log('Found tokens for user, creating Spotify API instance...');
+    // Use Platform Service to create playlist
+    const PlatformService = require('./services/platformService');
+    const platformService = new PlatformService();
+    const platform = platformService.getPlatform(userId);
 
-    // Create a new instance for this user to avoid conflicts
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
+    console.log(`Creating playlist on ${platform}...`);
 
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+    // Create playlist using platform service
+    const playlistResult = await platformService.createPlaylist(
+      userId,
+      playlistName,
+      description,
+      trackUris,
+      tokens,
+      isPublic
+    );
 
-    // Try to refresh the access token if it's expired
-    try {
-      console.log('Refreshing access token...');
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-
-      // Update stored tokens
-      tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
-      saveTokens(); // Persist to file
-
-      console.log('Access token refreshed successfully');
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
-      // Continue anyway - token might still be valid
-    }
-
-    console.log('Getting Spotify user ID...');
-
-    // Get user's Spotify ID
-    const meData = await userSpotifyApi.getMe();
-
-    if (!meData || !meData.body) {
-      throw new Error('Failed to get user data from Spotify. Response: ' + JSON.stringify(meData));
-    }
-
-    const spotifyUserId = meData.body.id;
-
-    console.log('Spotify user ID:', spotifyUserId);
-    console.log('Creating playlist with name:', playlistName);
-
-    // Create playlist - the third parameter must be an options object, not part of createPlaylist params
-    let playlistData;
-    try {
-      playlistData = await userSpotifyApi.createPlaylist(playlistName, {
-        description: description,
-        public: isPublic !== undefined ? isPublic : true
-      });
-      console.log('createPlaylist raw response:', JSON.stringify(playlistData));
-    } catch (createError) {
-      console.error('createPlaylist threw error:', createError);
-      throw new Error('Spotify createPlaylist error: ' + createError.message);
-    }
-
-    if (!playlistData || !playlistData.body) {
-      throw new Error('Failed to create playlist on Spotify. Response was undefined or missing body property');
-    }
-
-    const playlistId = playlistData.body.id;
-    console.log('Playlist created with ID:', playlistId);
-    console.log('Adding', trackUris.length, 'tracks to playlist...');
-
-    // Add tracks to playlist
-    await userSpotifyApi.addTracksToPlaylist(playlistId, trackUris);
-
-    console.log('Playlist created successfully!');
+    console.log('Playlist created successfully!', playlistResult);
 
     // Store playlist in history
     const playlistRecord = {
-      playlistId: playlistId,
-      playlistName: playlistName,
+      playlistId: playlistResult.id,
+      playlistName: playlistResult.name,
       description: description,
       trackUris: trackUris,
       trackCount: trackUris.length,
       createdAt: new Date().toISOString(),
-      spotifyUrl: playlistData.body.external_urls.spotify,
-      image: playlistData.body.images?.length > 0 ? playlistData.body.images[0].url : null,
+      spotifyUrl: platform === 'spotify' ? playlistResult.url : null,
+      appleMusicUrl: platform === 'apple' ? playlistResult.url : null,
+      platform: platform,
+      image: null, // Can be populated later
       updateFrequency: updateFrequency || 'never',
       updateMode: updateMode || 'append',
       isPublic: isPublic !== undefined ? isPublic : true,
       originalPrompt: prompt,
-      chatMessages: chatMessages || [], // Store cumulative refinements from chat
-      refinementInstructions: [], // Legacy field for backwards compatibility
-      excludedSongs: excludedSongs || [], // Track individual songs user removed with minus button
-      excludedArtists: [], // Track artists user doesn't want (auto-populated when all songs from artist removed)
+      chatMessages: chatMessages || [],
+      refinementInstructions: [],
+      excludedSongs: excludedSongs || [],
+      excludedArtists: [],
       lastUpdated: null,
-      nextUpdate: updateFrequency && updateFrequency !== 'never' ? calculateNextUpdate(updateFrequency, playlistData.body.id) : null,
+      nextUpdate: updateFrequency && updateFrequency !== 'never' ? calculateNextUpdate(updateFrequency, playlistResult.id) : null,
       tracks: []
     };
 
-    // Get user's playlists array or create new one
-    const userPlaylistHistory = userPlaylists.get(userId) || [];
-    userPlaylistHistory.push(playlistRecord);
-    userPlaylists.set(userId, userPlaylistHistory);
+    // Save playlist to database
     await savePlaylist(userId, playlistRecord);
 
     console.log('Playlist saved to history');
 
     res.json({
       success: true,
-      playlistUrl: playlistData.body.external_urls.spotify,
-      playlistId: playlistId
+      playlistUrl: playlistResult.url,
+      playlistId: playlistResult.id,
+      platform: platform
     });
 
   } catch (error) {
     console.error('Error creating playlist:', error);
     console.error('Error details:', {
       message: error.message,
-      statusCode: error.statusCode,
-      body: error.body
+      status: error.status
     });
     res.status(500).json({
       error: 'Failed to create playlist',
-      details: error.message,
-      statusCode: error.statusCode
+      details: error.message
     });
   }
 });
@@ -3373,6 +3319,34 @@ app.get('/api/playlists/:userId', async (req, res) => {
 });
 
 // Get user's Spotify playlists for import
+// Platform-agnostic get playlists from music service
+app.get('/api/platform-playlists/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const tokens = await getUserTokens(userId);
+    if (!tokens) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const PlatformService = require('./services/platformService');
+    const platformService = new PlatformService();
+    const platform = platformService.getPlatform(userId);
+
+    // Get playlists using platform service
+    const playlists = await platformService.getPlaylists(userId, tokens);
+
+    res.json({ playlists, platform });
+  } catch (error) {
+    console.error('Error fetching playlists:', error.message || error);
+    res.status(500).json({
+      error: 'Failed to fetch playlists',
+      details: error.message || 'Unknown error'
+    });
+  }
+});
+
+// Legacy Spotify playlists endpoint (kept for backwards compatibility)
 app.get('/api/spotify-playlists/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -3397,7 +3371,6 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      // Save updated token to database
       await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
@@ -3420,11 +3393,9 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
     res.json({ playlists });
   } catch (error) {
     console.error('Error fetching Spotify playlists:', error.message || error);
-    console.error('Full error:', error);
     res.status(500).json({
       error: 'Failed to fetch Spotify playlists',
-      details: error.message || 'Unknown error',
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: error.message || 'Unknown error'
     });
   }
 });
