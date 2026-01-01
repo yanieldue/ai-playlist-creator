@@ -295,6 +295,9 @@ const PlaylistGenerator = () => {
                 setActivePlatform(null);
                 localStorage.removeItem('activePlatform');
               }
+              // Clear any displayed data
+              setTopArtists([]);
+              setNewArtists([]);
             }
 
             // If localStorage has appleMusicUserId but backend says Apple not connected, clear it
@@ -307,22 +310,7 @@ const PlaylistGenerator = () => {
                 setActivePlatform(null);
                 localStorage.removeItem('activePlatform');
               }
-            }
-
-            // If userId looks like a platform userId but platform is not connected, clear it
-            const currentUserId = localStorage.getItem('userId');
-            if (currentUserId && currentUserId.startsWith('spotify_') && !backendPlatforms.spotify) {
-              console.warn('PlaylistGenerator: Clearing stale Spotify userId - platform not connected');
-              localStorage.removeItem('userId');
-              setUserId(null);
-              setIsAuthenticated(false);
-              setTopArtists([]);
-              setNewArtists([]);
-            } else if (currentUserId && currentUserId.startsWith('apple_music_') && !backendPlatforms.apple) {
-              console.warn('PlaylistGenerator: Clearing stale Apple Music userId - platform not connected');
-              localStorage.removeItem('userId');
-              setUserId(null);
-              setIsAuthenticated(false);
+              // Clear any displayed data
               setTopArtists([]);
               setNewArtists([]);
             }
