@@ -737,21 +737,28 @@ app.get('/api/account/:email', async (req, res) => {
     const { email } = req.params;
     const normalizedEmail = email.trim().toLowerCase();
 
-    const user = registeredUsers.get(normalizedEmail);
+    // Get user from database first (source of truth)
+    const dbUser = await db.getUser(normalizedEmail);
 
-    if (!user) {
+    if (!dbUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Also check in-memory registeredUsers for additional data
+    const memUser = registeredUsers.get(normalizedEmail);
+
+    // Combine data from both sources, preferring database for connectedPlatforms
     res.json({
       success: true,
       email: normalizedEmail,
-      platform: user.platform,
-      connectedPlatforms: user.connectedPlatforms || {
-        spotify: user.platform === 'spotify',
-        apple: user.platform === 'apple'
+      platform: dbUser.platform || memUser?.platform,
+      connectedPlatforms: dbUser.connectedPlatforms || {
+        spotify: dbUser.platform === 'spotify' || memUser?.platform === 'spotify',
+        apple: dbUser.platform === 'apple' || memUser?.platform === 'apple'
       },
-      userId: user.userId,
+      userId: memUser?.userId || dbUser.userId,
+      spotifyUserId: memUser?.spotifyUserId,
+      appleMusicUserId: memUser?.appleMusicUserId
     });
   } catch (error) {
     console.error('Get account error:', error);
