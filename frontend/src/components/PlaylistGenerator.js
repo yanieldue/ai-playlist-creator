@@ -172,55 +172,34 @@ const PlaylistGenerator = () => {
       localStorage.setItem('activePlatform', 'apple');
     }
 
-    // Check if we're in OAuth flow first to avoid clearing data prematurely
+    // Check URL params first
     const urlParams = new URLSearchParams(window.location.search);
     const success = urlParams.get('success');
     const spotifyConnected = urlParams.get('spotify') === 'connected';
-    const skipEarlyValidation = localStorage.getItem('skipValidation') === 'true' || success === 'true' || spotifyConnected;
 
     // First, check if user has a userId stored (either from signup or previous login)
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
       console.log('PlaylistGenerator: Found existing userId in localStorage:', storedUserId);
+      setUserId(storedUserId);
+      setIsAuthenticated(true);
 
-      // Validate that userId has a corresponding platform-specific userId
-      // This catches stale data from before platform disconnect fixes were implemented
-      // BUT skip this validation if we're in OAuth flow to avoid race conditions
-      const hasSpotifyUserId = !!storedSpotifyUserId;
-      const hasAppleMusicUserId = !!storedAppleMusicUserId;
-
-      if (!hasSpotifyUserId && !hasAppleMusicUserId && !skipEarlyValidation) {
-        console.warn('PlaylistGenerator: Found userId but no platform-specific userId - clearing stale data');
-        localStorage.removeItem('userId');
-        localStorage.removeItem('activePlatform');
-        setUserId(null);
-        setIsAuthenticated(false);
-        setActivePlatform(null);
-        setTopArtists([]);
-        setNewArtists([]);
-        setNewArtistsFetched(false);
-      } else {
-        setUserId(storedUserId);
-        setIsAuthenticated(true);
-
-        // Also detect platform from userId format and store accordingly
-        if (storedUserId.startsWith('spotify_') && !storedSpotifyUserId) {
-          setSpotifyUserId(storedUserId);
-          localStorage.setItem('spotifyUserId', storedUserId);
-          if (!storedActivePlatform) {
-            setActivePlatform('spotify');
-            localStorage.setItem('activePlatform', 'spotify');
-          }
-        } else if (storedUserId.startsWith('apple_music_') && !storedAppleMusicUserId) {
-          setAppleMusicUserId(storedUserId);
-          localStorage.setItem('appleMusicUserId', storedUserId);
-          if (!storedActivePlatform) {
-            setActivePlatform('apple');
-            localStorage.setItem('activePlatform', 'apple');
-          }
+      // Also detect platform from userId format and store accordingly
+      if (storedUserId.startsWith('spotify_') && !storedSpotifyUserId) {
+        setSpotifyUserId(storedUserId);
+        localStorage.setItem('spotifyUserId', storedUserId);
+        if (!storedActivePlatform) {
+          setActivePlatform('spotify');
+          localStorage.setItem('activePlatform', 'spotify');
+        }
+      } else if (storedUserId.startsWith('apple_music_') && !storedAppleMusicUserId) {
+        setAppleMusicUserId(storedUserId);
+        localStorage.setItem('appleMusicUserId', storedUserId);
+        if (!storedActivePlatform) {
+          setActivePlatform('apple');
+          localStorage.setItem('activePlatform', 'apple');
         }
       }
-
     }
 
     // Check if user is in signup flow
@@ -310,26 +289,26 @@ const PlaylistGenerator = () => {
             if (localSpotifyUserId && !backendPlatforms.spotify) {
               console.warn('PlaylistGenerator: Clearing stale spotifyUserId - backend says not connected');
               localStorage.removeItem('spotifyUserId');
+              // If this was the active platform, clear it
+              if (activePlatform === 'spotify') {
+                setActivePlatform(null);
+                localStorage.removeItem('activePlatform');
+              }
             }
 
             // If localStorage has appleMusicUserId but backend says Apple not connected, clear it
             if (localAppleMusicUserId && !backendPlatforms.apple) {
               console.warn('PlaylistGenerator: Clearing stale appleMusicUserId - backend says not connected');
               localStorage.removeItem('appleMusicUserId');
+              // If this was the active platform, clear it
+              if (activePlatform === 'apple') {
+                setActivePlatform(null);
+                localStorage.removeItem('activePlatform');
+              }
             }
 
-            // If both platforms are disconnected, clear all auth state
-            if (!backendPlatforms.spotify && !backendPlatforms.apple) {
-              console.warn('PlaylistGenerator: No platforms connected per backend - clearing all auth state');
-              localStorage.removeItem('userId');
-              localStorage.removeItem('activePlatform');
-              setUserId(null);
-              setIsAuthenticated(false);
-              setActivePlatform(null);
-              setTopArtists([]);
-              setNewArtists([]);
-              setNewArtistsFetched(false);
-            }
+            // Note: We DON'T clear userId even if no platforms connected
+            // User can still be logged in without connected platforms
           }
         })
         .catch(err => {
