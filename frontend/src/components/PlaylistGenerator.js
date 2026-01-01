@@ -280,8 +280,11 @@ const PlaylistGenerator = () => {
     }
 
     // Load connected platforms from backend (get authoritative data)
+    // Skip validation if we're in the middle of OAuth flow to avoid race conditions
+    const isInOAuthFlow = success === 'true' || spotifyConnected;
+
     const userEmail = localStorage.getItem('userEmail');
-    if (userEmail) {
+    if (userEmail && !isInOAuthFlow) {
       playlistService.getAccountInfo(userEmail)
         .then(accountInfo => {
           if (accountInfo && accountInfo.connectedPlatforms) {
