@@ -196,34 +196,6 @@ const PlaylistGenerator = () => {
         }
       }
 
-      // Validate userId against backend - check if platforms are still connected
-      // Only do this validation after a delay to avoid interfering with login flow
-      const userEmail = localStorage.getItem('userEmail');
-      if (userEmail) {
-        setTimeout(() => {
-          playlistService.getAccountInfo(userEmail)
-            .then(accountInfo => {
-              if (accountInfo && accountInfo.connectedPlatforms) {
-                const hasAnyPlatform = accountInfo.connectedPlatforms.spotify || accountInfo.connectedPlatforms.apple;
-                if (!hasAnyPlatform) {
-                  console.log('PlaylistGenerator: Backend says no platforms connected, clearing localStorage');
-                  localStorage.removeItem('userId');
-                  localStorage.removeItem('spotifyUserId');
-                  localStorage.removeItem('appleMusicUserId');
-                  localStorage.removeItem('activePlatform');
-                  setUserId(null);
-                  setIsAuthenticated(false);
-                  setSpotifyUserId(null);
-                  setAppleMusicUserId(null);
-                  setActivePlatform(null);
-                }
-              }
-            })
-            .catch(err => {
-              console.error('PlaylistGenerator: Error validating userId:', err);
-            });
-        }, 1000); // Wait 1 second before validating to avoid race conditions with login
-      }
     }
 
     // Check if user is in signup flow
