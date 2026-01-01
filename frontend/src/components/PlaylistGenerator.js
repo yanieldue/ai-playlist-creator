@@ -172,6 +172,12 @@ const PlaylistGenerator = () => {
       localStorage.setItem('activePlatform', 'apple');
     }
 
+    // Check if we're in OAuth flow first to avoid clearing data prematurely
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const spotifyConnected = urlParams.get('spotify') === 'connected';
+    const skipEarlyValidation = localStorage.getItem('skipValidation') === 'true' || success === 'true' || spotifyConnected;
+
     // First, check if user has a userId stored (either from signup or previous login)
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
@@ -179,10 +185,11 @@ const PlaylistGenerator = () => {
 
       // Validate that userId has a corresponding platform-specific userId
       // This catches stale data from before platform disconnect fixes were implemented
+      // BUT skip this validation if we're in OAuth flow to avoid race conditions
       const hasSpotifyUserId = !!storedSpotifyUserId;
       const hasAppleMusicUserId = !!storedAppleMusicUserId;
 
-      if (!hasSpotifyUserId && !hasAppleMusicUserId) {
+      if (!hasSpotifyUserId && !hasAppleMusicUserId && !skipEarlyValidation) {
         console.warn('PlaylistGenerator: Found userId but no platform-specific userId - clearing stale data');
         localStorage.removeItem('userId');
         localStorage.removeItem('activePlatform');
@@ -225,12 +232,9 @@ const PlaylistGenerator = () => {
       return; // Don't check auth yet, let PlatformSelection handle it
     }
 
-    // Check if user just authenticated via OAuth
-    const urlParams = new URLSearchParams(window.location.search);
+    // Check if user just authenticated via OAuth (urlParams already parsed above)
     const userIdParam = urlParams.get('userId');
     const emailParam = urlParams.get('email');
-    const success = urlParams.get('success');
-    const spotifyConnected = urlParams.get('spotify') === 'connected';
     const connectingFromAccount = localStorage.getItem('connectingFromAccount') === 'true';
 
     console.log('PlaylistGenerator useEffect - checking URL params:', {
