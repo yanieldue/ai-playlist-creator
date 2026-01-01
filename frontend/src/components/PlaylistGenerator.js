@@ -287,9 +287,11 @@ const PlaylistGenerator = () => {
     const isInOAuthFlow = success === 'true' || spotifyConnected;
     const skipValidation = localStorage.getItem('skipValidation') === 'true';
 
-    // Clear the skipValidation flag after reading it
+    // Clear the skipValidation flag after a delay to allow for page redirects
     if (skipValidation) {
-      localStorage.removeItem('skipValidation');
+      setTimeout(() => {
+        localStorage.removeItem('skipValidation');
+      }, 2000); // 2 second delay
     }
 
     const userEmail = localStorage.getItem('userEmail');
