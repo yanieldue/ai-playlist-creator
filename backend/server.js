@@ -932,6 +932,23 @@ app.put('/api/account/platforms', async (req, res) => {
     registeredUsers.set(normalizedEmail, user);
     saveUsers();
 
+    // Update platforms in database
+    await db.updatePlatforms(normalizedEmail, platforms);
+
+    // If disconnecting a platform, clear userId if it matches that platform
+    const dbUser = await db.getUser(normalizedEmail);
+    if (dbUser && dbUser.userId) {
+      if (dbUser.userId.startsWith('spotify_') && !platforms.spotify) {
+        console.log('Clearing Spotify userId from database:', dbUser.userId);
+        await db.updateUserId(normalizedEmail, null);
+        user.userId = null;
+      } else if (dbUser.userId.startsWith('apple_music_') && !platforms.apple) {
+        console.log('Clearing Apple Music userId from database:', dbUser.userId);
+        await db.updateUserId(normalizedEmail, null);
+        user.userId = null;
+      }
+    }
+
     res.json({
       success: true,
       platforms: platforms,
