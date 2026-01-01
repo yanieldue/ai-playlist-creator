@@ -1215,7 +1215,7 @@ app.post('/api/apple-music/connect', async (req, res) => {
   try {
     const { userMusicToken, email } = req.body;
 
-    console.log('=== Apple Music Connect Request ===');
+    console.log('=== Apple Music Connect Request (v2 - with updatePlatforms fix) ===');
     console.log('Email:', email);
     console.log('User token length:', userMusicToken?.length);
 
@@ -1287,10 +1287,20 @@ app.post('/api/apple-music/connect', async (req, res) => {
       console.log('Updated user record for:', email);
 
       // Update connected_platforms in database
-      await db.updatePlatforms(email, {
-        spotify: user.connectedPlatforms.spotify || false,
-        apple: true
-      });
+      try {
+        console.log('Calling db.updatePlatforms...');
+        console.log('db.updatePlatforms type:', typeof db.updatePlatforms);
+        await db.updatePlatforms(email, {
+          spotify: user.connectedPlatforms.spotify || false,
+          apple: true
+        });
+        console.log('Successfully updated platforms in database');
+      } catch (dbError) {
+        console.error('Error updating platforms in database:', dbError);
+        console.error('Database error stack:', dbError.stack);
+        // Don't fail the whole request if just the platform update fails
+        // The connection is still successful
+      }
     } else if (email) {
       console.warn('User email not found in registered users:', email);
     }
