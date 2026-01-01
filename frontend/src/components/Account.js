@@ -235,6 +235,15 @@ const Account = ({ onBack, showToast }) => {
           }
         }
 
+        // Check if both platforms are now disconnected - if so, clear all auth state
+        if (!updatedPlatforms.spotify && !updatedPlatforms.apple) {
+          console.log('All platforms disconnected - clearing auth state');
+          localStorage.removeItem('userId');
+          localStorage.removeItem('spotifyUserId');
+          localStorage.removeItem('appleMusicUserId');
+          localStorage.removeItem('activePlatform');
+        }
+
         // Dispatch custom event to notify other components of platform changes
         window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
         const platformName = platform === 'spotify' ? 'Spotify' : 'Apple Music';

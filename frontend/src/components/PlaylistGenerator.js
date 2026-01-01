@@ -326,7 +326,15 @@ const PlaylistGenerator = () => {
       else setAppleMusicUserId(null);
 
       if (storedActivePlatform) setActivePlatform(storedActivePlatform);
-      if (storedUserId) setUserId(storedUserId);
+      else setActivePlatform(null);
+
+      if (storedUserId) {
+        setUserId(storedUserId);
+        setIsAuthenticated(true);
+      } else {
+        setUserId(null);
+        setIsAuthenticated(false);
+      }
 
       // Reload top artists and new artists with the new active platform
       if (storedUserId) {
@@ -338,6 +346,11 @@ const PlaylistGenerator = () => {
           fetchTopArtists();
           fetchNewArtists();
         }, 100);
+      } else {
+        // Clear data when no platforms connected
+        setTopArtists([]);
+        setNewArtists([]);
+        setNewArtistsFetched(false);
       }
     };
 
