@@ -107,16 +107,27 @@ function generateAppleMusicToken() {
     const teamId = process.env.APPLE_MUSIC_TEAM_ID;
     const keyId = process.env.APPLE_MUSIC_KEY_ID;
     const privateKeyPath = process.env.APPLE_MUSIC_PRIVATE_KEY_PATH;
+    const privateKeyEnv = process.env.APPLE_MUSIC_PRIVATE_KEY;
 
     // If using pre-generated token, return it
-    if (process.env.APPLE_MUSIC_DEV_TOKEN && !privateKeyPath) {
+    if (process.env.APPLE_MUSIC_DEV_TOKEN && !privateKeyPath && !privateKeyEnv) {
       return process.env.APPLE_MUSIC_DEV_TOKEN;
     }
 
+    // Get private key from environment variable or file
+    let privateKey;
+    if (privateKeyEnv) {
+      // Use private key from environment variable (for production/Railway)
+      privateKey = privateKeyEnv;
+    } else if (privateKeyPath) {
+      // Read private key from file (for local development)
+      privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    } else {
+      throw new Error('No Apple Music private key found (set APPLE_MUSIC_PRIVATE_KEY or APPLE_MUSIC_PRIVATE_KEY_PATH)');
+    }
+
     // Generate JWT token if credentials are available
-    if (teamId && keyId && privateKeyPath) {
-      // Read private key from file
-      const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+    if (teamId && keyId && privateKey) {
 
       const now = Math.floor(Date.now() / 1000);
       const expiresIn = 15777000; // 6 months (max allowed by Apple)
