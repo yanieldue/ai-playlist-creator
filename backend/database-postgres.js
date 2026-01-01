@@ -247,6 +247,16 @@ class DatabaseService {
     `, [email, spotify, apple]);
   }
 
+  async updatePlatforms(email, platforms) {
+    await pool.query(`
+      INSERT INTO connected_platforms (email, spotify, apple)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (email) DO UPDATE SET
+        spotify = $2,
+        apple = $3
+    `, [email, platforms.spotify, platforms.apple]);
+  }
+
   // Tokens
   async getToken(userId) {
     const result = await pool.query(`

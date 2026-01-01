@@ -304,6 +304,10 @@ class DatabaseService {
     platformOps.set.run(email, spotify ? 1 : 0, apple ? 1 : 0);
   }
 
+  updatePlatforms(email, platforms) {
+    platformOps.set.run(email, platforms.spotify ? 1 : 0, platforms.apple ? 1 : 0);
+  }
+
   // Tokens
   getToken(userId) {
     const token = tokenOps.get.get(userId);
