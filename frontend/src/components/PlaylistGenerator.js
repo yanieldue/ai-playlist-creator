@@ -401,11 +401,14 @@ const PlaylistGenerator = () => {
   // Fetch top artists and new artists when user is authenticated
   useEffect(() => {
     if (isAuthenticated && userId && !newArtistsFetched) {
-      if (topArtists.length === 0) {
-        fetchTopArtists();
-        fetchUserProfile();
+      // Only fetch if we have a platform connected
+      if (spotifyUserId || appleMusicUserId) {
+        if (topArtists.length === 0) {
+          fetchTopArtists();
+          fetchUserProfile();
+        }
+        fetchNewArtists();
       }
-      fetchNewArtists();
 
       // Check if user has completed the tour
       const tourCompleted = localStorage.getItem('productTourCompleted');
@@ -416,7 +419,7 @@ const PlaylistGenerator = () => {
         }, 1000);
       }
     }
-  }, [isAuthenticated, userId]);
+  }, [isAuthenticated, userId, spotifyUserId, appleMusicUserId]);
 
   // Load draft playlists when user is authenticated
   useEffect(() => {
