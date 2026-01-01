@@ -1051,9 +1051,9 @@ const PlaylistGenerator = () => {
   };
 
   const fetchTopArtists = async () => {
-    // Guard: Don't fetch if no userId
-    if (!userId) {
-      console.log('fetchTopArtists: Skipping - no userId');
+    // Guard: Don't fetch if no userId OR no platform connected
+    if (!userId || (!spotifyUserId && !appleMusicUserId)) {
+      console.log('fetchTopArtists: Skipping - no userId or no connected platforms');
       setTopArtists([]);
       return;
     }
@@ -1081,9 +1081,9 @@ const PlaylistGenerator = () => {
   };
 
   const fetchNewArtists = async () => {
-    // Guard: Don't fetch if no userId
-    if (!userId) {
-      console.log('[fetchNewArtists] Skipping - no userId');
+    // Guard: Don't fetch if no userId OR no platform connected OR not Spotify (this is Spotify-only feature)
+    if (!userId || !spotifyUserId) {
+      console.log('[fetchNewArtists] Skipping - no userId or not connected to Spotify');
       setNewArtists([]);
       return;
     }
