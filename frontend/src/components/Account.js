@@ -72,6 +72,14 @@ const Account = ({ onBack, showToast }) => {
 
     if (spotifyOAuthCompleted && connectingFromAccount) {
       console.log('Spotify OAuth callback detected from Account page! Updating platforms...');
+
+      // Get the userId that was just set from Spotify OAuth
+      const spotifyId = localStorage.getItem('userId');
+      if (spotifyId && spotifyId.startsWith('spotify_')) {
+        localStorage.setItem('spotifyUserId', spotifyId);
+        localStorage.setItem('activePlatform', 'spotify');
+      }
+
       const updatedPlatforms = {
         spotify: true,
         apple: false
@@ -154,6 +162,34 @@ const Account = ({ onBack, showToast }) => {
         await playlistService.updatePlatforms(emailToUse, updatedPlatforms);
         localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
         setConnectedPlatforms(updatedPlatforms);
+
+        // Remove platform-specific userId from localStorage
+        if (platform === 'spotify') {
+          localStorage.removeItem('spotifyUserId');
+          // If currently using Spotify, switch to Apple Music if available
+          if (localStorage.getItem('activePlatform') === 'spotify') {
+            if (updatedPlatforms.apple && localStorage.getItem('appleMusicUserId')) {
+              localStorage.setItem('activePlatform', 'apple');
+              localStorage.setItem('userId', localStorage.getItem('appleMusicUserId'));
+            } else {
+              localStorage.removeItem('activePlatform');
+              localStorage.removeItem('userId');
+            }
+          }
+        } else if (platform === 'apple') {
+          localStorage.removeItem('appleMusicUserId');
+          // If currently using Apple Music, switch to Spotify if available
+          if (localStorage.getItem('activePlatform') === 'apple') {
+            if (updatedPlatforms.spotify && localStorage.getItem('spotifyUserId')) {
+              localStorage.setItem('activePlatform', 'spotify');
+              localStorage.setItem('userId', localStorage.getItem('spotifyUserId'));
+            } else {
+              localStorage.removeItem('activePlatform');
+              localStorage.removeItem('userId');
+            }
+          }
+        }
+
         // Dispatch custom event to notify other components of platform changes
         window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
         const platformName = platform === 'spotify' ? 'Spotify' : 'Apple Music';
@@ -199,9 +235,11 @@ const Account = ({ onBack, showToast }) => {
           const result = await playlistService.connectAppleMusicWithToken(userMusicToken, emailToUse);
           console.log('Apple Music connected successfully:', result);
 
-          // Step 5: Update state
+          // Step 5: Update state and localStorage
           if (result.userId) {
             localStorage.setItem('appleMusicUserId', result.userId);
+            localStorage.setItem('userId', result.userId);
+            localStorage.setItem('activePlatform', 'apple');
           }
 
           const updatedPlatforms = {
@@ -211,8 +249,12 @@ const Account = ({ onBack, showToast }) => {
           setConnectedPlatforms(updatedPlatforms);
           localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
 
+          // Dispatch custom event to notify other components of platform changes
+          window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+
           setAccountError('');
           setAccountLoading(false);
+          toast('Apple Music connected successfully!', 'success');
           return; // Exit early since we handled everything
         }
       }

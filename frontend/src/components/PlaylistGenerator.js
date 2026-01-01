@@ -83,6 +83,9 @@ const PlaylistGenerator = () => {
 
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
+  const [spotifyUserId, setSpotifyUserId] = useState(null);
+  const [appleMusicUserId, setAppleMusicUserId] = useState(null);
+  const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
 
   // Artist settings modal
   const [showArtistSettingsModal, setShowArtistSettingsModal] = useState(false);
@@ -129,13 +132,69 @@ const PlaylistGenerator = () => {
     "Electronic dance music for parties"
   ];
 
+  // Helper function to get the active userId based on selected platform
+  const getActiveUserId = () => {
+    if (activePlatform === 'spotify' && spotifyUserId) {
+      return spotifyUserId;
+    } else if (activePlatform === 'apple' && appleMusicUserId) {
+      return appleMusicUserId;
+    }
+    // Fallback to the general userId (backwards compatibility)
+    return userId;
+  };
+
   useEffect(() => {
+    // Load platform-specific userIds from localStorage
+    const storedSpotifyUserId = localStorage.getItem('spotifyUserId');
+    const storedAppleMusicUserId = localStorage.getItem('appleMusicUserId');
+    const storedActivePlatform = localStorage.getItem('activePlatform');
+
+    console.log('PlaylistGenerator: Loading stored IDs:', {
+      spotify: storedSpotifyUserId,
+      apple: storedAppleMusicUserId,
+      active: storedActivePlatform
+    });
+
+    if (storedSpotifyUserId) setSpotifyUserId(storedSpotifyUserId);
+    if (storedAppleMusicUserId) setAppleMusicUserId(storedAppleMusicUserId);
+
+    // Set active platform (prefer stored, otherwise use whichever is available)
+    if (storedActivePlatform && (
+      (storedActivePlatform === 'spotify' && storedSpotifyUserId) ||
+      (storedActivePlatform === 'apple' && storedAppleMusicUserId)
+    )) {
+      setActivePlatform(storedActivePlatform);
+    } else if (storedSpotifyUserId) {
+      setActivePlatform('spotify');
+      localStorage.setItem('activePlatform', 'spotify');
+    } else if (storedAppleMusicUserId) {
+      setActivePlatform('apple');
+      localStorage.setItem('activePlatform', 'apple');
+    }
+
     // First, check if user has a userId stored (either from signup or previous login)
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
       console.log('PlaylistGenerator: Found existing userId in localStorage:', storedUserId);
       setUserId(storedUserId);
       setIsAuthenticated(true);
+
+      // Also detect platform from userId format and store accordingly
+      if (storedUserId.startsWith('spotify_') && !storedSpotifyUserId) {
+        setSpotifyUserId(storedUserId);
+        localStorage.setItem('spotifyUserId', storedUserId);
+        if (!storedActivePlatform) {
+          setActivePlatform('spotify');
+          localStorage.setItem('activePlatform', 'spotify');
+        }
+      } else if (storedUserId.startsWith('apple_music_') && !storedAppleMusicUserId) {
+        setAppleMusicUserId(storedUserId);
+        localStorage.setItem('appleMusicUserId', storedUserId);
+        if (!storedActivePlatform) {
+          setActivePlatform('apple');
+          localStorage.setItem('activePlatform', 'apple');
+        }
+      }
     }
 
     // Check if user is in signup flow
@@ -238,6 +297,52 @@ const PlaylistGenerator = () => {
         }
       }
     }
+  }, []);
+
+  // Listen for platform changes from Account page
+  useEffect(() => {
+    const handlePlatformChange = (event) => {
+      console.log('PlaylistGenerator: Platform changed event received:', event.detail);
+      const newPlatforms = event.detail;
+      setConnectedPlatforms(newPlatforms);
+
+      // Reload userId and activePlatform from localStorage
+      const storedSpotifyUserId = localStorage.getItem('spotifyUserId');
+      const storedAppleMusicUserId = localStorage.getItem('appleMusicUserId');
+      const storedActivePlatform = localStorage.getItem('activePlatform');
+      const storedUserId = localStorage.getItem('userId');
+
+      console.log('PlaylistGenerator: Reloading after platform change:', {
+        spotify: storedSpotifyUserId,
+        apple: storedAppleMusicUserId,
+        active: storedActivePlatform,
+        userId: storedUserId
+      });
+
+      if (storedSpotifyUserId) setSpotifyUserId(storedSpotifyUserId);
+      else setSpotifyUserId(null);
+
+      if (storedAppleMusicUserId) setAppleMusicUserId(storedAppleMusicUserId);
+      else setAppleMusicUserId(null);
+
+      if (storedActivePlatform) setActivePlatform(storedActivePlatform);
+      if (storedUserId) setUserId(storedUserId);
+
+      // Reload top artists and new artists with the new active platform
+      if (storedUserId) {
+        setTopArtists([]);
+        setNewArtists([]);
+        setNewArtistsFetched(false);
+        // Trigger refetch
+        setTimeout(() => {
+          fetchTopArtists();
+          fetchNewArtists();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('platformsChanged', handlePlatformChange);
+    return () => window.removeEventListener('platformsChanged', handlePlatformChange);
   }, []);
 
   // Fetch top artists and new artists when user is authenticated
