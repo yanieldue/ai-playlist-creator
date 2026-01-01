@@ -106,6 +106,16 @@ export const playlistService = {
   },
 
   // Search Spotify for tracks and artists
+  // Platform-agnostic search (works with both Spotify and Apple Music)
+  searchTracks: async (query, userId) => {
+    const response = await api.post('/api/search', {
+      query,
+      userId,
+    });
+    return response.data;
+  },
+
+  // Legacy Spotify search (kept for backward compatibility)
   searchSpotify: async (query, userId) => {
     const response = await api.post('/api/search-spotify', {
       query,
@@ -196,6 +206,13 @@ export const playlistService = {
   },
 
   // Get user's Spotify playlists for import
+  // Platform-agnostic get playlists (works with both Spotify and Apple Music)
+  getPlatformPlaylists: async (userId) => {
+    const response = await api.get(`/api/platform-playlists/${userId}`);
+    return response.data;
+  },
+
+  // Legacy Spotify playlists (kept for backward compatibility)
   getSpotifyPlaylists: async (userId) => {
     const response = await api.get(`/api/spotify-playlists/${userId}`);
     return response.data;
