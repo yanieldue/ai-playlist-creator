@@ -1297,10 +1297,20 @@ app.post('/api/apple-music/connect', async (req, res) => {
     }
 
     // Update connected_platforms in database
-    // IMPORTANT: Get current platform status from database first, then update only Apple
+    // IMPORTANT: Create user if doesn't exist, then update platforms
     try {
-      console.log('Fetching current platform status from database...');
-      const dbUser = await db.getUser(email);
+      console.log('Fetching current user from database...');
+      let dbUser = await db.getUser(email);
+
+      if (!dbUser) {
+        console.log('User not found in database, creating new user...');
+        // Create user with a temporary password (they'll use OAuth to login anyway)
+        const tempPassword = `apple_music_${Date.now()}`;
+        await db.createUser(email, tempPassword, 'apple_music', userId);
+        console.log('Created new user in database:', email);
+        dbUser = await db.getUser(email);
+      }
+
       const currentPlatforms = dbUser?.connectedPlatforms || { spotify: false, apple: false };
       console.log('Current platforms in database:', currentPlatforms);
 
