@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MusicKit Debug</title>
+    <script src="https://js-cdn.music.apple.com/musickit/v3/musickit.js"></script>
+</head>
+<body>
+    <h1>MusicKit Debug</h1>
+    <button onclick="testMusicKit()">Test MusicKit</button>
+    <pre id="output"></pre>
+
+    <script>
+        const output = document.getElementById('output');
+
+        async function log(msg) {
+            console.log(msg);
+            output.textContent += msg + '\n';
+        }
+
+        async function testMusicKit() {
+            try {
+                output.textContent = '';
+
+                // Get developer token
+                log('1. Getting developer token...');
+                const res = await fetch('http://localhost:3001/api/apple-music/developer-token');
+                const data = await json();
+                log('   Token: ' + data.token.substring(0, 50) + '...');
+
+                // Parse JWT to see payload
+                const parts = data.token.split('.');
+                const header = JSON.parse(atob(parts[0]));
+                const payload = JSON.parse(atob(parts[1]));
+
+                log('\n2. Developer Token Details:');
+                log('   Header: ' + JSON.stringify(header, null, 2));
+                log('   Payload: ' + JSON.stringify(payload, null, 2));
+                log('   Issued: ' + new Date(payload.iat * 1000).toLocaleString());
+                log('   Expires: ' + new Date(payload.exp * 1000).toLocaleString());
+
+                // Configure MusicKit
+                log('\n3. Configuring MusicKit...');
+                await MusicKit.configure({
+                    developerToken: data.token,
+                    app: {
+                        name: 'Test App',
+                        build: '1.0'
+                    }
+                });
+                log('   ✓ MusicKit configured');
+
+                const music = MusicKit.getInstance();
+                log('   MusicKit version: ' + (music.version || 'unknown'));
+                log('   Is authorized: ' + music.isAuthorized);
+
+                // Try to authorize
+                log('\n4. Attempting authorization...');
+                log('   This will open Apple sign-in...');
+
+                const token = await music.authorize();
+                log('   ✓ SUCCESS! Got user token');
+                log('   User token length: ' + token.length);
+
+            } catch (error) {
+                log('\n❌ ERROR: ' + error.message);
+                log('   Error type: ' + error.constructor.name);
+                log('   Full error: ' + JSON.stringify(error, null, 2));
+                console.error('Full error object:', error);
+            }
+        }
+    </script>
+</body>
+</html>
