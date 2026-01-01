@@ -269,17 +269,9 @@ const PlaylistGenerator = () => {
         localStorage.setItem('spotifyOAuthCompleted', 'true');
       }
 
-      // Clean up URL and redirect appropriately
-      console.log('PlaylistGenerator: Clearing URL parameters');
-      if (connectingFromAccount) {
-        // If user was connecting from Account page, redirect back to account
-        console.log('PlaylistGenerator: User was connecting from Account page, redirecting to /account');
-        window.history.replaceState({}, document.title, '/account');
-        window.location.href = '/account';
-      } else {
-        // Otherwise redirect to home
-        window.history.replaceState({}, document.title, '/');
-      }
+      // Clean up URL and redirect to home page
+      console.log('PlaylistGenerator: Clearing URL parameters and redirecting to home');
+      window.history.replaceState({}, document.title, '/');
     }
 
     // Load connected platforms from backend (get authoritative data)
