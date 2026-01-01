@@ -1292,24 +1292,29 @@ app.post('/api/apple-music/connect', async (req, res) => {
       registeredUsers.set(email, user);
       saveUsers();
       console.log('Updated user record for:', email);
-
-      // Update connected_platforms in database
-      try {
-        console.log('Calling db.updatePlatforms...');
-        console.log('db.updatePlatforms type:', typeof db.updatePlatforms);
-        await db.updatePlatforms(email, {
-          spotify: user.connectedPlatforms.spotify || false,
-          apple: true
-        });
-        console.log('Successfully updated platforms in database');
-      } catch (dbError) {
-        console.error('Error updating platforms in database:', dbError);
-        console.error('Database error stack:', dbError.stack);
-        // Don't fail the whole request if just the platform update fails
-        // The connection is still successful
-      }
     } else if (email) {
       console.warn('User email not found in registered users:', email);
+    }
+
+    // Update connected_platforms in database
+    // IMPORTANT: Get current platform status from database first, then update only Apple
+    try {
+      console.log('Fetching current platform status from database...');
+      const dbUser = await db.getUser(email);
+      const currentPlatforms = dbUser?.connectedPlatforms || { spotify: false, apple: false };
+      console.log('Current platforms in database:', currentPlatforms);
+
+      console.log('Calling db.updatePlatforms...');
+      await db.updatePlatforms(email, {
+        spotify: currentPlatforms.spotify,  // Keep existing Spotify status
+        apple: true  // Set Apple to true
+      });
+      console.log('Successfully updated platforms in database');
+    } catch (dbError) {
+      console.error('Error updating platforms in database:', dbError);
+      console.error('Database error stack:', dbError.stack);
+      // Don't fail the whole request if just the platform update fails
+      // The connection is still successful
     }
 
     // Return success with userId
