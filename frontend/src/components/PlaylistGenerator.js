@@ -244,6 +244,9 @@ const PlaylistGenerator = () => {
     });
 
     if ((userIdParam && success === 'true') || spotifyConnected) {
+      // Set a flag to skip validation on the next page load
+      localStorage.setItem('skipValidation', 'true');
+
       if (userIdParam) {
         setUserId(userIdParam);
         setIsAuthenticated(true);
@@ -282,9 +285,15 @@ const PlaylistGenerator = () => {
     // Load connected platforms from backend (get authoritative data)
     // Skip validation if we're in the middle of OAuth flow to avoid race conditions
     const isInOAuthFlow = success === 'true' || spotifyConnected;
+    const skipValidation = localStorage.getItem('skipValidation') === 'true';
+
+    // Clear the skipValidation flag after reading it
+    if (skipValidation) {
+      localStorage.removeItem('skipValidation');
+    }
 
     const userEmail = localStorage.getItem('userEmail');
-    if (userEmail && !isInOAuthFlow) {
+    if (userEmail && !isInOAuthFlow && !skipValidation) {
       playlistService.getAccountInfo(userEmail)
         .then(accountInfo => {
           if (accountInfo && accountInfo.connectedPlatforms) {
