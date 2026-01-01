@@ -289,6 +289,7 @@ const PlaylistGenerator = () => {
             if (localSpotifyUserId && !backendPlatforms.spotify) {
               console.warn('PlaylistGenerator: Clearing stale spotifyUserId - backend says not connected');
               localStorage.removeItem('spotifyUserId');
+              setSpotifyUserId(null);
               // If this was the active platform, clear it
               if (activePlatform === 'spotify') {
                 setActivePlatform(null);
@@ -300,6 +301,7 @@ const PlaylistGenerator = () => {
             if (localAppleMusicUserId && !backendPlatforms.apple) {
               console.warn('PlaylistGenerator: Clearing stale appleMusicUserId - backend says not connected');
               localStorage.removeItem('appleMusicUserId');
+              setAppleMusicUserId(null);
               // If this was the active platform, clear it
               if (activePlatform === 'apple') {
                 setActivePlatform(null);
@@ -307,8 +309,23 @@ const PlaylistGenerator = () => {
               }
             }
 
-            // Note: We DON'T clear userId even if no platforms connected
-            // User can still be logged in without connected platforms
+            // If userId looks like a platform userId but platform is not connected, clear it
+            const currentUserId = localStorage.getItem('userId');
+            if (currentUserId && currentUserId.startsWith('spotify_') && !backendPlatforms.spotify) {
+              console.warn('PlaylistGenerator: Clearing stale Spotify userId - platform not connected');
+              localStorage.removeItem('userId');
+              setUserId(null);
+              setIsAuthenticated(false);
+              setTopArtists([]);
+              setNewArtists([]);
+            } else if (currentUserId && currentUserId.startsWith('apple_music_') && !backendPlatforms.apple) {
+              console.warn('PlaylistGenerator: Clearing stale Apple Music userId - platform not connected');
+              localStorage.removeItem('userId');
+              setUserId(null);
+              setIsAuthenticated(false);
+              setTopArtists([]);
+              setNewArtists([]);
+            }
           }
         })
         .catch(err => {
