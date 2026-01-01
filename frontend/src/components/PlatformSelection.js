@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
+import musicKitService from '../services/musicKit';
 import '../styles/PlatformSelection.css';
 
 const PlatformSelection = ({ email, authToken, onComplete }) => {
@@ -96,19 +97,39 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     setError('');
 
     try {
-      console.log('PlatformSelection: Getting Apple Music auth URL for:', email);
-      const authData = await playlistService.getAppleMusicAuthUrl(email);
+      console.log('PlatformSelection: Connecting to Apple Music with MusicKit');
 
-      if (authData && authData.url) {
-        console.log('PlatformSelection: Redirecting to Apple Music OAuth');
-        window.location.href = authData.url;
-      } else {
-        setError('Failed to get Apple Music authorization URL');
-        setIsConnecting(null);
+      // Step 1: Get developer token from backend
+      const developerToken = await playlistService.getAppleMusicDeveloperToken();
+      console.log('PlatformSelection: Got developer token');
+
+      // Step 2: Configure MusicKit with developer token
+      await musicKitService.configure(developerToken);
+      console.log('PlatformSelection: MusicKit configured');
+
+      // Step 3: Authorize user (opens Apple sign-in popup)
+      const userMusicToken = await musicKitService.authorize();
+      console.log('PlatformSelection: User authorized with Apple Music');
+
+      // Step 4: Send user music token to backend
+      const result = await playlistService.connectAppleMusicWithToken(userMusicToken, email);
+      console.log('PlatformSelection: Apple Music connected successfully', result);
+
+      // Step 5: Store userId and update state
+      if (result.userId) {
+        localStorage.setItem('userId', result.userId);
+        localStorage.setItem('appleMusicUserId', result.userId);
       }
+
+      setConnectedPlatforms(prev => ({
+        ...prev,
+        apple: true
+      }));
+
+      setIsConnecting(null);
     } catch (err) {
       console.error('PlatformSelection: Error connecting to Apple Music:', err);
-      setError(err.response?.data?.error || 'Failed to connect to Apple Music');
+      setError(err.response?.data?.error || err.message || 'Failed to connect to Apple Music');
       setIsConnecting(null);
     }
   };

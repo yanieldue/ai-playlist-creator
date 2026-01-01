@@ -61,13 +61,28 @@ export const playlistService = {
     return response.data;
   },
 
-  // Get Apple Music authorization URL
+  // Get Apple Music authorization URL (legacy OAuth - not used with MusicKit)
   getAppleMusicAuthUrl: async (userEmail = null) => {
     let url = '/api/auth/apple';
     if (userEmail) {
       url += `?email=${encodeURIComponent(userEmail)}`;
     }
     const response = await api.get(url);
+    return response.data;
+  },
+
+  // Get Apple Music developer token for MusicKit JS
+  getAppleMusicDeveloperToken: async () => {
+    const response = await api.get('/api/apple-music/developer-token');
+    return response.data.token;
+  },
+
+  // Send Apple Music user token to backend after MusicKit authorization
+  connectAppleMusicWithToken: async (userMusicToken, userEmail) => {
+    const response = await api.post('/api/apple-music/connect', {
+      userMusicToken,
+      email: userEmail
+    });
     return response.data;
   },
 

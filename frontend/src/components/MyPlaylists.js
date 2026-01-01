@@ -790,9 +790,19 @@ IMPORTANT: Pay close attention to the original request and description to unders
   if (loading) {
     return (
       <div className="my-playlists">
-        <div className="loading-container">
-          <span className="spinner"></span>
-          <p>Loading your playlists...</p>
+        <div className="playlists-header">
+          <h1>My Playlists</h1>
+        </div>
+        <div className="playlists-grid">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="playlist-card skeleton-card">
+              <div className="skeleton-cover"></div>
+              <div className="skeleton-content">
+                <div className="skeleton-title"></div>
+                <div className="skeleton-meta"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );

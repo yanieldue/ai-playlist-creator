@@ -1178,6 +1178,117 @@ app.all('/apple-callback', async (req, res) => {
   }
 });
 
+// ============================================================================
+// MusicKit JS Endpoints (New Apple Music authentication flow)
+// ============================================================================
+
+// Get Apple Music developer token for MusicKit JS
+app.get('/api/apple-music/developer-token', (req, res) => {
+  try {
+    const developerToken = generateAppleMusicToken();
+
+    if (!developerToken) {
+      return res.status(500).json({ error: 'Failed to generate developer token' });
+    }
+
+    console.log('Generated Apple Music developer token for MusicKit');
+    res.json({ token: developerToken });
+  } catch (error) {
+    console.error('Error generating Apple Music developer token:', error);
+    res.status(500).json({ error: 'Failed to generate developer token' });
+  }
+});
+
+// Connect Apple Music with user music token from MusicKit JS
+app.post('/api/apple-music/connect', async (req, res) => {
+  try {
+    const { userMusicToken, email } = req.body;
+
+    if (!userMusicToken) {
+      return res.status(400).json({ error: 'userMusicToken is required' });
+    }
+
+    if (!email) {
+      return res.status(400).json({ error: 'email is required' });
+    }
+
+    console.log('Connecting Apple Music via MusicKit for:', email);
+
+    // Generate developer token
+    const appleMusicDevToken = generateAppleMusicToken();
+
+    if (!appleMusicDevToken) {
+      throw new Error('Failed to generate Apple Music developer token');
+    }
+
+    // Get user's storefront using the developer token and user music token
+    const AppleMusicService = require('./services/appleMusicService');
+    const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+    let storefront = 'us'; // Default
+    try {
+      storefront = await appleMusicApi.getUserStorefront(userMusicToken);
+      console.log('User storefront:', storefront);
+    } catch (storefrontError) {
+      console.warn('Could not fetch storefront, using default (us):', storefrontError.message);
+    }
+
+    // Create a unique user ID for this Apple Music connection
+    const userId = `apple_music_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Store tokens in database
+    const tokenData = {
+      access_token: userMusicToken,
+      user_music_token: userMusicToken,
+      developer_token: appleMusicDevToken,
+      platform: 'apple_music',
+      email: email,
+      storefront: storefront,
+      authorized_at: new Date().toISOString()
+    };
+
+    userTokens.set(userId, tokenData);
+    await db.setToken(userId, tokenData);
+
+    console.log('Apple Music user authenticated via MusicKit:', userId);
+    console.log('Storefront:', storefront);
+
+    // Update the user record in registeredUsers
+    if (email && registeredUsers.has(email)) {
+      const user = registeredUsers.get(email);
+      user.appleMusicUserId = userId;
+      user.connectedPlatforms = user.connectedPlatforms || {};
+      user.connectedPlatforms.apple = true;
+      registeredUsers.set(email, user);
+      saveUsers();
+      console.log('Updated user record for:', email);
+
+      // Update connected_platforms in database
+      await db.updatePlatforms(email, {
+        spotify: user.connectedPlatforms.spotify || false,
+        apple: true
+      });
+    } else if (email) {
+      console.warn('User email not found in registered users:', email);
+    }
+
+    // Return success with userId
+    res.json({
+      success: true,
+      userId: userId,
+      platform: 'apple',
+      storefront: storefront
+    });
+
+  } catch (error) {
+    console.error('Error connecting Apple Music:', error);
+    res.status(500).json({
+      error: 'Failed to connect Apple Music',
+      message: error.message
+    });
+  }
+});
+
 // Get user's top artists
 app.get('/api/top-artists/:userId', async (req, res) => {
   try {
