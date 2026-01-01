@@ -1215,6 +1215,10 @@ app.post('/api/apple-music/connect', async (req, res) => {
   try {
     const { userMusicToken, email } = req.body;
 
+    console.log('=== Apple Music Connect Request ===');
+    console.log('Email:', email);
+    console.log('User token length:', userMusicToken?.length);
+
     if (!userMusicToken) {
       return res.status(400).json({ error: 'userMusicToken is required' });
     }
@@ -1226,10 +1230,17 @@ app.post('/api/apple-music/connect', async (req, res) => {
     console.log('Connecting Apple Music via MusicKit for:', email);
 
     // Generate developer token
-    const appleMusicDevToken = generateAppleMusicToken();
+    let appleMusicDevToken;
+    try {
+      appleMusicDevToken = generateAppleMusicToken();
+      console.log('Developer token generated successfully');
+    } catch (tokenError) {
+      console.error('Error generating developer token:', tokenError);
+      return res.status(500).json({ error: 'Failed to generate developer token', details: tokenError.message });
+    }
 
     if (!appleMusicDevToken) {
-      throw new Error('Failed to generate Apple Music developer token');
+      return res.status(500).json({ error: 'Failed to generate Apple Music developer token' });
     }
 
     // Get user's storefront using the developer token and user music token
@@ -1242,6 +1253,7 @@ app.post('/api/apple-music/connect', async (req, res) => {
       console.log('User storefront:', storefront);
     } catch (storefrontError) {
       console.warn('Could not fetch storefront, using default (us):', storefrontError.message);
+      // Continue with default storefront
     }
 
     // Create a unique user ID for this Apple Music connection
@@ -1292,10 +1304,13 @@ app.post('/api/apple-music/connect', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error connecting Apple Music:', error);
+    console.error('=== Error connecting Apple Music ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to connect Apple Music',
-      message: error.message
+      message: error.message,
+      details: error.stack
     });
   }
 });
