@@ -91,6 +91,12 @@ async function initializeTables() {
         expires_at TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS platform_user_ids (
+        email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+        spotify_user_id TEXT,
+        apple_music_user_id TEXT
+      );
+
       CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
       CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
       CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
@@ -540,6 +546,23 @@ class DatabaseService {
       console.error('Error cleaning expired artist cache:', error);
       throw error;
     }
+  }
+
+  // Platform User IDs
+  async getPlatformUserIds(email) {
+    const result = await pool.query(`
+      SELECT * FROM platform_user_ids WHERE email = $1
+    `, [email]);
+    return result.rows.length > 0 ? result.rows[0] : null;
+  }
+
+  async setPlatformUserId(email, platform, platformUserId) {
+    const column = platform === 'spotify' ? 'spotify_user_id' : 'apple_music_user_id';
+    await pool.query(`
+      INSERT INTO platform_user_ids (email, ${column})
+      VALUES ($1, $2)
+      ON CONFLICT (email) DO UPDATE SET ${column} = $2
+    `, [email, platformUserId]);
   }
 
   // Close pool

@@ -507,6 +507,7 @@ app.post('/api/signup', async (req, res) => {
     }
 
     // Create user account (in production, you should hash the password)
+    // Use email as the userId (platform-independent)
     const user = {
       email: normalizedEmail,
       password: password, // TODO: Hash password in production
@@ -516,10 +517,14 @@ app.post('/api/signup', async (req, res) => {
         apple: platform === 'apple'
       },
       createdAt: new Date().toISOString(),
-      userId: null, // Will be set after Spotify/Apple authentication
+      userId: normalizedEmail, // Use email as userId (platform-independent)
     };
 
     registeredUsers.set(normalizedEmail, user);
+
+    // Create user in database
+    await db.createUser(normalizedEmail, password, platform, normalizedEmail);
+
     saveUsers();
 
     // Generate a simple auth token (in production, use JWT)
@@ -530,6 +535,7 @@ app.post('/api/signup', async (req, res) => {
       token: token,
       email: normalizedEmail,
       platform: platform,
+      userId: normalizedEmail,
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -1061,14 +1067,18 @@ app.get('/callback', async (req, res) => {
     const meData = await tempApi.getMe();
     const spotifyUserId = meData.body.id;
 
-    // Use Spotify user ID as the userId for consistent identification
-    const userId = `spotify_${spotifyUserId}`;
+    // Create platform-specific userId for token storage
+    const spotifyPlatformUserId = `spotify_${spotifyUserId}`;
     const tokenData = { access_token, refresh_token };
-    userTokens.set(userId, tokenData);
+    userTokens.set(spotifyPlatformUserId, tokenData);
 
-    // Save to database
-    await db.setToken(userId, tokenData);
-    console.log('User authenticated and tokens saved to database:', userId);
+    // Save tokens to database (keyed by platform userId for API calls)
+    await db.setToken(spotifyPlatformUserId, {
+      ...tokenData,
+      platform: 'spotify',
+      email: userEmail
+    });
+    console.log('Spotify tokens saved to database:', spotifyPlatformUserId);
 
     // The userEmail was already parsed from state at the beginning
     // If state is 'state' (old default), it means email wasn't provided
@@ -1077,25 +1087,32 @@ app.get('/callback', async (req, res) => {
       userEmail = '';
     }
 
-    console.log('Linking Spotify userId:', userId, 'to email:', userEmail, 'fromAccount:', fromAccount);
+    console.log('Linking Spotify platform userId:', spotifyPlatformUserId, 'to email:', userEmail, 'fromAccount:', fromAccount);
 
     // Update the user record in registeredUsers to link the Spotify connection
     if (userEmail && registeredUsers.has(userEmail)) {
       const user = registeredUsers.get(userEmail);
-      user.userId = userId;
+      // Keep userId as email (platform-independent)
+      if (!user.userId) {
+        user.userId = userEmail;
+      }
       user.connectedPlatforms = user.connectedPlatforms || {};
       user.connectedPlatforms.spotify = true;
       registeredUsers.set(userEmail, user);
       saveUsers();
-      console.log('Updated user record for:', userEmail);
+
+      // Store platform user ID separately in database
+      await db.setPlatformUserId(userEmail, 'spotify', spotifyPlatformUserId);
+      await db.updateUserId(userEmail, userEmail);
+      await db.updatePlatforms(userEmail, user.connectedPlatforms);
+
+      console.log('Updated user record for:', userEmail, 'userId:', userEmail);
     } else if (userEmail) {
       console.warn('User email from OAuth callback not found in registered users:', userEmail);
     }
 
-    // Redirect back to frontend
-    // If connecting from Account page, redirect to /account, otherwise to home page
-    const basePath = fromAccount ? '/account' : '/';
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}${basePath}?userId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
+    // Redirect back to frontend with email-based userId (not platform-specific)
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userEmail}&spotifyUserId=${spotifyPlatformUserId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {

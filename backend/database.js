@@ -51,6 +51,13 @@ db.exec(`
     expires_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS platform_user_ids (
+    email TEXT PRIMARY KEY,
+    spotify_user_id TEXT,
+    apple_music_user_id TEXT,
+    FOREIGN KEY (email) REFERENCES users(email) ON DELETE CASCADE
+  );
+
   CREATE INDEX IF NOT EXISTS idx_users_user_id ON users(user_id);
   CREATE INDEX IF NOT EXISTS idx_tokens_email ON tokens(email);
   CREATE INDEX IF NOT EXISTS idx_reset_tokens_token ON password_reset_tokens(token);
@@ -425,6 +432,34 @@ class DatabaseService {
   cleanExpiredArtistCache() {
     const now = new Date().toISOString();
     artistCacheOps.deleteExpired.run(now);
+  }
+
+  // Platform User IDs
+  getPlatformUserIds(email) {
+    const stmt = db.prepare(`SELECT * FROM platform_user_ids WHERE email = ?`);
+    return stmt.get(email);
+  }
+
+  setPlatformUserId(email, platform, platformUserId) {
+    const existing = this.getPlatformUserIds(email);
+    if (existing) {
+      const stmt = db.prepare(`
+        UPDATE platform_user_ids
+        SET ${platform === 'spotify' ? 'spotify_user_id' : 'apple_music_user_id'} = ?
+        WHERE email = ?
+      `);
+      stmt.run(platformUserId, email);
+    } else {
+      const stmt = db.prepare(`
+        INSERT INTO platform_user_ids (email, spotify_user_id, apple_music_user_id)
+        VALUES (?, ?, ?)
+      `);
+      stmt.run(
+        email,
+        platform === 'spotify' ? platformUserId : null,
+        platform === 'apple' ? platformUserId : null
+      );
+    }
   }
 
   // Close database connection
