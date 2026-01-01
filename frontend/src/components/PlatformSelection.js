@@ -99,6 +99,12 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     try {
       console.log('PlatformSelection: Connecting to Apple Music with MusicKit');
 
+      // Get email from props or localStorage
+      const userEmail = email || localStorage.getItem('userEmail');
+      if (!userEmail) {
+        throw new Error('Email not found. Please sign up or log in first.');
+      }
+
       // Step 1: Get developer token from backend
       const developerToken = await playlistService.getAppleMusicDeveloperToken();
       console.log('PlatformSelection: Got developer token');
@@ -112,7 +118,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
       console.log('PlatformSelection: User authorized with Apple Music');
 
       // Step 4: Send user music token to backend
-      const result = await playlistService.connectAppleMusicWithToken(userMusicToken, email);
+      const result = await playlistService.connectAppleMusicWithToken(userMusicToken, userEmail);
       console.log('PlatformSelection: Apple Music connected successfully', result);
 
       // Step 5: Store userId and update state
