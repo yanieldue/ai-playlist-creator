@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
+import musicKitService from '../services/musicKit';
 import Icons from './Icons';
 import '../styles/Account.css';
 
@@ -175,20 +176,44 @@ const Account = ({ onBack, showToast }) => {
           console.log('Redirecting to:', response.url);
           window.location.href = response.url;
         } else if (platform === 'apple') {
-          // Always get fresh email from localStorage (don't rely on state)
+          // Use MusicKit JS for Apple Music authentication
           const emailToUse = localStorage.getItem('userEmail');
           if (!emailToUse) {
             setAccountError('Error: User email not found. Please try logging in again.');
             setAccountLoading(false);
             return;
           }
-          console.log('Getting Apple Music auth URL for:', emailToUse);
-          // Set flag to indicate we're connecting from Account page
-          localStorage.setItem('connectingFromAccount', 'true');
-          const response = await playlistService.getAppleMusicAuthUrl(emailToUse);
-          console.log('Apple Music auth URL received:', response);
-          console.log('Redirecting to:', response.url);
-          window.location.href = response.url;
+
+          console.log('Connecting to Apple Music with MusicKit for:', emailToUse);
+
+          // Step 1: Get developer token
+          const developerToken = await playlistService.getAppleMusicDeveloperToken();
+
+          // Step 2: Configure MusicKit
+          await musicKitService.configure(developerToken);
+
+          // Step 3: Authorize user (opens Apple sign-in)
+          const userMusicToken = await musicKitService.authorize();
+
+          // Step 4: Send user music token to backend
+          const result = await playlistService.connectAppleMusicWithToken(userMusicToken, emailToUse);
+          console.log('Apple Music connected successfully:', result);
+
+          // Step 5: Update state
+          if (result.userId) {
+            localStorage.setItem('appleMusicUserId', result.userId);
+          }
+
+          const updatedPlatforms = {
+            ...connectedPlatforms,
+            apple: true
+          };
+          setConnectedPlatforms(updatedPlatforms);
+          localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
+
+          setAccountError('');
+          setAccountLoading(false);
+          return; // Exit early since we handled everything
         }
       }
     } catch (err) {
