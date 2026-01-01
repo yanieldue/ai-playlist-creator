@@ -987,7 +987,7 @@ app.post('/api/account/create', async (req, res) => {
 
 // Get Spotify authorization URL
 app.get('/api/auth/spotify', (req, res) => {
-  const { email } = req.query;
+  const { email, fromAccount } = req.query;
 
   if (!email) {
     return res.status(400).json({ error: 'Email parameter is required for Spotify authentication' });
@@ -1004,10 +1004,11 @@ app.get('/api/auth/spotify', (req, res) => {
     'playlist-read-collaborative'
   ];
 
-  // Use email as state to identify user on callback
-  const state = email;
+  // Use email and redirect context as state to identify user on callback
+  // Format: email|fromAccount (e.g., "user@example.com|true")
+  const state = fromAccount === 'true' ? `${email}|fromAccount` : email;
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes, state);
-  console.log('Spotify auth URL requested for email:', email, 'State:', state);
+  console.log('Spotify auth URL requested for email:', email, 'fromAccount:', fromAccount, 'State:', state);
   res.json({ url: authorizeURL });
 });
 
@@ -1016,6 +1017,17 @@ app.get('/callback', async (req, res) => {
   const { code, state } = req.query;
 
   try {
+    // Parse state to get email and redirect context
+    // State format: "email|fromAccount" or just "email"
+    let userEmail = state;
+    let fromAccount = false;
+
+    if (state && state.includes('|fromAccount')) {
+      const parts = state.split('|fromAccount');
+      userEmail = parts[0];
+      fromAccount = true;
+    }
+
     const data = await spotifyApi.authorizationCodeGrant(code);
     const { access_token, refresh_token } = data.body;
 
@@ -1041,16 +1053,14 @@ app.get('/callback', async (req, res) => {
     await db.setToken(userId, tokenData);
     console.log('User authenticated and tokens saved to database:', userId);
 
-    // The 'state' parameter contains the user's email (from the auth request)
-    let userEmail = state || '';
-
+    // The userEmail was already parsed from state at the beginning
     // If state is 'state' (old default), it means email wasn't provided
     if (userEmail === 'state') {
       console.warn('OAuth callback received without email in state parameter. This should not happen.');
       userEmail = '';
     }
 
-    console.log('Linking Spotify userId:', userId, 'to email:', userEmail);
+    console.log('Linking Spotify userId:', userId, 'to email:', userEmail, 'fromAccount:', fromAccount);
 
     // Update the user record in registeredUsers to link the Spotify connection
     if (userEmail && registeredUsers.has(userEmail)) {
@@ -1065,8 +1075,10 @@ app.get('/callback', async (req, res) => {
       console.warn('User email from OAuth callback not found in registered users:', userEmail);
     }
 
-    // Redirect back to frontend with userId, email, and success flag for Account component
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
+    // Redirect back to frontend
+    // If connecting from Account page, redirect to /account, otherwise to home page
+    const basePath = fromAccount ? '/account' : '/';
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}${basePath}?userId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {

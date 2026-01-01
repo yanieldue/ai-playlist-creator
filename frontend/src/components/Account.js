@@ -26,8 +26,40 @@ const Account = ({ onBack, showToast }) => {
 
   useEffect(() => {
     console.log('Account component mounted');
+
+    // Check for OAuth callback parameters in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get('email');
+    const userIdParam = urlParams.get('userId');
+    const success = urlParams.get('success');
+    const spotifyConnected = urlParams.get('spotify') === 'connected';
+
+    // If email is provided in callback, update localStorage (from OAuth redirect)
+    if (emailParam) {
+      const decodedEmail = decodeURIComponent(emailParam);
+      console.log('Account: OAuth callback email parameter:', decodedEmail);
+      console.log('Account: Previous userEmail was:', localStorage.getItem('userEmail'));
+      localStorage.setItem('userEmail', decodedEmail);
+      console.log('Account: Updated userEmail from OAuth callback:', decodedEmail);
+    }
+
+    // Get email from localStorage (either just updated or previously stored)
     const userEmail = localStorage.getItem('userEmail') || '';
     setAccountEmail(userEmail);
+
+    // If userId is provided in callback, update it
+    if (userIdParam) {
+      console.log('Account: Storing userId from OAuth:', userIdParam);
+      localStorage.setItem('userId', userIdParam);
+      if (userIdParam.startsWith('spotify_')) {
+        localStorage.setItem('spotifyUserId', userIdParam);
+      }
+    }
+
+    // Clean up URL parameters after processing
+    if (emailParam || userIdParam || success) {
+      window.history.replaceState({}, document.title, '/account');
+    }
 
     // Fetch the user's actual platform status from backend
     const fetchPlatformStatus = async () => {
@@ -65,7 +97,7 @@ const Account = ({ onBack, showToast }) => {
     const spotifyOAuthCompleted = localStorage.getItem('spotifyOAuthCompleted') === 'true';
     const connectingFromAccount = localStorage.getItem('connectingFromAccount') === 'true';
     console.log('Account.js useEffect - checking for OAuth callback:', {
-      spotifyOAuthCompleted: spotifyOAuthCompleted,
+      spotifyOAuthCompleted: spotifyOAuthCompleted || spotifyConnected,
       connectingFromAccount: connectingFromAccount,
       userEmail: userEmail
     });
@@ -220,7 +252,7 @@ const Account = ({ onBack, showToast }) => {
           console.log('Getting Spotify auth URL for:', emailToUse);
           // Set flag to indicate we're connecting from Account page
           localStorage.setItem('connectingFromAccount', 'true');
-          const response = await playlistService.getSpotifyAuthUrl(emailToUse);
+          const response = await playlistService.getSpotifyAuthUrl(emailToUse, true);
           console.log('Spotify auth URL received:', response);
           console.log('Redirecting to:', response.url);
           window.location.href = response.url;

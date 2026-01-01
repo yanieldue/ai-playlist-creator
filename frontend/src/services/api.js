@@ -52,10 +52,17 @@ api.interceptors.response.use(
 
 export const playlistService = {
   // Get Spotify authorization URL
-  getSpotifyAuthUrl: async (userEmail = null) => {
+  getSpotifyAuthUrl: async (userEmail = null, fromAccount = false) => {
     let url = '/api/auth/spotify';
+    const params = [];
     if (userEmail) {
-      url += `?email=${encodeURIComponent(userEmail)}`;
+      params.push(`email=${encodeURIComponent(userEmail)}`);
+    }
+    if (fromAccount) {
+      params.push('fromAccount=true');
+    }
+    if (params.length > 0) {
+      url += `?${params.join('&')}`;
     }
     const response = await api.get(url);
     return response.data;
