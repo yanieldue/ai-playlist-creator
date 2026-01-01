@@ -106,24 +106,20 @@ function generateAppleMusicToken() {
   try {
     const teamId = process.env.APPLE_MUSIC_TEAM_ID;
     const keyId = process.env.APPLE_MUSIC_KEY_ID;
-    let privateKey = process.env.APPLE_MUSIC_PRIVATE_KEY;
+    const privateKeyPath = process.env.APPLE_MUSIC_PRIVATE_KEY_PATH;
 
     // If using pre-generated token, return it
-    if (process.env.APPLE_MUSIC_DEV_TOKEN && !privateKey) {
+    if (process.env.APPLE_MUSIC_DEV_TOKEN && !privateKeyPath) {
       return process.env.APPLE_MUSIC_DEV_TOKEN;
     }
 
-    // Generate JWT token if private key is available
-    if (teamId && keyId && privateKey) {
-      // Handle base64 encoded private key
-      if (!privateKey.includes('-----BEGIN')) {
-        // It's base64 encoded, decode it
-        const decodedKey = Buffer.from(privateKey, 'base64').toString('utf-8');
-        privateKey = `-----BEGIN EC PRIVATE KEY-----\n${decodedKey}\n-----END EC PRIVATE KEY-----`;
-      }
+    // Generate JWT token if credentials are available
+    if (teamId && keyId && privateKeyPath) {
+      // Read private key from file
+      const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
 
       const now = Math.floor(Date.now() / 1000);
-      const expiresIn = 15 * 60; // 15 minutes
+      const expiresIn = 15777000; // 6 months (max allowed by Apple)
 
       const token = jwt.sign(
         {
@@ -138,15 +134,15 @@ function generateAppleMusicToken() {
         }
       );
 
-      console.log('Generated new Apple Music JWT token');
+      console.log('Generated new Apple Music JWT token (valid for 6 months)');
       return token;
     }
 
-    console.warn('Apple Music token generation: missing credentials (APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, or APPLE_MUSIC_PRIVATE_KEY)');
-    return process.env.APPLE_MUSIC_DEV_TOKEN;
+    console.warn('Apple Music token generation: missing credentials (APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, or APPLE_MUSIC_PRIVATE_KEY_PATH)');
+    return null;
   } catch (error) {
     console.error('Error generating Apple Music token:', error.message);
-    return process.env.APPLE_MUSIC_DEV_TOKEN;
+    return null;
   }
 }
 
@@ -1116,20 +1112,42 @@ app.all('/apple-callback', async (req, res) => {
       throw new Error('Failed to generate Apple Music developer token');
     }
 
-    // Create a unique user ID for this Apple Music connection
-    const userId = `apple_music_${Date.now()}`;
+    // For Apple Music, the 'code' from OAuth callback needs to be exchanged for a user token
+    // However, Apple Music uses MusicKit which handles this differently
+    // The code here is actually the user music token from MusicKit
+    const userMusicToken = code;
 
-    // Store the authorization code and token info
-    userTokens.set(userId, {
-      access_token: code,
+    // Get user's storefront using the developer token and user music token
+    const AppleMusicService = require('./services/appleMusicService');
+    const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+    let storefront = 'us'; // Default
+    try {
+      storefront = await appleMusicApi.getUserStorefront(userMusicToken);
+      console.log('User storefront:', storefront);
+    } catch (storefrontError) {
+      console.warn('Could not fetch storefront, using default (us):', storefrontError.message);
+    }
+
+    // Create a unique user ID for this Apple Music connection
+    const userId = `apple_music_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    // Store tokens in database
+    const tokenData = {
+      access_token: userMusicToken,
+      user_music_token: userMusicToken, // Apple Music user token
       developer_token: appleMusicDevToken,
       platform: 'apple_music',
       email: userEmail,
+      storefront: storefront,
       authorized_at: new Date().toISOString()
-    });
-    saveTokens();
+    };
+
+    userTokens.set(userId, tokenData);
+    await db.setToken(userId, tokenData);
 
     console.log('Apple Music user authenticated:', userId);
+    console.log('Storefront:', storefront);
 
     // Update the user record in registeredUsers to link the Apple Music connection
     if (userEmail && registeredUsers.has(userEmail)) {
@@ -1140,6 +1158,12 @@ app.all('/apple-callback', async (req, res) => {
       registeredUsers.set(userEmail, user);
       saveUsers();
       console.log('Updated user record for:', userEmail);
+
+      // Also update connected_platforms in database
+      await db.updatePlatforms(userEmail, {
+        spotify: user.connectedPlatforms.spotify || false,
+        apple: true
+      });
     } else if (userEmail) {
       console.warn('User email from Apple Music callback not found in registered users:', userEmail);
     }
@@ -1732,6 +1756,52 @@ app.get('/api/user-profile/:userId', async (req, res) => {
 });
 
 // Search Spotify for tracks and artists
+// Platform-agnostic search endpoint (supports both Spotify and Apple Music)
+app.post('/api/search', async (req, res) => {
+  try {
+    const { query, userId } = req.body;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Query is required' });
+    }
+
+    const tokens = await getUserTokens(userId);
+    if (!tokens) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const PlatformService = require('./services/platformService');
+    const platformService = new PlatformService();
+
+    // Get user's storefront (for Apple Music)
+    const storefront = tokens.storefront || 'us';
+
+    // Search using platform service
+    const trackResults = await platformService.searchTracks(userId, query, tokens, storefront, 5);
+
+    // Format results for frontend (tracks only for now)
+    const results = trackResults.map(track => ({
+      id: track.id,
+      type: 'track',
+      name: track.name,
+      artist: track.artists[0].name,
+      album: track.album.name,
+      image: track.album.images?.[0]?.url || null,
+      uri: track.uri,
+      platform: track.platform
+    }));
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error searching:', error);
+    res.status(500).json({
+      error: 'Failed to search',
+      details: error.message
+    });
+  }
+});
+
+// Legacy Spotify search endpoint (kept for backwards compatibility)
 app.post('/api/search-spotify', async (req, res) => {
   try {
     const { query, userId } = req.body;
@@ -1760,7 +1830,6 @@ app.post('/api/search-spotify', async (req, res) => {
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
       userTokens.set(userId, tokens);
-      // Save updated token to database
       await db.updateAccessToken(userId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);

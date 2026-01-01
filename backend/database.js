@@ -57,6 +57,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_artist_cache_expires ON artist_recommendations_cache(expires_at);
 `);
 
+// Database migrations
+function migrateDatabase() {
+  console.log('Running database migrations...');
+
+  // Check if user_music_token and storefront columns exist
+  const tableInfo = db.prepare("PRAGMA table_info(tokens)").all();
+  const hasUserMusicToken = tableInfo.some(col => col.name === 'user_music_token');
+  const hasStorefront = tableInfo.some(col => col.name === 'storefront');
+
+  if (!hasUserMusicToken) {
+    console.log('Adding user_music_token column to tokens table...');
+    db.exec('ALTER TABLE tokens ADD COLUMN user_music_token TEXT');
+    console.log('✓ Added user_music_token column');
+  }
+
+  if (!hasStorefront) {
+    console.log('Adding storefront column to tokens table...');
+    db.exec('ALTER TABLE tokens ADD COLUMN storefront TEXT');
+    console.log('✓ Added storefront column');
+  }
+
+  if (hasUserMusicToken && hasStorefront) {
+    console.log('✓ Database schema is up to date');
+  }
+}
+
+// Run migrations on startup
+migrateDatabase();
+
 // User operations
 const userOps = {
   // Get user by email

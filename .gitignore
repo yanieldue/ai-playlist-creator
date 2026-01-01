@@ -46,3 +46,4 @@ coverage/
 
 # Misc
 .cache/
+backend/AuthKey.p8

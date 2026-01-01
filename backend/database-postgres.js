@@ -105,11 +105,33 @@ async function initializeTables() {
   }
 }
 
+// Database migrations
+async function migrateDatabase() {
+  const client = await pool.connect();
+  try {
+    console.log('Running PostgreSQL database migrations...');
+
+    // Add user_music_token and storefront columns if they don't exist
+    await client.query(`
+      ALTER TABLE tokens
+      ADD COLUMN IF NOT EXISTS user_music_token TEXT,
+      ADD COLUMN IF NOT EXISTS storefront TEXT
+    `);
+
+    console.log('✓ PostgreSQL migrations complete');
+  } catch (error) {
+    console.error('Error running migrations:', error);
+  } finally {
+    client.release();
+  }
+}
+
 // High-level API
 class DatabaseService {
   async initialize() {
     pool = initializePool();
     await initializeTables();
+    await migrateDatabase();
   }
 
   // Users
