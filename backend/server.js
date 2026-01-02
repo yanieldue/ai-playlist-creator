@@ -184,6 +184,34 @@ function saveTokens() {
   // Database auto-saves, this function is kept for compatibility
 }
 
+// Helper function to resolve platform-specific userId from email
+async function resolvePlatformUserId(email, platform) {
+  try {
+    const platformIds = await db.getPlatformUserIds(email);
+    if (!platformIds) {
+      console.log(`No platform user IDs found for email: ${email}`);
+      return null;
+    }
+
+    if (platform === 'spotify') {
+      return platformIds.spotify_user_id;
+    } else if (platform === 'apple' || platform === 'apple_music') {
+      return platformIds.apple_music_user_id;
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Error resolving platform userId for ${email}:`, error);
+    return null;
+  }
+}
+
+// Helper function to detect if userId is email-based (new format) or platform-specific (old format)
+function isEmailBasedUserId(userId) {
+  // Email-based userIds contain @ symbol
+  return userId && userId.includes('@');
+}
+
 // Helper function to get user tokens (from memory or database)
 async function getUserTokens(userId) {
   // Try to get from memory first
@@ -574,12 +602,13 @@ app.post('/api/login', async (req, res) => {
     // Generate auth token
     const token = Buffer.from(`${normalizedEmail}:${Date.now()}`).toString('base64');
 
+    // Return email as userId (platform-independent)
     res.json({
       success: true,
       token: token,
       email: normalizedEmail,
       platform: user.platform,
-      userId: user.userId,
+      userId: normalizedEmail, // Always use email as userId
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -1309,10 +1338,10 @@ app.post('/api/apple-music/connect', async (req, res) => {
       // Continue with default storefront
     }
 
-    // Create a unique user ID for this Apple Music connection
-    const userId = `apple_music_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // Create platform-specific user ID for Apple Music
+    const appleMusicPlatformUserId = `apple_music_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // Store tokens in database
+    // Store tokens in database (keyed by platform userId for API calls)
     const tokenData = {
       access_token: userMusicToken,
       user_music_token: userMusicToken,
@@ -1323,60 +1352,57 @@ app.post('/api/apple-music/connect', async (req, res) => {
       authorized_at: new Date().toISOString()
     };
 
-    userTokens.set(userId, tokenData);
-    await db.setToken(userId, tokenData);
+    userTokens.set(appleMusicPlatformUserId, tokenData);
+    await db.setToken(appleMusicPlatformUserId, tokenData);
 
-    console.log('Apple Music user authenticated via MusicKit:', userId);
+    console.log('Apple Music tokens saved to database:', appleMusicPlatformUserId);
     console.log('Storefront:', storefront);
 
     // Update the user record in registeredUsers
     if (email && registeredUsers.has(email)) {
       const user = registeredUsers.get(email);
-      user.appleMusicUserId = userId;
+      // Keep userId as email (platform-independent)
+      if (!user.userId) {
+        user.userId = email;
+      }
       user.connectedPlatforms = user.connectedPlatforms || {};
       user.connectedPlatforms.apple = true;
       registeredUsers.set(email, user);
       saveUsers();
-      console.log('Updated user record for:', email);
+
+      // Store platform user ID separately in database
+      await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
+      await db.updateUserId(email, email);
+      await db.updatePlatforms(email, user.connectedPlatforms);
+
+      console.log('Updated user record for:', email, 'userId:', email);
     } else if (email) {
       console.warn('User email not found in registered users:', email);
-    }
 
-    // Update connected_platforms in database
-    // IMPORTANT: Create user if doesn't exist, then update platforms
-    try {
-      console.log('Fetching current user from database...');
-      let dbUser = await db.getUser(email);
+      // Create user if doesn't exist
+      console.log('Creating new user in database...');
+      const tempPassword = `apple_music_${Date.now()}`;
+      await db.createUser(email, tempPassword, 'apple_music', email);
+      await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
+      await db.updatePlatforms(email, { spotify: false, apple: true });
 
-      if (!dbUser) {
-        console.log('User not found in database, creating new user...');
-        // Create user with a temporary password (they'll use OAuth to login anyway)
-        const tempPassword = `apple_music_${Date.now()}`;
-        await db.createUser(email, tempPassword, 'apple_music', userId);
-        console.log('Created new user in database:', email);
-        dbUser = await db.getUser(email);
-      }
-
-      const currentPlatforms = dbUser?.connectedPlatforms || { spotify: false, apple: false };
-      console.log('Current platforms in database:', currentPlatforms);
-
-      console.log('Calling db.updatePlatforms...');
-      await db.updatePlatforms(email, {
-        spotify: currentPlatforms.spotify,  // Keep existing Spotify status
-        apple: true  // Set Apple to true
+      // Add to in-memory cache
+      registeredUsers.set(email, {
+        email: email,
+        password: tempPassword,
+        platform: 'apple_music',
+        userId: email,
+        connectedPlatforms: { spotify: false, apple: true }
       });
-      console.log('Successfully updated platforms in database');
-    } catch (dbError) {
-      console.error('Error updating platforms in database:', dbError);
-      console.error('Database error stack:', dbError.stack);
-      // Don't fail the whole request if just the platform update fails
-      // The connection is still successful
+      saveUsers();
+      console.log('Created new user:', email);
     }
 
-    // Return success with userId
+    // Return success with email-based userId (not platform-specific)
     res.json({
       success: true,
-      userId: userId,
+      userId: email,
+      appleMusicUserId: appleMusicPlatformUserId,
       platform: 'apple',
       storefront: storefront
     });
@@ -1396,12 +1422,24 @@ app.post('/api/apple-music/connect', async (req, res) => {
 // Get user's top artists
 app.get('/api/top-artists/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        // User doesn't have Spotify connected
+        console.log('No Spotify userId found for email:', userId, '- returning empty artists array');
+        return res.json({ artists: [] });
+      }
+      console.log(`Resolved email ${userId} to Spotify userId: ${platformUserId}`);
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       // Return empty array for users without Spotify connection
-      console.log('No tokens found for userId:', userId, '- returning empty artists array');
+      console.log('No tokens found for userId:', platformUserId, '- returning empty artists array');
       return res.json({ artists: [] });
     }
 
@@ -1419,9 +1457,9 @@ app.get('/api/top-artists/:userId', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1463,12 +1501,24 @@ app.get('/api/new-artists/:userId', async (req, res) => {
   console.log('=== NEW ARTISTS ENDPOINT CALLED ===');
   console.log('UserId:', req.params.userId);
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
-    // Check cache first
-    const cachedArtists = await db.getCachedArtists(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        // User doesn't have Spotify connected
+        console.log('No Spotify userId found for email:', userId, '- returning empty artists array');
+        return res.json({ artists: [] });
+      }
+      console.log(`Resolved email ${userId} to Spotify userId: ${platformUserId}`);
+    }
+
+    // Check cache first (use platformUserId for cache key)
+    const cachedArtists = await db.getCachedArtists(platformUserId);
     if (cachedArtists && Array.isArray(cachedArtists) && cachedArtists.length > 0) {
-      console.log(`✓ Returning ${cachedArtists.length} cached artists for ${userId}`);
+      console.log(`✓ Returning ${cachedArtists.length} cached artists for ${platformUserId}`);
       return res.json({ artists: cachedArtists, cached: true });
     }
 
@@ -1479,7 +1529,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     console.log('No valid cache found, fetching fresh artist recommendations...');
 
     // Get user's tokens and top artists directly (no HTTP call)
-    const tokens = await getUserTokens(userId);
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       console.log('No tokens found for user');
       return res.json({ artists: [] });
@@ -1498,8 +1548,8 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       const refreshData = await userSpotifyApi.refreshAccessToken();
       userSpotifyApi.setAccessToken(refreshData.body.access_token);
       tokens.access_token = refreshData.body.access_token;
-      userTokens.set(userId, tokens);
-      await db.updateAccessToken(userId, refreshData.body.access_token);
+      userTokens.set(platformUserId, tokens);
+      await db.updateAccessToken(platformUserId, refreshData.body.access_token);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1528,7 +1578,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
 
     // Track top artists in database for future filtering
     try {
-      await db.trackArtists(userId, topArtistNames);
+      await db.trackArtists(platformUserId, topArtistNames);
       console.log('✓ Tracked top artists to database');
     } catch (trackError) {
       console.log('Could not track artists to database:', trackError.message);
@@ -1539,7 +1589,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
 
     // 1. Get artist history from our database (builds over time)
     try {
-      const artistHistory = await db.getArtistHistory(userId);
+      const artistHistory = await db.getArtistHistory(platformUserId);
       artistHistory.forEach(artist => allListenedArtistNames.add(artist.artistName));
       console.log(`Loaded ${artistHistory.length} artists from database history`);
     } catch (dbError) {
@@ -1861,7 +1911,7 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
     // Cache the results for 24 hours (expires at next 12 AM UTC)
     if (formattedArtists.length > 0) {
       try {
-        await db.setCachedArtists(userId, formattedArtists);
+        await db.setCachedArtists(platformUserId, formattedArtists);
         console.log('✓ Cached artist recommendations for user');
       } catch (cacheError) {
         console.error('Failed to cache artists:', cacheError.message);
@@ -1912,11 +1962,30 @@ app.delete('/api/new-artists/cache/:userId', async (req, res) => {
 // Get user profile
 app.get('/api/user-profile/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        console.log('No Spotify connection found for email:', userId);
+        // Return basic profile for users without platform connection
+        return res.json({
+          displayName: 'Music Lover',
+          image: null,
+          email: null,
+          external_urls: { spotify: null },
+          followers: { total: 0 },
+          href: null,
+          uri: null
+        });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
-      console.log('No tokens found for userId:', userId);
+      console.log('No tokens found for platformUserId:', platformUserId);
       // Return basic profile for users without platform connection
       return res.json({
         displayName: 'Music Lover',
@@ -1943,9 +2012,9 @@ app.get('/api/user-profile/:userId', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -1974,13 +2043,27 @@ app.get('/api/user-profile/:userId', async (req, res) => {
 // Platform-agnostic search endpoint (supports both Spotify and Apple Music)
 app.post('/api/search', async (req, res) => {
   try {
-    const { query, userId } = req.body;
+    let { query, userId } = req.body;
 
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (!platformUserId) {
+          return res.status(401).json({ error: 'No music platform connected' });
+        }
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -1992,7 +2075,7 @@ app.post('/api/search', async (req, res) => {
     const storefront = tokens.storefront || 'us';
 
     // Search using platform service
-    const trackResults = await platformService.searchTracks(userId, query, tokens, storefront, 5);
+    const trackResults = await platformService.searchTracks(platformUserId, query, tokens, storefront, 5);
 
     // Format results for frontend (tracks only for now)
     const results = trackResults.map(track => ({
@@ -2019,13 +2102,22 @@ app.post('/api/search', async (req, res) => {
 // Legacy Spotify search endpoint (kept for backwards compatibility)
 app.post('/api/search-spotify', async (req, res) => {
   try {
-    const { query, userId } = req.body;
+    let { query, userId } = req.body;
 
     if (!query) {
       return res.status(400).json({ error: 'Query is required' });
     }
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'Spotify not connected' });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2044,8 +2136,8 @@ app.post('/api/search-spotify', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
-      await db.updateAccessToken(userId, newAccessToken);
+      userTokens.set(platformUserId, tokens);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -2096,14 +2188,23 @@ app.post('/api/search-spotify', async (req, res) => {
 // Generate playlist using AI
 app.post('/api/generate-playlist', async (req, res) => {
   try {
-    const { prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null } = req.body;
-    
+    let { prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null } = req.body;
+
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
-    
+
+    // If userId is email-based, resolve to platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, platform);
+      if (!platformUserId) {
+        return res.status(404).json({ error: `${platform === 'spotify' ? 'Spotify' : 'Apple Music'} not connected` });
+      }
+    }
+
     // Get user tokens
-    const tokens = await getUserTokens(userId);
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens && platform === 'spotify') {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -2127,7 +2228,7 @@ app.post('/api/generate-playlist', async (req, res) => {
 
         // Update stored tokens
         tokens.access_token = newAccessToken;
-        userTokens.set(userId, tokens);
+        userTokens.set(platformUserId, tokens);
         saveTokens(); // Persist to file
 
         console.log('Access token refreshed for generate playlist');
@@ -2145,7 +2246,7 @@ app.post('/api/generate-playlist', async (req, res) => {
 
         // 1. Load artist history from our database (builds over time, unlimited)
         try {
-          const artistHistory = await db.getArtistHistory(userId);
+          const artistHistory = await db.getArtistHistory(platformUserId);
           artistHistory.forEach(artist => {
             knownArtists.add(artist.artistName.toLowerCase());
           });
@@ -3219,10 +3320,10 @@ DO NOT include any text outside the JSON.`;
     }
 
     // Track artists from generated playlist to database for future filtering
-    if (userId && selectedTracks.length > 0) {
+    if (platformUserId && selectedTracks.length > 0) {
       try {
         const artistNames = [...new Set(selectedTracks.map(t => t.artist))];
-        await db.trackArtists(userId, artistNames);
+        await db.trackArtists(platformUserId, artistNames);
         console.log(`✓ Tracked ${artistNames.length} artists from generated playlist to database`);
       } catch (trackError) {
         console.log('Could not track artists to database:', trackError.message);
@@ -3249,7 +3350,7 @@ DO NOT include any text outside the JSON.`;
 // Create playlist on Spotify
 app.post('/api/create-playlist', async (req, res) => {
   try {
-    const { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs } = req.body;
+    let { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs } = req.body;
 
     console.log('Create playlist request:', {
       userId,
@@ -3260,22 +3361,44 @@ app.post('/api/create-playlist', async (req, res) => {
       isPublic
     });
 
-    const tokens = await getUserTokens(userId);
-    if (!tokens) {
-      console.error('No tokens found for userId:', userId);
-      return res.status(401).json({ error: 'User not authenticated' });
+    // If userId is email-based, resolve to platform userId
+    let platformUserId = userId;
+    let platform = null;
+
+    if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      platform = 'spotify';
+
+      if (!platformUserId) {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        platform = 'apple';
+
+        if (!platformUserId) {
+          return res.status(404).json({ error: 'No music platform connected' });
+        }
+      }
+    } else {
+      // For old platform-specific userIds, detect platform from prefix
+      const PlatformService = require('./services/platformService');
+      const platformService = new PlatformService();
+      platform = platformService.getPlatform(platformUserId);
     }
 
-    // Use Platform Service to create playlist
-    const PlatformService = require('./services/platformService');
-    const platformService = new PlatformService();
-    const platform = platformService.getPlatform(userId);
+    const tokens = await getUserTokens(platformUserId);
+    if (!tokens) {
+      console.error('No tokens found for platformUserId:', platformUserId);
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
 
     console.log(`Creating playlist on ${platform}...`);
 
     // Create playlist using platform service
+    const PlatformService = require('./services/platformService');
+    const platformService = new PlatformService();
     const playlistResult = await platformService.createPlaylist(
-      userId,
+      platformUserId,
       playlistName,
       description,
       trackUris,
@@ -3310,7 +3433,7 @@ app.post('/api/create-playlist', async (req, res) => {
       tracks: []
     };
 
-    // Save playlist to database
+    // Save playlist to database (use original userId for user-facing data)
     await savePlaylist(userId, playlistRecord);
 
     console.log('Playlist saved to history');
@@ -3430,7 +3553,7 @@ app.delete('/api/drafts/:userId/:draftId', async (req, res) => {
 // Get user's playlist history
 app.get('/api/playlists/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
     let allPlaylists;
 
@@ -3445,8 +3568,19 @@ app.get('/api/playlists/:userId', async (req, res) => {
     // Filter out drafts - only return playlists that have been published to Spotify
     const userPlaylistHistory = allPlaylists.filter(p => p && p.isDraft !== true);
 
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        // User doesn't have Spotify connected, return empty playlists
+        console.log('No Spotify connection found for email:', userId);
+        return res.json([]);
+      }
+    }
+
     // For each playlist, fetch current track details from Spotify
-    const tokens = await getUserTokens(userId);
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -3465,9 +3599,9 @@ app.get('/api/playlists/:userId', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -3537,19 +3671,33 @@ app.get('/api/playlists/:userId', async (req, res) => {
 // Platform-agnostic get playlists from music service
 app.get('/api/platform-playlists/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (!platformUserId) {
+          return res.status(404).json({ error: 'No music platform connected' });
+        }
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
     const PlatformService = require('./services/platformService');
     const platformService = new PlatformService();
-    const platform = platformService.getPlatform(userId);
+    const platform = platformService.getPlatform(platformUserId);
 
     // Get playlists using platform service
-    const playlists = await platformService.getPlaylists(userId, tokens);
+    const playlists = await platformService.getPlaylists(platformUserId, tokens);
 
     res.json({ playlists, platform });
   } catch (error) {
@@ -3564,9 +3712,18 @@ app.get('/api/platform-playlists/:userId', async (req, res) => {
 // Legacy Spotify playlists endpoint (kept for backwards compatibility)
 app.get('/api/spotify-playlists/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
+    let { userId } = req.params;
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'Spotify not connected' });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -3585,8 +3742,8 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
-      await db.updateAccessToken(userId, newAccessToken);
+      userTokens.set(platformUserId, tokens);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -3602,7 +3759,7 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
       image: playlist.images?.length > 0 ? playlist.images[0].url : null,
       spotifyUrl: playlist.external_urls.spotify,
       owner: playlist.owner.display_name,
-      isOwner: playlist.owner.id === userId.replace('spotify_', '')
+      isOwner: playlist.owner.id === platformUserId.replace('spotify_', '')
     }));
 
     res.json({ playlists });
@@ -3618,9 +3775,18 @@ app.get('/api/spotify-playlists/:userId', async (req, res) => {
 // Import a Spotify playlist
 app.post('/api/import-playlist', async (req, res) => {
   try {
-    const { userId, playlistId } = req.body;
+    let { userId, playlistId } = req.body;
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'Spotify not connected' });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -3639,9 +3805,9 @@ app.post('/api/import-playlist', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -3691,13 +3857,22 @@ app.post('/api/import-playlist', async (req, res) => {
 app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const { userId } = req.query;
+    let { userId } = req.query;
 
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'Spotify not connected' });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -3716,9 +3891,9 @@ app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -3749,7 +3924,7 @@ app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
 app.post('/api/playlists/:playlistId/update', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const { userId, tracksToAdd, tracksToRemove } = req.body;
+    let { userId, tracksToAdd, tracksToRemove } = req.body;
 
     console.log('Update playlist endpoint:', {
       playlistId,
@@ -3759,7 +3934,16 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       addSample: tracksToAdd?.slice(0, 2)
     });
 
-    const tokens = await getUserTokens(userId);
+    // If userId is email-based, resolve to Spotify platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'Spotify not connected' });
+      }
+    }
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
@@ -3778,9 +3962,9 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       const newAccessToken = refreshData.body.access_token;
       userSpotifyApi.setAccessToken(newAccessToken);
       tokens.access_token = newAccessToken;
-      userTokens.set(userId, tokens);
+      userTokens.set(platformUserId, tokens);
       // Save updated token to database
-      await db.updateAccessToken(userId, newAccessToken);
+      await db.updateAccessToken(platformUserId, newAccessToken);
     } catch (refreshError) {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
@@ -3864,7 +4048,7 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
 app.put('/api/playlists/:playlistId/settings', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const { userId, updateFrequency, updateMode, isPublic, updateTime } = req.body;
+    let { userId, updateFrequency, updateMode, isPublic, updateTime } = req.body;
 
     console.log('Update settings request:', { playlistId, userId, updateFrequency, updateMode, isPublic, updateTime });
 
@@ -3879,7 +4063,16 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
 
     // If isPublic setting changed, update it on Spotify
     if (isPublic !== undefined && isPublic !== userPlaylistHistory[playlistIndex].isPublic) {
-      const tokens = await getUserTokens(userId);
+      // If userId is email-based, resolve to Spotify platform userId
+      let platformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        if (!platformUserId) {
+          return res.status(404).json({ error: 'Spotify not connected' });
+        }
+      }
+
+      const tokens = await getUserTokens(platformUserId);
       if (tokens) {
         const userSpotifyApi = new SpotifyWebApi({
           clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -3895,7 +4088,7 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
           const newAccessToken = refreshData.body.access_token;
           userSpotifyApi.setAccessToken(newAccessToken);
           tokens.access_token = newAccessToken;
-          userTokens.set(userId, tokens);
+          userTokens.set(platformUserId, tokens);
           saveTokens();
         } catch (refreshError) {
           console.log('Token refresh failed or not needed:', refreshError.message);
@@ -4077,7 +4270,23 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
 
     // Also remove from Spotify if the playlist exists there
     try {
-      const tokens = await getUserTokens(userId);
+      // If userId is email-based, resolve to Spotify platform userId for API calls
+      let platformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        if (!platformUserId) {
+          console.log('No Spotify connection found for email:', userId);
+          // Skip Spotify removal but don't fail
+          return res.json({
+            success: true,
+            excludedSongs: playlist.excludedSongs,
+            excludedArtists: playlist.excludedArtists,
+            remainingTracks: playlist.tracks.length
+          });
+        }
+      }
+
+      const tokens = await getUserTokens(platformUserId);
       if (tokens && trackUri) {
         const userSpotifyApi = new SpotifyWebApi({
           clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -4092,8 +4301,8 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
           const refreshData = await userSpotifyApi.refreshAccessToken();
           userSpotifyApi.setAccessToken(refreshData.body.access_token);
           tokens.access_token = refreshData.body.access_token;
-          userTokens.set(userId, tokens);
-          await db.updateAccessToken(userId, refreshData.body.access_token);
+          userTokens.set(platformUserId, tokens);
+          await db.updateAccessToken(platformUserId, refreshData.body.access_token);
         } catch (refreshError) {
           console.log('Token refresh not needed:', refreshError.message);
         }
@@ -4752,7 +4961,18 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
 
                   // Search Spotify for tracks matching the queries
                   const allSearchResults = [];
-                  const tokens = await getUserTokens(userId);
+
+                  // If userId is email-based, resolve to Spotify platform userId
+                  let platformUserId = userId;
+                  if (isEmailBasedUserId(userId)) {
+                    platformUserId = await resolvePlatformUserId(userId, 'spotify');
+                    if (!platformUserId) {
+                      console.log(`[AUTO-UPDATE] No Spotify connection for user ${userId}, skipping playlist ${playlist.playlistName}`);
+                      continue; // Skip to next playlist
+                    }
+                  }
+
+                  const tokens = await getUserTokens(platformUserId);
 
                   if (tokens) {
                     const userSpotifyApi = new SpotifyWebApi({
@@ -4774,7 +4994,7 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
                         const newAccessToken = refreshData.body.access_token;
                         userSpotifyApi.setAccessToken(newAccessToken);
                         tokens.access_token = newAccessToken;
-                        userTokens.set(userId, tokens);
+                        userTokens.set(platformUserId, tokens);
                         saveTokens();
                         console.log('[AUTO-UPDATE] Token refresh successful');
                         tokenRefreshSuccess = true;
@@ -5389,8 +5609,8 @@ Only include tracks that genuinely match "${genreData.primaryGenre}". DO NOT inc
                   newTrackUris = [];
                 }
 
-                // Get user tokens
-                const tokens = await getUserTokens(userId);
+                // Get user tokens (use platformUserId resolved earlier)
+                const tokens = await getUserTokens(platformUserId);
                 if (tokens && newTrackUris.length > 0) {
                   const userSpotifyApi = new SpotifyWebApi({
                     clientId: process.env.SPOTIFY_CLIENT_ID,

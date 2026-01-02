@@ -184,22 +184,8 @@ const PlaylistGenerator = () => {
       setUserId(storedUserId);
       setIsAuthenticated(true);
 
-      // Also detect platform from userId format and store accordingly
-      if (storedUserId.startsWith('spotify_') && !storedSpotifyUserId) {
-        setSpotifyUserId(storedUserId);
-        localStorage.setItem('spotifyUserId', storedUserId);
-        if (!storedActivePlatform) {
-          setActivePlatform('spotify');
-          localStorage.setItem('activePlatform', 'spotify');
-        }
-      } else if (storedUserId.startsWith('apple_music_') && !storedAppleMusicUserId) {
-        setAppleMusicUserId(storedUserId);
-        localStorage.setItem('appleMusicUserId', storedUserId);
-        if (!storedActivePlatform) {
-          setActivePlatform('apple');
-          localStorage.setItem('activePlatform', 'apple');
-        }
-      }
+      // Note: userId is now email-based (platform-independent)
+      // Platform-specific IDs are stored separately as spotifyUserId and appleMusicUserId
     }
 
     // Check if user is in signup flow
@@ -214,11 +200,15 @@ const PlaylistGenerator = () => {
     // Check if user just authenticated via OAuth (urlParams already parsed above)
     const userIdParam = urlParams.get('userId');
     const emailParam = urlParams.get('email');
+    const spotifyUserIdParam = urlParams.get('spotifyUserId');
+    const appleMusicUserIdParam = urlParams.get('appleMusicUserId');
     const connectingFromAccount = localStorage.getItem('connectingFromAccount') === 'true';
 
     console.log('PlaylistGenerator useEffect - checking URL params:', {
       userIdParam,
       emailParam,
+      spotifyUserIdParam,
+      appleMusicUserIdParam,
       success,
       spotifyConnected,
       connectingFromAccount,
@@ -247,6 +237,23 @@ const PlaylistGenerator = () => {
         localStorage.setItem('userEmail', decodedEmail);
         console.log('PlaylistGenerator: Updated userEmail from OAuth callback:', decodedEmail);
         console.log('PlaylistGenerator: Verified userEmail is now:', localStorage.getItem('userEmail'));
+      }
+
+      // Store platform-specific userIds from OAuth callback
+      if (spotifyUserIdParam) {
+        console.log('PlaylistGenerator: Storing Spotify userId from OAuth callback:', spotifyUserIdParam);
+        setSpotifyUserId(spotifyUserIdParam);
+        localStorage.setItem('spotifyUserId', spotifyUserIdParam);
+        setActivePlatform('spotify');
+        localStorage.setItem('activePlatform', 'spotify');
+      }
+
+      if (appleMusicUserIdParam) {
+        console.log('PlaylistGenerator: Storing Apple Music userId from OAuth callback:', appleMusicUserIdParam);
+        setAppleMusicUserId(appleMusicUserIdParam);
+        localStorage.setItem('appleMusicUserId', appleMusicUserIdParam);
+        setActivePlatform('apple');
+        localStorage.setItem('activePlatform', 'apple');
       }
 
       // If coming back from Spotify OAuth, store flag for Account component to read
