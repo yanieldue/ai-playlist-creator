@@ -1844,7 +1844,7 @@ const PlaylistGenerator = () => {
                         marginBottom: '24px',
                         lineHeight: '1.6'
                       }}>
-                        Connect your favorite music platform to discover personalized playlists powered by AI.
+                        Connect your favorite music platform to discover personalized playlists.
                       </p>
                       <button
                         onClick={() => setActiveTab('account')}
