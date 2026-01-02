@@ -1482,57 +1482,95 @@ app.get('/api/top-artists/:userId', async (req, res) => {
   try {
     let { userId } = req.params;
 
-    // If userId is email-based, resolve to Spotify platform userId
+    // If userId is email-based, resolve to platform userId (try Spotify first, then Apple Music)
     let platformUserId = userId;
+    let platform = null;
+
     if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
       platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (!platformUserId) {
-        // User doesn't have Spotify connected
-        console.log('No Spotify userId found for email:', userId, '- returning empty artists array');
-        return res.json({ artists: [] });
+      if (platformUserId) {
+        platform = 'spotify';
+        console.log(`Resolved email ${userId} to Spotify userId: ${platformUserId}`);
+      } else {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (platformUserId) {
+          platform = 'apple';
+          console.log(`Resolved email ${userId} to Apple Music userId: ${platformUserId}`);
+        } else {
+          // No platform connected
+          console.log('No platform userId found for email:', userId, '- returning empty artists array');
+          return res.json({ artists: [] });
+        }
       }
-      console.log(`Resolved email ${userId} to Spotify userId: ${platformUserId}`);
+    } else {
+      // Detect platform from userId prefix
+      if (platformUserId.startsWith('spotify_')) {
+        platform = 'spotify';
+      } else if (platformUserId.startsWith('apple_music_')) {
+        platform = 'apple';
+      }
     }
 
     const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
-      // Return empty array for users without Spotify connection
       console.log('No tokens found for userId:', platformUserId, '- returning empty artists array');
       return res.json({ artists: [] });
     }
 
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+    let topArtists = [];
 
-    // Refresh token if needed
-    try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(platformUserId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(platformUserId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
+    if (platform === 'spotify') {
+      // Spotify: Use listening history API
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        const newAccessToken = refreshData.body.access_token;
+        userSpotifyApi.setAccessToken(newAccessToken);
+        tokens.access_token = newAccessToken;
+        userTokens.set(platformUserId, tokens);
+        await db.updateAccessToken(platformUserId, newAccessToken);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      // Get top 10 artists from the last 3 months
+      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
+
+      topArtists = topArtistsData.body.items.map(artist => ({
+        id: artist.id,
+        name: artist.name,
+        image: artist.images[0]?.url,
+        genres: artist.genres,
+        popularity: artist.popularity,
+        uri: artist.uri,
+        platform: 'spotify'
+      }));
+    } else if (platform === 'apple') {
+      // Apple Music: Analyze library playlists
+      if (!AppleMusicService) {
+        console.error('AppleMusicService not available');
+        return res.json({ artists: [] });
+      }
+
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) {
+        console.error('Failed to generate Apple Music developer token');
+        return res.json({ artists: [] });
+      }
+
+      const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+      topArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token, 10);
     }
-
-    // Get top 10 artists from the last 3 months
-    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
-
-    const topArtists = topArtistsData.body.items.map(artist => ({
-      id: artist.id,
-      name: artist.name,
-      image: artist.images[0]?.url,
-      genres: artist.genres,
-      popularity: artist.popularity,
-      uri: artist.uri
-    }));
 
     res.json({ artists: topArtists });
   } catch (error) {

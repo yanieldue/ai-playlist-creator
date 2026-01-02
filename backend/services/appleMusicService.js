@@ -293,6 +293,126 @@ class AppleMusicService {
     // In production, you might want to implement fuzzy matching
     return results[0];
   }
+
+  /**
+   * Get user's library playlists
+   * @param {string} userToken - User music token
+   * @param {number} limit - Number of playlists to fetch (default: 100)
+   */
+  async getLibraryPlaylists(userToken, limit = 100) {
+    try {
+      const data = await this.request(`/me/library/playlists`, userToken, {
+        params: { limit }
+      });
+
+      if (!data.data) {
+        return [];
+      }
+
+      return data.data.map(playlist => ({
+        id: playlist.id,
+        name: playlist.attributes.name,
+        description: playlist.attributes.description?.standard || '',
+        trackCount: playlist.attributes.trackCount || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching library playlists:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get tracks from a library playlist
+   * @param {string} userToken - User music token
+   * @param {string} playlistId - Playlist ID
+   * @param {number} limit - Number of tracks to fetch (default: 100)
+   */
+  async getLibraryPlaylistTracks(userToken, playlistId, limit = 100) {
+    try {
+      const data = await this.request(`/me/library/playlists/${playlistId}/tracks`, userToken, {
+        params: { limit }
+      });
+
+      if (!data.data) {
+        return [];
+      }
+
+      return data.data.map(track => ({
+        id: track.id,
+        name: track.attributes.name,
+        artistName: track.attributes.artistName,
+        albumName: track.attributes.albumName,
+        artwork: track.attributes.artwork
+      }));
+    } catch (error) {
+      console.error(`Error fetching tracks for playlist ${playlistId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Get top artists from user's library playlists
+   * Analyzes all library playlists and counts artist frequency
+   * @param {string} userToken - User music token
+   * @param {number} limit - Number of top artists to return (default: 50)
+   */
+  async getTopArtistsFromLibrary(userToken, limit = 50) {
+    try {
+      // Get all library playlists
+      console.log('Fetching library playlists...');
+      const playlists = await this.getLibraryPlaylists(userToken);
+      console.log(`Found ${playlists.length} library playlists`);
+
+      if (playlists.length === 0) {
+        return [];
+      }
+
+      // Count artist occurrences across all playlists
+      const artistCounts = new Map();
+
+      // Fetch tracks from each playlist
+      for (const playlist of playlists) {
+        console.log(`Fetching tracks from playlist: ${playlist.name}`);
+        const tracks = await this.getLibraryPlaylistTracks(userToken, playlist.id);
+
+        // Count each artist
+        for (const track of tracks) {
+          const artistName = track.artistName;
+          if (artistName) {
+            const current = artistCounts.get(artistName) || { count: 0, artwork: null };
+            artistCounts.set(artistName, {
+              count: current.count + 1,
+              artwork: track.artwork || current.artwork
+            });
+          }
+        }
+      }
+
+      // Convert to array and sort by count
+      const topArtists = Array.from(artistCounts.entries())
+        .map(([name, data]) => ({
+          name,
+          count: data.count,
+          artwork: data.artwork
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit);
+
+      console.log(`Analyzed library: found ${artistCounts.size} unique artists, returning top ${topArtists.length}`);
+
+      // Format for frontend (match Spotify format)
+      return topArtists.map(artist => ({
+        id: artist.name.toLowerCase().replace(/\s+/g, '-'), // Generate ID from name
+        name: artist.name,
+        image: artist.artwork ? artist.artwork.url.replace('{w}', '300').replace('{h}', '300') : null,
+        playcount: artist.count,
+        platform: 'apple'
+      }));
+    } catch (error) {
+      console.error('Error getting top artists from library:', error);
+      return [];
+    }
+  }
 }
 
 module.exports = AppleMusicService;
