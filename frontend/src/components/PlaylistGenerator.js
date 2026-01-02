@@ -1107,9 +1107,9 @@ const PlaylistGenerator = () => {
   };
 
   const fetchNewArtists = async () => {
-    // Guard: Don't fetch if no userId OR no platform connected OR not Spotify (this is Spotify-only feature)
-    if (!userId || !spotifyUserId) {
-      console.log('[fetchNewArtists] Skipping - no userId or not connected to Spotify');
+    // Guard: Don't fetch if no userId OR no platform connected
+    if (!userId || (!spotifyUserId && !appleMusicUserId)) {
+      console.log('[fetchNewArtists] Skipping - no userId or no platform connected');
       setNewArtists([]);
       return;
     }
