@@ -1602,14 +1602,17 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     let platform = null;
 
     // Detect platform
+    console.log(`[new-artists] Received userId: ${userId}`);
     if (isEmailBasedUserId(userId)) {
       // Try Spotify first
       platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      console.log(`[new-artists] Spotify resolution result: ${platformUserId}`);
       if (platformUserId) {
         platform = 'spotify';
       } else {
         // Try Apple Music if Spotify not connected
         platformUserId = await resolvePlatformUserId(userId, 'apple');
+        console.log(`[new-artists] Apple Music resolution result: ${platformUserId}`);
         if (platformUserId) {
           platform = 'apple';
         } else {
@@ -1617,11 +1620,13 @@ app.get('/api/new-artists/:userId', async (req, res) => {
           return res.json({ artists: [] });
         }
       }
-      console.log(`Resolved email ${userId} to ${platform} userId: ${platformUserId}`);
+      console.log(`[new-artists] Resolved email ${userId} to ${platform} userId: ${platformUserId}`);
     } else if (userId.startsWith('spotify_')) {
       platform = 'spotify';
+      console.log(`[new-artists] Direct Spotify userId detected`);
     } else if (userId.startsWith('apple_music_')) {
       platform = 'apple';
+      console.log(`[new-artists] Direct Apple Music userId detected`);
     }
 
     // Check cache first (use platformUserId for cache key)
@@ -1648,24 +1653,32 @@ app.get('/api/new-artists/:userId', async (req, res) => {
 
     if (platform === 'apple') {
       // Apple Music: Use library-based recommendations
-      console.log('Generating Apple Music recommendations from library...');
+      console.log('[new-artists] Platform is Apple Music, generating recommendations from library...');
+      console.log('[new-artists] User token available:', !!tokens.access_token);
+      console.log('[new-artists] Storefront:', tokens.storefront || 'us (default)');
+
       const appleMusicDevToken = generateAppleMusicToken();
       if (!appleMusicDevToken) {
-        console.error('Failed to generate Apple Music developer token');
+        console.error('[new-artists] Failed to generate Apple Music developer token');
         return res.status(500).json({ error: 'Apple Music service unavailable' });
       }
+      console.log('[new-artists] Developer token generated successfully');
+
       const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
       // Get storefront from tokens or detect it
       const storefront = tokens.storefront || 'us';
+      console.log('[new-artists] Calling getRecommendedArtists...');
       newArtists = await appleMusicApi.getRecommendedArtists(tokens.access_token, storefront, 50);
 
-      console.log(`Generated ${newArtists.length} Apple Music recommendations`);
+      console.log(`[new-artists] Generated ${newArtists.length} Apple Music recommendations`);
 
       // Cache the results
       if (newArtists.length > 0) {
         await db.setCachedArtists(platformUserId, newArtists);
-        console.log('✓ Cached Apple Music recommendations');
+        console.log('[new-artists] ✓ Cached Apple Music recommendations');
+      } else {
+        console.log('[new-artists] No recommendations generated, not caching');
       }
 
       return res.json({ artists: newArtists, cached: false });

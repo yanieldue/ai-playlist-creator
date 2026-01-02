@@ -98,6 +98,25 @@ class AppleMusicService {
   }
 
   /**
+   * Search Apple Music catalog for various types
+   * @param {string} query - Search query
+   * @param {string} storefront - Country code (e.g., 'us')
+   * @param {Array<string>} types - Types to search for (e.g., ['artists', 'songs', 'albums'])
+   * @param {number} limit - Number of results per type (default: 25)
+   */
+  async searchCatalog(query, storefront, types = ['songs'], limit = 25) {
+    const data = await this.request(`/catalog/${storefront}/search`, null, {
+      params: {
+        term: query,
+        types: types.join(','),
+        limit
+      }
+    });
+
+    return data.results || {};
+  }
+
+  /**
    * Get user's library playlists
    * @param {string} userToken - User's music token
    */
