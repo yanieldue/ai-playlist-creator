@@ -180,6 +180,17 @@ const PlaylistGenerator = () => {
     // First, check if user has a userId stored (either from signup or previous login)
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
+      // Check if this is an old platform-specific userId (migration cleanup)
+      const isOldPlatformId = storedUserId.startsWith('spotify_') || storedUserId.startsWith('apple_music_');
+
+      if (isOldPlatformId) {
+        console.warn('PlaylistGenerator: Detected old platform-specific userId, clearing localStorage');
+        // Clear old data - user will need to log in again with new system
+        localStorage.clear();
+        window.location.reload();
+        return;
+      }
+
       console.log('PlaylistGenerator: Found existing userId in localStorage:', storedUserId);
       setUserId(storedUserId);
       setIsAuthenticated(true);
