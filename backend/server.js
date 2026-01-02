@@ -1312,6 +1312,15 @@ app.post('/api/apple-music/connect', async (req, res) => {
     console.log('Email:', email);
     console.log('User token length:', userMusicToken?.length);
 
+    // Check if AppleMusicService loaded successfully
+    if (!AppleMusicService) {
+      console.error('AppleMusicService not available - service failed to load at startup');
+      return res.status(500).json({
+        error: 'Apple Music service is not available',
+        details: 'The service failed to load. Please contact support.'
+      });
+    }
+
     if (!userMusicToken) {
       return res.status(400).json({ error: 'userMusicToken is required' });
     }
