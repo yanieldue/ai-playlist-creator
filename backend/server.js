@@ -11,8 +11,18 @@ const cron = require('node-cron');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
 const { handleCriticalError } = require('./services/errorNotificationService');
-const AppleMusicService = require('./services/appleMusicService');
-const PlatformService = require('./services/platformService');
+
+// Load services with error handling
+let AppleMusicService, PlatformService;
+try {
+  AppleMusicService = require('./services/appleMusicService');
+  PlatformService = require('./services/platformService');
+  console.log('✓ Apple Music and Platform services loaded successfully');
+} catch (error) {
+  console.error('❌ Failed to load services:', error.message);
+  console.error('Stack:', error.stack);
+  // Continue without services - some endpoints won't work but server will start
+}
 
 dotenv.config();
 
