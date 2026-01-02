@@ -1829,12 +1829,6 @@ const PlaylistGenerator = () => {
                 {!spotifyUserId && !appleMusicUserId ? (
                   // No platforms connected - show prompt
                   <div className="horizontal-scroll-section">
-                    <div className="section-header">
-                      <div>
-                        <h2 className="section-title">No Music Platforms Connected</h2>
-                        <p className="section-subtitle">Connect Spotify or Apple Music to get started</p>
-                      </div>
-                    </div>
                     <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                       <h3 style={{
                         fontSize: '18px',
