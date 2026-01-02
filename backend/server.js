@@ -503,7 +503,17 @@ const registeredUsers = {
   set: (email, userData) => {
     const existing = db.getUser(email);
     if (existing) {
-      db.updateUser(email, userData);
+      // Only call updateUser if we have all required fields
+      if (userData.password && userData.platform && userData.userId) {
+        db.updateUser(email, userData);
+      }
+      // Update individual fields as needed
+      if (userData.userId && (!userData.password || !userData.platform)) {
+        db.updateUserId(email, userData.userId);
+      }
+      if (userData.connectedPlatforms) {
+        db.updatePlatforms(email, userData.connectedPlatforms);
+      }
     } else {
       db.createUser(email, userData.password, userData.platform, userData.userId);
       if (userData.connectedPlatforms) {
