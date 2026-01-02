@@ -1649,6 +1649,11 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     if (platform === 'apple') {
       // Apple Music: Use library-based recommendations
       console.log('Generating Apple Music recommendations from library...');
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) {
+        console.error('Failed to generate Apple Music developer token');
+        return res.status(500).json({ error: 'Apple Music service unavailable' });
+      }
       const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
       // Get storefront from tokens or detect it
