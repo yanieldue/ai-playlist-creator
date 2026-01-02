@@ -1924,53 +1924,49 @@ const PlaylistGenerator = () => {
                       </div>
                     ) : null}
 
-                    {/* Artists You Should Explore - Spotify only (uses recommendation API) */}
-                    {spotifyUserId && (
-                      <>
-                        {loadingNewArtists ? (
-                          <div className="horizontal-scroll-section">
-                            <div className="section-header">
-                              <div>
-                                <h2 className="section-title">Artists You Should Explore</h2>
-                                <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
-                              </div>
-                            </div>
-                            <div style={{ textAlign: 'center', padding: '40px' }}>
-                              <div className="loading-spinner-apple"></div>
-                              <p style={{ color: '#8e8e93', marginTop: '12px' }}>Loading...</p>
-                            </div>
+                    {/* Artists You Should Explore */}
+                    {loadingNewArtists ? (
+                      <div className="horizontal-scroll-section">
+                        <div className="section-header">
+                          <div>
+                            <h2 className="section-title">Artists You Should Explore</h2>
+                            <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
                           </div>
-                        ) : newArtists.length > 0 ? (
-                          <div className="horizontal-scroll-section">
-                            <div className="section-header">
-                              <div>
-                                <h2 className="section-title">Artists You Should Explore</h2>
-                                <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
-                              </div>
-                            </div>
-                            <div className="horizontal-scroll-container" ref={newArtistsScrollRef}>
-                              {newArtists.map((artist) => (
-                                <div
-                                  key={artist.id}
-                                  className="artist-card-apple"
-                                  onClick={() => handleArtistClick(artist)}
-                                  style={{ cursor: 'pointer' }}
-                                >
-                                  <div className="artist-card-image">
-                                    {artist.image ? (
-                                      <img src={artist.image} alt={artist.name} />
-                                    ) : (
-                                      <span><Icons.Microphone size={32} /></span>
-                                    )}
-                                  </div>
-                                  <div className="artist-card-name">{artist.name}</div>
-                                </div>
-                              ))}
-                            </div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '40px' }}>
+                          <div className="loading-spinner-apple"></div>
+                          <p style={{ color: '#8e8e93', marginTop: '12px' }}>Loading...</p>
+                        </div>
+                      </div>
+                    ) : newArtists.length > 0 ? (
+                      <div className="horizontal-scroll-section">
+                        <div className="section-header">
+                          <div>
+                            <h2 className="section-title">Artists You Should Explore</h2>
+                            <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
                           </div>
-                        ) : null}
-                      </>
-                    )}
+                        </div>
+                        <div className="horizontal-scroll-container" ref={newArtistsScrollRef}>
+                          {newArtists.map((artist) => (
+                            <div
+                              key={artist.id}
+                              className="artist-card-apple"
+                              onClick={() => handleArtistClick(artist)}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <div className="artist-card-image">
+                                {artist.image ? (
+                                  <img src={artist.image} alt={artist.name} />
+                                ) : (
+                                  <span><Icons.Microphone size={32} /></span>
+                                )}
+                              </div>
+                              <div className="artist-card-name">{artist.name}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </>
                 )}
               </>

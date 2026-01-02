@@ -1598,17 +1598,30 @@ app.get('/api/new-artists/:userId', async (req, res) => {
   console.log('UserId:', req.params.userId);
   try {
     let { userId } = req.params;
-
-    // If userId is email-based, resolve to Spotify platform userId
     let platformUserId = userId;
+    let platform = null;
+
+    // Detect platform
     if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
       platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (!platformUserId) {
-        // User doesn't have Spotify connected
-        console.log('No Spotify userId found for email:', userId, '- returning empty artists array');
-        return res.json({ artists: [] });
+      if (platformUserId) {
+        platform = 'spotify';
+      } else {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (platformUserId) {
+          platform = 'apple';
+        } else {
+          console.log('No platform userId found for email:', userId);
+          return res.json({ artists: [] });
+        }
       }
-      console.log(`Resolved email ${userId} to Spotify userId: ${platformUserId}`);
+      console.log(`Resolved email ${userId} to ${platform} userId: ${platformUserId}`);
+    } else if (userId.startsWith('spotify_')) {
+      platform = 'spotify';
+    } else if (userId.startsWith('apple_music_')) {
+      platform = 'apple';
     }
 
     // Check cache first (use platformUserId for cache key)
@@ -1624,13 +1637,36 @@ app.get('/api/new-artists/:userId', async (req, res) => {
 
     console.log('No valid cache found, fetching fresh artist recommendations...');
 
-    // Get user's tokens and top artists directly (no HTTP call)
+    // Get user's tokens
     const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       console.log('No tokens found for user');
       return res.json({ artists: [] });
     }
 
+    let newArtists = [];
+
+    if (platform === 'apple') {
+      // Apple Music: Use library-based recommendations
+      console.log('Generating Apple Music recommendations from library...');
+      const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+      // Get storefront from tokens or detect it
+      const storefront = tokens.storefront || 'us';
+      newArtists = await appleMusicApi.getRecommendedArtists(tokens.access_token, storefront, 50);
+
+      console.log(`Generated ${newArtists.length} Apple Music recommendations`);
+
+      // Cache the results
+      if (newArtists.length > 0) {
+        await db.setCachedArtists(platformUserId, newArtists);
+        console.log('✓ Cached Apple Music recommendations');
+      }
+
+      return res.json({ artists: newArtists, cached: false });
+    }
+
+    // Spotify: Use existing AI-based recommendation logic
     const userSpotifyApi = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,

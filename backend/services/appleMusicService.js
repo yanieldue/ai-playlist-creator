@@ -413,6 +413,104 @@ class AppleMusicService {
       return [];
     }
   }
+
+  /**
+   * Get artist recommendations based on library analysis
+   * Finds similar artists in the catalog that user doesn't already have
+   * @param {string} userToken - User music token
+   * @param {string} storefront - User's storefront (e.g., 'us')
+   * @param {number} limit - Number of recommendations to return (default: 50)
+   */
+  async getRecommendedArtists(userToken, storefront, limit = 50) {
+    try {
+      // Get top artists from user's library
+      console.log('Getting top artists from library for recommendations...');
+      const topArtists = await this.getTopArtistsFromLibrary(userToken, 20);
+
+      if (topArtists.length === 0) {
+        console.log('No artists in library, cannot generate recommendations');
+        return [];
+      }
+
+      // Get all artists from library to filter out duplicates
+      const playlists = await this.getLibraryPlaylists(userToken);
+      const libraryArtists = new Set();
+
+      for (const playlist of playlists) {
+        const tracks = await this.getLibraryPlaylistTracks(userToken, playlist.id);
+        for (const track of tracks) {
+          if (track.artistName) {
+            libraryArtists.add(track.artistName.toLowerCase());
+          }
+        }
+      }
+
+      console.log(`Found ${libraryArtists.size} unique artists in library`);
+
+      // For each top artist, search for similar artists in catalog
+      const recommendations = new Map();
+
+      for (const artist of topArtists.slice(0, 5)) { // Use top 5 artists as seeds
+        try {
+          console.log(`Searching for artists similar to: ${artist.name}`);
+
+          // Search for the artist in catalog to get their genre
+          const searchResults = await this.searchCatalog(artist.name, storefront, ['artists'], 1);
+
+          if (searchResults.artists?.data?.[0]) {
+            const catalogArtist = searchResults.artists.data[0];
+            const genres = catalogArtist.attributes.genreNames || [];
+
+            // Search for artists in the same genre
+            if (genres.length > 0) {
+              const genreQuery = genres[0]; // Use primary genre
+              const genreResults = await this.searchCatalog(genreQuery, storefront, ['artists'], 25);
+
+              if (genreResults.artists?.data) {
+                for (const similarArtist of genreResults.artists.data) {
+                  const artistName = similarArtist.attributes.name;
+                  const artistNameLower = artistName.toLowerCase();
+
+                  // Skip if already in library or already recommended
+                  if (libraryArtists.has(artistNameLower) || recommendations.has(artistNameLower)) {
+                    continue;
+                  }
+
+                  recommendations.set(artistNameLower, {
+                    id: similarArtist.id,
+                    name: artistName,
+                    image: similarArtist.attributes.artwork?.url
+                      ? similarArtist.attributes.artwork.url.replace('{w}', '300').replace('{h}', '300')
+                      : null,
+                    genres: similarArtist.attributes.genreNames || [],
+                    platform: 'apple'
+                  });
+
+                  if (recommendations.size >= limit) {
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          if (recommendations.size >= limit) {
+            break;
+          }
+        } catch (error) {
+          console.error(`Error finding similar artists to ${artist.name}:`, error);
+        }
+      }
+
+      const recommendedArtists = Array.from(recommendations.values());
+      console.log(`Generated ${recommendedArtists.length} artist recommendations`);
+
+      return recommendedArtists;
+    } catch (error) {
+      console.error('Error getting recommended artists:', error);
+      return [];
+    }
+  }
 }
 
 module.exports = AppleMusicService;
