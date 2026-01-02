@@ -294,9 +294,21 @@ const PlaylistGenerator = () => {
       playlistService.getAccountInfo(userEmail)
         .then(accountInfo => {
           if (accountInfo && accountInfo.connectedPlatforms) {
-            console.log('PlaylistGenerator: Fetched connected platforms from backend:', accountInfo.connectedPlatforms);
+            console.log('PlaylistGenerator: Fetched account info from backend:', accountInfo);
             setConnectedPlatforms(accountInfo.connectedPlatforms);
             localStorage.setItem('connectedPlatforms', JSON.stringify(accountInfo.connectedPlatforms));
+
+            // Update platform userIds from backend (source of truth)
+            if (accountInfo.spotifyUserId) {
+              console.log('PlaylistGenerator: Updating spotifyUserId from backend:', accountInfo.spotifyUserId);
+              setSpotifyUserId(accountInfo.spotifyUserId);
+              localStorage.setItem('spotifyUserId', accountInfo.spotifyUserId);
+            }
+            if (accountInfo.appleMusicUserId) {
+              console.log('PlaylistGenerator: Updating appleMusicUserId from backend:', accountInfo.appleMusicUserId);
+              setAppleMusicUserId(accountInfo.appleMusicUserId);
+              localStorage.setItem('appleMusicUserId', accountInfo.appleMusicUserId);
+            }
 
             // Validate localStorage userIds against backend platform status
             const backendPlatforms = accountInfo.connectedPlatforms;
