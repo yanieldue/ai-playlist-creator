@@ -401,14 +401,11 @@ const PlaylistGenerator = () => {
 
       // Reload top artists and new artists with the new active platform
       if (storedUserId) {
+        // Clear data and set flag to refetch
         setTopArtists([]);
         setNewArtists([]);
         setNewArtistsFetched(false);
-        // Trigger refetch
-        setTimeout(() => {
-          fetchTopArtists();
-          fetchNewArtists();
-        }, 100);
+        // Don't call fetch functions here - let the useEffect handle it after state updates
       } else {
         // Clear data when no platforms connected
         setTopArtists([]);
@@ -426,10 +423,8 @@ const PlaylistGenerator = () => {
     if (isAuthenticated && userId && !newArtistsFetched) {
       // Only fetch if we have a platform connected
       if (spotifyUserId || appleMusicUserId) {
-        if (topArtists.length === 0) {
-          fetchTopArtists();
-          fetchUserProfile();
-        }
+        fetchTopArtists();
+        fetchUserProfile();
         fetchNewArtists();
       }
 
