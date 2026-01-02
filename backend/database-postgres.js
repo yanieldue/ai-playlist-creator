@@ -557,12 +557,22 @@ class DatabaseService {
   }
 
   async setPlatformUserId(email, platform, platformUserId) {
-    const column = platform === 'spotify' ? 'spotify_user_id' : 'apple_music_user_id';
-    await pool.query(`
-      INSERT INTO platform_user_ids (email, ${column})
-      VALUES ($1, $2)
-      ON CONFLICT (email) DO UPDATE SET ${column} = $2
-    `, [email, platformUserId]);
+    // Validate platform and build safe query
+    if (platform === 'spotify') {
+      await pool.query(`
+        INSERT INTO platform_user_ids (email, spotify_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT (email) DO UPDATE SET spotify_user_id = $2
+      `, [email, platformUserId]);
+    } else if (platform === 'apple') {
+      await pool.query(`
+        INSERT INTO platform_user_ids (email, apple_music_user_id)
+        VALUES ($1, $2)
+        ON CONFLICT (email) DO UPDATE SET apple_music_user_id = $2
+      `, [email, platformUserId]);
+    } else {
+      throw new Error(`Invalid platform: ${platform}`);
+    }
   }
 
   // Close pool
