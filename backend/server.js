@@ -66,7 +66,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase limit for Apple Music tokens
 
 // Initialize Spotify API
 const spotifyApi = new SpotifyWebApi({
@@ -1305,10 +1305,13 @@ app.get('/api/apple-music/developer-token', (req, res) => {
 
 // Connect Apple Music with user music token from MusicKit JS
 app.post('/api/apple-music/connect', async (req, res) => {
+  console.log('🔵 Apple Music connect endpoint HIT - request received');
+  console.log('Request body keys:', Object.keys(req.body));
+
   try {
     const { userMusicToken, email } = req.body;
 
-    console.log('=== Apple Music Connect Request (v2 - with updatePlatforms fix) ===');
+    console.log('=== Apple Music Connect Request (v3 - with SQL fix) ===');
     console.log('Email:', email);
     console.log('User token length:', userMusicToken?.length);
 
