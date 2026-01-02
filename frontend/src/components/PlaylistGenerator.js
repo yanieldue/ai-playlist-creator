@@ -1878,8 +1878,60 @@ const PlaylistGenerator = () => {
                     </div>
                   </div>
                 ) : (
-                  // User is connected - show Top Artists
+                  // User is connected - show content
                   <>
+                    {/* Show message for Apple Music-only users */}
+                    {appleMusicUserId && !spotifyUserId && (
+                      <div className="horizontal-scroll-section">
+                        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                          <h3 style={{
+                            fontSize: '18px',
+                            color: '#ffffff',
+                            marginBottom: '12px',
+                            fontWeight: '600'
+                          }}>
+                            Apple Music Connected
+                          </h3>
+                          <p style={{
+                            color: '#8e8e93',
+                            fontSize: '14px',
+                            marginBottom: '16px',
+                            lineHeight: '1.6',
+                            maxWidth: '500px',
+                            margin: '0 auto 24px'
+                          }}>
+                            You can now create AI-generated playlists on Apple Music! The "Your Top Artists" and "Artists You Should Explore" features are currently Spotify-only.
+                          </p>
+                          <p style={{
+                            color: '#8e8e93',
+                            fontSize: '14px',
+                            marginBottom: '24px'
+                          }}>
+                            Connect Spotify to unlock personalized artist recommendations.
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('account')}
+                            style={{
+                              background: '#fbbf24',
+                              color: '#78350f',
+                              border: 'none',
+                              borderRadius: '12px',
+                              padding: '12px 24px',
+                              fontSize: '15px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseOver={(e) => e.target.style.background = '#f59e0b'}
+                            onMouseOut={(e) => e.target.style.background = '#fbbf24'}
+                          >
+                            Connect Spotify
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show Top Artists section only if user has Spotify */}
                     {loadingTopArtists ? (
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
