@@ -1875,6 +1875,48 @@ const PlaylistGenerator = () => {
                 ) : (
                   // User is connected - show content
                   <>
+                    {/* Platform Selector - shown when both platforms connected */}
+                    {spotifyUserId && appleMusicUserId && (
+                      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'center' }}>
+                        <div className="platform-selector">
+                          <button
+                            className={`platform-selector-btn ${activePlatform === 'spotify' ? 'active' : ''}`}
+                            onClick={() => {
+                              setActivePlatform('spotify');
+                              localStorage.setItem('activePlatform', 'spotify');
+                              setTopArtists([]);
+                              setNewArtists([]);
+                              setNewArtistsFetched(false);
+                              setTimeout(() => {
+                                fetchTopArtists();
+                                fetchNewArtists();
+                              }, 100);
+                            }}
+                          >
+                            <Icons.Music size={16} />
+                            Spotify
+                          </button>
+                          <button
+                            className={`platform-selector-btn ${activePlatform === 'apple' ? 'active' : ''}`}
+                            onClick={() => {
+                              setActivePlatform('apple');
+                              localStorage.setItem('activePlatform', 'apple');
+                              setTopArtists([]);
+                              setNewArtists([]);
+                              setNewArtistsFetched(false);
+                              setTimeout(() => {
+                                fetchTopArtists();
+                                fetchNewArtists();
+                              }, 100);
+                            }}
+                          >
+                            <Icons.Music size={16} />
+                            Apple Music
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Show Top Artists section */}
                     {loadingTopArtists ? (
                       <div className="horizontal-scroll-section">
