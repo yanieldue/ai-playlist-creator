@@ -11,6 +11,8 @@ const cron = require('node-cron');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
 const { handleCriticalError } = require('./services/errorNotificationService');
+const AppleMusicService = require('./services/appleMusicService');
+const PlatformService = require('./services/platformService');
 
 dotenv.config();
 
@@ -1211,7 +1213,6 @@ app.all('/apple-callback', async (req, res) => {
     const userMusicToken = code;
 
     // Get user's storefront using the developer token and user music token
-    const AppleMusicService = require('./services/appleMusicService');
     const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
     let storefront = 'us'; // Default
@@ -1326,7 +1327,6 @@ app.post('/api/apple-music/connect', async (req, res) => {
     }
 
     // Get user's storefront using the developer token and user music token
-    const AppleMusicService = require('./services/appleMusicService');
     const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
     let storefront = 'us'; // Default
@@ -2068,7 +2068,6 @@ app.post('/api/search', async (req, res) => {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const PlatformService = require('./services/platformService');
     const platformService = new PlatformService();
 
     // Get user's storefront (for Apple Music)
@@ -3395,7 +3394,6 @@ app.post('/api/create-playlist', async (req, res) => {
     console.log(`Creating playlist on ${platform}...`);
 
     // Create playlist using platform service
-    const PlatformService = require('./services/platformService');
     const platformService = new PlatformService();
     const playlistResult = await platformService.createPlaylist(
       platformUserId,
@@ -3692,7 +3690,6 @@ app.get('/api/platform-playlists/:userId', async (req, res) => {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const PlatformService = require('./services/platformService');
     const platformService = new PlatformService();
     const platform = platformService.getPlatform(platformUserId);
 
