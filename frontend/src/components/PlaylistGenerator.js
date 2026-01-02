@@ -418,26 +418,30 @@ const PlaylistGenerator = () => {
     return () => window.removeEventListener('platformsChanged', handlePlatformChange);
   }, []);
 
-  // Fetch top artists and new artists when user is authenticated
+  // Fetch top artists and new artists when user is authenticated or platform changes
   useEffect(() => {
-    if (isAuthenticated && userId && !newArtistsFetched) {
+    if (isAuthenticated && userId) {
       // Only fetch if we have a platform connected
       if (spotifyUserId || appleMusicUserId) {
+        console.log('[useEffect] Fetching artists for platform:', activePlatform);
+        // Always fetch artists when platform changes
         fetchTopArtists();
         fetchUserProfile();
         fetchNewArtists();
       }
 
-      // Check if user has completed the tour
-      const tourCompleted = localStorage.getItem('productTourCompleted');
-      if (!tourCompleted) {
-        // Show tour after a brief delay to let the UI settle
-        setTimeout(() => {
-          setShowProductTour(true);
-        }, 1000);
+      // Check if user has completed the tour (only on initial load)
+      if (!newArtistsFetched) {
+        const tourCompleted = localStorage.getItem('productTourCompleted');
+        if (!tourCompleted) {
+          // Show tour after a brief delay to let the UI settle
+          setTimeout(() => {
+            setShowProductTour(true);
+          }, 1000);
+        }
       }
     }
-  }, [isAuthenticated, userId, spotifyUserId, appleMusicUserId]);
+  }, [isAuthenticated, userId, spotifyUserId, appleMusicUserId, activePlatform]);
 
   // Load draft playlists when user is authenticated
   useEffect(() => {
@@ -1882,15 +1886,12 @@ const PlaylistGenerator = () => {
                           <button
                             className={`platform-selector-btn ${activePlatform === 'spotify' ? 'active' : ''}`}
                             onClick={() => {
+                              console.log('Switching to Spotify');
                               setActivePlatform('spotify');
                               localStorage.setItem('activePlatform', 'spotify');
                               setTopArtists([]);
                               setNewArtists([]);
                               setNewArtistsFetched(false);
-                              setTimeout(() => {
-                                fetchTopArtists();
-                                fetchNewArtists();
-                              }, 100);
                             }}
                           >
                             <Icons.Music size={16} />
@@ -1899,15 +1900,12 @@ const PlaylistGenerator = () => {
                           <button
                             className={`platform-selector-btn ${activePlatform === 'apple' ? 'active' : ''}`}
                             onClick={() => {
+                              console.log('Switching to Apple Music');
                               setActivePlatform('apple');
                               localStorage.setItem('activePlatform', 'apple');
                               setTopArtists([]);
                               setNewArtists([]);
                               setNewArtistsFetched(false);
-                              setTimeout(() => {
-                                fetchTopArtists();
-                                fetchNewArtists();
-                              }, 100);
                             }}
                           >
                             <Icons.Music size={16} />
