@@ -1334,6 +1334,7 @@ app.post('/api/apple-music/connect', async (req, res) => {
     // Generate developer token
     let appleMusicDevToken;
     try {
+      console.log('Step 1: Generating developer token...');
       appleMusicDevToken = generateAppleMusicToken();
       console.log('Developer token generated successfully');
     } catch (tokenError) {
@@ -1342,14 +1343,24 @@ app.post('/api/apple-music/connect', async (req, res) => {
     }
 
     if (!appleMusicDevToken) {
+      console.error('Developer token is null/undefined');
       return res.status(500).json({ error: 'Failed to generate Apple Music developer token' });
     }
 
     // Get user's storefront using the developer token and user music token
-    const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+    console.log('Step 2: Creating AppleMusicService instance...');
+    let appleMusicApi;
+    try {
+      appleMusicApi = new AppleMusicService(appleMusicDevToken);
+      console.log('AppleMusicService instance created successfully');
+    } catch (serviceError) {
+      console.error('Error creating AppleMusicService instance:', serviceError);
+      return res.status(500).json({ error: 'Failed to create Apple Music service', details: serviceError.message });
+    }
 
     let storefront = 'us'; // Default
     try {
+      console.log('Step 3: Getting user storefront...');
       storefront = await appleMusicApi.getUserStorefront(userMusicToken);
       console.log('User storefront:', storefront);
     } catch (storefrontError) {
@@ -1358,9 +1369,12 @@ app.post('/api/apple-music/connect', async (req, res) => {
     }
 
     // Create platform-specific user ID for Apple Music
+    console.log('Step 4: Creating platform user ID...');
     const appleMusicPlatformUserId = `apple_music_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    console.log('Platform user ID:', appleMusicPlatformUserId);
 
     // Store tokens in database (keyed by platform userId for API calls)
+    console.log('Step 5: Storing tokens in database...');
     const tokenData = {
       access_token: userMusicToken,
       user_music_token: userMusicToken,
@@ -1371,50 +1385,62 @@ app.post('/api/apple-music/connect', async (req, res) => {
       authorized_at: new Date().toISOString()
     };
 
-    userTokens.set(appleMusicPlatformUserId, tokenData);
-    await db.setToken(appleMusicPlatformUserId, tokenData);
+    try {
+      userTokens.set(appleMusicPlatformUserId, tokenData);
+      await db.setToken(appleMusicPlatformUserId, tokenData);
+      console.log('Tokens stored successfully');
+    } catch (dbError) {
+      console.error('Error storing tokens:', dbError);
+      return res.status(500).json({ error: 'Failed to store tokens', details: dbError.message });
+    }
 
     console.log('Apple Music tokens saved to database:', appleMusicPlatformUserId);
     console.log('Storefront:', storefront);
 
     // Update the user record in registeredUsers
-    if (email && registeredUsers.has(email)) {
-      const user = registeredUsers.get(email);
-      // Keep userId as email (platform-independent)
-      if (!user.userId) {
-        user.userId = email;
+    console.log('Step 6: Updating user record...');
+    try {
+      if (email && registeredUsers.has(email)) {
+        const user = registeredUsers.get(email);
+        // Keep userId as email (platform-independent)
+        if (!user.userId) {
+          user.userId = email;
+        }
+        user.connectedPlatforms = user.connectedPlatforms || {};
+        user.connectedPlatforms.apple = true;
+        registeredUsers.set(email, user);
+        saveUsers();
+
+        // Store platform user ID separately in database
+        await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
+        await db.updateUserId(email, email);
+        await db.updatePlatforms(email, user.connectedPlatforms);
+
+        console.log('Updated user record for:', email, 'userId:', email);
+      } else if (email) {
+        console.warn('User email not found in registered users:', email);
+
+        // Create user if doesn't exist
+        console.log('Creating new user in database...');
+        const tempPassword = `apple_music_${Date.now()}`;
+        await db.createUser(email, tempPassword, 'apple_music', email);
+        await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
+        await db.updatePlatforms(email, { spotify: false, apple: true });
+
+        // Add to in-memory cache
+        registeredUsers.set(email, {
+          email: email,
+          password: tempPassword,
+          platform: 'apple_music',
+          userId: email,
+          connectedPlatforms: { spotify: false, apple: true }
+        });
+        saveUsers();
+        console.log('Created new user:', email);
       }
-      user.connectedPlatforms = user.connectedPlatforms || {};
-      user.connectedPlatforms.apple = true;
-      registeredUsers.set(email, user);
-      saveUsers();
-
-      // Store platform user ID separately in database
-      await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
-      await db.updateUserId(email, email);
-      await db.updatePlatforms(email, user.connectedPlatforms);
-
-      console.log('Updated user record for:', email, 'userId:', email);
-    } else if (email) {
-      console.warn('User email not found in registered users:', email);
-
-      // Create user if doesn't exist
-      console.log('Creating new user in database...');
-      const tempPassword = `apple_music_${Date.now()}`;
-      await db.createUser(email, tempPassword, 'apple_music', email);
-      await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
-      await db.updatePlatforms(email, { spotify: false, apple: true });
-
-      // Add to in-memory cache
-      registeredUsers.set(email, {
-        email: email,
-        password: tempPassword,
-        platform: 'apple_music',
-        userId: email,
-        connectedPlatforms: { spotify: false, apple: true }
-      });
-      saveUsers();
-      console.log('Created new user:', email);
+    } catch (userUpdateError) {
+      console.error('Error updating user record:', userUpdateError);
+      return res.status(500).json({ error: 'Failed to update user record', details: userUpdateError.message });
     }
 
     // Return success with email-based userId (not platform-specific)
