@@ -1849,8 +1849,8 @@ const PlaylistGenerator = () => {
                       <button
                         onClick={() => setActiveTab('account')}
                         style={{
-                          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                          color: '#ffffff',
+                          background: '#fbbf24',
+                          color: '#78350f',
                           border: 'none',
                           borderRadius: '12px',
                           padding: '12px 24px',
@@ -1859,8 +1859,8 @@ const PlaylistGenerator = () => {
                           cursor: 'pointer',
                           transition: 'all 0.2s ease'
                         }}
-                        onMouseOver={(e) => e.target.style.background = 'linear-gradient(135deg, #00f2fe 0%, #0dd9ff 100%)'}
-                        onMouseOut={(e) => e.target.style.background = 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}
+                        onMouseOver={(e) => e.target.style.background = '#f59e0b'}
+                        onMouseOut={(e) => e.target.style.background = '#fbbf24'}
                       >
                         Connect a Platform
                       </button>
