@@ -1273,6 +1273,10 @@ app.all('/apple-callback', async (req, res) => {
       saveUsers();
       console.log('Updated user record for:', userEmail);
 
+      // Save platform userId mapping in database
+      await db.setPlatformUserId(userEmail, 'apple', userId);
+      console.log('Saved Apple Music platform userId for:', userEmail);
+
       // Also update connected_platforms in database
       await db.updatePlatforms(userEmail, {
         spotify: user.connectedPlatforms.spotify || false,
@@ -1283,7 +1287,8 @@ app.all('/apple-callback', async (req, res) => {
     }
 
     // Redirect back to frontend with userId, email, and success flag
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&apple=connected`;
+    // Use appleMusicUserId parameter so frontend knows to store it
+    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userEmail}&appleMusicUserId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&apple=connected`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {
