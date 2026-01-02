@@ -1543,8 +1543,8 @@ app.get('/api/top-artists/:userId', async (req, res) => {
         console.log('Token refresh failed or not needed:', refreshError.message);
       }
 
-      // Get top 10 artists from the last 3 months
-      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
+      // Get top 10 artists from the last 4 weeks
+      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'short_term' });
 
       topArtists = topArtistsData.body.items.map(artist => ({
         id: artist.id,
@@ -1704,8 +1704,8 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       console.log('Token refresh failed or not needed:', refreshError.message);
     }
 
-    // Get top 10 artists
-    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'medium_term' });
+    // Get top 10 artists from the last 4 weeks
+    const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 10, time_range: 'short_term' });
 
     if (!topArtistsData.body.items || topArtistsData.body.items.length === 0) {
       console.log('No top artists found for user');
