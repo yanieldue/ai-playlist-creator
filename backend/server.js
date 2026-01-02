@@ -2068,6 +2068,15 @@ app.post('/api/search', async (req, res) => {
       return res.status(400).json({ error: 'Query is required' });
     }
 
+    // Check if PlatformService loaded successfully
+    if (!PlatformService) {
+      console.error('PlatformService not available - service failed to load at startup');
+      return res.status(500).json({
+        error: 'Platform service is not available',
+        details: 'The service failed to load. Please contact support.'
+      });
+    }
+
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
     if (isEmailBasedUserId(userId)) {
@@ -3379,6 +3388,15 @@ app.post('/api/create-playlist', async (req, res) => {
       isPublic
     });
 
+    // Check if PlatformService loaded successfully
+    if (!PlatformService) {
+      console.error('PlatformService not available - service failed to load at startup');
+      return res.status(500).json({
+        error: 'Platform service is not available',
+        details: 'The service failed to load. Please contact support.'
+      });
+    }
+
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
     let platform = null;
@@ -3399,7 +3417,6 @@ app.post('/api/create-playlist', async (req, res) => {
       }
     } else {
       // For old platform-specific userIds, detect platform from prefix
-      const PlatformService = require('./services/platformService');
       const platformService = new PlatformService();
       platform = platformService.getPlatform(platformUserId);
     }
@@ -3689,6 +3706,15 @@ app.get('/api/playlists/:userId', async (req, res) => {
 app.get('/api/platform-playlists/:userId', async (req, res) => {
   try {
     let { userId } = req.params;
+
+    // Check if PlatformService loaded successfully
+    if (!PlatformService) {
+      console.error('PlatformService not available - service failed to load at startup');
+      return res.status(500).json({
+        error: 'Platform service is not available',
+        details: 'The service failed to load. Please contact support.'
+      });
+    }
 
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
