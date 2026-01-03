@@ -113,19 +113,10 @@ const Account = ({ onBack, showToast }) => {
       }
 
       // Get current platforms from localStorage to preserve other platform connections
-      const storedPlatforms = localStorage.getItem('connectedPlatforms');
-      let currentPlatforms = { spotify: false, apple: false };
-      if (storedPlatforms) {
-        try {
-          currentPlatforms = JSON.parse(storedPlatforms);
-        } catch (e) {
-          console.error('Error parsing stored platforms:', e);
-        }
-      }
-
+      // When connecting Spotify, disconnect Apple Music
       const updatedPlatforms = {
-        ...currentPlatforms,
-        spotify: true
+        spotify: true,
+        apple: false  // Disconnect Apple Music when connecting Spotify
       };
       console.log('Updated platforms:', updatedPlatforms);
       setConnectedPlatforms(updatedPlatforms);
@@ -329,7 +320,7 @@ const Account = ({ onBack, showToast }) => {
           }
 
           const updatedPlatforms = {
-            ...connectedPlatforms,
+            spotify: false,  // Disconnect Spotify when connecting Apple Music
             apple: true
           };
           setConnectedPlatforms(updatedPlatforms);
