@@ -13,6 +13,22 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   const [isConnecting, setIsConnecting] = useState(null); // 'spotify' or 'apple' while connecting
 
   useEffect(() => {
+    const fetchConnectedPlatforms = async () => {
+      // Get email from props or localStorage
+      const userEmail = email || localStorage.getItem('userEmail');
+
+      if (userEmail) {
+        try {
+          // Fetch user's current connected platforms from backend
+          const platforms = await playlistService.getConnectedPlatforms(userEmail);
+          console.log('PlatformSelection: Fetched connected platforms:', platforms);
+          setConnectedPlatforms(platforms);
+        } catch (err) {
+          console.error('PlatformSelection: Error fetching connected platforms:', err);
+        }
+      }
+    };
+
     // Check if we're coming back from OAuth
     const urlParams = new URLSearchParams(window.location.search);
     const userIdParam = urlParams.get('userId');
@@ -23,10 +39,10 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
 
     if (spotifyConnected) {
       console.log('PlatformSelection: Spotify OAuth completed');
-      setConnectedPlatforms(prev => ({
-        ...prev,
-        spotify: true
-      }));
+      setConnectedPlatforms({
+        spotify: true,
+        apple: false // Disconnect Apple Music when Spotify connects
+      });
 
       // Store userId from OAuth callback
       if (userIdParam) {
@@ -43,14 +59,12 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
 
       // Clean up URL
       window.history.replaceState({}, document.title, '/platform-selection');
-    }
-
-    if (appleConnected) {
+    } else if (appleConnected) {
       console.log('PlatformSelection: Apple Music OAuth completed');
-      setConnectedPlatforms(prev => ({
-        ...prev,
+      setConnectedPlatforms({
+        spotify: false, // Disconnect Spotify when Apple Music connects
         apple: true
-      }));
+      });
 
       // Store userId from OAuth callback
       if (userIdParam) {
@@ -67,10 +81,25 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
 
       // Clean up URL
       window.history.replaceState({}, document.title, '/platform-selection');
+    } else {
+      // Not coming back from OAuth, fetch current platforms
+      fetchConnectedPlatforms();
     }
-  }, []);
+  }, [email]);
 
   const handleConnectSpotify = async () => {
+    // Check if Apple Music is already connected
+    if (connectedPlatforms.apple) {
+      const confirmed = window.confirm(
+        'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible. Do you want to continue?'
+      );
+      if (!confirmed) {
+        return;
+      }
+      // Clear Apple Music data from localStorage
+      localStorage.removeItem('appleMusicUserId');
+    }
+
     setIsConnecting('spotify');
     setError('');
 
@@ -93,6 +122,18 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   };
 
   const handleConnectApple = async () => {
+    // Check if Spotify is already connected
+    if (connectedPlatforms.spotify) {
+      const confirmed = window.confirm(
+        'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible. Do you want to continue?'
+      );
+      if (!confirmed) {
+        return;
+      }
+      // Clear Spotify data from localStorage
+      localStorage.removeItem('spotifyUserId');
+    }
+
     setIsConnecting('apple');
     setError('');
 
@@ -225,6 +266,14 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
               <button className="platform-button connected" disabled>
                 ✓ Connected
               </button>
+            ) : connectedPlatforms.apple ? (
+              <button
+                className="platform-button spotify-button"
+                onClick={handleConnectSpotify}
+                disabled={isConnecting === 'spotify' || loading}
+              >
+                {isConnecting === 'spotify' ? 'Connecting...' : 'Switch to Spotify'}
+              </button>
             ) : (
               <button
                 className="platform-button spotify-button"
@@ -248,6 +297,14 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
               <button className="platform-button connected" disabled>
                 ✓ Connected
               </button>
+            ) : connectedPlatforms.spotify ? (
+              <button
+                className="platform-button apple-button"
+                onClick={handleConnectApple}
+                disabled={isConnecting === 'apple' || loading}
+              >
+                {isConnecting === 'apple' ? 'Connecting...' : 'Switch to Apple Music'}
+              </button>
             ) : (
               <button
                 className="platform-button apple-button"
@@ -262,30 +319,18 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
 
         <div className="platform-selection-actions">
           {connectedPlatforms.spotify || connectedPlatforms.apple ? (
-            <>
-              <button
-                className="platform-selection-primary-button"
-                onClick={handleFinishSignup}
-                disabled={loading}
-              >
-                {loading ? 'Completing Signup...' : 'Finish Signup'}
-              </button>
-              <button
-                className="platform-selection-secondary-button"
-                onClick={() => {
-                  // Show platform selection again after coming back from OAuth
-                  // This allows connecting another platform
-                  window.history.replaceState({}, document.title, '/platform-selection');
-                }}
-              >
-                Connect Another Platform
-              </button>
-            </>
+            <button
+              className="platform-selection-primary-button"
+              onClick={handleFinishSignup}
+              disabled={loading}
+            >
+              {loading ? 'Completing Signup...' : 'Finish Signup'}
+            </button>
           ) : null}
         </div>
 
         <p className="platform-selection-note">
-          You must connect at least one platform to create your account
+          You must connect one platform to create your account. Connecting a platform will disconnect any previously connected platform.
         </p>
       </div>
     </div>

@@ -320,6 +320,11 @@ export const playlistService = {
     return response.data;
   },
 
+  getConnectedPlatforms: async (email) => {
+    const response = await api.get(`/api/account/platforms?email=${encodeURIComponent(email)}`);
+    return response.data;
+  },
+
   // Create user account (for users who skip platform selection)
   createUserAccount: async (email) => {
     const response = await api.post('/api/account/create', {

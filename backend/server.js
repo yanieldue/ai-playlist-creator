@@ -965,6 +965,33 @@ app.put('/api/account/platform', async (req, res) => {
 });
 
 // Update multiple music platforms
+app.get('/api/account/platforms', async (req, res) => {
+  try {
+    const { email } = req.query;
+    console.log('Get platforms request - Email:', email);
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = registeredUsers.get(normalizedEmail);
+
+    if (!user) {
+      console.error('User not found in registeredUsers. Email:', normalizedEmail);
+      return res.status(404).json({ error: 'User not found', email: normalizedEmail });
+    }
+
+    // Return connected platforms
+    const platforms = user.connectedPlatforms || { spotify: false, apple: false };
+    console.log('Returning platforms for', normalizedEmail, ':', platforms);
+    res.json(platforms);
+  } catch (error) {
+    console.error('Error getting platforms:', error);
+    res.status(500).json({ error: 'Failed to get platforms', details: error.message });
+  }
+});
+
 app.put('/api/account/platforms', async (req, res) => {
   try {
     const { email, platforms } = req.body;
@@ -1152,6 +1179,20 @@ app.get('/callback', async (req, res) => {
         user.userId = userEmail;
       }
       user.connectedPlatforms = user.connectedPlatforms || {};
+
+      // Disconnect Apple Music if it was previously connected
+      if (user.connectedPlatforms.apple) {
+        console.log('Disconnecting Apple Music for:', userEmail);
+        user.connectedPlatforms.apple = false;
+
+        // Get and delete Apple Music platform user ID
+        const platformUserIds = await db.getPlatformUserIds(userEmail);
+        if (platformUserIds && platformUserIds.apple_music_user_id) {
+          await db.deleteToken(platformUserIds.apple_music_user_id);
+          console.log('Deleted Apple Music token for:', platformUserIds.apple_music_user_id);
+        }
+      }
+
       user.connectedPlatforms.spotify = true;
       registeredUsers.set(userEmail, user);
       saveUsers();
@@ -1272,6 +1313,20 @@ app.all('/apple-callback', async (req, res) => {
       const user = registeredUsers.get(userEmail);
       user.appleMusicUserId = userId;
       user.connectedPlatforms = user.connectedPlatforms || {};
+
+      // Disconnect Spotify if it was previously connected
+      if (user.connectedPlatforms.spotify) {
+        console.log('Disconnecting Spotify for:', userEmail);
+        user.connectedPlatforms.spotify = false;
+
+        // Get and delete Spotify platform user ID
+        const platformUserIds = await db.getPlatformUserIds(userEmail);
+        if (platformUserIds && platformUserIds.spotify_user_id) {
+          await db.deleteToken(platformUserIds.spotify_user_id);
+          console.log('Deleted Spotify token for:', platformUserIds.spotify_user_id);
+        }
+      }
+
       user.connectedPlatforms.apple = true;
       registeredUsers.set(userEmail, user);
       saveUsers();
@@ -1283,7 +1338,7 @@ app.all('/apple-callback', async (req, res) => {
 
       // Also update connected_platforms in database
       await db.updatePlatforms(userEmail, {
-        spotify: user.connectedPlatforms.spotify || false,
+        spotify: false,
         apple: true
       });
     } else if (userEmail) {
@@ -1429,6 +1484,20 @@ app.post('/api/apple-music/connect', async (req, res) => {
           user.userId = email;
         }
         user.connectedPlatforms = user.connectedPlatforms || {};
+
+        // Disconnect Spotify if it was previously connected
+        if (user.connectedPlatforms.spotify) {
+          console.log('Disconnecting Spotify for:', email);
+          user.connectedPlatforms.spotify = false;
+
+          // Get and delete Spotify platform user ID
+          const platformUserIds = await db.getPlatformUserIds(email);
+          if (platformUserIds && platformUserIds.spotify_user_id) {
+            await db.deleteToken(platformUserIds.spotify_user_id);
+            console.log('Deleted Spotify token for:', platformUserIds.spotify_user_id);
+          }
+        }
+
         user.connectedPlatforms.apple = true;
         registeredUsers.set(email, user);
         saveUsers();
@@ -1436,7 +1505,7 @@ app.post('/api/apple-music/connect', async (req, res) => {
         // Store platform user ID separately in database
         await db.setPlatformUserId(email, 'apple', appleMusicPlatformUserId);
         await db.updateUserId(email, email);
-        await db.updatePlatforms(email, user.connectedPlatforms);
+        await db.updatePlatforms(email, { spotify: false, apple: true });
 
         console.log('Updated user record for:', email, 'userId:', email);
       } else if (email) {
