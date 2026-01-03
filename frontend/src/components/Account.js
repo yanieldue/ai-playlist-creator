@@ -249,8 +249,21 @@ const Account = ({ onBack, showToast }) => {
         const platformName = platform === 'spotify' ? 'Spotify' : 'Apple Music';
         toast(`${platformName} disconnected successfully`, 'success');
       } else {
-        // If connecting, trigger OAuth flow
+        // If connecting, check if another platform is already connected and warn
         if (platform === 'spotify') {
+          // Check if Apple Music is already connected
+          if (connectedPlatforms.apple) {
+            const confirmed = window.confirm(
+              'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible. Do you want to continue?'
+            );
+            if (!confirmed) {
+              setAccountLoading(false);
+              return;
+            }
+            // Clear Apple Music data from localStorage
+            localStorage.removeItem('appleMusicUserId');
+          }
+
           // Always get fresh email from localStorage (don't rely on state)
           const emailToUse = localStorage.getItem('userEmail');
           if (!emailToUse) {
@@ -266,6 +279,19 @@ const Account = ({ onBack, showToast }) => {
           console.log('Redirecting to:', response.url);
           window.location.href = response.url;
         } else if (platform === 'apple') {
+          // Check if Spotify is already connected
+          if (connectedPlatforms.spotify) {
+            const confirmed = window.confirm(
+              'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible. Do you want to continue?'
+            );
+            if (!confirmed) {
+              setAccountLoading(false);
+              return;
+            }
+            // Clear Spotify data from localStorage
+            localStorage.removeItem('spotifyUserId');
+          }
+
           // Use MusicKit JS for Apple Music authentication
           const emailToUse = localStorage.getItem('userEmail');
           if (!emailToUse) {
