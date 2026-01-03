@@ -235,13 +235,19 @@ const Account = ({ onBack, showToast }) => {
           }
         }
 
-        // Check if both platforms are now disconnected - if so, clear all auth state
+        // Check if both platforms are now disconnected - clear platform-specific data but keep user logged in
         if (!updatedPlatforms.spotify && !updatedPlatforms.apple) {
-          console.log('All platforms disconnected - clearing auth state');
-          localStorage.removeItem('userId');
+          console.log('All platforms disconnected - clearing platform-specific data');
+          // Keep userEmail to maintain login state
+          // Only clear platform-specific userIds and activePlatform
           localStorage.removeItem('spotifyUserId');
           localStorage.removeItem('appleMusicUserId');
           localStorage.removeItem('activePlatform');
+          // Set userId back to email to maintain authentication
+          const userEmail = localStorage.getItem('userEmail');
+          if (userEmail) {
+            localStorage.setItem('userId', userEmail);
+          }
         }
 
         // Dispatch custom event to notify other components of platform changes
