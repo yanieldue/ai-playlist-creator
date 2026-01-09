@@ -907,13 +907,26 @@ const PlaylistGenerator = () => {
       // Auto-save draft to database for cross-device sync (only once per generation)
       if (retryCount === 0) {
         try {
-          console.log('Saving draft to database...');
-          const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
+          // Determine which platform userId to use
+          let platformUserId = userId;
+          if (activePlatform === 'spotify' && spotifyUserId) {
+            platformUserId = spotifyUserId;
+          } else if (activePlatform === 'apple' && appleMusicUserId) {
+            platformUserId = appleMusicUserId;
+          } else if (spotifyUserId) {
+            platformUserId = spotifyUserId;
+          } else if (appleMusicUserId) {
+            platformUserId = appleMusicUserId;
+          }
+
+          console.log('Saving draft to database for userId:', platformUserId, 'activePlatform:', activePlatform);
+          const draftResponse = await playlistService.saveDraft(platformUserId, playlistWithPrompt);
           // Store the draftId so we can delete it later
           playlistWithPrompt.draftId = draftResponse.draftId;
           console.log('Draft saved successfully with ID:', draftResponse.draftId);
         } catch (draftError) {
           console.error('Failed to save draft:', draftError);
+          console.error('Draft error details:', draftError.response?.data || draftError.message);
           // Don't block the user if draft save fails
         }
       }
