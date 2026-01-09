@@ -3384,7 +3384,13 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
       isSingleArtistPlaylist // Greatest hits/best of also counts
     );
 
-    const trackSelectionPrompt = `From the following list of songs, select ${isSingleArtistPlaylist || hasSpecificArtists ? 'UP TO' : 'the'} ${songCount} BEST songs that match this playlist theme: "${prompt}"
+    // Request more songs than target to account for vibe check filtering
+    // Vibe check typically removes 10-20% of songs that don't fit the atmosphere
+    const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre;
+    const selectionTarget = hasVibeRequirements ? Math.ceil(songCount * 1.2) : songCount; // Request 20% more if vibe check will run
+    console.log(`Selection target: ${selectionTarget} songs (${songCount} requested, ${hasVibeRequirements ? 'will run vibe check' : 'no vibe check'})`);
+
+    const trackSelectionPrompt = `From the following list of songs, select ${isSingleArtistPlaylist || hasSpecificArtists ? 'UP TO' : 'approximately'} ${selectionTarget} BEST songs that match this playlist theme: "${prompt}"
 
 PLAYLIST REQUIREMENTS:
 
@@ -3437,7 +3443,7 @@ ${tracksForSelection.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist} (Album:
 
 Respond ONLY with a JSON array of the indices (1-based) of the songs you select.
 
-TARGET: Select as close to ${songCount} songs as possible. If the pool has enough quality tracks, aim for exactly ${songCount} songs.
+TARGET: Select as close to ${selectionTarget} songs as possible. If the pool has enough quality tracks, aim for exactly ${selectionTarget} songs.
 
 Select songs that:
 ${isSingleArtistPlaylist || hasSpecificArtists
@@ -3446,14 +3452,14 @@ ${isSingleArtistPlaylist || hasSpecificArtists
 - For example, if the prompt says "Justin Bieber and One Direction", ONLY select songs where the artist is "Justin Bieber" or "One Direction"
 - DO NOT include songs by related or similar artists (e.g., no Harry Styles if only One Direction is requested, no Ariana Grande if only Justin Bieber is requested)
 - STRICTLY filter by artist name - the artist field MUST exactly match one of the requested artists
-- Aim for exactly ${songCount} songs if available from the specified artists`
+- Aim for exactly ${selectionTarget} songs if available from the specified artists`
   : `- STRICTLY match the genre and style indicated in the playlist prompt
 - Provide good variety in artists and tempo
 - Have strong thematic coherence with the playlist`}
 - Are high quality and well-known tracks
 - AVOID selecting multiple versions of the same song (e.g., don't include both "Song Title" and "Song Title - Live Version" or "Song Title - A COLORS SHOW")
 
-IMPORTANT: Prioritize reaching the target of ${songCount} songs while maintaining quality. Only select fewer songs if there genuinely aren't enough quality matches in the pool.
+IMPORTANT: Prioritize reaching the target of ${selectionTarget} songs while maintaining quality. Only select fewer songs if there genuinely aren't enough quality matches in the pool.
 
 ${isSingleArtistPlaylist || hasSpecificArtists
   ? `CRITICAL: This is a specific-artist playlist. ONLY select songs where the artist name EXACTLY matches one of the artists mentioned in the prompt: "${prompt}". DO NOT include similar artists, related artists, or artists from the same genre. Be extremely strict about artist matching.`
@@ -3550,11 +3556,37 @@ DO NOT include any text outside the JSON.`;
           });
 
           // Filter to only keep tracks that passed the vibe check
-          selectedTracks = vibeCheckData.keepIndices
+          const tracksAfterVibeCheck = vibeCheckData.keepIndices
             .map(index => selectedTracks[index - 1])
             .filter(track => track !== undefined);
 
-          console.log(`After vibe check: ${selectedTracks.length} tracks remain (curated selection only)`);
+          console.log(`After vibe check: ${tracksAfterVibeCheck.length} tracks remain (removed ${selectedTracks.length - tracksAfterVibeCheck.length} tracks)`);
+
+          // Trim to target songCount if we have more than needed
+          if (tracksAfterVibeCheck.length > songCount) {
+            selectedTracks = tracksAfterVibeCheck.slice(0, songCount);
+            console.log(`Trimmed to target count: ${selectedTracks.length} songs (${tracksAfterVibeCheck.length - selectedTracks.length} extra removed)`);
+          } else if (tracksAfterVibeCheck.length < songCount) {
+            // If still below target after vibe check, try to backfill from remaining pool
+            console.log(`Below target count (${tracksAfterVibeCheck.length}/${songCount}), attempting to backfill from remaining tracks...`);
+
+            const selectedTrackIds = new Set(tracksAfterVibeCheck.map(t => t.id));
+            const remainingTracks = tracksForSelection.filter(t => !selectedTrackIds.has(t.id));
+
+            if (remainingTracks.length > 0) {
+              const neededCount = songCount - tracksAfterVibeCheck.length;
+              console.log(`Need ${neededCount} more tracks, ${remainingTracks.length} available in pool`);
+
+              const backfillTracks = remainingTracks.slice(0, neededCount);
+              tracksAfterVibeCheck.push(...backfillTracks);
+              console.log(`Backfilled ${backfillTracks.length} tracks to reach ${tracksAfterVibeCheck.length} total`);
+            }
+
+            selectedTracks = tracksAfterVibeCheck;
+          } else {
+            // Exactly at target
+            selectedTracks = tracksAfterVibeCheck;
+          }
         } else {
           console.log('Vibe check passed - all tracks fit the intended atmosphere');
         }
