@@ -132,7 +132,7 @@ const Account = ({ onBack, showToast }) => {
       // Use setTimeout to ensure localStorage updates are complete before event is processed
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-      }, 100);
+      }, 200);
       toast('Spotify connected successfully!', 'success');
     } else {
       // Fetch platform status from backend (only if not handling OAuth callback)
@@ -318,6 +318,12 @@ const Account = ({ onBack, showToast }) => {
           console.log('Apple Music connected successfully:', result);
 
           // Step 5: Update state and localStorage
+          // First, clear Spotify data if switching from Spotify
+          if (connectedPlatforms.spotify) {
+            localStorage.removeItem('spotifyUserId');
+            console.log('Cleared spotifyUserId when switching to Apple Music');
+          }
+
           if (result.userId) {
             localStorage.setItem('appleMusicUserId', result.userId);
             localStorage.setItem('userId', result.userId);
@@ -335,7 +341,7 @@ const Account = ({ onBack, showToast }) => {
           // Use setTimeout to ensure localStorage updates are complete before event is processed
           setTimeout(() => {
             window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-          }, 100);
+          }, 200);
 
           setAccountError('');
           setAccountLoading(false);
