@@ -2430,6 +2430,18 @@ app.post('/api/generate-playlist', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    // Extract song count from prompt if user specified it
+    // Look for patterns like "30 songs", "create 25 tracks", "give me 20 songs", etc.
+    const songCountMatch = prompt.match(/\b(\d+)\s+(?:songs?|tracks?)\b/i);
+    if (songCountMatch) {
+      const extractedCount = parseInt(songCountMatch[1], 10);
+      // Only override if it's a reasonable number (between 5 and 100)
+      if (extractedCount >= 5 && extractedCount <= 100) {
+        songCount = extractedCount;
+        console.log(`Extracted song count from prompt: ${songCount}`);
+      }
+    }
+
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
     if (isEmailBasedUserId(userId)) {
