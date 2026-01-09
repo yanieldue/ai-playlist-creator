@@ -121,13 +121,18 @@ const Account = ({ onBack, showToast }) => {
       console.log('Updated platforms:', updatedPlatforms);
       setConnectedPlatforms(updatedPlatforms);
       localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
+      // Clear Apple Music userId when switching to Spotify
+      localStorage.removeItem('appleMusicUserId');
       // Update the backend
       playlistService.updatePlatforms(userEmail, updatedPlatforms).catch(err => console.error('Error updating platforms:', err));
       // Clear the flags
       localStorage.removeItem('spotifyOAuthCompleted');
       localStorage.removeItem('connectingFromAccount');
       // Dispatch custom event to notify other components of platform changes
-      window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+      // Use setTimeout to ensure localStorage updates are complete before event is processed
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+      }, 100);
       toast('Spotify connected successfully!', 'success');
     } else {
       // Fetch platform status from backend (only if not handling OAuth callback)
@@ -327,7 +332,10 @@ const Account = ({ onBack, showToast }) => {
           localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
 
           // Dispatch custom event to notify other components of platform changes
-          window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+          // Use setTimeout to ensure localStorage updates are complete before event is processed
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+          }, 100);
 
           setAccountError('');
           setAccountLoading(false);
