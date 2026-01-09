@@ -234,13 +234,19 @@ export const playlistService = {
     return response.data;
   },
 
+  // Get playlists from user's connected platform (Spotify or Apple Music)
+  getPlatformPlaylists: async (userId) => {
+    const response = await api.get(`/api/platform-playlists/${userId}`);
+    return response.data;
+  },
+
   // Legacy Spotify playlists (kept for backward compatibility)
   getSpotifyPlaylists: async (userId) => {
     const response = await api.get(`/api/spotify-playlists/${userId}`);
     return response.data;
   },
 
-  // Import a Spotify playlist
+  // Import a playlist from user's connected platform
   importPlaylist: async (userId, playlistId) => {
     const response = await api.post('/api/import-playlist', {
       userId,

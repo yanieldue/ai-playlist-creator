@@ -31,9 +31,10 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   const [editingPlaylistId, setEditingPlaylistId] = useState(null);
   const [selectedTracksToRemove, setSelectedTracksToRemove] = useState(new Set());
   const [showImportModal, setShowImportModal] = useState(false);
-  const [spotifyPlaylists, setSpotifyPlaylists] = useState([]);
-  const [loadingSpotifyPlaylists, setLoadingSpotifyPlaylists] = useState(false);
+  const [platformPlaylists, setPlatformPlaylists] = useState([]);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
   const [tempUpdateFrequency, setTempUpdateFrequency] = useState('never');
   const [tempUpdateMode, setTempUpdateMode] = useState('append');
   const [tempIsPublic, setTempIsPublic] = useState(true);
@@ -365,31 +366,37 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
 
   const openImportModal = async () => {
     setShowImportModal(true);
-    setLoadingSpotifyPlaylists(true);
+    setLoadingPlaylists(true);
     setError('');
 
     try {
-      const data = await playlistService.getSpotifyPlaylists(userId);
+      const data = await playlistService.getPlatformPlaylists(userId);
+      console.log('Platform playlists data:', data);
+
+      // Store which platform we're importing from
+      setActivePlatform(data.platform);
+
       // Filter out playlists that are already imported
       const importedPlaylistIds = playlists.map(p => p.playlistId);
       const availablePlaylists = data.playlists.filter(
         p => !importedPlaylistIds.includes(p.id)
       );
-      setSpotifyPlaylists(availablePlaylists);
+      setPlatformPlaylists(availablePlaylists);
     } catch (err) {
-      const errorMessage = err.response?.data?.details || err.response?.data?.error || 'Failed to load Spotify playlists';
+      const errorMessage = err.response?.data?.details || err.response?.data?.error || 'Failed to load playlists';
       console.error('Import error details:', errorMessage);
       console.error('Full response:', err.response?.data);
       setError(errorMessage);
       console.error(err);
     } finally {
-      setLoadingSpotifyPlaylists(false);
+      setLoadingPlaylists(false);
     }
   };
 
   const closeImportModal = () => {
     setShowImportModal(false);
-    setSpotifyPlaylists([]);
+    setPlatformPlaylists([]);
+    setActivePlatform(null);
   };
 
   const openDeleteModal = (playlistId, playlistName) => {
@@ -821,7 +828,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
           {playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'} created
         </p>
         <button onClick={openImportModal} className="import-button">
-          Import from Spotify
+          Import
         </button>
       </div>
 
@@ -1006,24 +1013,24 @@ IMPORTANT: Pay close attention to the original request and description to unders
         <div className="modal-overlay" onClick={closeImportModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Import Playlist from Spotify</h2>
+              <h2>Import Playlist {activePlatform ? `from ${activePlatform === 'spotify' ? 'Spotify' : 'Apple Music'}` : ''}</h2>
               <button onClick={closeImportModal} className="close-modal-button">
                 ×
               </button>
             </div>
 
-            {loadingSpotifyPlaylists ? (
+            {loadingPlaylists ? (
               <div className="modal-loading">
                 <span className="spinner"></span>
-                <p>Loading your Spotify playlists...</p>
+                <p>Loading your {activePlatform === 'apple' ? 'Apple Music' : 'Spotify'} playlists...</p>
               </div>
-            ) : spotifyPlaylists.length === 0 ? (
+            ) : platformPlaylists.length === 0 ? (
               <div className="modal-empty">
-                <p>No playlists available to import. All your Spotify playlists have already been imported.</p>
+                <p>No playlists available to import. All your {activePlatform === 'apple' ? 'Apple Music' : 'Spotify'} playlists have already been imported.</p>
               </div>
             ) : (
               <div className="spotify-playlists-list">
-                {spotifyPlaylists.map((playlist) => (
+                {platformPlaylists.map((playlist) => (
                   <div key={playlist.id} className="spotify-playlist-item">
                     {playlist.image && (
                       <img src={playlist.image} alt={playlist.name} className="spotify-playlist-image" />
@@ -1031,7 +1038,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     <div className="spotify-playlist-info">
                       <div className="spotify-playlist-name">{playlist.name}</div>
                       <div className="spotify-playlist-meta">
-                        {playlist.trackCount} tracks • by {playlist.owner}
+                        {playlist.trackCount} tracks{playlist.owner ? ` • by ${playlist.owner}` : ''}
                       </div>
                       {playlist.description && (
                         <div className="spotify-playlist-description">{playlist.description}</div>
