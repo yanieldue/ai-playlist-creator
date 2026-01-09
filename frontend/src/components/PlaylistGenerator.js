@@ -542,8 +542,21 @@ const PlaylistGenerator = () => {
   }, [showArtistSettingsModal, showPlaylistModal]);
 
   const fetchUserProfile = async () => {
+    // Determine which platform userId to use based on activePlatform
+    let platformUserId = userId;
+    if (activePlatform === 'spotify' && spotifyUserId) {
+      platformUserId = spotifyUserId;
+    } else if (activePlatform === 'apple' && appleMusicUserId) {
+      platformUserId = appleMusicUserId;
+    } else if (spotifyUserId) {
+      platformUserId = spotifyUserId;
+    } else if (appleMusicUserId) {
+      platformUserId = appleMusicUserId;
+    }
+
     try {
-      const data = await playlistService.getUserProfile(userId);
+      console.log('fetchUserProfile: Fetching for platform userId:', platformUserId, 'activePlatform:', activePlatform);
+      const data = await playlistService.getUserProfile(platformUserId);
       setUserProfile(data);
     } catch (err) {
       console.error('Failed to fetch user profile:', err);
@@ -1024,10 +1037,22 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
+      // Determine which platform userId to use based on activePlatform
+      let platformUserId = userId;
+      if (activePlatform === 'spotify' && spotifyUserId) {
+        platformUserId = spotifyUserId;
+      } else if (activePlatform === 'apple' && appleMusicUserId) {
+        platformUserId = appleMusicUserId;
+      } else if (spotifyUserId) {
+        platformUserId = spotifyUserId;
+      } else if (appleMusicUserId) {
+        platformUserId = appleMusicUserId;
+      }
+
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
       const result = await playlistService.createPlaylist(
-        userId,
+        platformUserId,
         generatedPlaylist.playlistName,
         generatedPlaylist.description,
         trackUris
@@ -1095,10 +1120,28 @@ const PlaylistGenerator = () => {
       return;
     }
 
+    // Determine which platform userId to use based on activePlatform
+    let platformUserId = userId;
+    if (activePlatform === 'spotify' && spotifyUserId) {
+      platformUserId = spotifyUserId;
+      console.log('fetchTopArtists: Using Spotify userId:', platformUserId);
+    } else if (activePlatform === 'apple' && appleMusicUserId) {
+      platformUserId = appleMusicUserId;
+      console.log('fetchTopArtists: Using Apple Music userId:', platformUserId);
+    } else if (spotifyUserId) {
+      // Fallback to Spotify if activePlatform not set
+      platformUserId = spotifyUserId;
+      console.log('fetchTopArtists: Fallback to Spotify userId:', platformUserId);
+    } else if (appleMusicUserId) {
+      // Fallback to Apple Music
+      platformUserId = appleMusicUserId;
+      console.log('fetchTopArtists: Fallback to Apple Music userId:', platformUserId);
+    }
+
     setLoadingTopArtists(true);
     try {
-      console.log('fetchTopArtists: Fetching for userId:', userId);
-      const data = await playlistService.getTopArtists(userId);
+      console.log('fetchTopArtists: Fetching for platform userId:', platformUserId, 'activePlatform:', activePlatform);
+      const data = await playlistService.getTopArtists(platformUserId);
       console.log('fetchTopArtists: Received data:', data);
       setTopArtists(data.artists);
       console.log('fetchTopArtists: Set topArtists to:', data.artists.length, 'artists');
@@ -1125,10 +1168,26 @@ const PlaylistGenerator = () => {
       return;
     }
 
-    console.log('[fetchNewArtists] Starting fetch for userId:', userId);
+    // Determine which platform userId to use based on activePlatform
+    let platformUserId = userId;
+    if (activePlatform === 'spotify' && spotifyUserId) {
+      platformUserId = spotifyUserId;
+      console.log('[fetchNewArtists] Using Spotify userId:', platformUserId);
+    } else if (activePlatform === 'apple' && appleMusicUserId) {
+      platformUserId = appleMusicUserId;
+      console.log('[fetchNewArtists] Using Apple Music userId:', platformUserId);
+    } else if (spotifyUserId) {
+      platformUserId = spotifyUserId;
+      console.log('[fetchNewArtists] Fallback to Spotify userId:', platformUserId);
+    } else if (appleMusicUserId) {
+      platformUserId = appleMusicUserId;
+      console.log('[fetchNewArtists] Fallback to Apple Music userId:', platformUserId);
+    }
+
+    console.log('[fetchNewArtists] Starting fetch for platform userId:', platformUserId, 'activePlatform:', activePlatform);
     setLoadingNewArtists(true);
     try {
-      const data = await playlistService.getNewArtists(userId);
+      const data = await playlistService.getNewArtists(platformUserId);
       console.log('[fetchNewArtists] Received data:', data);
       console.log('[fetchNewArtists] Number of artists:', data.artists?.length || 0);
       setNewArtists(data.artists);
@@ -1443,6 +1502,18 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
+      // Determine which platform userId to use based on activePlatform
+      let platformUserId = userId;
+      if (activePlatform === 'spotify' && spotifyUserId) {
+        platformUserId = spotifyUserId;
+      } else if (activePlatform === 'apple' && appleMusicUserId) {
+        platformUserId = appleMusicUserId;
+      } else if (spotifyUserId) {
+        platformUserId = spotifyUserId;
+      } else if (appleMusicUserId) {
+        platformUserId = appleMusicUserId;
+      }
+
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
 
@@ -1452,7 +1523,7 @@ const PlaylistGenerator = () => {
       const excludedSongsToStore = generatedPlaylist.excludedSongs || [];
 
       const result = await playlistService.createPlaylist(
-        userId,
+        platformUserId,
         editedPlaylistName.trim(),
         editedDescription.trim(),
         trackUris,
