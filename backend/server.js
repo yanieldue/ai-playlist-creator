@@ -3866,27 +3866,33 @@ app.get('/api/playlists/:userId', async (req, res) => {
     // Filter out drafts - only return playlists that have been published to platform
     const userPlaylistHistory = allPlaylists.filter(p => p && p.isDraft !== true);
 
-    // Determine which platform the user is connected to
+    // Determine which platform the user is connected to based on their active platform setting
     let platformUserId = userId;
     let platform = null;
 
     if (isEmailBasedUserId(userId)) {
-      // Try Spotify first
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (platformUserId) {
-        platform = 'spotify';
-        console.log('Resolved email to Spotify userId:', platformUserId);
-      } else {
-        // Try Apple Music if Spotify not connected
+      // Check which platform is actively connected
+      const user = await db.getUser(userId);
+      if (!user) {
+        console.log('User not found for email:', userId);
+        return res.json({ playlists: [] });
+      }
+
+      // Use the actively connected platform
+      if (user.connectedPlatforms?.apple) {
         platformUserId = await resolvePlatformUserId(userId, 'apple');
-        if (platformUserId) {
-          platform = 'apple';
-          console.log('Resolved email to Apple Music userId:', platformUserId);
-        } else {
-          // User doesn't have any platform connected, return empty playlists
-          console.log('No music platform connection found for email:', userId);
-          return res.json({ playlists: [] });
-        }
+        platform = 'apple';
+        console.log('User has Apple Music active, resolved to:', platformUserId);
+      } else if (user.connectedPlatforms?.spotify) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        platform = 'spotify';
+        console.log('User has Spotify active, resolved to:', platformUserId);
+      }
+
+      if (!platformUserId) {
+        // User doesn't have any platform connected, return empty playlists
+        console.log('No music platform connection found for email:', userId);
+        return res.json({ playlists: [] });
       }
     } else {
       // Direct platform userId
@@ -4070,17 +4076,26 @@ app.get('/api/platform-playlists/:userId', async (req, res) => {
       });
     }
 
-    // If userId is email-based, resolve to platform userId
+    // If userId is email-based, resolve to platform userId based on which platform is actively connected
     let platformUserId = userId;
     if (isEmailBasedUserId(userId)) {
-      // Try Spotify first
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (!platformUserId) {
-        // Try Apple Music if Spotify not connected
+      // Check which platform is actively connected
+      const user = await db.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Use the actively connected platform
+      if (user.connectedPlatforms?.apple) {
         platformUserId = await resolvePlatformUserId(userId, 'apple');
-        if (!platformUserId) {
-          return res.status(404).json({ error: 'No music platform connected' });
-        }
+        console.log('User has Apple Music active, resolved to:', platformUserId);
+      } else if (user.connectedPlatforms?.spotify) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        console.log('User has Spotify active, resolved to:', platformUserId);
+      }
+
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'No music platform connected' });
       }
     }
 
