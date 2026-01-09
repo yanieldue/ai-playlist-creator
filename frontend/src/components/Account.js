@@ -105,11 +105,20 @@ const Account = ({ onBack, showToast }) => {
     if (spotifyOAuthCompleted && connectingFromAccount) {
       console.log('Spotify OAuth callback detected from Account page! Updating platforms...');
 
-      // Get the userId that was just set from Spotify OAuth
+      // First, clear ALL Apple Music data when switching to Spotify
+      console.log('Clearing Apple Music data before switching to Spotify');
+      localStorage.removeItem('appleMusicUserId');
+
+      // Get the userId that was just set from Spotify OAuth and set Spotify data
       const spotifyId = localStorage.getItem('userId');
       if (spotifyId && spotifyId.startsWith('spotify_')) {
         localStorage.setItem('spotifyUserId', spotifyId);
         localStorage.setItem('activePlatform', 'spotify');
+        console.log('Set Spotify data:', {
+          spotifyUserId: spotifyId,
+          userId: spotifyId,
+          activePlatform: 'spotify'
+        });
       }
 
       // Get current platforms from localStorage to preserve other platform connections
@@ -121,8 +130,7 @@ const Account = ({ onBack, showToast }) => {
       console.log('Updated platforms:', updatedPlatforms);
       setConnectedPlatforms(updatedPlatforms);
       localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
-      // Clear Apple Music userId when switching to Spotify
-      localStorage.removeItem('appleMusicUserId');
+
       // Update the backend
       playlistService.updatePlatforms(userEmail, updatedPlatforms).catch(err => console.error('Error updating platforms:', err));
       // Clear the flags
@@ -131,8 +139,9 @@ const Account = ({ onBack, showToast }) => {
       // Dispatch custom event to notify other components of platform changes
       // Use setTimeout to ensure localStorage updates are complete before event is processed
       setTimeout(() => {
+        console.log('Dispatching platformsChanged event for Spotify');
         window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-      }, 200);
+      }, 300);
       toast('Spotify connected successfully!', 'success');
     } else {
       // Fetch platform status from backend (only if not handling OAuth callback)
@@ -318,16 +327,20 @@ const Account = ({ onBack, showToast }) => {
           console.log('Apple Music connected successfully:', result);
 
           // Step 5: Update state and localStorage
-          // First, clear Spotify data if switching from Spotify
-          if (connectedPlatforms.spotify) {
-            localStorage.removeItem('spotifyUserId');
-            console.log('Cleared spotifyUserId when switching to Apple Music');
-          }
+          // First, clear ALL Spotify data when switching to Apple Music
+          console.log('Clearing Spotify data before switching to Apple Music');
+          localStorage.removeItem('spotifyUserId');
 
+          // Then set Apple Music data
           if (result.userId) {
             localStorage.setItem('appleMusicUserId', result.userId);
             localStorage.setItem('userId', result.userId);
             localStorage.setItem('activePlatform', 'apple');
+            console.log('Set Apple Music data:', {
+              appleMusicUserId: result.userId,
+              userId: result.userId,
+              activePlatform: 'apple'
+            });
           }
 
           const updatedPlatforms = {
@@ -336,12 +349,14 @@ const Account = ({ onBack, showToast }) => {
           };
           setConnectedPlatforms(updatedPlatforms);
           localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
+          console.log('Updated connectedPlatforms:', updatedPlatforms);
 
           // Dispatch custom event to notify other components of platform changes
           // Use setTimeout to ensure localStorage updates are complete before event is processed
           setTimeout(() => {
+            console.log('Dispatching platformsChanged event for Apple Music');
             window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-          }, 200);
+          }, 300);
 
           setAccountError('');
           setAccountLoading(false);
