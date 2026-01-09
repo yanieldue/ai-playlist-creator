@@ -3863,97 +3863,187 @@ app.get('/api/playlists/:userId', async (req, res) => {
       allPlaylists = userPlaylists.get(userId) || [];
     }
 
-    // Filter out drafts - only return playlists that have been published to Spotify
+    // Filter out drafts - only return playlists that have been published to platform
     const userPlaylistHistory = allPlaylists.filter(p => p && p.isDraft !== true);
 
-    // If userId is email-based, resolve to Spotify platform userId
+    // Determine which platform the user is connected to
     let platformUserId = userId;
+    let platform = null;
+
     if (isEmailBasedUserId(userId)) {
+      // Try Spotify first
       platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (!platformUserId) {
-        // User doesn't have Spotify connected, return empty playlists
-        console.log('No Spotify connection found for email:', userId);
-        return res.json([]);
+      if (platformUserId) {
+        platform = 'spotify';
+        console.log('Resolved email to Spotify userId:', platformUserId);
+      } else {
+        // Try Apple Music if Spotify not connected
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (platformUserId) {
+          platform = 'apple';
+          console.log('Resolved email to Apple Music userId:', platformUserId);
+        } else {
+          // User doesn't have any platform connected, return empty playlists
+          console.log('No music platform connection found for email:', userId);
+          return res.json({ playlists: [] });
+        }
+      }
+    } else {
+      // Direct platform userId
+      if (userId.startsWith('spotify_')) {
+        platform = 'spotify';
+      } else if (userId.startsWith('apple_music_')) {
+        platform = 'apple';
       }
     }
 
-    // For each playlist, fetch current track details from Spotify
+    // Get user tokens
     const tokens = await getUserTokens(platformUserId);
     if (!tokens) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+    let playlistsWithDetails;
 
-    // Refresh token if needed
-    try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(platformUserId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(platformUserId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
-    }
+    if (platform === 'spotify') {
+      // Spotify: Fetch playlists using Spotify API
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
 
-    // Fetch detailed track info for each playlist
-    const playlistsWithDetails = await Promise.all(
-      userPlaylistHistory.map(async (playlist) => {
-        try {
-          // Get playlist details from Spotify
-          const playlistDetails = await userSpotifyApi.getPlaylist(playlist.playlistId);
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        const newAccessToken = refreshData.body.access_token;
+        userSpotifyApi.setAccessToken(newAccessToken);
+        tokens.access_token = newAccessToken;
+        userTokens.set(platformUserId, tokens);
+        // Save updated token to database
+        await db.updateAccessToken(platformUserId, newAccessToken);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
 
-          // Create maps for quick lookup of reactions
-          const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
-          const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
+      // Fetch detailed track info for each playlist
+      playlistsWithDetails = await Promise.all(
+        userPlaylistHistory.map(async (playlist) => {
+          try {
+            // Get playlist details from Spotify
+            const playlistDetails = await userSpotifyApi.getPlaylist(playlist.playlistId);
 
-          const tracks = playlistDetails.body.tracks.items.map(item => {
-            const trackId = item.track.id;
-            let reaction = null;
-            if (likedSongsMap.has(trackId)) {
-              reaction = 'thumbsUp';
-            } else if (dislikedSongsMap.has(trackId)) {
-              reaction = 'thumbsDown';
-            }
+            // Create maps for quick lookup of reactions
+            const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
+            const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
+
+            const tracks = playlistDetails.body.tracks.items.map(item => {
+              const trackId = item.track.id;
+              let reaction = null;
+              if (likedSongsMap.has(trackId)) {
+                reaction = 'thumbsUp';
+              } else if (dislikedSongsMap.has(trackId)) {
+                reaction = 'thumbsDown';
+              }
+
+              return {
+                id: trackId,
+                name: item.track.name,
+                artist: item.track.artists[0].name,
+                uri: item.track.uri,
+                album: item.track.album.name,
+                image: item.track.album.images[0]?.url,
+                externalUrl: item.track.external_urls.spotify,
+                reaction: reaction
+              };
+            });
 
             return {
-              id: trackId,
-              name: item.track.name,
-              artist: item.track.artists[0].name,
-              uri: item.track.uri,
-              album: item.track.album.name,
-              image: item.track.album.images[0]?.url,
-              externalUrl: item.track.external_urls.spotify,
-              reaction: reaction
+              ...playlist,
+              tracks: tracks,
+              trackCount: tracks.length,
+              image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : playlist.image
             };
-          });
+          } catch (error) {
+            console.error(`Error fetching Spotify playlist ${playlist.playlistId}:`, error.message);
+            // Return playlist without detailed tracks if fetch fails
+            return {
+              ...playlist,
+              tracks: [],
+              error: 'Could not fetch current tracks',
+              fetchError: error.message
+            };
+          }
+        })
+      );
+    } else if (platform === 'apple') {
+      // Apple Music: Fetch playlists using Apple Music API
+      if (!AppleMusicService) {
+        console.error('Apple Music service not available');
+        return res.status(500).json({ error: 'Apple Music service not available' });
+      }
 
-          return {
-            ...playlist,
-            tracks: tracks,
-            trackCount: tracks.length,
-            image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : playlist.image
-          };
-        } catch (error) {
-          console.error(`Error fetching playlist ${playlist.playlistId}:`, error.message);
-          // Return playlist without detailed tracks if fetch fails
-          return {
-            ...playlist,
-            tracks: [],
-            error: 'Could not fetch current tracks',
-            fetchError: error.message
-          };
-        }
-      })
-    );
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) {
+        console.error('Failed to generate Apple Music developer token');
+        return res.status(500).json({ error: 'Apple Music service unavailable' });
+      }
+
+      const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+      // Fetch detailed track info for each Apple Music playlist
+      playlistsWithDetails = await Promise.all(
+        userPlaylistHistory.map(async (playlist) => {
+          try {
+            // Get playlist tracks from Apple Music
+            const tracks = await appleMusicApi.getPlaylistTracks(tokens.access_token, playlist.playlistId);
+
+            // Create maps for quick lookup of reactions
+            const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
+            const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
+
+            const tracksWithDetails = tracks.map(track => {
+              const trackId = track.id;
+              let reaction = null;
+              if (likedSongsMap.has(trackId)) {
+                reaction = 'thumbsUp';
+              } else if (dislikedSongsMap.has(trackId)) {
+                reaction = 'thumbsDown';
+              }
+
+              return {
+                id: trackId,
+                name: track.name,
+                artist: track.artists[0].name,
+                uri: track.uri,
+                album: track.album.name,
+                image: track.album.images?.[0]?.url || null,
+                externalUrl: track.url || null,
+                reaction: reaction
+              };
+            });
+
+            return {
+              ...playlist,
+              tracks: tracksWithDetails,
+              trackCount: tracksWithDetails.length,
+              image: playlist.image || null
+            };
+          } catch (error) {
+            console.error(`Error fetching Apple Music playlist ${playlist.playlistId}:`, error.message);
+            // Return playlist without detailed tracks if fetch fails
+            return {
+              ...playlist,
+              tracks: [],
+              error: 'Could not fetch current tracks',
+              fetchError: error.message
+            };
+          }
+        })
+      );
+    }
 
     res.json({ playlists: playlistsWithDetails });
   } catch (error) {
