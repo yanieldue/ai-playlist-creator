@@ -2651,11 +2651,11 @@ DISCOVERY:
 - "surprise me", "unexpected picks": preference: "unexpected"
 
 AUDIO FEATURES:
-- BPM: "fast" = 140-180, "slow" = 60-90, "moderate" = 90-120
-- Energy: "energetic" = 0.7-1.0, "chill" = 0.0-0.4, "relaxed" = 0.3-0.6
-- Valence: "happy/upbeat" = 0.6-1.0, "sad/melancholic" = 0.0-0.4
-- Danceability: "danceable" = 0.6-1.0, "not danceable" = 0.0-0.4
-- Acousticness: "acoustic" = 0.6-1.0, "electronic" = 0.0-0.3
+- BPM: "fast" = 140-180, "slow" = 60-90, "moderate/mid-tempo" = 90-120, "very slow" = 50-75
+- Energy: "energetic/hype" = 0.7-1.0, "chill/relaxed/laid-back" = 0.0-0.4, "mellow/smooth" = 0.2-0.5, "moderate" = 0.4-0.7
+- Valence: "happy/upbeat/feel-good" = 0.6-1.0, "sad/melancholic/moody" = 0.0-0.4, "emotional/in your feels" = 0.2-0.5
+- Danceability: "danceable/groovy" = 0.6-1.0, "not danceable/slow jam" = 0.0-0.4, "moderate groove" = 0.4-0.6
+- Acousticness: "acoustic/stripped" = 0.6-1.0, "electronic/produced" = 0.0-0.3
 
 Use null, [], or false for any feature not mentioned.
 
@@ -2797,6 +2797,12 @@ VIBE & ATMOSPHERE:
 - Use case: ${genreData.contextClues.useCase || 'not specified'} ${genreData.contextClues.useCase ? '← CRITICAL: Tailor queries to this use case' : ''}
 - Avoid: ${genreData.contextClues.avoidances.join(', ') || 'nothing specified'}
 
+AUDIO CHARACTERISTICS (VERY IMPORTANT):
+- BPM range: ${genreData.audioFeatures.bpm.min || genreData.audioFeatures.bpm.max ? `${genreData.audioFeatures.bpm.min || 'any'}-${genreData.audioFeatures.bpm.max || 'any'}` : 'not specified'}${genreData.audioFeatures.bpm.min && genreData.audioFeatures.bpm.min < 95 ? ' ← SLOW TEMPO REQUIRED' : ''}
+- Energy level: ${genreData.audioFeatures.energy.min !== null || genreData.audioFeatures.energy.max !== null ? `${genreData.audioFeatures.energy.min || 0.0}-${genreData.audioFeatures.energy.max || 1.0}` : 'not specified'}${genreData.audioFeatures.energy.max && genreData.audioFeatures.energy.max < 0.5 ? ' ← LOW ENERGY/MELLOW REQUIRED' : ''}
+- Danceability: ${genreData.audioFeatures.danceability.min !== null || genreData.audioFeatures.danceability.max !== null ? `${genreData.audioFeatures.danceability.min || 0.0}-${genreData.audioFeatures.danceability.max || 1.0}` : 'not specified'}
+- Valence (mood): ${genreData.audioFeatures.valence.min !== null || genreData.audioFeatures.valence.max !== null ? `${genreData.audioFeatures.valence.min || 0.0}-${genreData.audioFeatures.valence.max || 1.0}` : 'not specified'}${genreData.audioFeatures.valence.max && genreData.audioFeatures.valence.max < 0.6 ? ' ← MOODY/EMOTIONAL VIBE' : ''}
+
 ERA & CULTURAL CONTEXT:
 - Decade: ${genreData.era.decade || 'not specified'} ${genreData.era.decade ? '← MUST stick to this era' : ''}
 - Year range: ${genreData.era.yearRange.min || genreData.era.yearRange.max ? `${genreData.era.yearRange.min || 'any'} to ${genreData.era.yearRange.max || 'any'}` : 'not specified'}
@@ -2811,6 +2817,11 @@ SEARCH QUERY REQUIREMENTS:
 - If DECADE/ERA is specified, add year filters to queries (e.g., "year:1990-1999") or mention the era
 - If CULTURAL REGION is specified, include region-specific artists/styles (e.g., "West Coast hip-hop", "UK grime")
 - If USE CASE is specified, tailor queries to that context (e.g., "focus" = chill/ambient versions, "workout" = high-energy)
+- If AUDIO CHARACTERISTICS are specified (slow BPM, low energy, moody valence):
+  * For SLOW/MELLOW vibes: Use terms like "slow jam", "ballad", "mellow", "smooth", "laid-back", "downtempo" in queries
+  * For MOODY/EMOTIONAL vibes: Use terms like "emotional", "intimate", "soulful", "deep", "introspective" in queries
+  * For LOW ENERGY: AVOID terms like "upbeat", "energetic", "party", "dance", "club", "hype" in queries
+  * Example: Instead of "R&B songs", use "slow R&B ballads" or "mellow R&B" if slow/low energy is required
 - Mix specific artist searches with broader genre/era/region searches
 - AVOID queries that would return songs from different genres, eras, or regions
 - AVOID vague emotional queries alone - always ground them in genre/style/era
