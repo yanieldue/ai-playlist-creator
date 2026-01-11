@@ -123,8 +123,7 @@ class AppleMusicService {
   async getPlaylists(userToken) {
     const data = await this.request('/me/library/playlists', userToken, {
       params: {
-        limit: 100,
-        include: 'tracks'
+        limit: 100
       }
     });
 
@@ -132,7 +131,8 @@ class AppleMusicService {
       return [];
     }
 
-    return data.data.map(playlist => {
+    // For each playlist without artwork, fetch it individually to get the first track's artwork
+    const playlists = await Promise.all(data.data.map(async (playlist) => {
       let image = null;
 
       // Try to get artwork from the playlist itself
@@ -140,12 +140,14 @@ class AppleMusicService {
         image = playlist.attributes.artwork.url
           .replace('{w}', '300')
           .replace('{h}', '300');
-      }
-      // If playlist doesn't have artwork, try to use the first track's album art
-      else if (playlist.relationships?.tracks?.data?.[0]?.attributes?.artwork) {
-        image = playlist.relationships.tracks.data[0].attributes.artwork.url
-          .replace('{w}', '300')
-          .replace('{h}', '300');
+      } else {
+        // If no playlist artwork, fetch individual playlist with tracks to get first track's album art
+        try {
+          const detailedPlaylist = await this.getPlaylist(userToken, playlist.id);
+          image = detailedPlaylist.image;
+        } catch (err) {
+          console.log(`Could not fetch artwork for playlist ${playlist.id}:`, err.message);
+        }
       }
 
       return {
@@ -153,15 +155,17 @@ class AppleMusicService {
         name: playlist.attributes.name,
         description: playlist.attributes.description?.standard || '',
         image: image,
-        trackCount: playlist.relationships?.tracks?.data?.length || 0,
+        trackCount: 0, // We don't have track count from this endpoint
         tracks: {
-          total: playlist.relationships?.tracks?.data?.length || 0
+          total: 0
         },
         platform: 'apple',
         url: null, // Apple Music library playlists don't have public URLs
         canEdit: playlist.attributes.canEdit
       };
-    });
+    }));
+
+    return playlists;
   }
 
   /**
@@ -209,14 +213,26 @@ class AppleMusicService {
     }
 
     const playlist = data.data[0];
+
+    let image = null;
+    // Try playlist artwork first
+    if (playlist.attributes.artwork) {
+      image = playlist.attributes.artwork.url
+        .replace('{w}', '300')
+        .replace('{h}', '300');
+    }
+    // Fall back to first track's album art
+    else if (playlist.relationships?.tracks?.data?.[0]?.attributes?.artwork) {
+      image = playlist.relationships.tracks.data[0].attributes.artwork.url
+        .replace('{w}', '300')
+        .replace('{h}', '300');
+    }
+
     return {
       id: playlist.id,
       name: playlist.attributes.name,
       description: playlist.attributes.description?.standard || '',
-      image: playlist.attributes.artwork ?
-        playlist.attributes.artwork.url
-          .replace('{w}', '300')
-          .replace('{h}', '300') : null,
+      image: image,
       tracks: playlist.relationships?.tracks?.data || []
     };
   }
