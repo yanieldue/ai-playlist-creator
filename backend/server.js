@@ -4188,12 +4188,37 @@ app.post('/api/import-playlist', async (req, res) => {
   try {
     let { userId, playlistId } = req.body;
 
-    // If userId is email-based, resolve to Spotify platform userId
+    // Determine which platform the user is connected to
     let platformUserId = userId;
+    let platform = null;
+
     if (isEmailBasedUserId(userId)) {
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      // Check which platform is actively connected
+      const user = await db.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Use the actively connected platform
+      if (user.connectedPlatforms?.apple) {
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        platform = 'apple';
+        console.log('Importing from Apple Music for user:', platformUserId);
+      } else if (user.connectedPlatforms?.spotify) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        platform = 'spotify';
+        console.log('Importing from Spotify for user:', platformUserId);
+      }
+
       if (!platformUserId) {
-        return res.status(404).json({ error: 'Spotify not connected' });
+        return res.status(404).json({ error: 'No music platform connected' });
+      }
+    } else {
+      // Direct platform userId
+      if (userId.startsWith('spotify_')) {
+        platform = 'spotify';
+      } else if (userId.startsWith('apple_music_')) {
+        platform = 'apple';
       }
     }
 
@@ -4202,43 +4227,81 @@ app.post('/api/import-playlist', async (req, res) => {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+    let playlistRecord;
 
-    // Refresh token if needed
-    try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(platformUserId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(platformUserId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
+    if (platform === 'spotify') {
+      // Spotify import
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        const newAccessToken = refreshData.body.access_token;
+        userSpotifyApi.setAccessToken(newAccessToken);
+        tokens.access_token = newAccessToken;
+        userTokens.set(platformUserId, tokens);
+        await db.updateAccessToken(platformUserId, newAccessToken);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      // Get playlist details from Spotify
+      const playlistDetails = await userSpotifyApi.getPlaylist(playlistId);
+      const trackUris = playlistDetails.body.tracks.items.map(item => item.track.uri);
+
+      playlistRecord = {
+        playlistId: playlistId,
+        playlistName: playlistDetails.body.name,
+        description: playlistDetails.body.description || '',
+        image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : null,
+        trackUris: trackUris,
+        trackCount: trackUris.length,
+        createdAt: new Date().toISOString(),
+        spotifyUrl: playlistDetails.body.external_urls.spotify,
+        platform: 'spotify',
+        imported: true
+      };
+    } else if (platform === 'apple') {
+      // Apple Music import
+      if (!AppleMusicService) {
+        console.error('Apple Music service not available');
+        return res.status(500).json({ error: 'Apple Music service not available' });
+      }
+
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) {
+        console.error('Failed to generate Apple Music developer token');
+        return res.status(500).json({ error: 'Apple Music service unavailable' });
+      }
+
+      const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+      // Get playlist tracks from Apple Music
+      const tracks = await appleMusicApi.getPlaylistTracks(tokens.access_token, playlistId);
+      const trackUris = tracks.map(track => track.uri);
+
+      // Get basic playlist info (we already have it from the list, but let's get name at least)
+      // Note: Apple Music library playlists don't have a separate "get playlist details" endpoint
+      // The playlist name and info come from the getPlaylists call
+      playlistRecord = {
+        playlistId: playlistId,
+        playlistName: 'Imported Apple Music Playlist', // Will be updated from frontend data if needed
+        description: '',
+        image: null,
+        trackUris: trackUris,
+        trackCount: trackUris.length,
+        createdAt: new Date().toISOString(),
+        appleMusicUrl: null,
+        platform: 'apple',
+        imported: true
+      };
     }
-
-    // Get playlist details
-    const playlistDetails = await userSpotifyApi.getPlaylist(playlistId);
-    const trackUris = playlistDetails.body.tracks.items.map(item => item.track.uri);
-
-    // Store in user's playlist history
-    const playlistRecord = {
-      playlistId: playlistId,
-      playlistName: playlistDetails.body.name,
-      description: playlistDetails.body.description || '',
-      image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : null,
-      trackUris: trackUris,
-      trackCount: trackUris.length,
-      createdAt: new Date().toISOString(),
-      spotifyUrl: playlistDetails.body.external_urls.spotify,
-      imported: true
-    };
 
     const userPlaylistHistory = userPlaylists.get(userId) || [];
 
@@ -4252,7 +4315,7 @@ app.post('/api/import-playlist', async (req, res) => {
     userPlaylists.set(userId, userPlaylistHistory);
     await savePlaylist(userId, playlistRecord);
 
-    console.log('Playlist imported:', playlistId);
+    console.log(`${platform === 'apple' ? 'Apple Music' : 'Spotify'} playlist imported:`, playlistId);
 
     res.json({ success: true, playlist: playlistRecord });
   } catch (error) {
