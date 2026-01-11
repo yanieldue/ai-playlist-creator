@@ -279,6 +279,19 @@
   flex-shrink: 0;
 }
 
+.playlist-cover-placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .playlist-description {
   color: #8e8e93;
   font-size: 15px;
@@ -1557,6 +1570,10 @@
 
 :root.dark-mode .playlist-cover-image {
   border: 1px solid #424245;
+}
+
+:root.dark-mode .playlist-cover-placeholder {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
 }
 
 :root.dark-mode .playlist-description {

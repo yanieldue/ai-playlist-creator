@@ -887,8 +887,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </span>
                 </div>
                 <div className="playlist-header-content">
-                  {playlist.image && (
+                  {playlist.image ? (
                     <img src={playlist.image} alt={playlist.playlistName} className="playlist-cover-image" />
+                  ) : (
+                    <div className="playlist-cover-placeholder">♫</div>
                   )}
                   <div className="playlist-info">
                     <h2>
@@ -1032,8 +1034,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
               <div className="spotify-playlists-list">
                 {platformPlaylists.map((playlist) => (
                   <div key={playlist.id} className="spotify-playlist-item">
-                    {playlist.image && (
+                    {playlist.image ? (
                       <img src={playlist.image} alt={playlist.name} className="spotify-playlist-image" />
+                    ) : (
+                      <div className="spotify-playlist-image playlist-cover-placeholder">♫</div>
                     )}
                     <div className="spotify-playlist-info">
                       <div className="spotify-playlist-name">{playlist.name}</div>
