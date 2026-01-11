@@ -134,20 +134,24 @@ class AppleMusicService {
     // For each playlist without artwork, fetch it individually to get the first track's artwork
     const playlists = await Promise.all(data.data.map(async (playlist) => {
       let image = null;
+      let trackCount = 0;
 
       // Try to get artwork from the playlist itself
       if (playlist.attributes.artwork) {
         image = playlist.attributes.artwork.url
           .replace('{w}', '300')
           .replace('{h}', '300');
-      } else {
-        // If no playlist artwork, fetch individual playlist with tracks to get first track's album art
-        try {
-          const detailedPlaylist = await this.getPlaylist(userToken, playlist.id);
+      }
+
+      // Always fetch individual playlist to get track count and artwork if needed
+      try {
+        const detailedPlaylist = await this.getPlaylist(userToken, playlist.id);
+        if (!image) {
           image = detailedPlaylist.image;
-        } catch (err) {
-          console.log(`Could not fetch artwork for playlist ${playlist.id}:`, err.message);
         }
+        trackCount = detailedPlaylist.tracks?.length || 0;
+      } catch (err) {
+        console.log(`Could not fetch details for playlist ${playlist.id}:`, err.message);
       }
 
       return {
@@ -155,9 +159,9 @@ class AppleMusicService {
         name: playlist.attributes.name,
         description: playlist.attributes.description?.standard || '',
         image: image,
-        trackCount: 0, // We don't have track count from this endpoint
+        trackCount: trackCount,
         tracks: {
-          total: 0
+          total: trackCount
         },
         platform: 'apple',
         url: null, // Apple Music library playlists don't have public URLs
