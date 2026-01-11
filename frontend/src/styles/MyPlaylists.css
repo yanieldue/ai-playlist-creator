@@ -230,11 +230,13 @@
   align-items: center;
   gap: var(--space-lg);
   width: 100%;
-  padding-right: 60px; /* Space for the actions */
+  padding-right: 80px; /* Space for the actions - increased to prevent overlap */
+  min-width: 0; /* Allow flex children to shrink */
 }
 
 .playlist-info {
   flex: 1;
+  min-width: 0; /* Allow content to shrink and handle overflow properly */
 }
 
 .playlist-info h2 {
@@ -246,6 +248,7 @@
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
+  overflow: hidden; /* Prevent text overflow */
 }
 
 .imported-badge {
