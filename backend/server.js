@@ -4291,7 +4291,7 @@ app.post('/api/import-playlist', async (req, res) => {
         playlistId: playlistId,
         playlistName: playlistDetails.name,
         description: playlistDetails.description || '',
-        image: null,
+        image: playlistDetails.image || null,
         trackUris: trackUris,
         trackCount: trackUris.length,
         createdAt: new Date().toISOString(),

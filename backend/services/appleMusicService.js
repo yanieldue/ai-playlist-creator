@@ -135,6 +135,12 @@ class AppleMusicService {
       id: playlist.id,
       name: playlist.attributes.name,
       description: playlist.attributes.description?.standard || '',
+      image: playlist.attributes.artwork ?
+        playlist.attributes.artwork.url
+          .replace('{w}', '300')
+          .replace('{h}', '300') : null,
+      trackCount: playlist.attributes.hasCatalog ?
+        (playlist.relationships?.tracks?.data?.length || 0) : 0,
       tracks: {
         total: playlist.attributes.hasCatalog ?
           (playlist.relationships?.tracks?.data?.length || 0) : 0
@@ -194,6 +200,10 @@ class AppleMusicService {
       id: playlist.id,
       name: playlist.attributes.name,
       description: playlist.attributes.description?.standard || '',
+      image: playlist.attributes.artwork ?
+        playlist.attributes.artwork.url
+          .replace('{w}', '300')
+          .replace('{h}', '300') : null,
       tracks: playlist.relationships?.tracks?.data || []
     };
   }
