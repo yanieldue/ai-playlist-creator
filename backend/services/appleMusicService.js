@@ -123,7 +123,8 @@ class AppleMusicService {
   async getPlaylists(userToken) {
     const data = await this.request('/me/library/playlists', userToken, {
       params: {
-        limit: 100
+        limit: 100,
+        include: 'tracks'
       }
     });
 
@@ -131,24 +132,36 @@ class AppleMusicService {
       return [];
     }
 
-    return data.data.map(playlist => ({
-      id: playlist.id,
-      name: playlist.attributes.name,
-      description: playlist.attributes.description?.standard || '',
-      image: playlist.attributes.artwork ?
-        playlist.attributes.artwork.url
+    return data.data.map(playlist => {
+      let image = null;
+
+      // Try to get artwork from the playlist itself
+      if (playlist.attributes.artwork) {
+        image = playlist.attributes.artwork.url
           .replace('{w}', '300')
-          .replace('{h}', '300') : null,
-      trackCount: playlist.attributes.hasCatalog ?
-        (playlist.relationships?.tracks?.data?.length || 0) : 0,
-      tracks: {
-        total: playlist.attributes.hasCatalog ?
-          (playlist.relationships?.tracks?.data?.length || 0) : 0
-      },
-      platform: 'apple',
-      url: null, // Apple Music library playlists don't have public URLs
-      canEdit: playlist.attributes.canEdit
-    }));
+          .replace('{h}', '300');
+      }
+      // If playlist doesn't have artwork, try to use the first track's album art
+      else if (playlist.relationships?.tracks?.data?.[0]?.attributes?.artwork) {
+        image = playlist.relationships.tracks.data[0].attributes.artwork.url
+          .replace('{w}', '300')
+          .replace('{h}', '300');
+      }
+
+      return {
+        id: playlist.id,
+        name: playlist.attributes.name,
+        description: playlist.attributes.description?.standard || '',
+        image: image,
+        trackCount: playlist.relationships?.tracks?.data?.length || 0,
+        tracks: {
+          total: playlist.relationships?.tracks?.data?.length || 0
+        },
+        platform: 'apple',
+        url: null, // Apple Music library playlists don't have public URLs
+        canEdit: playlist.attributes.canEdit
+      };
+    });
   }
 
   /**
