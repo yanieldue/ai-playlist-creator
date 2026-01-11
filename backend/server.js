@@ -4003,6 +4003,22 @@ app.get('/api/playlists/:userId', async (req, res) => {
       playlistsWithDetails = await Promise.all(
         userPlaylistHistory.map(async (playlist) => {
           try {
+            // If playlist doesn't have an image, fetch playlist details to get it
+            let playlistImage = playlist.image;
+            if (!playlistImage) {
+              try {
+                const playlistDetails = await appleMusicApi.getPlaylist(tokens.access_token, playlist.playlistId);
+                playlistImage = playlistDetails.image;
+                // Update the stored playlist with the image
+                if (playlistImage) {
+                  playlist.image = playlistImage;
+                  await savePlaylist(userId, playlist);
+                }
+              } catch (imageError) {
+                console.log(`Could not fetch image for playlist ${playlist.playlistId}:`, imageError.message);
+              }
+            }
+
             // Get playlist tracks from Apple Music
             const tracks = await appleMusicApi.getPlaylistTracks(tokens.access_token, playlist.playlistId);
 
@@ -4035,7 +4051,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
               ...playlist,
               tracks: tracksWithDetails,
               trackCount: tracksWithDetails.length,
-              image: playlist.image || null
+              image: playlistImage || null
             };
           } catch (error) {
             console.error(`Error fetching Apple Music playlist ${playlist.playlistId}:`, error.message);
