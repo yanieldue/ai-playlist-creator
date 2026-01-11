@@ -210,7 +210,7 @@
   padding: var(--space-md);
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 12px;
 }
 
@@ -218,7 +218,7 @@
   position: absolute;
   top: var(--space-sm);
   right: var(--space-sm);
-  z-index: 10;
+  z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -429,6 +429,9 @@
   transition: transform 0.2s ease;
   cursor: pointer;
   padding: 4px;
+  display: inline-block;
+  max-width: 24px;
+  overflow: hidden;
 }
 
 .playlist-details {
