@@ -4282,17 +4282,15 @@ app.post('/api/import-playlist', async (req, res) => {
 
       const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
-      // Get playlist tracks from Apple Music
+      // Get playlist details and tracks from Apple Music
+      const playlistDetails = await appleMusicApi.getPlaylist(tokens.access_token, playlistId);
       const tracks = await appleMusicApi.getPlaylistTracks(tokens.access_token, playlistId);
       const trackUris = tracks.map(track => track.uri);
 
-      // Get basic playlist info (we already have it from the list, but let's get name at least)
-      // Note: Apple Music library playlists don't have a separate "get playlist details" endpoint
-      // The playlist name and info come from the getPlaylists call
       playlistRecord = {
         playlistId: playlistId,
-        playlistName: 'Imported Apple Music Playlist', // Will be updated from frontend data if needed
-        description: '',
+        playlistName: playlistDetails.name,
+        description: playlistDetails.description || '',
         image: null,
         trackUris: trackUris,
         trackCount: trackUris.length,

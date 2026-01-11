@@ -170,26 +170,48 @@ class AppleMusicService {
   }
 
   /**
+   * Get a single playlist with tracks
+   * @param {string} userToken - User's music token
+   * @param {string} playlistId - Playlist ID
+   */
+  async getPlaylist(userToken, playlistId) {
+    const data = await this.request(
+      `/me/library/playlists/${playlistId}`,
+      userToken,
+      {
+        params: {
+          include: 'tracks'
+        }
+      }
+    );
+
+    if (!data.data || data.data.length === 0) {
+      throw new Error('Playlist not found');
+    }
+
+    const playlist = data.data[0];
+    return {
+      id: playlist.id,
+      name: playlist.attributes.name,
+      description: playlist.attributes.description?.standard || '',
+      tracks: playlist.relationships?.tracks?.data || []
+    };
+  }
+
+  /**
    * Get tracks in a playlist
    * @param {string} userToken - User's music token
    * @param {string} playlistId - Playlist ID
    */
   async getPlaylistTracks(userToken, playlistId) {
-    const data = await this.request(
-      `/me/library/playlists/${playlistId}/tracks`,
-      userToken,
-      {
-        params: {
-          limit: 100
-        }
-      }
-    );
+    // First get the playlist with tracks included
+    const playlist = await this.getPlaylist(userToken, playlistId);
 
-    if (!data.data) {
+    if (!playlist.tracks || playlist.tracks.length === 0) {
       return [];
     }
 
-    return data.data.map(track => ({
+    return playlist.tracks.map(track => ({
       id: track.id,
       name: track.attributes.name,
       uri: `apple:track:${track.id}`,
