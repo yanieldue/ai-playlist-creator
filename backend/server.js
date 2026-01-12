@@ -3975,13 +3975,16 @@ app.get('/api/playlists/:userId', async (req, res) => {
     if (usePostgres) {
       // PostgreSQL: Load from database to ensure cross-device sync
       allPlaylists = await db.getUserPlaylists(userId);
+      console.log(`Loaded ${allPlaylists.length} playlists from database for user: ${userId}`);
     } else {
       // SQLite: Load from in-memory Map
       allPlaylists = userPlaylists.get(userId) || [];
+      console.log(`Loaded ${allPlaylists.length} playlists from memory for user: ${userId}`);
     }
 
     // Filter out drafts - only return playlists that have been published to platform
     const userPlaylistHistory = allPlaylists.filter(p => p && p.isDraft !== true);
+    console.log(`After filtering drafts: ${userPlaylistHistory.length} playlists`);
 
     // Determine which platform the user is connected to based on their active platform setting
     let platformUserId = userId;
