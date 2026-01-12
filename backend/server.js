@@ -2639,7 +2639,8 @@ Respond ONLY with valid JSON in this format:
   "artistConstraints": {
     "vocalGender": "male/female/mixed/any" or null,
     "artistType": "solo/band/any" or null,
-    "excludeFeatures": boolean
+    "excludeFeatures": boolean,
+    "requestedArtists": ["exact artist names mentioned in prompt"] or []
   },
   "productionStyle": {
     "preference": "acoustic/produced/lofi/polished/raw" or null,
@@ -2692,6 +2693,15 @@ VOCALS:
 - "solo artists only": artistType: "solo"
 - "bands only": artistType: "band"
 - "no features", "no collaborations": excludeFeatures: true
+
+SPECIFIC ARTISTS:
+- "artists like [name]", "similar to [artist]", "songs from [artist]": Extract EXACT artist names to requestedArtists array
+- Be precise with artist names - do NOT confuse similar names (e.g., "C.LACY" is NOT "Steve Lacy")
+- Include ALL mentioned artists, even if they're indie/underground
+- Examples:
+  * "artists like C.LACY or Tyree Thomas" → requestedArtists: ["C.LACY", "Tyree Thomas"]
+  * "songs like Need my baby by Reo Xander" → requestedArtists: ["Reo Xander"]
+  * "Taylor Swift and Olivia Rodrigo vibes" → requestedArtists: ["Taylor Swift", "Olivia Rodrigo"]
 
 PRODUCTION:
 - "acoustic", "unplugged", "stripped": preference: "acoustic"
@@ -2873,8 +2883,17 @@ ERA & CULTURAL CONTEXT:
 - Movement: ${genreData.culturalContext.movement || 'not specified'}
 - Scene: ${genreData.culturalContext.scene || 'not specified'}
 
+REQUESTED ARTISTS:
+${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
+  ? `- User specifically requested: ${genreData.artistConstraints.requestedArtists.join(', ')}
+- CRITICAL: Include queries for EACH requested artist (e.g., "C.LACY R&B", "Tyree Thomas", "Reo Xander")
+- These are the PRIMARY focus - most queries should include these artist names
+- Also include "similar to [artist]" queries to find related artists`
+  : '- No specific artists requested'}
+
 SEARCH QUERY REQUIREMENTS:
 - For GENRE-SPECIFIC playlists, include at least 8 genre-specific queries (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists")
+- If SPECIFIC ARTISTS are requested, PRIORITIZE queries with those exact artist names - at least 60% of queries should include requested artist names
 - If SUBGENRE is specified, ALL queries must target that specific subgenre (e.g., "90s R&B" not just "R&B")
 - If DECADE/ERA is specified, add year filters to queries (e.g., "year:1990-1999") or mention the era
 - If CULTURAL REGION is specified, include region-specific artists/styles (e.g., "West Coast hip-hop", "UK grime")
