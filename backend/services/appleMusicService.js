@@ -304,7 +304,7 @@ class AppleMusicService {
 
     // Step 1: Add tracks to user's library first (required by Apple Music)
     // This is necessary because Apple Music playlists can only contain library tracks
-    console.log(`Attempting to add ${ids.length} tracks to user's library...`);
+    console.log(`Step 1: Adding ${ids.length} catalog tracks to user's library...`);
     try {
       await this.request(
         `/me/library`,
@@ -316,16 +316,46 @@ class AppleMusicService {
           }
         }
       );
-      console.log(`✓ Successfully added ${ids.length} tracks to user's library`);
+      console.log(`✓ Successfully added tracks to library`);
     } catch (error) {
       console.error('Error adding tracks to library:', error);
-      console.log('Note: Some tracks may already be in library. Continuing with playlist addition...');
+      console.log('Note: Some tracks may already be in library. Continuing...');
       // Continue anyway - tracks might already be in library
     }
 
-    // Step 2: Add tracks to playlist using catalog IDs
-    // Apple Music API accepts catalog IDs in the format: {id: 'catalog_id', type: 'songs'}
-    console.log(`Adding ${ids.length} tracks to playlist ${playlistId}...`);
+    // Step 2: Get the library IDs for the tracks we just added
+    // Apple Music playlists require library IDs, not catalog IDs
+    console.log(`Step 2: Fetching library IDs for ${ids.length} tracks...`);
+    let libraryTrackIds = [];
+
+    try {
+      // Fetch library songs to get their library IDs
+      const libraryData = await this.request(
+        `/me/library/songs`,
+        userToken,
+        {
+          params: {
+            'filter[catalog]': ids.join(','),
+            limit: ids.length
+          }
+        }
+      );
+
+      if (libraryData.data && libraryData.data.length > 0) {
+        libraryTrackIds = libraryData.data.map(track => track.id);
+        console.log(`✓ Found ${libraryTrackIds.length} library track IDs`);
+        console.log(`Sample library IDs:`, libraryTrackIds.slice(0, 3));
+      } else {
+        console.error('No library tracks found. They may not have been added to library yet.');
+        throw new Error('Failed to get library track IDs');
+      }
+    } catch (error) {
+      console.error('Error fetching library track IDs:', error);
+      throw error;
+    }
+
+    // Step 3: Add library tracks to playlist
+    console.log(`Step 3: Adding ${libraryTrackIds.length} library tracks to playlist ${playlistId}...`);
     try {
       await this.request(
         `/me/library/playlists/${playlistId}/tracks`,
@@ -333,14 +363,14 @@ class AppleMusicService {
         {
           method: 'POST',
           data: {
-            data: ids.map(id => ({
+            data: libraryTrackIds.map(id => ({
               id,
-              type: 'songs'
+              type: 'library-songs'
             }))
           }
         }
       );
-      console.log(`✓ Successfully added ${ids.length} tracks to playlist`);
+      console.log(`✓ Successfully added ${libraryTrackIds.length} tracks to playlist`);
       return { success: true };
     } catch (error) {
       console.error('Error adding tracks to playlist:', error);
