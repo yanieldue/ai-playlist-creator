@@ -302,80 +302,82 @@ class AppleMusicService {
     console.log(`Sample track URIs:`, trackIds.slice(0, 3));
     console.log(`Sample track IDs after conversion:`, ids.slice(0, 3));
 
-    // Step 1: Add tracks to user's library first (required by Apple Music)
-    // This is necessary because Apple Music playlists can only contain library tracks
-    console.log(`Step 1: Adding ${ids.length} catalog tracks to user's library...`);
-    try {
-      await this.request(
-        `/me/library`,
-        userToken,
-        {
-          method: 'POST',
-          params: {
-            'ids[songs]': ids.join(',')
-          }
-        }
-      );
-      console.log(`✓ Successfully added tracks to library`);
-    } catch (error) {
-      console.error('Error adding tracks to library:', error);
-      console.log('Note: Some tracks may already be in library. Continuing...');
-      // Continue anyway - tracks might already be in library
+    // Apple Music requires a different approach than Spotify
+    // We need to add tracks in batches and handle each batch separately
+    console.log(`Adding ${ids.length} tracks to Apple Music playlist ${playlistId}...`);
+
+    // Split into batches of 25 (Apple Music limit)
+    const batchSize = 25;
+    const batches = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+      batches.push(ids.slice(i, i + batchSize));
     }
 
-    // Step 2: Get the library IDs for the tracks we just added
-    // Apple Music playlists require library IDs, not catalog IDs
-    console.log(`Step 2: Fetching library IDs for ${ids.length} tracks...`);
-    let libraryTrackIds = [];
+    console.log(`Processing ${batches.length} batch(es) of tracks...`);
 
-    try {
-      // Fetch library songs to get their library IDs
-      const libraryData = await this.request(
-        `/me/library/songs`,
-        userToken,
-        {
-          params: {
-            'filter[catalog]': ids.join(','),
-            limit: ids.length
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      console.log(`Batch ${i + 1}/${batches.length}: Adding ${batch.length} tracks...`);
+
+      try {
+        // Add tracks directly using catalog IDs
+        // The endpoint accepts both catalog IDs and library IDs
+        await this.request(
+          `/me/library/playlists/${playlistId}/tracks`,
+          userToken,
+          {
+            method: 'POST',
+            data: {
+              data: batch.map(id => ({
+                id,
+                type: 'songs'
+              }))
+            }
           }
-        }
-      );
+        );
+        console.log(`✓ Batch ${i + 1} added successfully`);
+      } catch (error) {
+        console.error(`Error adding batch ${i + 1}:`, error);
+        // Try adding to library first, then retry
+        console.log(`Attempting to add batch ${i + 1} to library first...`);
+        try {
+          await this.request(
+            `/me/library`,
+            userToken,
+            {
+              method: 'POST',
+              params: {
+                'ids[songs]': batch.join(',')
+              }
+            }
+          );
+          console.log('Added to library, waiting 1 second...');
+          await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (libraryData.data && libraryData.data.length > 0) {
-        libraryTrackIds = libraryData.data.map(track => track.id);
-        console.log(`✓ Found ${libraryTrackIds.length} library track IDs`);
-        console.log(`Sample library IDs:`, libraryTrackIds.slice(0, 3));
-      } else {
-        console.error('No library tracks found. They may not have been added to library yet.');
-        throw new Error('Failed to get library track IDs');
+          // Retry adding to playlist
+          await this.request(
+            `/me/library/playlists/${playlistId}/tracks`,
+            userToken,
+            {
+              method: 'POST',
+              data: {
+                data: batch.map(id => ({
+                  id,
+                  type: 'songs'
+                }))
+              }
+            }
+          );
+          console.log(`✓ Batch ${i + 1} added successfully after library addition`);
+        } catch (retryError) {
+          console.error(`Failed to add batch ${i + 1} even after library addition:`, retryError);
+          throw retryError;
+        }
       }
-    } catch (error) {
-      console.error('Error fetching library track IDs:', error);
-      throw error;
     }
 
-    // Step 3: Add library tracks to playlist
-    console.log(`Step 3: Adding ${libraryTrackIds.length} library tracks to playlist ${playlistId}...`);
-    try {
-      await this.request(
-        `/me/library/playlists/${playlistId}/tracks`,
-        userToken,
-        {
-          method: 'POST',
-          data: {
-            data: libraryTrackIds.map(id => ({
-              id,
-              type: 'library-songs'
-            }))
-          }
-        }
-      );
-      console.log(`✓ Successfully added ${libraryTrackIds.length} tracks to playlist`);
-      return { success: true };
-    } catch (error) {
-      console.error('Error adding tracks to playlist:', error);
-      throw error;
-    }
+    console.log(`✓ Successfully added all ${ids.length} tracks to playlist`);
+    return { success: true };
   }
 
   /**
