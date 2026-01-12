@@ -262,10 +262,16 @@ class AppleMusicService {
         name: track.attributes.artistName
       }],
       album: {
-        name: track.attributes.albumName
+        name: track.attributes.albumName,
+        images: track.attributes.artwork ? [{
+          url: track.attributes.artwork.url
+            .replace('{w}', '300')
+            .replace('{h}', '300')
+        }] : []
       },
       duration_ms: track.attributes.durationInMillis,
-      platform: 'apple'
+      platform: 'apple',
+      url: track.attributes.url || null
     }));
   }
 
@@ -284,6 +290,27 @@ class AppleMusicService {
       return track;
     });
 
+    // Step 1: Add tracks to user's library first (required by Apple Music)
+    // This is necessary because Apple Music playlists can only contain library tracks
+    try {
+      await this.request(
+        `/me/library`,
+        userToken,
+        {
+          method: 'POST',
+          params: {
+            ids: ids.join(',')
+          }
+        }
+      );
+      console.log(`Added ${ids.length} tracks to user's library`);
+    } catch (error) {
+      console.log('Note: Some tracks may already be in library or failed to add:', error.message);
+      // Continue anyway - tracks might already be in library
+    }
+
+    // Step 2: Add tracks to playlist using catalog IDs
+    // Apple Music API accepts catalog IDs in the format: {id: 'catalog_id', type: 'songs'}
     const data = await this.request(
       `/me/library/playlists/${playlistId}/tracks`,
       userToken,

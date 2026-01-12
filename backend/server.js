@@ -3937,6 +3937,20 @@ app.get('/api/playlists/:userId', async (req, res) => {
       // Fetch detailed track info for each playlist
       playlistsWithDetails = await Promise.all(
         userPlaylistHistory.map(async (playlist) => {
+          // Check if this playlist matches the active platform
+          if (playlist.platform && playlist.platform !== 'spotify') {
+            // This is a playlist from a different platform (e.g., Apple Music)
+            // Return it in read-only mode with stored information
+            console.log(`Playlist ${playlist.playlistId} is from ${playlist.platform}, showing in read-only mode`);
+            return {
+              ...playlist,
+              tracks: [],
+              trackCount: playlist.trackCount || 0,
+              isReadOnly: true,
+              readOnlyReason: `This playlist is from ${playlist.platform === 'apple' ? 'Apple Music' : playlist.platform}. Connect to ${playlist.platform === 'apple' ? 'Apple Music' : playlist.platform} to view details.`
+            };
+          }
+
           try {
             // Get playlist details from Spotify
             const playlistDetails = await userSpotifyApi.getPlaylist(playlist.playlistId);
@@ -3962,6 +3976,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
                 album: item.track.album.name,
                 image: item.track.album.images[0]?.url,
                 externalUrl: item.track.external_urls.spotify,
+                platform: 'spotify',
                 reaction: reaction
               };
             });
@@ -4002,6 +4017,20 @@ app.get('/api/playlists/:userId', async (req, res) => {
       // Fetch detailed track info for each Apple Music playlist
       playlistsWithDetails = await Promise.all(
         userPlaylistHistory.map(async (playlist) => {
+          // Check if this playlist matches the active platform
+          if (playlist.platform && playlist.platform !== 'apple') {
+            // This is a playlist from a different platform (e.g., Spotify)
+            // Return it in read-only mode with stored information
+            console.log(`Playlist ${playlist.playlistId} is from ${playlist.platform}, showing in read-only mode`);
+            return {
+              ...playlist,
+              tracks: [],
+              trackCount: playlist.trackCount || 0,
+              isReadOnly: true,
+              readOnlyReason: `This playlist is from ${playlist.platform === 'spotify' ? 'Spotify' : playlist.platform}. Connect to ${playlist.platform === 'spotify' ? 'Spotify' : playlist.platform} to view details.`
+            };
+          }
+
           try {
             // If playlist doesn't have an image, fetch playlist details to get it
             let playlistImage = playlist.image;
@@ -4043,6 +4072,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
                 album: track.album.name,
                 image: track.album.images?.[0]?.url || null,
                 externalUrl: track.url || null,
+                platform: 'apple',
                 reaction: reaction
               };
             });

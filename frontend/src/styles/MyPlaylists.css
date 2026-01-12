@@ -264,6 +264,47 @@
   border: 1px solid #fbbf24;
 }
 
+.platform-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f2f2f7;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-left: 8px;
+}
+
+.platform-badge.platform-spotify {
+  color: #1db954;
+  border: 1px solid #1db954;
+}
+
+.platform-badge.platform-apple {
+  color: #fa243c;
+  border: 1px solid #fa243c;
+}
+
+.platform-badge svg {
+  flex-shrink: 0;
+}
+
+.readonly-badge {
+  display: inline-block;
+  font-size: 14px;
+  margin-left: 6px;
+  cursor: help;
+}
+
+.error-badge {
+  display: inline-block;
+  font-size: 14px;
+  margin-left: 6px;
+  cursor: help;
+}
+
 .playlist-meta {
   color: #8e8e93;
   font-size: 12px;
