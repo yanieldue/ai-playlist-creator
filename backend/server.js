@@ -2194,20 +2194,38 @@ app.get('/api/user-profile/:userId', async (req, res) => {
 
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
+    let platform = null;
+
     if (isEmailBasedUserId(userId)) {
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      // Check which platform is actively connected (check Apple Music first for consistency)
+      const user = await db.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.connectedPlatforms?.apple) {
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        platform = 'apple';
+      } else if (user.connectedPlatforms?.spotify) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        platform = 'spotify';
+      }
+
       if (!platformUserId) {
-        console.log('No Spotify connection found for email:', userId);
+        console.log('No platform connection found for email:', userId);
         // Return basic profile for users without platform connection
         return res.json({
           displayName: 'Music Lover',
           image: null,
-          email: null,
-          external_urls: { spotify: null },
-          followers: { total: 0 },
-          href: null,
-          uri: null
+          email: userId
         });
+      }
+    } else {
+      // Detect platform from userId prefix
+      if (userId.startsWith('spotify_')) {
+        platform = 'spotify';
+      } else if (userId.startsWith('apple_music_')) {
+        platform = 'apple';
       }
     }
 
@@ -2218,45 +2236,53 @@ app.get('/api/user-profile/:userId', async (req, res) => {
       return res.json({
         displayName: 'Music Lover',
         image: null,
-        email: null,
-        external_urls: { spotify: null },
-        followers: { total: 0 },
-        href: null,
-        uri: null
+        email: userId
       });
     }
 
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
+    if (platform === 'spotify') {
+      // Fetch Spotify profile
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
 
-    // Refresh token if needed
-    try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(platformUserId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(platformUserId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        const newAccessToken = refreshData.body.access_token;
+        userSpotifyApi.setAccessToken(newAccessToken);
+        tokens.access_token = newAccessToken;
+        userTokens.set(platformUserId, tokens);
+        await db.updateAccessToken(platformUserId, newAccessToken);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      // Get user profile
+      const userData = await userSpotifyApi.getMe();
+
+      res.json({
+        displayName: userData.body.display_name || 'User',
+        email: userData.body.email,
+        image: userData.body.images?.[0]?.url,
+        country: userData.body.country,
+        product: userData.body.product
+      });
+
+    } else if (platform === 'apple') {
+      // Apple Music doesn't have a "get user profile" endpoint
+      // Return basic info with email
+      const user = await db.getUser(userId);
+      res.json({
+        displayName: user?.email?.split('@')[0] || 'Music Lover',
+        email: user?.email || userId,
+        image: null // Apple Music doesn't provide profile images
+      });
     }
-
-    // Get user profile
-    const userData = await userSpotifyApi.getMe();
-
-    res.json({
-      displayName: userData.body.display_name || 'User',
-      email: userData.body.email,
-      image: userData.body.images?.[0]?.url,
-      country: userData.body.country,
-      product: userData.body.product
-    });
 
   } catch (error) {
     console.error('Error fetching user profile:', error);
