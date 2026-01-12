@@ -3711,7 +3711,13 @@ DO NOT include any text outside the JSON.`;
           }]
         });
 
-        const vibeCheckText = vibeCheckResponse.content[0].text.trim();
+        let vibeCheckText = vibeCheckResponse.content[0].text.trim();
+        // Handle markdown code blocks
+        if (vibeCheckText.startsWith('```json')) {
+          vibeCheckText = vibeCheckText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+        } else if (vibeCheckText.startsWith('```')) {
+          vibeCheckText = vibeCheckText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+        }
         const vibeCheckData = JSON.parse(vibeCheckText);
 
         if (vibeCheckData.vibeIssues && vibeCheckData.vibeIssues.length > 0) {
