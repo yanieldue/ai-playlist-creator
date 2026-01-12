@@ -224,6 +224,29 @@ function isEmailBasedUserId(userId) {
   return userId && userId.includes('@');
 }
 
+// Helper function to get email userId from platform-specific userId
+async function getEmailUserIdFromPlatform(platformUserId) {
+  if (isEmailBasedUserId(platformUserId)) {
+    return platformUserId; // Already email-based
+  }
+
+  // Platform userId format: spotify_xxx or apple_music_xxx
+  // Query database to find the user with this platform ID
+  try {
+    const users = await db.getAllUsers();
+    for (const user of users) {
+      if (user.spotify_user_id === platformUserId || user.apple_music_user_id === platformUserId) {
+        return user.email;
+      }
+    }
+  } catch (error) {
+    console.error('Error looking up email for platform userId:', error);
+  }
+
+  // Fallback: return the platform userId if no email found
+  return platformUserId;
+}
+
 // Helper function to get user tokens (from memory or database)
 async function getUserTokens(userId) {
   // Try to get from memory first
@@ -3848,8 +3871,11 @@ app.post('/api/create-playlist', async (req, res) => {
       tracks: []
     };
 
-    // Save playlist to database (use original userId for user-facing data)
-    await savePlaylist(userId, playlistRecord);
+    // Save playlist to database (use email userId for user-facing data)
+    // Convert platform userId to email if needed
+    const emailUserId = await getEmailUserIdFromPlatform(userId);
+    console.log(`Saving playlist for userId: ${userId}, resolved to email: ${emailUserId}`);
+    await savePlaylist(emailUserId, playlistRecord);
 
     console.log('Playlist saved to history');
 
