@@ -233,14 +233,9 @@ async function getEmailUserIdFromPlatform(platformUserId) {
   // Platform userId format: spotify_xxx or apple_music_xxx
   // Query platform_user_ids table to find the email with this platform ID
   try {
-    const result = await db.pool.query(`
-      SELECT email, spotify_user_id, apple_music_user_id
-      FROM platform_user_ids
-      WHERE spotify_user_id = $1 OR apple_music_user_id = $1
-    `, [platformUserId]);
+    const email = await db.getEmailFromPlatformUserId(platformUserId);
 
-    if (result.rows.length > 0) {
-      const email = result.rows[0].email;
+    if (email) {
       console.log(`Resolved platform userId ${platformUserId} to email: ${email}`);
       return email;
     }

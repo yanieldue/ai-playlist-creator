@@ -575,6 +575,14 @@ class DatabaseService {
     }
   }
 
+  async getEmailFromPlatformUserId(platformUserId) {
+    const result = await pool.query(`
+      SELECT email FROM platform_user_ids
+      WHERE spotify_user_id = $1 OR apple_music_user_id = $1
+    `, [platformUserId]);
+    return result.rows.length > 0 ? result.rows[0].email : null;
+  }
+
   // Close pool
   async close() {
     if (pool) {
