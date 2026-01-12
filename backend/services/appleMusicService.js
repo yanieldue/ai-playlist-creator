@@ -36,11 +36,19 @@ class AppleMusicService {
 
       return response.data;
     } catch (error) {
-      console.error('Apple Music API Error:', error.response?.data || error.message);
+      console.error('Apple Music API Error Details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        endpoint: endpoint,
+        method: options.method || 'GET'
+      });
       throw {
         status: error.response?.status,
         message: error.response?.data?.errors?.[0]?.detail || error.message,
-        code: error.response?.data?.errors?.[0]?.code
+        code: error.response?.data?.errors?.[0]?.code,
+        fullError: error.response?.data
       };
     }
   }
@@ -289,6 +297,10 @@ class AppleMusicService {
       }
       return track;
     });
+
+    console.log(`Processing ${trackIds.length} tracks for playlist ${playlistId}`);
+    console.log(`Sample track URIs:`, trackIds.slice(0, 3));
+    console.log(`Sample track IDs after conversion:`, ids.slice(0, 3));
 
     // Step 1: Add tracks to user's library first (required by Apple Music)
     // This is necessary because Apple Music playlists can only contain library tracks
