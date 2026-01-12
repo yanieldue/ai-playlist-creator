@@ -3666,18 +3666,25 @@ app.post('/api/create-playlist', async (req, res) => {
     let platform = null;
 
     if (isEmailBasedUserId(userId)) {
-      // Try Spotify first
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      platform = 'spotify';
+      // Check which platform is actively connected
+      const user = await db.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
 
-      if (!platformUserId) {
-        // Try Apple Music if Spotify not connected
+      // Use the actively connected platform (check Apple Music first for consistency with other endpoints)
+      if (user.connectedPlatforms?.apple) {
         platformUserId = await resolvePlatformUserId(userId, 'apple');
         platform = 'apple';
+        console.log('Creating playlist on Apple Music for user:', platformUserId);
+      } else if (user.connectedPlatforms?.spotify) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        platform = 'spotify';
+        console.log('Creating playlist on Spotify for user:', platformUserId);
+      }
 
-        if (!platformUserId) {
-          return res.status(404).json({ error: 'No music platform connected' });
-        }
+      if (!platformUserId) {
+        return res.status(404).json({ error: 'No music platform connected' });
       }
     } else {
       // For old platform-specific userIds, detect platform from prefix
