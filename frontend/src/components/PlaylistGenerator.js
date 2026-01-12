@@ -1073,10 +1073,6 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
-        showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
-        if (result.playlistUrl) {
-          window.open(result.playlistUrl, '_blank');
-        }
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {
@@ -1094,7 +1090,7 @@ const PlaylistGenerator = () => {
           : draftPlaylists.filter(d => (d.playlistId || d.id) !== generatedPlaylist.draftId);
         setDraftPlaylists(updatedDrafts);
 
-        // Clear state
+        // Clear state first
         setShowPlaylistModal(false);
         setModalStep(1);
         setChatMessages([]);
@@ -1103,6 +1099,14 @@ const PlaylistGenerator = () => {
         setGeneratedPlaylist(null);
         setPrompt('');
         setCurrentDraftId(null);
+
+        // Show toast and open URL after state is cleared (small delay to avoid flicker)
+        setTimeout(() => {
+          showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
+          if (result.playlistUrl) {
+            window.open(result.playlistUrl, '_blank');
+          }
+        }, 100);
       }
     } catch (err) {
       // If authentication failed, clear stored userId and prompt re-authentication
@@ -1553,10 +1557,6 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
-        showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
-        if (result.playlistUrl) {
-          window.open(result.playlistUrl, '_blank');
-        }
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {
@@ -1577,6 +1577,7 @@ const PlaylistGenerator = () => {
             );
         setDraftPlaylists(updatedDrafts);
 
+        // Clear state first
         setShowPlaylistModal(false);
         setModalStep(1);
         setChatMessages([]);
@@ -1585,6 +1586,14 @@ const PlaylistGenerator = () => {
         setGeneratedPlaylist(null);
         setPrompt('');
         setCurrentDraftId(null);
+
+        // Show toast and open URL after state is cleared (small delay to avoid flicker)
+        setTimeout(() => {
+          showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
+          if (result.playlistUrl) {
+            window.open(result.playlistUrl, '_blank');
+          }
+        }, 100);
       }
     } catch (err) {
       if (err.response?.status === 401) {
