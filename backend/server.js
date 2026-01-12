@@ -2886,9 +2886,10 @@ ERA & CULTURAL CONTEXT:
 REQUESTED ARTISTS:
 ${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
   ? `- User specifically requested: ${genreData.artistConstraints.requestedArtists.join(', ')}
-- CRITICAL: Include queries for EACH requested artist (e.g., "C.LACY R&B", "Tyree Thomas", "Reo Xander")
-- These are the PRIMARY focus - most queries should include these artist names
-- Also include "similar to [artist]" queries to find related artists`
+- CRITICAL PRIORITY: First query for EACH artist should be JUST the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander") with NO genre keywords
+- Then add queries with genre keywords (e.g., "C.LACY R&B", "Tyree Thomas mellow")
+- Include at least 2 queries per requested artist (one simple, one with keywords)
+- Also include "similar to [artist]" or "artists like [artist]" queries`
   : '- No specific artists requested'}
 
 SEARCH QUERY REQUIREMENTS:
