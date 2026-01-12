@@ -215,7 +215,9 @@ class DatabaseService {
       SELECT u.email, u.password, u.platform, u.user_id as "userId",
              u.created_at as "createdAt",
              COALESCE(cp.spotify, false) as spotify,
-             COALESCE(cp.apple, false) as apple
+             COALESCE(cp.apple, false) as apple,
+             cp.spotify_user_id,
+             cp.apple_music_user_id
       FROM users u
       LEFT JOIN connected_platforms cp ON u.email = cp.email
     `);
@@ -229,7 +231,9 @@ class DatabaseService {
       connectedPlatforms: {
         spotify: row.spotify,
         apple: row.apple
-      }
+      },
+      spotify_user_id: row.spotify_user_id,
+      apple_music_user_id: row.apple_music_user_id
     }));
   }
 
