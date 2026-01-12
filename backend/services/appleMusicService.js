@@ -387,22 +387,13 @@ class AppleMusicService {
    * @param {string} playlistId - Playlist ID
    * @param {Array<string>} trackIds - Array of track library IDs
    */
-  async removeTracksFromPlaylist(userToken, playlistId, trackIds) {
-    // Apple Music requires library track IDs, not catalog IDs
-    // This is a limitation - we may need to get the full playlist first
-    // and match by catalog ID to find library ID
+  async removeTracksFromPlaylist(userToken, playlistId, _trackIds) {
+    // Apple Music API limitation: No endpoint to remove tracks from playlists
+    // The API only supports adding tracks, not removing them
+    // This is a known limitation of the Apple Music web API
+    // Users must remove tracks manually in the Apple Music app
 
-    const ids = trackIds.map(track => {
-      if (typeof track === 'string' && track.startsWith('apple:track:')) {
-        return track.replace('apple:track:', '');
-      }
-      return track;
-    });
-
-    // Note: Apple Music API doesn't have a direct "remove tracks" endpoint
-    // We would need to get all tracks, filter out the ones to remove,
-    // and recreate the playlist order. For now, throw not implemented.
-    throw new Error('Remove tracks not yet implemented for Apple Music');
+    throw new Error('Apple Music API does not support removing tracks from playlists. Please use the Apple Music app to remove tracks manually.');
   }
 
   /**

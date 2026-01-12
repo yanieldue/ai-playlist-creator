@@ -4696,48 +4696,57 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
       return res.status(404).json({ error: 'Playlist not found' });
     }
 
-    // If isPublic setting changed, update it on Spotify
+    // If isPublic setting changed, update it on the platform
     if (isPublic !== undefined && isPublic !== userPlaylistHistory[playlistIndex].isPublic) {
-      // If userId is email-based, resolve to Spotify platform userId
-      let platformUserId = userId;
-      if (isEmailBasedUserId(userId)) {
-        platformUserId = await resolvePlatformUserId(userId, 'spotify');
-        if (!platformUserId) {
-          return res.status(404).json({ error: 'Spotify not connected' });
-        }
-      }
+      const playlistPlatform = userPlaylistHistory[playlistIndex].platform;
 
-      const tokens = await getUserTokens(platformUserId);
-      if (tokens) {
-        const userSpotifyApi = new SpotifyWebApi({
-          clientId: process.env.SPOTIFY_CLIENT_ID,
-          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-        });
-        userSpotifyApi.setAccessToken(tokens.access_token);
-        userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-        try {
-          // Refresh token if needed
-          const refreshData = await userSpotifyApi.refreshAccessToken();
-          const newAccessToken = refreshData.body.access_token;
-          userSpotifyApi.setAccessToken(newAccessToken);
-          tokens.access_token = newAccessToken;
-          userTokens.set(platformUserId, tokens);
-          saveTokens();
-        } catch (refreshError) {
-          console.log('Token refresh failed or not needed:', refreshError.message);
+      // Apple Music library playlists are always private, cannot be made public
+      if (playlistPlatform === 'apple') {
+        console.log('Apple Music playlists are always private, skipping privacy update');
+        // Don't update isPublic for Apple Music - keep it as false
+        isPublic = false;
+      } else if (playlistPlatform === 'spotify') {
+        // Handle Spotify privacy update
+        let platformUserId = userId;
+        if (isEmailBasedUserId(userId)) {
+          platformUserId = await resolvePlatformUserId(userId, 'spotify');
+          if (!platformUserId) {
+            return res.status(404).json({ error: 'Spotify not connected' });
+          }
         }
 
-        try {
-          // Update playlist privacy on Spotify
-          await userSpotifyApi.changePlaylistDetails(playlistId, {
-            public: isPublic
+        const tokens = await getUserTokens(platformUserId);
+        if (tokens) {
+          const userSpotifyApi = new SpotifyWebApi({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
           });
-          console.log('Updated playlist privacy on Spotify to:', isPublic ? 'public' : 'private');
-        } catch (spotifyError) {
-          console.error('Failed to update playlist privacy on Spotify:', spotifyError);
-          // Continue anyway - we'll still update our local record
+          userSpotifyApi.setAccessToken(tokens.access_token);
+          userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+          try {
+            // Refresh token if needed
+            const refreshData = await userSpotifyApi.refreshAccessToken();
+            const newAccessToken = refreshData.body.access_token;
+            userSpotifyApi.setAccessToken(newAccessToken);
+            tokens.access_token = newAccessToken;
+            userTokens.set(platformUserId, tokens);
+            saveTokens();
+          } catch (refreshError) {
+            console.log('Token refresh failed or not needed:', refreshError.message);
+          }
+
+          try {
+            // Update playlist privacy on Spotify
+            await userSpotifyApi.changePlaylistDetails(playlistId, {
+              public: isPublic
+            });
+            console.log('Updated playlist privacy on Spotify to:', isPublic ? 'public' : 'private');
+          } catch (spotifyError) {
+            console.error('Failed to update playlist privacy on Spotify:', spotifyError);
+            // Continue anyway - we'll still update our local record
+          }
         }
       }
     }
