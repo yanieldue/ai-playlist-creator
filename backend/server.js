@@ -3021,6 +3021,90 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
           console.error(`Error searching for "${query}":`, error.message);
         }
       }
+    } else if (platform === 'apple') {
+      // Apple Music search implementation
+      const platformService = new PlatformService();
+      const storefront = tokens.storefront || 'us';
+
+      const searchLimit = Math.min(
+        Math.max(5, Math.ceil(songCount / 2)),
+        15
+      );
+      console.log(`Using search limit of ${searchLimit} tracks per query (requested ${songCount} songs)`);
+
+      for (const query of aiData.searchQueries) {
+        try {
+          const tracks = await platformService.searchTracks(platformUserId, query, tokens, storefront, searchLimit);
+
+          // Add tracks, filtering out duplicates and explicit content if needed
+          for (const track of tracks) {
+            if (!seenTrackIds.has(track.id)) {
+              // Skip tracks that are already in the playlist (for replace mode)
+              if (excludeTrackIds.has(track.id)) {
+                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+                continue;
+              }
+
+              // Filter explicit content if user doesn't allow it
+              if (!allowExplicit && track.explicit) {
+                continue;
+              }
+
+              // Filter out tracks from known artists if newArtistsOnly is enabled
+              if (newArtistsOnly && knownArtists.size > 0) {
+                const trackArtist = track.artists[0].name.toLowerCase();
+                if (knownArtists.has(trackArtist)) {
+                  console.log(`Skipping "${track.name}" by ${track.artists[0].name} (known artist)`);
+                  continue;
+                }
+              }
+
+              // Create a signature for the song (artist + normalized track name)
+              const primaryArtist = track.artists[0].name.toLowerCase();
+              const normalizedTrackName = normalizeTrackName(track.name);
+              const songSignature = `${primaryArtist}::${normalizedTrackName}`;
+
+              // Check if we've seen this song before
+              if (seenSongSignatures.has(songSignature)) {
+                // Only allow if it's a unique variation (remix, live, etc.)
+                if (!isUniqueVariation(track.name)) {
+                  console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name} (already have it)`);
+                  continue;
+                }
+              }
+
+              // Check against playlist song history (if loaded)
+              if (playlistSongHistory.size > 0) {
+                const historySignature = `${normalizedTrackName}|||${primaryArtist}`;
+                if (playlistSongHistory.has(historySignature)) {
+                  console.log(`Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist history)`);
+                  continue;
+                }
+              }
+
+              seenTrackIds.add(track.id);
+              seenSongSignatures.set(songSignature, track.name);
+              allTracks.push({
+                id: track.id,
+                name: track.name,
+                artist: track.artists[0].name,
+                uri: track.uri,
+                album: track.album.name,
+                image: track.album.images?.[0]?.url,
+                previewUrl: track.preview_url,
+                externalUrl: track.external_urls?.spotify || track.external_urls?.appleMusic,
+                explicit: track.explicit || false,
+                genres: [] // Apple Music doesn't provide genres per track
+              });
+            }
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Error searching for "${query}":`, error.message);
+        }
+      }
     }
 
     console.log(`Found ${allTracks.length} unique tracks before audio features filtering`);
@@ -3036,7 +3120,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       genreData.audioFeatures.acousticness.min !== null
     );
 
-    if (hasAudioFeatureFilters && allTracks.length > 0) {
+    if (hasAudioFeatureFilters && allTracks.length > 0 && platform === 'spotify') {
       console.log('Audio feature filters detected:', genreData.audioFeatures);
 
       try {
