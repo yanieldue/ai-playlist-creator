@@ -231,19 +231,25 @@ async function getEmailUserIdFromPlatform(platformUserId) {
   }
 
   // Platform userId format: spotify_xxx or apple_music_xxx
-  // Query database to find the user with this platform ID
+  // Query platform_user_ids table to find the email with this platform ID
   try {
-    const users = await db.getAllUsers();
-    for (const user of users) {
-      if (user.spotify_user_id === platformUserId || user.apple_music_user_id === platformUserId) {
-        return user.email;
-      }
+    const result = await db.pool.query(`
+      SELECT email, spotify_user_id, apple_music_user_id
+      FROM platform_user_ids
+      WHERE spotify_user_id = $1 OR apple_music_user_id = $1
+    `, [platformUserId]);
+
+    if (result.rows.length > 0) {
+      const email = result.rows[0].email;
+      console.log(`Resolved platform userId ${platformUserId} to email: ${email}`);
+      return email;
     }
   } catch (error) {
     console.error('Error looking up email for platform userId:', error);
   }
 
   // Fallback: return the platform userId if no email found
+  console.warn(`Could not find email for platform userId: ${platformUserId}, using platform userId as fallback`);
   return platformUserId;
 }
 
