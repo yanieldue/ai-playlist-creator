@@ -1072,8 +1072,11 @@ const PlaylistGenerator = () => {
       );
 
       if (result.success) {
-        showToast('Playlist created successfully! Opening Spotify...', 'success');
-        window.open(result.playlistUrl, '_blank');
+        const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
+        if (result.playlistUrl) {
+          window.open(result.playlistUrl, '_blank');
+        }
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {
@@ -1549,8 +1552,11 @@ const PlaylistGenerator = () => {
       );
 
       if (result.success) {
-        showToast('Playlist created successfully! Opening Spotify...', 'success');
-        window.open(result.playlistUrl, '_blank');
+        const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
+        if (result.playlistUrl) {
+          window.open(result.playlistUrl, '_blank');
+        }
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {

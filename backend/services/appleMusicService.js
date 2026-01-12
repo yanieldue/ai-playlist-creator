@@ -292,6 +292,7 @@ class AppleMusicService {
 
     // Step 1: Add tracks to user's library first (required by Apple Music)
     // This is necessary because Apple Music playlists can only contain library tracks
+    console.log(`Attempting to add ${ids.length} tracks to user's library...`);
     try {
       await this.request(
         `/me/library`,
@@ -299,33 +300,40 @@ class AppleMusicService {
         {
           method: 'POST',
           params: {
-            ids: ids.join(',')
+            'ids[songs]': ids.join(',')
           }
         }
       );
-      console.log(`Added ${ids.length} tracks to user's library`);
+      console.log(`✓ Successfully added ${ids.length} tracks to user's library`);
     } catch (error) {
-      console.log('Note: Some tracks may already be in library or failed to add:', error.message);
+      console.error('Error adding tracks to library:', error);
+      console.log('Note: Some tracks may already be in library. Continuing with playlist addition...');
       // Continue anyway - tracks might already be in library
     }
 
     // Step 2: Add tracks to playlist using catalog IDs
     // Apple Music API accepts catalog IDs in the format: {id: 'catalog_id', type: 'songs'}
-    const data = await this.request(
-      `/me/library/playlists/${playlistId}/tracks`,
-      userToken,
-      {
-        method: 'POST',
-        data: {
-          data: ids.map(id => ({
-            id,
-            type: 'songs'
-          }))
+    console.log(`Adding ${ids.length} tracks to playlist ${playlistId}...`);
+    try {
+      await this.request(
+        `/me/library/playlists/${playlistId}/tracks`,
+        userToken,
+        {
+          method: 'POST',
+          data: {
+            data: ids.map(id => ({
+              id,
+              type: 'songs'
+            }))
+          }
         }
-      }
-    );
-
-    return { success: true };
+      );
+      console.log(`✓ Successfully added ${ids.length} tracks to playlist`);
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding tracks to playlist:', error);
+      throw error;
+    }
   }
 
   /**
