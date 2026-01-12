@@ -3214,12 +3214,23 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       if (shouldFilterForIndieVibe && allTracks.length > 0) {
         console.log('🎯 Adjusting for indie/underground vibe (requested artists underrepresented)...');
 
-        // Calculate average popularity of all tracks
+        // Calculate both average and median popularity
+        const sortedByPopularity = [...allTracks].sort((a, b) => (b.popularity || 50) - (a.popularity || 50));
+        const medianPopularity = sortedByPopularity[Math.floor(sortedByPopularity.length / 2)].popularity || 50;
         const avgPopularity = allTracks.reduce((sum, t) => sum + (t.popularity || 50), 0) / allTracks.length;
-        console.log(`Average track popularity: ${avgPopularity.toFixed(1)}`);
 
-        // If average popularity is high (>60), filter for less popular tracks to match indie vibe
-        if (avgPopularity > 60) {
+        // Check if top artists are mainstream (top 30% of tracks have high popularity)
+        const top30PercentCount = Math.ceil(allTracks.length * 0.3);
+        const top30PercentAvg = sortedByPopularity.slice(0, top30PercentCount).reduce((sum, t) => sum + (t.popularity || 50), 0) / top30PercentCount;
+
+        console.log(`Track popularity - Avg: ${avgPopularity.toFixed(1)}, Median: ${medianPopularity}, Top 30% avg: ${top30PercentAvg.toFixed(1)}`);
+
+        // Filter if:
+        // 1. Median popularity > 55 (half the tracks are mainstream), OR
+        // 2. Top 30% average > 65 (dominated by popular artists at the top)
+        const hasMainstreamBias = medianPopularity > 55 || top30PercentAvg > 65;
+
+        if (hasMainstreamBias) {
           const popularityThreshold = 55; // Keep only tracks with popularity <= 55
           const beforeCount = allTracks.length;
 
