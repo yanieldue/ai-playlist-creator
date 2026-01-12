@@ -2808,6 +2808,16 @@ DO NOT include any text outside the JSON.`
     if (playlistId && userId) {
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       existingPlaylistData = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+      // If adding more songs to existing playlist, preserve original genre data (especially requestedArtists)
+      if (existingPlaylistData && existingPlaylistData.genreData) {
+        console.log('Reusing original genre data from existing playlist to maintain consistency');
+        // Preserve requested artists and other constraints from original prompt
+        if (existingPlaylistData.genreData.artistConstraints?.requestedArtists) {
+          genreData.artistConstraints.requestedArtists = existingPlaylistData.genreData.artistConstraints.requestedArtists;
+          console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')}`);
+        }
+      }
     }
 
     // Build context from liked/disliked songs if available
@@ -3993,6 +4003,7 @@ app.post('/api/create-playlist', async (req, res) => {
       updateMode: updateMode || 'append',
       isPublic: isPublic !== undefined ? isPublic : true,
       originalPrompt: prompt,
+      genreData: genreData, // Save genre data to preserve requested artists and constraints
       chatMessages: chatMessages || [],
       refinementInstructions: [],
       excludedSongs: excludedSongs || [],
