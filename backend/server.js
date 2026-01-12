@@ -3231,7 +3231,9 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         const hasMainstreamBias = medianPopularity > 55 || top30PercentAvg > 65;
 
         if (hasMainstreamBias) {
-          const popularityThreshold = 55; // Keep only tracks with popularity <= 55
+          // Use very strict threshold (35) when requested artists are underrepresented
+          // This ensures we get truly underground/indie artists that might match the vibe
+          const popularityThreshold = 35;
           const beforeCount = allTracks.length;
 
           // Keep tracks from requested artists even if they're popular, but filter everyone else
@@ -3243,7 +3245,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
           console.log(`Filtered out mainstream artists: ${beforeCount} -> ${allTracks.length} tracks (kept requested artists + popularity <= ${popularityThreshold})`);
 
           if (allTracks.length < songCount) {
-            console.warn(`⚠️  Only ${allTracks.length} underground tracks found (needed ${songCount})`);
+            console.warn(`⚠️  Only ${allTracks.length} tracks found with indie/underground vibe (needed ${songCount})`);
+            console.log(`💡 Tip: The requested artists (${requestedArtists.join(', ')}) may not be available on this platform, so results include similar lesser-known artists`);
           }
         } else {
           console.log('Track selection already has indie/underground vibe, no filtering needed');
