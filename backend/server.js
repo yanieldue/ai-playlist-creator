@@ -2823,7 +2823,8 @@ DO NOT include any text outside the JSON.`
         // Preserve requested artists and other constraints from original prompt
         if (existingPlaylistData.genreData.artistConstraints?.requestedArtists) {
           genreData.artistConstraints.requestedArtists = existingPlaylistData.genreData.artistConstraints.requestedArtists;
-          console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')}`);
+          genreData.artistConstraints.exclusiveMode = existingPlaylistData.genreData.artistConstraints.exclusiveMode || false;
+          console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')} (exclusive: ${genreData.artistConstraints.exclusiveMode})`);
         }
       }
     }
@@ -2873,6 +2874,7 @@ DO NOT include any text outside the JSON.`
 3. 15-20 diverse search queries to find songs that match the prompt
 
 User prompt: "${prompt}"
+${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `\n⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be prioritized in search queries, even if the refinement message seems to minimize them. The user still wants these artists included, they're just adjusting the balance.` : ''}
 ${newArtistsOnly ? '\nIMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists in your search queries.' : ''}${userFeedbackContext}
 
 IMPORTANT GUIDELINES - Genre & Style:
