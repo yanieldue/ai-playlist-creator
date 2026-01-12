@@ -3192,6 +3192,29 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         console.log(`  ${isRequested ? '✓' : ' '} ${artist}: ${count} tracks`);
       });
       console.log('');
+
+      // If none of the requested artists were found, filter for underground/indie artists
+      if (foundRequestedArtists.length === 0 && allTracks.length > 0) {
+        console.log('🎯 Adjusting for indie/underground vibe since requested artists not found...');
+
+        // Calculate average popularity of all tracks
+        const avgPopularity = allTracks.reduce((sum, t) => sum + (t.popularity || 50), 0) / allTracks.length;
+        console.log(`Average track popularity: ${avgPopularity.toFixed(1)}`);
+
+        // If average popularity is high (>60), filter for less popular tracks to match indie vibe
+        if (avgPopularity > 60) {
+          const popularityThreshold = 55; // Keep only tracks with popularity <= 55
+          const beforeCount = allTracks.length;
+          allTracks.splice(0, allTracks.length, ...allTracks.filter(t => (t.popularity || 50) <= popularityThreshold));
+          console.log(`Filtered out mainstream artists: ${beforeCount} -> ${allTracks.length} tracks (popularity <= ${popularityThreshold})`);
+
+          if (allTracks.length < songCount) {
+            console.warn(`⚠️  Only ${allTracks.length} underground tracks found (needed ${songCount})`);
+          }
+        } else {
+          console.log('Track selection already has indie/underground vibe, no filtering needed');
+        }
+      }
     }
 
     // Step 2.5: Filter by audio features if specified
