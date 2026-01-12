@@ -3193,9 +3193,26 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       });
       console.log('');
 
-      // If none of the requested artists were found, filter for underground/indie artists
-      if (foundRequestedArtists.length === 0 && allTracks.length > 0) {
-        console.log('🎯 Adjusting for indie/underground vibe since requested artists not found...');
+      // If few/no requested artists were found, check if we should filter for indie vibe
+      const requestedArtistRatio = foundRequestedArtists.length / requestedArtists.length;
+
+      // Count how many tracks are from requested artists
+      const requestedArtistTrackCount = allTracks.filter(t =>
+        requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase())
+      ).length;
+      const requestedArtistTrackRatio = requestedArtistTrackCount / allTracks.length;
+
+      console.log(`Requested artist coverage: ${foundRequestedArtists.length}/${requestedArtists.length} artists found, ${requestedArtistTrackCount}/${allTracks.length} tracks (${(requestedArtistTrackRatio * 100).toFixed(1)}%)`);
+
+      // Filter for indie vibe if:
+      // 1. None of the requested artists were found, OR
+      // 2. Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists)
+      const shouldFilterForIndieVibe =
+        foundRequestedArtists.length === 0 ||
+        (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2);
+
+      if (shouldFilterForIndieVibe && allTracks.length > 0) {
+        console.log('🎯 Adjusting for indie/underground vibe (requested artists underrepresented)...');
 
         // Calculate average popularity of all tracks
         const avgPopularity = allTracks.reduce((sum, t) => sum + (t.popularity || 50), 0) / allTracks.length;
@@ -3205,8 +3222,14 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         if (avgPopularity > 60) {
           const popularityThreshold = 55; // Keep only tracks with popularity <= 55
           const beforeCount = allTracks.length;
-          allTracks.splice(0, allTracks.length, ...allTracks.filter(t => (t.popularity || 50) <= popularityThreshold));
-          console.log(`Filtered out mainstream artists: ${beforeCount} -> ${allTracks.length} tracks (popularity <= ${popularityThreshold})`);
+
+          // Keep tracks from requested artists even if they're popular, but filter everyone else
+          allTracks.splice(0, allTracks.length, ...allTracks.filter(t => {
+            const isRequestedArtist = requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase());
+            return isRequestedArtist || (t.popularity || 50) <= popularityThreshold;
+          }));
+
+          console.log(`Filtered out mainstream artists: ${beforeCount} -> ${allTracks.length} tracks (kept requested artists + popularity <= ${popularityThreshold})`);
 
           if (allTracks.length < songCount) {
             console.warn(`⚠️  Only ${allTracks.length} underground tracks found (needed ${songCount})`);
@@ -3214,6 +3237,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         } else {
           console.log('Track selection already has indie/underground vibe, no filtering needed');
         }
+      } else {
+        console.log('Requested artists well-represented in results, no indie filtering needed');
       }
     }
 
