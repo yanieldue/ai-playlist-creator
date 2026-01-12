@@ -3152,6 +3152,48 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
     console.log(`Found ${allTracks.length} unique tracks before audio features filtering`);
 
+    // Log artist breakdown, especially for requested artists
+    if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
+      const artistCounts = new Map();
+      allTracks.forEach(track => {
+        const artist = track.artist;
+        artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
+      });
+
+      console.log('\nArtist breakdown in search results:');
+      const requestedArtists = genreData.artistConstraints.requestedArtists;
+
+      // Check if requested artists were found
+      const foundRequestedArtists = requestedArtists.filter(reqArtist => {
+        // Check both exact match and case-insensitive match
+        return Array.from(artistCounts.keys()).some(foundArtist =>
+          foundArtist.toLowerCase() === reqArtist.toLowerCase()
+        );
+      });
+
+      console.log(`Requested artists: ${requestedArtists.join(', ')}`);
+      console.log(`Found in results: ${foundRequestedArtists.length > 0 ? foundRequestedArtists.join(', ') : 'NONE'}`);
+
+      if (foundRequestedArtists.length === 0) {
+        console.warn('⚠️  WARNING: None of the requested artists were found in search results!');
+        console.log('This could mean:');
+        console.log('  1. These artists don\'t exist on Apple Music');
+        console.log('  2. Artist names are spelled differently on Apple Music');
+        console.log('  3. Artists have very limited catalogs');
+      }
+
+      // Show top artists found
+      const sortedArtists = Array.from(artistCounts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+      console.log(`Top 10 artists in results:`);
+      sortedArtists.forEach(([artist, count]) => {
+        const isRequested = requestedArtists.some(req => req.toLowerCase() === artist.toLowerCase());
+        console.log(`  ${isRequested ? '✓' : ' '} ${artist}: ${count} tracks`);
+      });
+      console.log('');
+    }
+
     // Step 2.5: Filter by audio features if specified
     let tracksForSelection = allTracks;
     const hasAudioFeatureFilters = genreData.audioFeatures && (
