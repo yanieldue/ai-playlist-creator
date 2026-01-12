@@ -2640,7 +2640,8 @@ Respond ONLY with valid JSON in this format:
     "vocalGender": "male/female/mixed/any" or null,
     "artistType": "solo/band/any" or null,
     "excludeFeatures": boolean,
-    "requestedArtists": ["exact artist names mentioned in prompt"] or []
+    "requestedArtists": ["exact artist names mentioned in prompt"] or [],
+    "exclusiveMode": boolean (true if user wants ONLY these specific artists, false for "similar vibe" mix)
   },
   "productionStyle": {
     "preference": "acoustic/produced/lofi/polished/raw" or null,
@@ -2698,10 +2699,15 @@ SPECIFIC ARTISTS:
 - "artists like [name]", "similar to [artist]", "songs from [artist]": Extract EXACT artist names to requestedArtists array
 - Be precise with artist names - do NOT confuse similar names (e.g., "C.LACY" is NOT "Steve Lacy")
 - Include ALL mentioned artists, even if they're indie/underground
+- EXCLUSIVE MODE DETECTION:
+  * exclusiveMode: true if user says "only [artist]", "just [artist]", "all songs from [artist]", "exclusively [artist]"
+  * exclusiveMode: false for "like [artist]", "similar to [artist]", "vibes of [artist]", "artists like [artist]"
 - Examples:
-  * "artists like C.LACY or Tyree Thomas" → requestedArtists: ["C.LACY", "Tyree Thomas"]
-  * "songs like Need my baby by Reo Xander" → requestedArtists: ["Reo Xander"]
-  * "Taylor Swift and Olivia Rodrigo vibes" → requestedArtists: ["Taylor Swift", "Olivia Rodrigo"]
+  * "artists like C.LACY or Tyree Thomas" → requestedArtists: ["C.LACY", "Tyree Thomas"], exclusiveMode: false
+  * "i only want songs from drake" → requestedArtists: ["Drake"], exclusiveMode: true
+  * "just Taylor Swift songs" → requestedArtists: ["Taylor Swift"], exclusiveMode: true
+  * "songs like Need my baby by Reo Xander" → requestedArtists: ["Reo Xander"], exclusiveMode: false
+  * "Taylor Swift and Olivia Rodrigo vibes" → requestedArtists: ["Taylor Swift", "Olivia Rodrigo"], exclusiveMode: false
 
 PRODUCTION:
 - "acoustic", "unplugged", "stripped": preference: "acoustic"
@@ -2773,7 +2779,9 @@ DO NOT include any text outside the JSON.`
       artistConstraints: {
         vocalGender: null,
         artistType: null,
-        excludeFeatures: false
+        excludeFeatures: false,
+        requestedArtists: [],
+        exclusiveMode: false
       },
       productionStyle: {
         preference: null,
@@ -2896,15 +2904,22 @@ ERA & CULTURAL CONTEXT:
 REQUESTED ARTISTS:
 ${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
   ? `- User specifically requested: ${genreData.artistConstraints.requestedArtists.join(', ')}
-- CRITICAL PRIORITY: First query for EACH artist should be JUST the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander") with NO genre keywords
+- EXCLUSIVE MODE: ${genreData.artistConstraints.exclusiveMode ? 'YES - User wants ONLY these artists, NO similar artists' : 'NO - Mix of these artists + similar vibe artists'}
+${genreData.artistConstraints.exclusiveMode
+  ? `- CRITICAL: ALL queries must be for the requested artists ONLY
+- Include at least 3-4 queries per artist (just name, with genre, with mood descriptors, deep cuts)
+- DO NOT include "similar to" or "artists like" queries
+- Examples: "${genreData.artistConstraints.requestedArtists[0]}", "${genreData.artistConstraints.requestedArtists[0]} ${genreData.primaryGenre || ''}", "${genreData.artistConstraints.requestedArtists[0]} deep cuts"`
+  : `- CRITICAL PRIORITY: First query for EACH artist should be JUST the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander") with NO genre keywords
 - Then add queries with genre keywords (e.g., "C.LACY R&B", "Tyree Thomas mellow")
 - Include at least 2 queries per requested artist (one simple, one with keywords)
-- Also include "similar to [artist]" or "artists like [artist]" queries`
+- Also include "similar to [artist]" or "artists like [artist]" queries to find similar vibe artists`}`
   : '- No specific artists requested'}
 
 SEARCH QUERY REQUIREMENTS:
-- For GENRE-SPECIFIC playlists, include at least 8 genre-specific queries (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists")
-- If SPECIFIC ARTISTS are requested, PRIORITIZE queries with those exact artist names - at least 60% of queries should include requested artist names
+- If EXCLUSIVE MODE is enabled, 100% of queries must be for the requested artists ONLY (no genre-only or similar artist queries)
+- If SPECIFIC ARTISTS are requested (non-exclusive), PRIORITIZE queries with those exact artist names - at least 60% of queries should include requested artist names
+- For GENRE-SPECIFIC playlists (without exclusive artist mode), include at least 8 genre-specific queries (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists")
 - If SUBGENRE is specified, ALL queries must target that specific subgenre (e.g., "90s R&B" not just "R&B")
 - If DECADE/ERA is specified, add year filters to queries (e.g., "year:1990-1999") or mention the era
 - If CULTURAL REGION is specified, include region-specific artists/styles (e.g., "West Coast hip-hop", "UK grime")
@@ -3183,6 +3198,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       });
 
       console.log(`Requested artists: ${requestedArtists.join(', ')}`);
+      console.log(`Exclusive mode: ${genreData.artistConstraints.exclusiveMode ? 'YES (only these artists)' : 'NO (similar vibe mix)'}`);
       console.log(`Found in results: ${foundRequestedArtists.length > 0 ? foundRequestedArtists.join(', ') : 'NONE'}`);
 
       if (foundRequestedArtists.length === 0) {
@@ -3205,6 +3221,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       console.log('');
 
       // If few/no requested artists were found, check if we should filter for indie vibe
+      // BUT SKIP this filtering if user wants EXCLUSIVE mode (they only want these specific artists)
       const requestedArtistRatio = foundRequestedArtists.length / requestedArtists.length;
 
       // Count how many tracks are from requested artists
@@ -3216,11 +3233,14 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       console.log(`Requested artist coverage: ${foundRequestedArtists.length}/${requestedArtists.length} artists found, ${requestedArtistTrackCount}/${allTracks.length} tracks (${(requestedArtistTrackRatio * 100).toFixed(1)}%)`);
 
       // Filter for indie vibe if:
-      // 1. None of the requested artists were found, OR
-      // 2. Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists)
+      // 1. NOT in exclusive mode (user wants similar vibe artists, not just the requested ones)
+      // 2. None of the requested artists were found, OR
+      // 3. Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists)
       const shouldFilterForIndieVibe =
-        foundRequestedArtists.length === 0 ||
-        (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2);
+        !genreData.artistConstraints.exclusiveMode && (
+          foundRequestedArtists.length === 0 ||
+          (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2)
+        );
 
       if (shouldFilterForIndieVibe && allTracks.length > 0) {
         console.log('🎯 Adjusting for indie/underground vibe (requested artists underrepresented)...');
@@ -3262,6 +3282,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         } else {
           console.log('Track selection already has indie/underground vibe, no filtering needed');
         }
+      } else if (genreData.artistConstraints.exclusiveMode) {
+        console.log('Skipping indie filtering - exclusive mode enabled (user wants only requested artists)');
       } else {
         console.log('Requested artists well-represented in results, no indie filtering needed');
       }
