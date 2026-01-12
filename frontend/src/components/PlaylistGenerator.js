@@ -896,7 +896,7 @@ const PlaylistGenerator = () => {
     }, 1500);
 
     try {
-      const result = await playlistService.generatePlaylist(prompt.trim(), userId, 'spotify', allowExplicit, newArtistsOnly, songCount);
+      const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount);
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
@@ -1265,7 +1265,7 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(
         refinementPrompt,
         userId,
-        'spotify',
+        activePlatform || 'spotify',
         allowExplicit,
         newArtistsOnly,
         requestedCount,
@@ -1391,7 +1391,7 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(
         `Based on this theme: "${promptToUse}".${descriptionContext}${refinementsContext} Add 10 more similar songs that match this exact vibe and description.`,
         userId,
-        'spotify',
+        activePlatform || 'spotify',
         allowExplicit,
         newArtistsOnly,
         10,
@@ -1692,7 +1692,7 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(
         promptText,
         userId,
-        'spotify',
+        activePlatform || 'spotify',
         allowExplicit,
         artistModalNewArtistsOnly,
         artistModalSongCount
