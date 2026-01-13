@@ -4077,7 +4077,7 @@ DO NOT include any text outside the JSON.`;
 // Create playlist on Spotify
 app.post('/api/create-playlist', async (req, res) => {
   try {
-    let { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs } = req.body;
+    let { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs, genreData } = req.body;
 
     console.log('Create playlist request:', {
       userId,
