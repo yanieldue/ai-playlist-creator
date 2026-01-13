@@ -2828,11 +2828,12 @@ DO NOT include any text outside the JSON.`
             let artistInfo = null;
 
             if (platform === 'apple') {
+              const appleMusicDevToken = generateAppleMusicToken();
               const searchResult = await fetch(
                 `https://api.music.apple.com/v1/catalog/us/search?term=${encodeURIComponent(artistName)}&types=artists&limit=1`,
                 {
                   headers: {
-                    'Authorization': `Bearer ${process.env.APPLE_MUSIC_DEVELOPER_TOKEN}`
+                    'Authorization': `Bearer ${appleMusicDevToken}`
                   }
                 }
               );
