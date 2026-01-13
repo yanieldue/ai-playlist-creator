@@ -3046,7 +3046,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       return res.status(500).json({ error: 'Failed to parse AI response' });
     }
     
-    console.log('AI generated:', aiData);
+    console.log('AI generated playlist name:', aiData.playlistName);
+    console.log('AI generated search queries:', JSON.stringify(aiData.searchQueries, null, 2));
     
     // Helper function to normalize track names for comparison
     const normalizeTrackName = (name) => {
