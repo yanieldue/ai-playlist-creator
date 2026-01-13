@@ -3191,16 +3191,18 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
     console.log(`Found ${allTracks.length} unique tracks before audio features filtering`);
 
+    // Helper function to normalize artist names (handles accents like GIVĒON -> GIVEON)
+    // Defined at top level so it's available in all scopes
+    const normalizeArtistForComparison = (name) => {
+      return name
+        .toLowerCase()
+        .normalize('NFD') // Decompose accented characters (ē -> e + combining accent)
+        .replace(/[\u0300-\u036f]/g, '') // Remove diacritics/accents
+        .trim();
+    };
+
     // Log artist breakdown, especially for requested artists
     if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
-      // Helper function to normalize artist names (handles accents like GIVĒON -> GIVEON)
-      const normalizeArtistForComparison = (name) => {
-        return name
-          .toLowerCase()
-          .normalize('NFD') // Decompose accented characters (ē -> e + combining accent)
-          .replace(/[\u0300-\u036f]/g, '') // Remove diacritics/accents
-          .trim();
-      };
 
       const artistCounts = new Map();
       allTracks.forEach(track => {
@@ -3307,15 +3309,6 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
           }
         }
 
-        // Helper function to normalize artist names (handles accents, case, etc.)
-        const normalizeArtistName = (name) => {
-          return name
-            .toLowerCase()
-            .normalize('NFD') // Decompose accented characters
-            .replace(/[\u0300-\u036f]/g, '') // Remove diacritics (accents)
-            .trim();
-        };
-
         const artistTrackMap = new Map();
 
         // Group tracks by normalized artist name
@@ -3323,7 +3316,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
           const originalArtist = track.artist;
           // First check if Claude mapped this artist, otherwise normalize ourselves
           const claudeNormalizedArtist = artistNameMap.get(originalArtist.toLowerCase());
-          const finalNormalizedArtist = normalizeArtistName(claudeNormalizedArtist || originalArtist);
+          const finalNormalizedArtist = normalizeArtistForComparison(claudeNormalizedArtist || originalArtist);
 
           if (!artistTrackMap.has(finalNormalizedArtist)) {
             artistTrackMap.set(finalNormalizedArtist, []);
@@ -3334,7 +3327,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
         // Filter to keep only first N tracks per artist
         const limitedTracks = [];
         artistTrackMap.forEach((tracks, artist) => {
-          const isRequestedArtist = requestedArtists.some(req => normalizeArtistName(req) === artist);
+          const isRequestedArtist = requestedArtists.some(req => normalizeArtistForComparison(req) === artist);
           const limit = isRequestedArtist ? maxTracksPerArtist : maxTracksPerArtist;
 
           if (tracks.length > limit) {
