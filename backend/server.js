@@ -2836,7 +2836,26 @@ DO NOT include any text outside the JSON.`
                   }
                 }
               );
-              const data = await searchResult.json();
+
+              if (!searchResult.ok) {
+                console.log(`Apple Music search failed for ${artistName}: ${searchResult.status} ${searchResult.statusText}`);
+                continue;
+              }
+
+              const responseText = await searchResult.text();
+              if (!responseText || responseText.trim().length === 0) {
+                console.log(`Apple Music returned empty response for ${artistName}`);
+                continue;
+              }
+
+              let data;
+              try {
+                data = JSON.parse(responseText);
+              } catch (parseError) {
+                console.log(`Failed to parse Apple Music response for ${artistName}:`, responseText.substring(0, 200));
+                continue;
+              }
+
               if (data.results?.artists?.data?.[0]) {
                 const artist = data.results.artists.data[0];
                 artistInfo = {
