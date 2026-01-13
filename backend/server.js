@@ -2860,12 +2860,57 @@ DO NOT include any text outside the JSON.`
 
               if (data.results?.artists?.data?.[0]) {
                 const artist = data.results.artists.data[0];
+
+                // Apple Music doesn't provide popularity scores directly
+                // But we can estimate from the artist's catalog URL presence and other signals
+                let estimatedPopularity = null;
+
+                // Try to get the artist's full details to check editorial notes, view count hints, etc.
+                try {
+                  const artistId = artist.id;
+                  const artistDetailResponse = await fetch(
+                    `https://api.music.apple.com/v1/catalog/us/artists/${artistId}`,
+                    {
+                      headers: {
+                        'Authorization': `Bearer ${appleMusicDevToken}`
+                      }
+                    }
+                  );
+
+                  if (artistDetailResponse.ok) {
+                    const artistDetail = await artistDetailResponse.json();
+                    const artistData = artistDetail.data?.[0];
+
+                    // Heuristics for estimating popularity on Apple Music:
+                    // 1. Check if artist has editorial notes (usually means curated/popular)
+                    const hasEditorialNotes = artistData?.attributes?.editorialNotes?.standard || artistData?.attributes?.editorialNotes?.short;
+
+                    // 2. Check artist URL structure - popular artists often have cleaner URLs
+                    const artistUrl = artistData?.attributes?.url || '';
+                    const hasCleanUrl = artistUrl.includes('artist/') && !artistUrl.includes('?');
+
+                    // Estimate popularity (very rough heuristic):
+                    // - If no editorial notes and basic presence: likely indie (20-35)
+                    // - If has editorial notes or clean URL: likely mid-tier (40-60)
+                    // - If both: likely mainstream (65-80)
+                    if (hasEditorialNotes && hasCleanUrl) {
+                      estimatedPopularity = 70; // Likely mainstream
+                    } else if (hasEditorialNotes || hasCleanUrl) {
+                      estimatedPopularity = 50; // Mid-tier
+                    } else {
+                      estimatedPopularity = 30; // Likely indie/underground
+                    }
+
+                    console.log(`Apple Music heuristic for ${artist.attributes.name}: editorial=${!!hasEditorialNotes}, cleanUrl=${hasCleanUrl}, estimated popularity=${estimatedPopularity}/100`);
+                  }
+                } catch (detailError) {
+                  console.log(`Could not fetch artist details for popularity estimation: ${detailError.message}`);
+                }
+
                 artistInfo = {
                   name: artist.attributes.name,
                   genres: artist.attributes.genreNames || [],
-                  // Apple Music doesn't provide popularity directly, estimate from follower-like metrics
-                  // We'll infer from whether they have many albums/tracks
-                  popularity: null // Apple Music doesn't expose this easily
+                  popularity: estimatedPopularity
                 };
               }
             } else {
@@ -2924,7 +2969,8 @@ DO NOT include any text outside the JSON.`
             console.log('🎯 Auto-detected popularity preference: BALANCED (requested artists have mid-tier popularity)');
           }
         } else if (artistPopularities.length === 0) {
-          console.log('⚠️  No popularity data available (Apple Music user), cannot infer popularity preference');
+          console.log('⚠️  No popularity data available for requested artists, cannot infer popularity preference');
+          console.log('    To get indie/underground artists, add "indie" or "underground" to your prompt');
         }
 
         // If we got genres from the platform, use Claude to analyze them
