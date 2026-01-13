@@ -201,7 +201,9 @@ class PlatformService {
         id: playlist.id,
         name: playlist.name,
         description,
-        url: null, // Apple Music library playlists don't have public URLs
+        // Apple Music URL scheme to open the app (opens to Library)
+        // Note: Can't deep link to specific user playlists, only to Library/Browse/Radio
+        url: 'music://music.apple.com/library/playlists',
         platform: 'apple',
         trackCount: trackUris.length
       };
