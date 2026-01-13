@@ -3233,6 +3233,38 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       });
       console.log('');
 
+      // For non-exclusive mode, limit tracks per artist to maintain discovery balance
+      if (!genreData.artistConstraints.exclusiveMode) {
+        const maxTracksPerArtist = 3; // Allow max 3 tracks per artist
+        const artistTrackMap = new Map();
+
+        // Group tracks by artist
+        allTracks.forEach(track => {
+          const artist = track.artist.toLowerCase();
+          if (!artistTrackMap.has(artist)) {
+            artistTrackMap.set(artist, []);
+          }
+          artistTrackMap.get(artist).push(track);
+        });
+
+        // Filter to keep only first N tracks per artist
+        const limitedTracks = [];
+        artistTrackMap.forEach((tracks, artist) => {
+          const isRequestedArtist = requestedArtists.some(req => req.toLowerCase() === artist);
+          const limit = isRequestedArtist ? maxTracksPerArtist : maxTracksPerArtist;
+
+          if (tracks.length > limit) {
+            console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks`);
+          }
+
+          limitedTracks.push(...tracks.slice(0, limit));
+        });
+
+        const beforeCount = allTracks.length;
+        allTracks.splice(0, allTracks.length, ...limitedTracks);
+        console.log(`\n📊 Artist diversity enforcement: ${beforeCount} -> ${allTracks.length} tracks (max ${maxTracksPerArtist} per artist)\n`);
+      }
+
       // If few/no requested artists were found, check if we should filter for indie vibe
       // BUT SKIP this filtering if user wants EXCLUSIVE mode (they only want these specific artists)
       const requestedArtistRatio = foundRequestedArtists.length / requestedArtists.length;
