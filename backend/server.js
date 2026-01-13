@@ -2912,22 +2912,26 @@ ${genreData.artistConstraints.exclusiveMode
 - Include at least 3-4 queries per artist (just name, with genre, with mood descriptors, deep cuts)
 - DO NOT include "similar to" or "artists like" queries
 - Examples: "${genreData.artistConstraints.requestedArtists[0]}", "${genreData.artistConstraints.requestedArtists[0]} ${genreData.primaryGenre || ''}", "${genreData.artistConstraints.requestedArtists[0]} deep cuts"`
-  : `- These artists are REFERENCE POINTS for the vibe, not the main content source
-- Include 1-2 simple queries per artist: just the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander")
-- CRITICAL: MAJORITY of queries should focus on finding SIMILAR artists:
-  * "similar to C.LACY", "artists like Tyree Thomas"
-  * "underground R&B like Reo Xander"
-  * "[genre] artists with [vibe] like [artist]"
-- Goal: Final playlist should be 20-30% requested artists, 70-80% similar vibe artists`}`
+  : `- IMPORTANT: These artists are REFERENCE POINTS to establish the vibe, NOT the main content
+- Include ONLY 1 query per requested artist: JUST the artist name (e.g., "Daniel J", "A.I DELLY", "Roe Xander")
+- DO NOT create multiple queries per artist (no "Daniel J R&B", "Daniel J mellow", etc.)
+- MAJORITY of your 15-20 queries (at least 12-15) must be:
+  * Genre + vibe searches: "underground R&B chill mellow", "indie alternative R&B", "smooth R&B ballads"
+  * "Similar to [artist]" searches: "similar to Daniel J", "artists like A.I DELLY"
+  * Scene/style searches: "underground R&B", "indie soul", "alternative R&B artists"
+- CRITICAL: Final playlist should contain roughly 5-8 tracks from requested artists, 22-25 tracks from similar artists`}`
   : '- No specific artists requested'}
 
 SEARCH QUERY REQUIREMENTS:
 - If EXCLUSIVE MODE is enabled, 100% of queries must be for the requested artists ONLY (no genre-only or similar artist queries)
 - If SPECIFIC ARTISTS are requested (non-exclusive), treat them as REFERENCE POINTS for the vibe:
-  * Include 1-2 simple queries per artist to get some of their tracks as examples
-  * MAJORITY of queries (70-80%) should be "similar to [artist]" or genre/vibe searches to find OTHER artists
-  * Goal: Use requested artists as seeds/examples, not as the main content
-  * Example: For "artists like C.LACY", most tracks should be FROM other artists with similar vibe, not C.LACY themselves
+  * STRICT LIMIT: Only 1 query per requested artist (just their name, nothing else)
+  * MAJORITY (12-15 out of 15-20 queries) must focus on discovering OTHER similar artists
+  * Use "similar to [artist]", "artists like [artist]", and genre/vibe searches
+  * Example for "artists like Daniel J, A.I DELLY":
+    - 2 queries: "Daniel J", "A.I DELLY"
+    - 13-18 queries: "similar to Daniel J", "underground R&B chill", "indie alternative R&B", etc.
+  * GOAL: 5-8 tracks from requested artists, 22-25 tracks discovering NEW similar artists
 - For GENRE-SPECIFIC playlists (without exclusive artist mode), include at least 8 genre-specific queries (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists")
 - If SUBGENRE is specified, ALL queries must target that specific subgenre (e.g., "90s R&B" not just "R&B")
 - If DECADE/ERA is specified, add year filters to queries (e.g., "year:1990-1999") or mention the era
