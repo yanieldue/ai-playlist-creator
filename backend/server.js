@@ -3245,18 +3245,35 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
       console.log(`Requested artist coverage: ${foundRequestedArtists.length}/${requestedArtists.length} artists found, ${requestedArtistTrackCount}/${allTracks.length} tracks (${(requestedArtistTrackRatio * 100).toFixed(1)}%)`);
 
+      // Check if requested artists are indie/underground (low popularity)
+      const requestedArtistTracks = allTracks.filter(t =>
+        requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase())
+      );
+      const requestedArtistsAreIndie = requestedArtistTracks.length > 0 &&
+        requestedArtistTracks.every(t => (t.popularity || 50) <= 45);
+
+      if (requestedArtistsAreIndie) {
+        console.log(`🎵 Detected indie/underground requested artists (all popularity <= 45)`);
+      }
+
       // Filter for indie vibe if:
       // 1. NOT in exclusive mode (user wants similar vibe artists, not just the requested ones)
-      // 2. None of the requested artists were found, OR
-      // 3. Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists)
+      // 2. EITHER:
+      //    a) None of the requested artists were found, OR
+      //    b) Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists), OR
+      //    c) Requested artists are clearly indie (all popularity <= 45) - maintain indie vibe throughout
       const shouldFilterForIndieVibe =
         !genreData.artistConstraints.exclusiveMode && (
           foundRequestedArtists.length === 0 ||
-          (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2)
+          (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2) ||
+          requestedArtistsAreIndie
         );
 
       if (shouldFilterForIndieVibe && allTracks.length > 0) {
-        console.log('🎯 Adjusting for indie/underground vibe (requested artists underrepresented)...');
+        const reason = requestedArtistsAreIndie
+          ? 'requested artists are indie/underground'
+          : 'requested artists underrepresented';
+        console.log(`🎯 Adjusting for indie/underground vibe (${reason})...`);
 
         // Calculate both average and median popularity
         const sortedByPopularity = [...allTracks].sort((a, b) => (b.popularity || 50) - (a.popularity || 50));
