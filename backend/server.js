@@ -3174,7 +3174,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
                 album: track.album.name,
                 image: track.album.images?.[0]?.url,
                 previewUrl: track.preview_url,
-                externalUrl: track.external_urls?.spotify || track.external_urls?.appleMusic,
+                externalUrl: track.url || track.external_urls?.spotify || track.external_urls?.appleMusic,
                 explicit: track.explicit || false,
                 genres: [] // Apple Music doesn't provide genres per track
               });
