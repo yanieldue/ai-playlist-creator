@@ -2865,46 +2865,75 @@ DO NOT include any text outside the JSON.`
                 // But we can estimate from the artist's catalog URL presence and other signals
                 let estimatedPopularity = null;
 
-                // Try to get the artist's full details to check editorial notes, view count hints, etc.
+                // Try to get the artist's full details and top songs to estimate popularity
                 try {
                   const artistId = artist.id;
-                  const artistDetailResponse = await fetch(
-                    `https://api.music.apple.com/v1/catalog/us/artists/${artistId}`,
-                    {
-                      headers: {
-                        'Authorization': `Bearer ${appleMusicDevToken}`
-                      }
-                    }
-                  );
 
+                  // Fetch artist details and top songs in parallel
+                  const [artistDetailResponse, topSongsResponse] = await Promise.all([
+                    fetch(
+                      `https://api.music.apple.com/v1/catalog/us/artists/${artistId}`,
+                      {
+                        headers: {
+                          'Authorization': `Bearer ${appleMusicDevToken}`
+                        }
+                      }
+                    ),
+                    fetch(
+                      `https://api.music.apple.com/v1/catalog/us/artists/${artistId}/view/top-songs`,
+                      {
+                        headers: {
+                          'Authorization': `Bearer ${appleMusicDevToken}`
+                        }
+                      }
+                    )
+                  ]);
+
+                  let popularityScore = 0;
+                  let signals = [];
+
+                  // Signal 1: Editorial notes (Apple curates popular artists)
                   if (artistDetailResponse.ok) {
                     const artistDetail = await artistDetailResponse.json();
                     const artistData = artistDetail.data?.[0];
 
-                    // Heuristics for estimating popularity on Apple Music:
-                    // 1. Check if artist has editorial notes (usually means curated/popular)
                     const hasEditorialNotes = artistData?.attributes?.editorialNotes?.standard || artistData?.attributes?.editorialNotes?.short;
-
-                    // 2. Check artist URL structure - popular artists often have cleaner URLs
-                    const artistUrl = artistData?.attributes?.url || '';
-                    const hasCleanUrl = artistUrl.includes('artist/') && !artistUrl.includes('?');
-
-                    // Estimate popularity (very rough heuristic):
-                    // - If no editorial notes and basic presence: likely indie (20-35)
-                    // - If has editorial notes or clean URL: likely mid-tier (40-60)
-                    // - If both: likely mainstream (65-80)
-                    if (hasEditorialNotes && hasCleanUrl) {
-                      estimatedPopularity = 70; // Likely mainstream
-                    } else if (hasEditorialNotes || hasCleanUrl) {
-                      estimatedPopularity = 50; // Mid-tier
-                    } else {
-                      estimatedPopularity = 30; // Likely indie/underground
+                    if (hasEditorialNotes) {
+                      popularityScore += 30;
+                      signals.push('editorial');
                     }
-
-                    console.log(`Apple Music heuristic for ${artist.attributes.name}: editorial=${!!hasEditorialNotes}, cleanUrl=${hasCleanUrl}, estimated popularity=${estimatedPopularity}/100`);
                   }
+
+                  // Signal 2: Number of top songs (popular artists have more charting tracks)
+                  if (topSongsResponse.ok) {
+                    const topSongs = await topSongsResponse.json();
+                    const topSongCount = topSongs.data?.length || 0;
+
+                    if (topSongCount >= 10) {
+                      // 10+ top songs = very popular
+                      popularityScore += 40;
+                      signals.push(`${topSongCount}topSongs`);
+                    } else if (topSongCount >= 5) {
+                      // 5-9 top songs = moderately popular
+                      popularityScore += 20;
+                      signals.push(`${topSongCount}topSongs`);
+                    } else if (topSongCount >= 1) {
+                      // 1-4 top songs = some recognition
+                      popularityScore += 10;
+                      signals.push(`${topSongCount}topSongs`);
+                    }
+                    // 0 top songs = likely indie/underground, no points added
+                  }
+
+                  // Base score for any artist on Apple Music (20 = indie baseline)
+                  const baseScore = 20;
+                  estimatedPopularity = Math.min(100, baseScore + popularityScore);
+
+                  console.log(`Apple Music heuristic for ${artist.attributes.name}: signals=[${signals.join(', ')}], estimated popularity=${estimatedPopularity}/100`);
                 } catch (detailError) {
                   console.log(`Could not fetch artist details for popularity estimation: ${detailError.message}`);
+                  // Default to indie if we can't determine
+                  estimatedPopularity = 25;
                 }
 
                 artistInfo = {
