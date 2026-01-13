@@ -3236,15 +3236,79 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       // For non-exclusive mode, limit tracks per artist to maintain discovery balance
       if (!genreData.artistConstraints.exclusiveMode) {
         const maxTracksPerArtist = 3; // Allow max 3 tracks per artist
+
+        // First, use Claude to normalize artist name variations (e.g., "Daniel J" vs "Daniel John")
+        const uniqueArtistNames = [...new Set(allTracks.map(t => t.artist))];
+        const artistNameMap = new Map(); // Maps normalized name -> canonical name
+
+        if (uniqueArtistNames.length > 1) {
+          try {
+            const artistNormalizationResponse = await anthropic.messages.create({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1000,
+              messages: [{
+                role: 'user',
+                content: `Given this list of artist names from music metadata, identify which names refer to the same artist despite spelling variations.
+
+Artist names: ${uniqueArtistNames.join(', ')}
+
+For each group of names that refer to the same artist, return them as a group. Use the most common/complete name as the canonical name.
+
+Respond ONLY with JSON in this format:
+{
+  "groups": [
+    {
+      "canonical": "Daniel J",
+      "variations": ["Daniel J", "daniel j", "Daniel John"]
+    },
+    {
+      "canonical": "Frank Ocean",
+      "variations": ["Frank Ocean"]
+    }
+  ]
+}
+
+IMPORTANT: Only group names that are clearly the same artist (typos, abbreviations, case differences). Do NOT group different artists.`
+              }]
+            });
+
+            let normalizationText = artistNormalizationResponse.content[0].text.trim();
+            if (normalizationText.startsWith('```json')) {
+              normalizationText = normalizationText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+            } else if (normalizationText.startsWith('```')) {
+              normalizationText = normalizationText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+            }
+            const normalizationData = JSON.parse(normalizationText);
+
+            // Build mapping from any variation -> canonical name
+            normalizationData.groups.forEach(group => {
+              group.variations.forEach(variation => {
+                artistNameMap.set(variation.toLowerCase(), group.canonical);
+              });
+            });
+
+            console.log('🔧 Artist name normalization applied:');
+            normalizationData.groups.forEach(group => {
+              if (group.variations.length > 1) {
+                console.log(`  "${group.variations.join('", "')}" -> "${group.canonical}"`);
+              }
+            });
+          } catch (err) {
+            console.log('⚠️  Artist normalization failed, using exact names:', err.message);
+          }
+        }
+
         const artistTrackMap = new Map();
 
-        // Group tracks by artist
+        // Group tracks by normalized artist name
         allTracks.forEach(track => {
-          const artist = track.artist.toLowerCase();
-          if (!artistTrackMap.has(artist)) {
-            artistTrackMap.set(artist, []);
+          const originalArtist = track.artist;
+          const normalizedArtist = (artistNameMap.get(originalArtist.toLowerCase()) || originalArtist).toLowerCase();
+
+          if (!artistTrackMap.has(normalizedArtist)) {
+            artistTrackMap.set(normalizedArtist, []);
           }
-          artistTrackMap.get(artist).push(track);
+          artistTrackMap.get(normalizedArtist).push(track);
         });
 
         // Filter to keep only first N tracks per artist
