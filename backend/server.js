@@ -2817,17 +2817,63 @@ DO NOT include any text outside the JSON.`
         genreData.artistConstraints.requestedArtists.length > 0 &&
         !genreData.artistConstraints.exclusiveMode) {
 
-      console.log('No explicit genre specified, but artists requested. Analyzing artist genres...');
+      console.log('No explicit genre specified, but artists requested. Searching music platform for artist genres...');
 
       try {
-        const artistGenreResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 800,
-          messages: [{
-            role: 'user',
-            content: `Based on your knowledge of these music artists, what genre/style do they represent?
+        // Search for each artist on the platform to get their actual genre information
+        const artistGenres = [];
 
-Artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
+        for (const artistName of genreData.artistConstraints.requestedArtists) {
+          try {
+            let artistInfo = null;
+
+            if (platform === 'apple') {
+              const searchResult = await fetch(
+                `https://api.music.apple.com/v1/catalog/us/search?term=${encodeURIComponent(artistName)}&types=artists&limit=1`,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${process.env.APPLE_MUSIC_DEVELOPER_TOKEN}`
+                  }
+                }
+              );
+              const data = await searchResult.json();
+              if (data.results?.artists?.data?.[0]) {
+                const artist = data.results.artists.data[0];
+                artistInfo = {
+                  name: artist.attributes.name,
+                  genres: artist.attributes.genreNames || []
+                };
+              }
+            } else {
+              // Spotify
+              const searchResult = await userSpotifyApi.searchArtists(artistName, { limit: 1 });
+              if (searchResult.body.artists?.items?.[0]) {
+                const artist = searchResult.body.artists.items[0];
+                artistInfo = {
+                  name: artist.name,
+                  genres: artist.genres || []
+                };
+              }
+            }
+
+            if (artistInfo && artistInfo.genres.length > 0) {
+              console.log(`Found genres for ${artistInfo.name}: ${artistInfo.genres.join(', ')}`);
+              artistGenres.push(...artistInfo.genres);
+            } else {
+              console.log(`No genres found for ${artistName}, will use Claude as fallback`);
+            }
+          } catch (err) {
+            console.log(`Failed to search for ${artistName}:`, err.message);
+          }
+        }
+
+        // If we got genres from the platform, use Claude to analyze them
+        // If we didn't get genres, let Claude make an educated guess (but log a warning)
+        let claudePrompt;
+        if (artistGenres.length > 0) {
+          claudePrompt = `Based on these genres from music artists "${genreData.artistConstraints.requestedArtists.join(', ')}", determine the overall genre characteristics:
+
+Platform genres found: ${[...new Set(artistGenres)].join(', ')}
 
 Respond ONLY with valid JSON in this format:
 {
@@ -2842,7 +2888,35 @@ Respond ONLY with valid JSON in this format:
   }
 }
 
-Be specific about the genre and characteristics. If the artists span multiple genres, identify the common thread.`
+Analyze the platform genres to identify the common thread and style.`;
+        } else {
+          console.log('⚠️  WARNING: No platform genres found, Claude will guess based on artist names (may be inaccurate)');
+          claudePrompt = `Based on your knowledge of these music artists, what genre/style do they represent?
+
+Artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
+
+IMPORTANT: If you are not confident about these specific artists, respond with "unknown" for primaryGenre.
+
+Respond ONLY with valid JSON in this format:
+{
+  "primaryGenre": "the main genre these artists share, or 'unknown' if not confident",
+  "subgenre": "specific subgenre if applicable or null",
+  "keyCharacteristics": ["characteristic1", "characteristic2"] or [],
+  "style": "overall style description or null",
+  "atmosphere": ["mood tag1", "mood tag2"] or [],
+  "audioFeatures": {
+    "energy": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
+    "valence": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null }
+  }
+}`;
+        }
+
+        const artistGenreResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 800,
+          messages: [{
+            role: 'user',
+            content: claudePrompt
           }]
         });
 
@@ -2854,6 +2928,12 @@ Be specific about the genre and characteristics. If the artists span multiple ge
         }
 
         const artistGenreData = JSON.parse(artistGenreText);
+
+        // Skip genre inference if Claude returned "unknown"
+        if (artistGenreData.primaryGenre === 'unknown') {
+          console.log('⚠️  Claude could not confidently determine artist genres - skipping genre inference');
+          throw new Error('Unknown artists, skipping genre inference');
+        }
 
         // Merge artist-inferred genre data into genreData (only if fields are empty)
         if (artistGenreData.primaryGenre && !genreData.primaryGenre) {
