@@ -2891,43 +2891,51 @@ DO NOT include any text outside the JSON.`
 
                   let popularityScore = 0;
                   let signals = [];
+                  let hasEditorialNotes = false;
 
-                  // Signal 1: Editorial notes (Apple curates popular artists)
+                  // Signal 1: Editorial notes (STRONGEST signal - Apple manually curates popular artists)
                   if (artistDetailResponse.ok) {
                     const artistDetail = await artistDetailResponse.json();
                     const artistData = artistDetail.data?.[0];
 
-                    const hasEditorialNotes = artistData?.attributes?.editorialNotes?.standard || artistData?.attributes?.editorialNotes?.short;
+                    hasEditorialNotes = !!(artistData?.attributes?.editorialNotes?.standard || artistData?.attributes?.editorialNotes?.short);
                     if (hasEditorialNotes) {
-                      popularityScore += 30;
                       signals.push('editorial');
                     }
                   }
 
-                  // Signal 2: Number of top songs (popular artists have more charting tracks)
+                  // Signal 2: Number of top songs (secondary signal, can be misleading)
+                  let topSongCount = 0;
                   if (topSongsResponse.ok) {
                     const topSongs = await topSongsResponse.json();
-                    const topSongCount = topSongs.data?.length || 0;
-
-                    if (topSongCount >= 10) {
-                      // 10+ top songs = very popular
-                      popularityScore += 40;
-                      signals.push(`${topSongCount}topSongs`);
-                    } else if (topSongCount >= 5) {
-                      // 5-9 top songs = moderately popular
-                      popularityScore += 20;
-                      signals.push(`${topSongCount}topSongs`);
-                    } else if (topSongCount >= 1) {
-                      // 1-4 top songs = some recognition
-                      popularityScore += 10;
+                    topSongCount = topSongs.data?.length || 0;
+                    if (topSongCount > 0) {
                       signals.push(`${topSongCount}topSongs`);
                     }
-                    // 0 top songs = likely indie/underground, no points added
                   }
 
-                  // Base score for any artist on Apple Music (20 = indie baseline)
-                  const baseScore = 20;
-                  estimatedPopularity = Math.min(100, baseScore + popularityScore);
+                  // IMPORTANT: Editorial notes override top song count
+                  // If no editorial notes, artist is likely indie/underground regardless of top songs
+                  if (hasEditorialNotes) {
+                    // Has editorial notes = Apple curated = mainstream/popular
+                    if (topSongCount >= 10) {
+                      estimatedPopularity = 75; // Very mainstream
+                    } else if (topSongCount >= 5) {
+                      estimatedPopularity = 65; // Mainstream
+                    } else {
+                      estimatedPopularity = 55; // Mid-tier
+                    }
+                  } else {
+                    // No editorial notes = not curated by Apple = indie/underground
+                    // Even with many "top songs", treat as indie if Apple hasn't curated them
+                    if (topSongCount >= 10) {
+                      estimatedPopularity = 35; // Indie with some traction
+                    } else if (topSongCount >= 5) {
+                      estimatedPopularity = 28; // Underground with recognition
+                    } else {
+                      estimatedPopularity = 22; // Pure indie/underground
+                    }
+                  }
 
                   console.log(`Apple Music heuristic for ${artist.attributes.name}: signals=[${signals.join(', ')}], estimated popularity=${estimatedPopularity}/100`);
                 } catch (detailError) {
