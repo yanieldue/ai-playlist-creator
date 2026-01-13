@@ -2912,15 +2912,22 @@ ${genreData.artistConstraints.exclusiveMode
 - Include at least 3-4 queries per artist (just name, with genre, with mood descriptors, deep cuts)
 - DO NOT include "similar to" or "artists like" queries
 - Examples: "${genreData.artistConstraints.requestedArtists[0]}", "${genreData.artistConstraints.requestedArtists[0]} ${genreData.primaryGenre || ''}", "${genreData.artistConstraints.requestedArtists[0]} deep cuts"`
-  : `- CRITICAL PRIORITY: First query for EACH artist should be JUST the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander") with NO genre keywords
-- Then add queries with genre keywords (e.g., "C.LACY R&B", "Tyree Thomas mellow")
-- Include at least 2 queries per requested artist (one simple, one with keywords)
-- Also include "similar to [artist]" or "artists like [artist]" queries to find similar vibe artists`}`
+  : `- These artists are REFERENCE POINTS for the vibe, not the main content source
+- Include 1-2 simple queries per artist: just the artist name (e.g., "C.LACY", "Tyree Thomas", "Reo Xander")
+- CRITICAL: MAJORITY of queries should focus on finding SIMILAR artists:
+  * "similar to C.LACY", "artists like Tyree Thomas"
+  * "underground R&B like Reo Xander"
+  * "[genre] artists with [vibe] like [artist]"
+- Goal: Final playlist should be 20-30% requested artists, 70-80% similar vibe artists`}`
   : '- No specific artists requested'}
 
 SEARCH QUERY REQUIREMENTS:
 - If EXCLUSIVE MODE is enabled, 100% of queries must be for the requested artists ONLY (no genre-only or similar artist queries)
-- If SPECIFIC ARTISTS are requested (non-exclusive), PRIORITIZE queries with those exact artist names - at least 60% of queries should include requested artist names
+- If SPECIFIC ARTISTS are requested (non-exclusive), treat them as REFERENCE POINTS for the vibe:
+  * Include 1-2 simple queries per artist to get some of their tracks as examples
+  * MAJORITY of queries (70-80%) should be "similar to [artist]" or genre/vibe searches to find OTHER artists
+  * Goal: Use requested artists as seeds/examples, not as the main content
+  * Example: For "artists like C.LACY", most tracks should be FROM other artists with similar vibe, not C.LACY themselves
 - For GENRE-SPECIFIC playlists (without exclusive artist mode), include at least 8 genre-specific queries (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists")
 - If SUBGENRE is specified, ALL queries must target that specific subgenre (e.g., "90s R&B" not just "R&B")
 - If DECADE/ERA is specified, add year filters to queries (e.g., "year:1990-1999") or mention the era
