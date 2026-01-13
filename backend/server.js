@@ -3190,6 +3190,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
     }
 
     console.log(`Found ${allTracks.length} unique tracks before audio features filtering`);
+    console.log('DEBUG: About to define normalizeArtistForComparison, genreData exists:', typeof genreData !== 'undefined');
 
     // Helper function to normalize artist names (handles accents like GIVĒON -> GIVEON)
     // Defined at top level so it's available in all scopes
