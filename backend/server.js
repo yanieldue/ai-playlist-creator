@@ -3193,6 +3193,15 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
     // Log artist breakdown, especially for requested artists
     if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
+      // Helper function to normalize artist names (handles accents like GIVĒON -> GIVEON)
+      const normalizeArtistForComparison = (name) => {
+        return name
+          .toLowerCase()
+          .normalize('NFD') // Decompose accented characters (ē -> e + combining accent)
+          .replace(/[\u0300-\u036f]/g, '') // Remove diacritics/accents
+          .trim();
+      };
+
       const artistCounts = new Map();
       allTracks.forEach(track => {
         const artist = track.artist;
@@ -3204,9 +3213,9 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
       // Check if requested artists were found
       const foundRequestedArtists = requestedArtists.filter(reqArtist => {
-        // Check both exact match and case-insensitive match
+        // Check with Unicode normalization to handle accents
         return Array.from(artistCounts.keys()).some(foundArtist =>
-          foundArtist.toLowerCase() === reqArtist.toLowerCase()
+          normalizeArtistForComparison(foundArtist) === normalizeArtistForComparison(reqArtist)
         );
       });
 
@@ -3228,7 +3237,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         .slice(0, 10);
       console.log(`Top 10 artists in results:`);
       sortedArtists.forEach(([artist, count]) => {
-        const isRequested = requestedArtists.some(req => req.toLowerCase() === artist.toLowerCase());
+        const isRequested = requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(artist));
         console.log(`  ${isRequested ? '✓' : ' '} ${artist}: ${count} tracks`);
       });
       console.log('');
@@ -3298,23 +3307,34 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
           }
         }
 
+        // Helper function to normalize artist names (handles accents, case, etc.)
+        const normalizeArtistName = (name) => {
+          return name
+            .toLowerCase()
+            .normalize('NFD') // Decompose accented characters
+            .replace(/[\u0300-\u036f]/g, '') // Remove diacritics (accents)
+            .trim();
+        };
+
         const artistTrackMap = new Map();
 
         // Group tracks by normalized artist name
         allTracks.forEach(track => {
           const originalArtist = track.artist;
-          const normalizedArtist = (artistNameMap.get(originalArtist.toLowerCase()) || originalArtist).toLowerCase();
+          // First check if Claude mapped this artist, otherwise normalize ourselves
+          const claudeNormalizedArtist = artistNameMap.get(originalArtist.toLowerCase());
+          const finalNormalizedArtist = normalizeArtistName(claudeNormalizedArtist || originalArtist);
 
-          if (!artistTrackMap.has(normalizedArtist)) {
-            artistTrackMap.set(normalizedArtist, []);
+          if (!artistTrackMap.has(finalNormalizedArtist)) {
+            artistTrackMap.set(finalNormalizedArtist, []);
           }
-          artistTrackMap.get(normalizedArtist).push(track);
+          artistTrackMap.get(finalNormalizedArtist).push(track);
         });
 
         // Filter to keep only first N tracks per artist
         const limitedTracks = [];
         artistTrackMap.forEach((tracks, artist) => {
-          const isRequestedArtist = requestedArtists.some(req => req.toLowerCase() === artist);
+          const isRequestedArtist = requestedArtists.some(req => normalizeArtistName(req) === artist);
           const limit = isRequestedArtist ? maxTracksPerArtist : maxTracksPerArtist;
 
           if (tracks.length > limit) {
@@ -3335,7 +3355,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
 
       // Count how many tracks are from requested artists
       const requestedArtistTrackCount = allTracks.filter(t =>
-        requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase())
+        requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist))
       ).length;
       const requestedArtistTrackRatio = requestedArtistTrackCount / allTracks.length;
 
@@ -3343,7 +3363,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
 
       // Check if requested artists are indie/underground (low popularity)
       const requestedArtistTracks = allTracks.filter(t =>
-        requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase())
+        requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist))
       );
       const requestedArtistsAreIndie = requestedArtistTracks.length > 0 &&
         requestedArtistTracks.every(t => (t.popularity || 50) <= 45);
@@ -3395,7 +3415,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
 
           // Keep tracks from requested artists even if they're popular, but filter everyone else
           allTracks.splice(0, allTracks.length, ...allTracks.filter(t => {
-            const isRequestedArtist = requestedArtists.some(req => req.toLowerCase() === t.artist.toLowerCase());
+            const isRequestedArtist = requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist));
             return isRequestedArtist || (t.popularity || 50) <= popularityThreshold;
           }));
 
