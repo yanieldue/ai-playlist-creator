@@ -2822,6 +2822,7 @@ DO NOT include any text outside the JSON.`
       try {
         // Search for each artist on the platform to get their actual genre information
         const artistGenres = [];
+        const artistPopularities = [];
 
         for (const artistName of genreData.artistConstraints.requestedArtists) {
           try {
@@ -2861,7 +2862,10 @@ DO NOT include any text outside the JSON.`
                 const artist = data.results.artists.data[0];
                 artistInfo = {
                   name: artist.attributes.name,
-                  genres: artist.attributes.genreNames || []
+                  genres: artist.attributes.genreNames || [],
+                  // Apple Music doesn't provide popularity directly, estimate from follower-like metrics
+                  // We'll infer from whether they have many albums/tracks
+                  popularity: null // Apple Music doesn't expose this easily
                 };
               }
             } else {
@@ -2871,20 +2875,56 @@ DO NOT include any text outside the JSON.`
                 const artist = searchResult.body.artists.items[0];
                 artistInfo = {
                   name: artist.name,
-                  genres: artist.genres || []
+                  genres: artist.genres || [],
+                  popularity: artist.popularity || null // 0-100 scale
                 };
               }
             }
 
-            if (artistInfo && artistInfo.genres.length > 0) {
-              console.log(`Found genres for ${artistInfo.name}: ${artistInfo.genres.join(', ')}`);
-              artistGenres.push(...artistInfo.genres);
-            } else {
-              console.log(`No genres found for ${artistName}, will use Claude as fallback`);
+            if (artistInfo) {
+              if (artistInfo.genres.length > 0) {
+                console.log(`Found genres for ${artistInfo.name}: ${artistInfo.genres.join(', ')}`);
+                artistGenres.push(...artistInfo.genres);
+              }
+
+              if (artistInfo.popularity !== null) {
+                console.log(`Popularity for ${artistInfo.name}: ${artistInfo.popularity}/100`);
+                artistPopularities.push(artistInfo.popularity);
+              }
+
+              if (artistInfo.genres.length === 0) {
+                console.log(`No genres found for ${artistName}, will use Claude as fallback`);
+              }
             }
           } catch (err) {
             console.log(`Failed to search for ${artistName}:`, err.message);
           }
+        }
+
+        // Infer popularity preference from requested artists (if not explicitly set by user)
+        // Only infer if user hasn't already specified a popularity preference
+        if (artistPopularities.length > 0 && !genreData.trackConstraints.popularity.preference) {
+          const avgPopularity = artistPopularities.reduce((a, b) => a + b, 0) / artistPopularities.length;
+          console.log(`Average popularity of requested artists: ${avgPopularity.toFixed(1)}/100`);
+
+          // Determine preference based on average popularity
+          // 0-40: underground/indie
+          // 41-65: balanced/mid-tier
+          // 66-100: mainstream
+          if (avgPopularity <= 40) {
+            genreData.trackConstraints.popularity.preference = 'underground';
+            genreData.trackConstraints.popularity.max = 50; // Cap at 50 to avoid mainstream
+            console.log('🎯 Auto-detected popularity preference: UNDERGROUND (requested artists have low popularity)');
+          } else if (avgPopularity >= 66) {
+            genreData.trackConstraints.popularity.preference = 'mainstream';
+            genreData.trackConstraints.popularity.min = 60; // Set floor at 60 for mainstream
+            console.log('🎯 Auto-detected popularity preference: MAINSTREAM (requested artists have high popularity)');
+          } else {
+            genreData.trackConstraints.popularity.preference = 'balanced';
+            console.log('🎯 Auto-detected popularity preference: BALANCED (requested artists have mid-tier popularity)');
+          }
+        } else if (artistPopularities.length === 0) {
+          console.log('⚠️  No popularity data available (Apple Music user), cannot infer popularity preference');
         }
 
         // If we got genres from the platform, use Claude to analyze them
@@ -3093,10 +3133,15 @@ ${genreData.artistConstraints.exclusiveMode
   : `- IMPORTANT: These artists are REFERENCE POINTS to establish the vibe, NOT the main content
 - Include ONLY 1 query per requested artist: JUST the artist name (e.g., "Daniel J", "A.I DELLY", "Roe Xander")
 - DO NOT create multiple queries per artist (no "Daniel J R&B", "Daniel J mellow", etc.)
+- POPULARITY TARGETING: ${genreData.trackConstraints.popularity.preference === 'underground'
+    ? `The requested artists are INDIE/UNDERGROUND (low popularity). Include terms like "indie", "underground", "emerging", "lesser-known", "hidden gems" in queries. AVOID mainstream artist names.`
+    : genreData.trackConstraints.popularity.preference === 'mainstream'
+    ? `The requested artists are MAINSTREAM (high popularity). Focus on well-known artists and popular tracks. Include artist names like those in the top charts.`
+    : `The requested artists have MID-TIER popularity. Include a balanced mix of known and emerging artists.`}
 - MAJORITY of your 15-20 queries (at least 12-15) must be:
-  * Genre + vibe searches: "${genreData.primaryGenre || 'underground'} ${genreData.keyCharacteristics.join(' ') || 'chill mellow'}", "indie ${genreData.primaryGenre || 'alternative'}", "${genreData.style || 'smooth'} ${genreData.primaryGenre || ''} ballads"
+  * Genre + vibe searches: "${genreData.trackConstraints.popularity.preference === 'underground' ? 'indie ' : ''}${genreData.primaryGenre || 'underground'} ${genreData.keyCharacteristics.join(' ') || 'chill mellow'}", "${genreData.trackConstraints.popularity.preference === 'underground' ? 'underground ' : ''}${genreData.primaryGenre || 'alternative'}", "${genreData.style || 'smooth'} ${genreData.primaryGenre || ''} ballads"
   * "Similar to [artist]" searches MUST include genre constraint: "${genreData.primaryGenre || ''} similar to [artist]", "${genreData.primaryGenre || ''} artists like [artist]"
-  * Scene/style searches: "underground ${genreData.primaryGenre || ''}", "indie ${genreData.secondaryGenres.join(' ') || 'soul'}", "alternative ${genreData.primaryGenre || ''} artists"
+  * Scene/style searches: "${genreData.trackConstraints.popularity.preference === 'underground' ? 'underground ' : ''}${genreData.primaryGenre || ''}", "${genreData.trackConstraints.popularity.preference === 'underground' ? 'indie ' : ''}${genreData.secondaryGenres.join(' ') || 'soul'}", "${genreData.trackConstraints.popularity.preference === 'underground' ? 'alternative ' : ''}${genreData.primaryGenre || ''} artists"
 - CRITICAL: ALL genre/vibe searches MUST include the primary genre "${genreData.primaryGenre || ''}" to prevent genre drift
 - CRITICAL: Final playlist should contain roughly 5-8 tracks from requested artists, 22-25 tracks from similar artists WITHIN THE SAME GENRE`}`
   : '- No specific artists requested'}
