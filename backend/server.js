@@ -2811,6 +2811,84 @@ DO NOT include any text outside the JSON.`
 
     console.log('Extracted genre data:', genreData);
 
+    // Step 0.5: If no explicit genre was specified but artists were requested, analyze those artists to infer the genre
+    if ((!genreData.primaryGenre || genreData.primaryGenre === 'not specified') &&
+        genreData.artistConstraints.requestedArtists &&
+        genreData.artistConstraints.requestedArtists.length > 0 &&
+        !genreData.artistConstraints.exclusiveMode) {
+
+      console.log('No explicit genre specified, but artists requested. Analyzing artist genres...');
+
+      try {
+        const artistGenreResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 800,
+          messages: [{
+            role: 'user',
+            content: `Based on your knowledge of these music artists, what genre/style do they represent?
+
+Artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
+
+Respond ONLY with valid JSON in this format:
+{
+  "primaryGenre": "the main genre these artists share",
+  "subgenre": "specific subgenre if applicable",
+  "keyCharacteristics": ["characteristic1", "characteristic2"],
+  "style": "overall style description",
+  "atmosphere": ["mood tag1", "mood tag2"],
+  "audioFeatures": {
+    "energy": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
+    "valence": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null }
+  }
+}
+
+Be specific about the genre and characteristics. If the artists span multiple genres, identify the common thread.`
+          }]
+        });
+
+        let artistGenreText = artistGenreResponse.content[0].text.trim();
+        if (artistGenreText.startsWith('```json')) {
+          artistGenreText = artistGenreText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+        } else if (artistGenreText.startsWith('```')) {
+          artistGenreText = artistGenreText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+        }
+
+        const artistGenreData = JSON.parse(artistGenreText);
+
+        // Merge artist-inferred genre data into genreData (only if fields are empty)
+        if (artistGenreData.primaryGenre && !genreData.primaryGenre) {
+          genreData.primaryGenre = artistGenreData.primaryGenre;
+          console.log(`Inferred primary genre from artists: ${artistGenreData.primaryGenre}`);
+        }
+        if (artistGenreData.subgenre && !genreData.subgenre) {
+          genreData.subgenre = artistGenreData.subgenre;
+          console.log(`Inferred subgenre from artists: ${artistGenreData.subgenre}`);
+        }
+        if (artistGenreData.keyCharacteristics && artistGenreData.keyCharacteristics.length > 0 && genreData.keyCharacteristics.length === 0) {
+          genreData.keyCharacteristics = artistGenreData.keyCharacteristics;
+        }
+        if (artistGenreData.style && !genreData.style) {
+          genreData.style = artistGenreData.style;
+        }
+        if (artistGenreData.atmosphere && artistGenreData.atmosphere.length > 0 && genreData.atmosphere.length === 0) {
+          genreData.atmosphere = artistGenreData.atmosphere;
+        }
+        if (artistGenreData.audioFeatures) {
+          if (artistGenreData.audioFeatures.energy && !genreData.audioFeatures.energy.min && !genreData.audioFeatures.energy.max) {
+            genreData.audioFeatures.energy = artistGenreData.audioFeatures.energy;
+          }
+          if (artistGenreData.audioFeatures.valence && !genreData.audioFeatures.valence.min && !genreData.audioFeatures.valence.max) {
+            genreData.audioFeatures.valence = artistGenreData.audioFeatures.valence;
+          }
+        }
+
+        console.log('Updated genre data with artist analysis:', genreData);
+      } catch (error) {
+        console.error('Failed to analyze artist genres:', error.message);
+        // Continue anyway - we'll use the original genreData
+      }
+    }
+
     // Load existing playlist data if playlistId is provided (for refinements/refreshes)
     let existingPlaylistData = null;
     if (playlistId && userId) {
@@ -2916,10 +2994,11 @@ ${genreData.artistConstraints.exclusiveMode
 - Include ONLY 1 query per requested artist: JUST the artist name (e.g., "Daniel J", "A.I DELLY", "Roe Xander")
 - DO NOT create multiple queries per artist (no "Daniel J R&B", "Daniel J mellow", etc.)
 - MAJORITY of your 15-20 queries (at least 12-15) must be:
-  * Genre + vibe searches: "underground R&B chill mellow", "indie alternative R&B", "smooth R&B ballads"
-  * "Similar to [artist]" searches: "similar to Daniel J", "artists like A.I DELLY"
-  * Scene/style searches: "underground R&B", "indie soul", "alternative R&B artists"
-- CRITICAL: Final playlist should contain roughly 5-8 tracks from requested artists, 22-25 tracks from similar artists`}`
+  * Genre + vibe searches: "${genreData.primaryGenre || 'underground'} ${genreData.keyCharacteristics.join(' ') || 'chill mellow'}", "indie ${genreData.primaryGenre || 'alternative'}", "${genreData.style || 'smooth'} ${genreData.primaryGenre || ''} ballads"
+  * "Similar to [artist]" searches MUST include genre constraint: "${genreData.primaryGenre || ''} similar to [artist]", "${genreData.primaryGenre || ''} artists like [artist]"
+  * Scene/style searches: "underground ${genreData.primaryGenre || ''}", "indie ${genreData.secondaryGenres.join(' ') || 'soul'}", "alternative ${genreData.primaryGenre || ''} artists"
+- CRITICAL: ALL genre/vibe searches MUST include the primary genre "${genreData.primaryGenre || ''}" to prevent genre drift
+- CRITICAL: Final playlist should contain roughly 5-8 tracks from requested artists, 22-25 tracks from similar artists WITHIN THE SAME GENRE`}`
   : '- No specific artists requested'}
 
 SEARCH QUERY REQUIREMENTS:
