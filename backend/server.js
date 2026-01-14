@@ -4248,7 +4248,8 @@ DO NOT include any text outside the JSON array.`;
 
     // Step 4: VIBE CHECK - Review the selected tracks for coherence
     // This addresses the #1 complaint: AI missing the "vibe" even when genres match
-    if (selectedTracks.length > 0 && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre)) {
+    // Also filters out mainstream artists when underground preference is detected
+    if (selectedTracks.length > 0 && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground')) {
       console.log('Running vibe check on selected tracks...');
 
       const vibeCheckPrompt = `You are reviewing a playlist to ensure it has a COHERENT VIBE and emotional atmosphere.
@@ -4261,6 +4262,7 @@ REQUIRED VIBE/CONTEXT:
 - Subgenre: ${genreData.subgenre || 'not specified'}
 - Era/decade: ${genreData.era.decade || 'not specified'}
 - Avoid: ${genreData.contextClues.avoidances.join('; ') || 'nothing'}
+- Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: Remove mainstream/overplayed artists' : ''}
 
 Selected tracks:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
@@ -4272,6 +4274,7 @@ For example:
 - If atmosphere is "melancholic" or "dreamy", upbeat party songs should be removed
 - If era is "90s", songs from 2020s should be removed
 - If subgenre is "neo-soul", trap songs should be removed even if both are R&B
+- If popularity preference is "underground", remove tracks by mainstream/well-known artists (e.g., Drake, SZA, The Weeknd, Rihanna, Beyoncé, Khalid, H.E.R., Daniel Caesar) and keep indie/lesser-known artists
 
 Respond ONLY with valid JSON:
 {
