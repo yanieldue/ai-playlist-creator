@@ -8,7 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 60000, // 60 second timeout for long-running requests like playlist generation
+  timeout: 120000, // 120 second timeout for long-running requests like playlist generation (includes vibe checks)
 });
 
 // Error interceptor
