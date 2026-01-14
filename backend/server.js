@@ -3163,6 +3163,52 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
+    // Step 0.5: If underground preference, ask Claude to recommend specific underground artists
+    let recommendedUndergroundArtists = [];
+    if (genreData.trackConstraints.popularity.preference === 'underground' &&
+        genreData.artistConstraints.requestedArtists.length > 0 &&
+        !genreData.artistConstraints.exclusiveMode) {
+
+      console.log('🎵 Requesting underground artist recommendations from Claude...');
+
+      try {
+        const artistRecommendationResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{
+            role: 'user',
+            content: `You are a music discovery expert specializing in underground and indie artists.
+
+The user is looking for artists similar to: ${genreData.artistConstraints.requestedArtists.join(', ')}
+Genre: ${genreData.primaryGenre}
+
+These are UNDERGROUND/INDIE artists with minimal mainstream recognition.
+
+Recommend 10-12 specific underground/indie ${genreData.primaryGenre} artists that have a similar vibe to the requested artists.
+
+CRITICAL RULES:
+- ONLY recommend artists that are truly underground/indie (NOT mainstream)
+- NO mainstream artists with radio hits or millions of streams (no SZA, Drake, Khalid, Miguel, Daniel Caesar, Summer Walker, Brent Faiyaz, Frank Ocean, The Weeknd, H.E.R., Jhené Aiko, Kehlani, etc.)
+- Focus on independent artists, small label artists, emerging artists
+- Artists should have a similar sound/vibe to ${genreData.artistConstraints.requestedArtists.join(' and ')}
+
+Return ONLY a JSON array of artist names. Example: ["Artist 1", "Artist 2", "Artist 3"]
+
+DO NOT include any text outside the JSON array.`
+          }]
+        });
+
+        const recommendationText = artistRecommendationResponse.content[0].text.trim()
+          .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+          .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+        recommendedUndergroundArtists = JSON.parse(recommendationText);
+        console.log(`✨ Recommended underground artists: ${recommendedUndergroundArtists.join(', ')}`);
+      } catch (error) {
+        console.log('Failed to get artist recommendations, continuing with normal flow:', error.message);
+      }
+    }
+
     // Step 1: Use Claude to analyze the prompt and generate search queries
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -3208,6 +3254,18 @@ REQUESTED ARTISTS:
 ${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
   ? `- User specifically requested: ${genreData.artistConstraints.requestedArtists.join(', ')}
 - EXCLUSIVE MODE: ${genreData.artistConstraints.exclusiveMode ? 'YES - User wants ONLY these artists, NO similar artists' : 'NO - Mix of these artists + similar vibe artists'}
+${recommendedUndergroundArtists.length > 0
+  ? `
+🎯 RECOMMENDED UNDERGROUND ARTISTS (USE THESE):
+I've identified these underground/indie artists with a similar vibe: ${recommendedUndergroundArtists.join(', ')}
+
+CRITICAL INSTRUCTIONS FOR UNDERGROUND PLAYLIST:
+- Include 1 query for EACH requested artist: ${genreData.artistConstraints.requestedArtists.map(a => `"${a}"`).join(', ')}
+- Include 1 query for EACH recommended underground artist: ${recommendedUndergroundArtists.slice(0, 10).map(a => `"${a}"`).join(', ')}
+- Use SPECIFIC ARTIST NAMES from the recommended list (not generic "indie R&B" searches)
+- These artist searches will return underground tracks, NO mainstream contamination
+- Total: ${genreData.artistConstraints.requestedArtists.length} requested + ~${Math.min(recommendedUndergroundArtists.length, 10)} recommended = ~${genreData.artistConstraints.requestedArtists.length + Math.min(recommendedUndergroundArtists.length, 10)} artist queries`
+  : ''}
 ${genreData.artistConstraints.exclusiveMode
   ? `- CRITICAL: ALL queries must be for the requested artists ONLY
 - Include at least 3-4 queries per artist (just name, with genre, with mood descriptors, deep cuts)
