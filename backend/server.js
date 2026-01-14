@@ -4262,7 +4262,7 @@ REQUIRED VIBE/CONTEXT:
 - Subgenre: ${genreData.subgenre || 'not specified'}
 - Era/decade: ${genreData.era.decade || 'not specified'}
 - Avoid: ${genreData.contextClues.avoidances.join('; ') || 'nothing'}
-- Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: Remove mainstream/overplayed artists' : ''}
+- Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: STRICTLY remove ALL mainstream/radio/chart artists' : ''}
 
 Selected tracks:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
@@ -4270,11 +4270,21 @@ ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n'
 Review this track list and identify any songs that are TECHNICALLY correct (right genre) but EMOTIONALLY WRONG (don't fit the vibe/atmosphere/context).
 
 For example:
-- If use case is "focus" or "study", songs that are too intense/distracting should be removed even if user normally likes them
+- If use case is "focus" or "study", songs that are too intense/distracting should be removed
 - If atmosphere is "melancholic" or "dreamy", upbeat party songs should be removed
 - If era is "90s", songs from 2020s should be removed
 - If subgenre is "neo-soul", trap songs should be removed even if both are R&B
-- If popularity preference is "underground", remove tracks by mainstream/well-known artists (e.g., Drake, SZA, The Weeknd, Rihanna, Beyoncé, Khalid, H.E.R., Daniel Caesar) and keep indie/lesser-known artists
+- If popularity preference is "underground", BE EXTREMELY STRICT - remove ANY artist that:
+  * Has had radio hits or chart success (Top 40, Hot 100, etc.)
+  * Has millions of monthly listeners on streaming platforms
+  * Is signed to a major label (RCA, Columbia, Atlantic, Interscope, Def Jam, etc.)
+  * Has collaborated with mainstream artists (Drake, The Weeknd, Travis Scott, etc.)
+  * Is commonly known outside underground/indie circles
+  * Has any songs with 100M+ streams
+
+  Examples to REMOVE: SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Tyler the Creator, Steve Lacy, Kali Uchis, Tinashe, Normani, 6LACK, Giveon, Ari Lennox, Ella Mai, Snoh Aalegra, Michael Jackson, Usher, Chris Brown, Cassie, 112, Ginuwine, Ty Dolla $ign, Sonder, Jorja Smith, etc.
+
+  KEEP ONLY: True underground/indie artists with minimal mainstream recognition, like the requested artists in the prompt.
 
 Respond ONLY with valid JSON:
 {
@@ -4285,7 +4295,7 @@ Respond ONLY with valid JSON:
   "keepIndices": [list of indices (1-based) of songs that DO fit the vibe and should be kept]
 }
 
-Be strict about vibe coherence. If a song is technically correct but emotionally wrong for this specific context, flag it.
+Be EXTREMELY strict about vibe coherence, especially for underground preference. When in doubt, REMOVE the track.
 
 DO NOT include any text outside the JSON.`;
 
@@ -4336,9 +4346,86 @@ DO NOT include any text outside the JSON.`;
               const neededCount = songCount - tracksAfterVibeCheck.length;
               console.log(`Need ${neededCount} more tracks, ${remainingTracks.length} available in pool`);
 
-              const backfillTracks = remainingTracks.slice(0, neededCount);
-              tracksAfterVibeCheck.push(...backfillTracks);
-              console.log(`Backfilled ${backfillTracks.length} tracks to reach ${tracksAfterVibeCheck.length} total`);
+              // Take more tracks than needed to allow for filtering
+              const backfillCandidates = remainingTracks.slice(0, neededCount * 3);
+
+              // If underground preference, run vibe check on backfill candidates to filter mainstream artists
+              if (genreData.trackConstraints.popularity.preference === 'underground' && backfillCandidates.length > 0) {
+                console.log(`Underground preference detected, running vibe check on ${backfillCandidates.length} backfill candidates...`);
+
+                const backfillVibeCheckPrompt = `You are filtering backfill tracks for an underground/indie playlist.
+
+Original user request: "${prompt}"
+
+The user requested artists like "Pete Bailey" and "Energy Shift Radio" - these are PURE INDIE/UNDERGROUND artists with minimal mainstream recognition.
+
+Backfill candidate tracks:
+${backfillCandidates.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+
+CRITICAL FILTERING RULES:
+1. REMOVE any artist that:
+   - Has had ANY radio hits or chart success (Top 40, Hot 100, etc.)
+   - Has millions of monthly Spotify listeners
+   - Is signed to a major label (RCA, Columbia, Atlantic, Interscope, Def Jam, etc.)
+   - Has collaborated with mainstream artists (Drake, The Weeknd, Travis Scott, etc.)
+   - Is commonly known outside of underground/indie R&B circles
+   - Has any songs with over 100M streams
+
+2. KEEP ONLY artists that:
+   - Are truly underground/indie like Pete Bailey, Energy Shift Radio
+   - Have minimal mainstream recognition
+   - Are independent or on small indie labels
+   - Would be considered "deep cuts" or "hidden gems"
+
+3. BE EXTREMELY STRICT: When in doubt, REMOVE the track. We prefer 5 true underground tracks over 15 tracks with ANY mainstream artists.
+
+Examples of artists to REMOVE (not exhaustive): SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Tyler the Creator, Steve Lacy, Kali Uchis, Tinashe, Normani, 6LACK, Giveon, Ari Lennox, Ella Mai, Snoh Aalegra, Michael Jackson, Usher, Chris Brown, Cassie, 112, Ginuwine, Ty Dolla $ign, Sonder, Jorja Smith, etc.
+
+Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only). Example: [1, 3, 5]`;
+
+                try {
+                  const backfillVibeResponse = await anthropic.messages.create({
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 2000,
+                    temperature: 0.3,
+                    messages: [{
+                      role: 'user',
+                      content: backfillVibeCheckPrompt
+                    }]
+                  });
+
+                  const backfillVibeContent = backfillVibeResponse.content[0].text;
+                  const backfillJsonMatch = backfillVibeContent.match(/\[([\d,\s]+)\]/);
+
+                  if (backfillJsonMatch) {
+                    const backfillKeepIndices = JSON.parse(backfillJsonMatch[0]);
+                    const backfillFilteredTracks = backfillKeepIndices
+                      .map(idx => backfillCandidates[idx - 1])
+                      .filter(track => track !== undefined)
+                      .slice(0, neededCount); // Take only what we need
+
+                    console.log(`Backfill vibe check: kept ${backfillFilteredTracks.length}/${backfillCandidates.length} underground tracks`);
+                    tracksAfterVibeCheck.push(...backfillFilteredTracks);
+                    console.log(`Backfilled ${backfillFilteredTracks.length} underground tracks to reach ${tracksAfterVibeCheck.length} total`);
+                  } else {
+                    // Fallback: take what we need without filtering
+                    const backfillTracks = backfillCandidates.slice(0, neededCount);
+                    tracksAfterVibeCheck.push(...backfillTracks);
+                    console.log(`Backfill vibe check failed to parse, added ${backfillTracks.length} tracks without filtering`);
+                  }
+                } catch (error) {
+                  console.error('Error during backfill vibe check:', error.message);
+                  // Fallback: take what we need without filtering
+                  const backfillTracks = backfillCandidates.slice(0, neededCount);
+                  tracksAfterVibeCheck.push(...backfillTracks);
+                  console.log(`Backfill vibe check error, added ${backfillTracks.length} tracks without filtering`);
+                }
+              } else {
+                // No underground preference, just backfill normally
+                const backfillTracks = backfillCandidates.slice(0, neededCount);
+                tracksAfterVibeCheck.push(...backfillTracks);
+                console.log(`Backfilled ${backfillTracks.length} tracks to reach ${tracksAfterVibeCheck.length} total`);
+              }
             }
 
             selectedTracks = tracksAfterVibeCheck;
