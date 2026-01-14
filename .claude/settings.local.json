@@ -20,7 +20,9 @@
       "Bash(sqlite3:*)",
       "Bash(grep:*)",
       "Bash(psql:*)",
-      "Bash(kill:*)"
+      "Bash(kill:*)",
+      "Bash(ls:*)",
+      "Bash(railway logs:*)"
     ],
     "deny": [],
     "ask": []

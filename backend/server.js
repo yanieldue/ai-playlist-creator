@@ -3163,53 +3163,290 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
-    // Step 0.5: If underground preference, ask Claude to recommend specific underground artists
-    let recommendedUndergroundArtists = [];
-    if (genreData.trackConstraints.popularity.preference === 'underground' &&
-        genreData.artistConstraints.requestedArtists.length > 0 &&
-        !genreData.artistConstraints.exclusiveMode) {
+    // Step 1: Use Claude to recommend specific songs based on the prompt
+    console.log('🎵 Requesting song recommendations from Claude...');
 
-      console.log('🎵 Requesting underground artist recommendations from Claude...');
+    let claudeRecommendedTracks = [];
+    try {
+      const songRecommendationResponse = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: `You are a music expert with deep knowledge of songs across all genres and eras.
 
-      try {
-        const artistRecommendationResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{
-            role: 'user',
-            content: `You are a music discovery expert specializing in underground and indie artists.
+User's playlist request: "${prompt}"
 
-The user is looking for artists similar to: ${genreData.artistConstraints.requestedArtists.join(', ')}
-Genre: ${genreData.primaryGenre}
+${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be included, even if the refinement message seems to minimize them.` : ''}
+${newArtistsOnly ? 'IMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists.' : ''}
+${userFeedbackContext}
 
-These are UNDERGROUND/INDIE artists with minimal mainstream recognition.
+MUSIC PREFERENCES ANALYSIS:
+Genre & Style:
+- Primary genre: ${genreData.primaryGenre || 'not specified'}
+- Subgenre: ${genreData.subgenre || 'not specified'}
+- Secondary genres: ${genreData.secondaryGenres.join(', ') || 'none'}
+- Key characteristics: ${genreData.keyCharacteristics.join(', ') || 'not specified'}
+- Style: ${genreData.style || 'not specified'}
 
-Recommend 10-12 specific underground/indie ${genreData.primaryGenre} artists that have a similar vibe to the requested artists.
+Vibe & Atmosphere:
+- Atmosphere: ${genreData.atmosphere.join(', ') || 'not specified'}
+- Use case: ${genreData.contextClues.useCase || 'not specified'}
+- Avoid: ${genreData.contextClues.avoidances.join(', ') || 'nothing specified'}
 
-CRITICAL RULES:
-- ONLY recommend artists that are truly underground/indie (NOT mainstream)
-- NO mainstream artists with radio hits or millions of streams (no SZA, Drake, Khalid, Miguel, Daniel Caesar, Summer Walker, Brent Faiyaz, Frank Ocean, The Weeknd, H.E.R., Jhené Aiko, Kehlani, etc.)
-- Focus on independent artists, small label artists, emerging artists
-- Artists should have a similar sound/vibe to ${genreData.artistConstraints.requestedArtists.join(' and ')}
+Audio Characteristics:
+- BPM range: ${genreData.audioFeatures.bpm.min || genreData.audioFeatures.bpm.max ? `${genreData.audioFeatures.bpm.min || 'any'}-${genreData.audioFeatures.bpm.max || 'any'}` : 'not specified'}
+- Energy level: ${genreData.audioFeatures.energy.min !== null || genreData.audioFeatures.energy.max !== null ? `${genreData.audioFeatures.energy.min || 0.0}-${genreData.audioFeatures.energy.max || 1.0}` : 'not specified'}
+- Danceability: ${genreData.audioFeatures.danceability.min !== null || genreData.audioFeatures.danceability.max !== null ? `${genreData.audioFeatures.danceability.min || 0.0}-${genreData.audioFeatures.danceability.max || 1.0}` : 'not specified'}
+- Valence (mood): ${genreData.audioFeatures.valence.min !== null || genreData.audioFeatures.valence.max !== null ? `${genreData.audioFeatures.valence.min || 0.0}-${genreData.audioFeatures.valence.max || 1.0}` : 'not specified'}
 
-Return ONLY a JSON array of artist names. Example: ["Artist 1", "Artist 2", "Artist 3"]
+Era & Cultural Context:
+- Decade: ${genreData.era.decade || 'not specified'}
+- Year range: ${genreData.era.yearRange.min || genreData.era.yearRange.max ? `${genreData.era.yearRange.min || 'any'} to ${genreData.era.yearRange.max || 'any'}` : 'not specified'}
+- Cultural region: ${genreData.culturalContext.region || 'not specified'}
+- Movement: ${genreData.culturalContext.movement || 'not specified'}
 
-DO NOT include any text outside the JSON array.`
-          }]
-        });
+Requested Artists:
+${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
+  ? `- Artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
+- EXCLUSIVE MODE: ${genreData.artistConstraints.exclusiveMode ? 'YES - User wants ONLY these artists, NO other artists' : 'NO - Include these artists + similar vibe artists'}
+${genreData.artistConstraints.exclusiveMode
+  ? `- ALL ${songCount} songs must be from: ${genreData.artistConstraints.requestedArtists.join(', ')}`
+  : `- Include ~${Math.min(8, Math.floor(songCount * 0.25))} songs from: ${genreData.artistConstraints.requestedArtists.join(', ')}
+- Include ~${songCount - Math.min(8, Math.floor(songCount * 0.25))} songs from similar artists with the same vibe`}`
+  : '- No specific artists requested - choose songs that match the vibe and genre'}
 
-        const recommendationText = artistRecommendationResponse.content[0].text.trim()
-          .replace(/^```json\n?/, '').replace(/\n?```$/, '')
-          .replace(/^```\n?/, '').replace(/\n?```$/, '');
+Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground' ? 'UNDERGROUND/INDIE (avoid mainstream artists with radio hits or millions of streams)' : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
 
-        recommendedUndergroundArtists = JSON.parse(recommendationText);
-        console.log(`✨ Recommended underground artists: ${recommendedUndergroundArtists.join(', ')}`);
-      } catch (error) {
-        console.log('Failed to get artist recommendations, continuing with normal flow:', error.message);
+YOUR TASK:
+Recommend exactly ${songCount} specific songs that match this request. Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
+
+${!allowExplicit ? 'IMPORTANT: Only recommend clean/non-explicit songs.' : ''}
+
+CRITICAL REQUIREMENTS:
+1. Return EXACTLY ${songCount} songs
+2. Each song must include: track name and artist name
+3. Songs must match the specified genre and vibe
+4. If requested artists are specified, follow the distribution guidelines above
+5. Ensure variety - don't recommend multiple songs from the same album
+6. Songs should be real, existing tracks that can be found on music streaming platforms
+
+Return ONLY valid JSON in this exact format:
+{
+  "playlistName": "Creative playlist name based on the prompt",
+  "description": "Brief description of the playlist vibe",
+  "songs": [
+    {"track": "Song Name", "artist": "Artist Name"},
+    {"track": "Song Name", "artist": "Artist Name"}
+  ]
+}
+
+DO NOT include any text outside the JSON.`
+        }]
+      });
+
+      const songRecommendationText = songRecommendationResponse.content[0].text.trim()
+        .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+        .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+      const songRecommendationData = JSON.parse(songRecommendationText);
+      claudeRecommendedTracks = songRecommendationData.songs || [];
+
+      console.log(`✨ Claude recommended ${claudeRecommendedTracks.length} songs`);
+      console.log('Playlist name:', songRecommendationData.playlistName);
+      console.log('Playlist description:', songRecommendationData.description);
+
+      // Store playlist name and description for later use
+      var claudePlaylistName = songRecommendationData.playlistName;
+      var claudePlaylistDescription = songRecommendationData.description;
+
+    } catch (error) {
+      console.log('Failed to get song recommendations from Claude:', error.message);
+      console.log('Falling back to traditional search query approach...');
+    }
+
+    // Step 2: Search for Claude's recommended songs on the user's platform
+    const allTracks = [];
+    const seenTrackIds = new Set(); // To prevent exact duplicates
+    const seenSongSignatures = new Map(); // To prevent same song by same artist from different albums
+    const excludeTrackIds = new Set(excludeTrackUris.map(uri => uri.split(':').pop())); // Extract track IDs from URIs
+
+    // Load song history if playlistId is provided (for manual refresh)
+    let playlistSongHistory = new Set();
+    if (playlistId && userId) {
+      const userPlaylistsArray = userPlaylists.get(userId) || [];
+      const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      if (playlist && playlist.songHistory && playlist.songHistory.length > 0) {
+        playlistSongHistory = new Set(playlist.songHistory);
+        console.log(`[MANUAL-REFRESH] Loaded ${playlistSongHistory.size} tracks from song history to filter out repeats`);
       }
     }
 
-    // Step 1: Use Claude to analyze the prompt and generate search queries
+    // Helper function to normalize track names for comparison
+    const normalizeTrackName = (name) => {
+      // Remove common suffixes/prefixes that indicate same song
+      let normalized = name.toLowerCase();
+
+      // Remove parenthetical/bracketed content and dashes that indicate versions
+      normalized = normalized
+        .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')  // Remove COLORS SHOW variations
+        .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')  // Remove version indicators
+        .replace(/\s*[\(\[].*?[\)\]]/g, '')  // Remove content in parentheses or brackets
+        .replace(/[^\w\s]/g, '')  // Remove special characters
+        .replace(/\s+/g, ' ')     // Normalize whitespace
+        .trim();
+
+      return normalized;
+    };
+
+    // Helper function to check if a track is a unique variation
+    const isUniqueVariation = (trackName) => {
+      const variations = [
+        'remix', 'mix', 'remaster', 'version', 'edit',
+        'live', 'acoustic', 'demo', 'cover', 'feat',
+        'featuring', 'ft', 'with', 'instrumental', 'radio edit',
+        'extended', 'club', 'bonus', 'alternate', 'unplugged',
+        'colors show', 'color show'  // Add COLORS SHOW as variation marker
+      ];
+      const lowerName = trackName.toLowerCase();
+      return variations.some(variation => lowerName.includes(variation));
+    };
+
+    // If we have Claude recommendations, search for those specific songs
+    if (claudeRecommendedTracks.length > 0) {
+      console.log(`🔍 Searching ${platform} for ${claudeRecommendedTracks.length} Claude-recommended songs...`);
+
+      if (platform === 'spotify') {
+        for (const recommendedSong of claudeRecommendedTracks) {
+          try {
+            const searchQuery = `track:${recommendedSong.track} artist:${recommendedSong.artist}`;
+            const searchPromise = userSpotifyApi.searchTracks(searchQuery, { limit: 5 });
+            const searchResult = await Promise.race([
+              searchPromise,
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
+            ]);
+            const tracks = searchResult.body.tracks.items;
+
+            if (tracks.length > 0) {
+              // Take the best match (first result)
+              const track = tracks[0];
+
+              // Check if we already have this track
+              if (seenTrackIds.has(track.id)) {
+                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
+                continue;
+              }
+
+              // Skip tracks that are already in the playlist (for replace mode)
+              if (excludeTrackIds.has(track.id)) {
+                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+                continue;
+              }
+
+              // Skip tracks from song history (for manual refresh)
+              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
+                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
+                continue;
+              }
+
+              // Check for explicit content if needed
+              if (!allowExplicit && track.explicit) {
+                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
+                continue;
+              }
+
+              // Check song signature (artist + normalized track name)
+              const normalizedName = normalizeTrackName(track.name);
+              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
+
+              if (seenSongSignatures.has(songSignature)) {
+                if (!isUniqueVariation(track.name)) {
+                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name} (same as "${seenSongSignatures.get(songSignature)}")`);
+                  continue;
+                }
+              }
+
+              seenTrackIds.add(track.id);
+              seenSongSignatures.set(songSignature, track.name);
+              allTracks.push(track);
+              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
+            } else {
+              console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
+            }
+          } catch (error) {
+            console.log(`Error searching for "${recommendedSong.track}": ${error.message}`);
+          }
+        }
+      } else if (platform === 'apple') {
+        for (const recommendedSong of claudeRecommendedTracks) {
+          try {
+            const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
+            const searchResult = await appleMusicApi.music(`/v1/catalog/us/search?types=songs&term=${encodeURIComponent(searchQuery)}&limit=5`);
+            const tracks = searchResult.data.results.songs?.data || [];
+
+            if (tracks.length > 0) {
+              // Take the best match (first result)
+              const track = tracks[0];
+
+              // Check if we already have this track
+              if (seenTrackIds.has(track.id)) {
+                console.log(`Skipping duplicate: "${track.attributes.name}" by ${track.attributes.artistName}`);
+                continue;
+              }
+
+              // Skip tracks that are already in the playlist (for replace mode)
+              const trackUri = `apple:track:${track.id}`;
+              if (excludeTrackUris.includes(trackUri)) {
+                console.log(`Skipping "${track.attributes.name}" by ${track.attributes.artistName} (already in playlist)`);
+                continue;
+              }
+
+              // Skip tracks from song history (for manual refresh)
+              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
+                console.log(`[MANUAL-REFRESH] Skipping "${track.attributes.name}" by ${track.attributes.artistName} (previously in playlist)`);
+                continue;
+              }
+
+              // Check for explicit content if needed
+              if (!allowExplicit && track.attributes.contentRating === 'explicit') {
+                console.log(`Skipping explicit track: "${track.attributes.name}" by ${track.attributes.artistName}`);
+                continue;
+              }
+
+              // Check song signature (artist + normalized track name)
+              const normalizedName = normalizeTrackName(track.attributes.name);
+              const songSignature = `${track.attributes.artistName.toLowerCase()}:${normalizedName}`;
+
+              if (seenSongSignatures.has(songSignature)) {
+                if (!isUniqueVariation(track.attributes.name)) {
+                  console.log(`Skipping duplicate song: "${track.attributes.name}" by ${track.attributes.artistName} (same as "${seenSongSignatures.get(songSignature)}")`);
+                  continue;
+                }
+              }
+
+              seenTrackIds.add(track.id);
+              seenSongSignatures.set(songSignature, track.attributes.name);
+              allTracks.push(track);
+              console.log(`✓ Found: "${track.attributes.name}" by ${track.attributes.artistName}`);
+            } else {
+              console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
+            }
+          } catch (error) {
+            console.log(`Error searching for "${recommendedSong.track}": ${error.message}`);
+          }
+        }
+      }
+
+      console.log(`📊 Successfully found ${allTracks.length} out of ${claudeRecommendedTracks.length} Claude-recommended songs`);
+    }
+
+    // Fallback: If we don't have enough tracks from Claude recommendations, use traditional search query approach
+    let needsFallback = allTracks.length < songCount * 0.5; // If we found less than 50% of requested songs
+
+    if (needsFallback || claudeRecommendedTracks.length === 0) {
+      console.log(`🔄 Using fallback search query approach (found ${allTracks.length}/${songCount} songs from Claude)...`);
+
+      // Step 3: Use Claude to generate search queries (fallback)
     const aiResponse = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
@@ -3254,18 +3491,6 @@ REQUESTED ARTISTS:
 ${genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0
   ? `- User specifically requested: ${genreData.artistConstraints.requestedArtists.join(', ')}
 - EXCLUSIVE MODE: ${genreData.artistConstraints.exclusiveMode ? 'YES - User wants ONLY these artists, NO similar artists' : 'NO - Mix of these artists + similar vibe artists'}
-${recommendedUndergroundArtists.length > 0
-  ? `
-🎯 RECOMMENDED UNDERGROUND ARTISTS (USE THESE):
-I've identified these underground/indie artists with a similar vibe: ${recommendedUndergroundArtists.join(', ')}
-
-CRITICAL INSTRUCTIONS FOR UNDERGROUND PLAYLIST:
-- Include 1 query for EACH requested artist: ${genreData.artistConstraints.requestedArtists.map(a => `"${a}"`).join(', ')}
-- Include 1 query for EACH recommended underground artist: ${recommendedUndergroundArtists.slice(0, 10).map(a => `"${a}"`).join(', ')}
-- Use SPECIFIC ARTIST NAMES from the recommended list (not generic "indie R&B" searches)
-- These artist searches will return underground tracks, NO mainstream contamination
-- Total: ${genreData.artistConstraints.requestedArtists.length} requested + ~${Math.min(recommendedUndergroundArtists.length, 10)} recommended = ~${genreData.artistConstraints.requestedArtists.length + Math.min(recommendedUndergroundArtists.length, 10)} artist queries`
-  : ''}
 ${genreData.artistConstraints.exclusiveMode
   ? `- CRITICAL: ALL queries must be for the requested artists ONLY
 - Include at least 3-4 queries per artist (just name, with genre, with mood descriptors, deep cuts)
@@ -3322,67 +3547,26 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       }]
     });
     
-    // Parse AI response
-    let aiData;
-    try {
-      const responseText = aiResponse.content[0].text.trim();
-      aiData = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', aiResponse.content[0].text);
-      return res.status(500).json({ error: 'Failed to parse AI response' });
-    }
-    
-    console.log('AI generated playlist name:', aiData.playlistName);
-    console.log('AI generated search queries:', JSON.stringify(aiData.searchQueries, null, 2));
-    
-    // Helper function to normalize track names for comparison
-    const normalizeTrackName = (name) => {
-      // Remove common suffixes/prefixes that indicate same song
-      let normalized = name.toLowerCase();
+      // Parse AI response (fallback)
+      let aiData;
+      try {
+        const responseText = aiResponse.content[0].text.trim();
+        aiData = JSON.parse(responseText);
 
-      // Remove parenthetical/bracketed content and dashes that indicate versions
-      normalized = normalized
-        .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')  // Remove COLORS SHOW variations
-        .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')  // Remove version indicators
-        .replace(/\s*[\(\[].*?[\)\]]/g, '')  // Remove content in parentheses or brackets
-        .replace(/[^\w\s]/g, '')  // Remove special characters
-        .replace(/\s+/g, ' ')     // Normalize whitespace
-        .trim();
-
-      return normalized;
-    };
-
-    // Helper function to check if a track is a unique variation
-    const isUniqueVariation = (trackName) => {
-      const variations = [
-        'remix', 'mix', 'remaster', 'version', 'edit',
-        'live', 'acoustic', 'demo', 'cover', 'feat',
-        'featuring', 'ft', 'with', 'instrumental', 'radio edit',
-        'extended', 'club', 'bonus', 'alternate', 'unplugged',
-        'colors show', 'color show'  // Add COLORS SHOW as variation marker
-      ];
-      const lowerName = trackName.toLowerCase();
-      return variations.some(variation => lowerName.includes(variation));
-    };
-
-    // Step 2: Search for songs based on AI-generated queries
-    const allTracks = [];
-    const seenTrackIds = new Set(); // To prevent exact duplicates
-    const seenSongSignatures = new Map(); // To prevent same song by same artist from different albums
-    const excludeTrackIds = new Set(excludeTrackUris.map(uri => uri.split(':').pop())); // Extract track IDs from URIs
-
-    // Load song history if playlistId is provided (for manual refresh)
-    let playlistSongHistory = new Set();
-    if (playlistId && userId) {
-      const userPlaylistsArray = userPlaylists.get(userId) || [];
-      const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
-      if (playlist && playlist.songHistory && playlist.songHistory.length > 0) {
-        playlistSongHistory = new Set(playlist.songHistory);
-        console.log(`[MANUAL-REFRESH] Loaded ${playlistSongHistory.size} tracks from song history to filter out repeats`);
+        // Override playlist name/description if we don't have Claude's version
+        if (!claudePlaylistName) {
+          claudePlaylistName = aiData.playlistName;
+          claudePlaylistDescription = aiData.description;
+        }
+      } catch (parseError) {
+        console.error('Failed to parse AI response:', aiResponse.content[0].text);
+        return res.status(500).json({ error: 'Failed to parse AI response' });
       }
-    }
 
-    if (platform === 'spotify') {
+      console.log('Fallback: AI generated search queries:', JSON.stringify(aiData.searchQueries, null, 2));
+
+      // Execute fallback search queries
+      if (platform === 'spotify') {
       // Calculate search limit based on requested song count
       // More songs requested = need more tracks per query to account for duplicates/filtering
       const searchLimit = Math.min(
@@ -3553,7 +3737,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
           console.error(`Error searching for "${query}":`, error.message);
         }
       }
-    }
+      }
+    } // End fallback block
 
     console.log(`Found ${allTracks.length} unique tracks before audio features filtering`);
     console.log('DEBUG: About to define normalizeArtistForComparison, genreData exists:', typeof genreData !== 'undefined');
@@ -4515,8 +4700,8 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
     }
 
     res.json({
-      playlistName: aiData.playlistName,
-      description: aiData.description,
+      playlistName: claudePlaylistName,
+      description: claudePlaylistDescription,
       tracks: selectedTracks,
       trackCount: selectedTracks.length
     });
