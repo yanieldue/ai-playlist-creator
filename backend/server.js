@@ -3378,11 +3378,13 @@ DO NOT include any text outside the JSON.`
           }
         }
       } else if (platform === 'apple') {
+        const platformService = new PlatformService();
+        const storefront = tokens.storefront || 'us';
+
         for (const recommendedSong of claudeRecommendedTracks) {
           try {
             const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
-            const searchResult = await appleMusicApi.music(`/v1/catalog/us/search?types=songs&term=${encodeURIComponent(searchQuery)}&limit=5`);
-            const tracks = searchResult.data.results.songs?.data || [];
+            const tracks = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
 
             if (tracks.length > 0) {
               // Take the best match (first result)
@@ -3390,44 +3392,44 @@ DO NOT include any text outside the JSON.`
 
               // Check if we already have this track
               if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.attributes.name}" by ${track.attributes.artistName}`);
+                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
                 continue;
               }
 
               // Skip tracks that are already in the playlist (for replace mode)
-              const trackUri = `apple:track:${track.id}`;
+              const trackUri = track.uri;
               if (excludeTrackUris.includes(trackUri)) {
-                console.log(`Skipping "${track.attributes.name}" by ${track.attributes.artistName} (already in playlist)`);
+                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
                 continue;
               }
 
               // Skip tracks from song history (for manual refresh)
               if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.attributes.name}" by ${track.attributes.artistName} (previously in playlist)`);
+                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
                 continue;
               }
 
               // Check for explicit content if needed
-              if (!allowExplicit && track.attributes.contentRating === 'explicit') {
-                console.log(`Skipping explicit track: "${track.attributes.name}" by ${track.attributes.artistName}`);
+              if (!allowExplicit && track.explicit) {
+                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
                 continue;
               }
 
               // Check song signature (artist + normalized track name)
-              const normalizedName = normalizeTrackName(track.attributes.name);
-              const songSignature = `${track.attributes.artistName.toLowerCase()}:${normalizedName}`;
+              const normalizedName = normalizeTrackName(track.name);
+              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
 
               if (seenSongSignatures.has(songSignature)) {
-                if (!isUniqueVariation(track.attributes.name)) {
-                  console.log(`Skipping duplicate song: "${track.attributes.name}" by ${track.attributes.artistName} (same as "${seenSongSignatures.get(songSignature)}")`);
+                if (!isUniqueVariation(track.name)) {
+                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name} (same as "${seenSongSignatures.get(songSignature)}")`);
                   continue;
                 }
               }
 
               seenTrackIds.add(track.id);
-              seenSongSignatures.set(songSignature, track.attributes.name);
+              seenSongSignatures.set(songSignature, track.name);
               allTracks.push(track);
-              console.log(`✓ Found: "${track.attributes.name}" by ${track.attributes.artistName}`);
+              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }
@@ -4637,7 +4639,10 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
                     }]
                   });
 
-                  const backfillVibeContent = backfillVibeResponse.content[0].text;
+                  const backfillVibeContent = backfillVibeResponse.content[0].text.trim()
+                    .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+                    .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
                   const backfillJsonMatch = backfillVibeContent.match(/\[([\d,\s]+)\]/);
 
                   if (backfillJsonMatch) {
@@ -4652,6 +4657,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
                     console.log(`Backfilled ${backfillFilteredTracks.length} underground tracks to reach ${tracksAfterVibeCheck.length} total`);
                   } else {
                     // Fallback: take what we need without filtering
+                    console.log(`Backfill vibe check failed to parse. Response was: ${backfillVibeContent.substring(0, 500)}`);
                     const backfillTracks = backfillCandidates.slice(0, neededCount);
                     tracksAfterVibeCheck.push(...backfillTracks);
                     console.log(`Backfill vibe check failed to parse, added ${backfillTracks.length} tracks without filtering`);
