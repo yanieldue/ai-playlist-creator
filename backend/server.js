@@ -4302,7 +4302,7 @@ DO NOT include any text outside the JSON.`;
       try {
         const vibeCheckResponse = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
+          max_tokens: 4000,
           messages: [{
             role: 'user',
             content: vibeCheckPrompt
