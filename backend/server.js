@@ -3244,13 +3244,14 @@ ${genreData.artistConstraints.exclusiveMode
 Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground' ? `STRICTLY UNDERGROUND/INDIE - This is CRITICAL!
 
 ⚠️ UNDERGROUND PLAYLIST RULES - YOU MUST FOLLOW THESE:
-1. DO NOT recommend ANY of these mainstream artists (or similar): SZA, Kehlani, H.E.R., Daniel Caesar, Miguel, Summer Walker, Brent Faiyaz, Jhené Aiko, Khalid, Frank Ocean, The Weeknd, Drake, Ella Mai, Lucky Daye, Pink Sweat$, Snoh Aalegra, Giveon, Ari Lennox, 6LACK, Kali Uchis, Jorja Smith, dvsn, PARTYNEXTDOOR, Tinashe, Teyana Taylor, Sabrina Claudio, Queen Naija, Muni Long, Chloe x Halle, Victoria Monét, Normani, Tory Lanez, Ty Dolla $ign, Chris Brown, Usher, Ne-Yo, Trey Songz, Jeremih, August Alsina, Jacquees, etc.
-2. DO NOT recommend artists with Grammy nominations/wins
-3. DO NOT recommend artists signed to major labels (RCA, Columbia, Atlantic, Interscope, Def Jam, Republic, etc.)
-4. DO NOT recommend artists with over 1 million monthly Spotify listeners
+1. DO NOT recommend ANY of these mainstream artists (or similar): SZA, Kehlani, H.E.R., Daniel Caesar, Miguel, Summer Walker, Brent Faiyaz, Jhené Aiko, Khalid, Frank Ocean, The Weeknd, Drake, Ella Mai, Lucky Daye, Pink Sweat$, Snoh Aalegra, Giveon, Ari Lennox, 6LACK, Kali Uchis, Jorja Smith, dvsn, PARTYNEXTDOOR, Tinashe, Teyana Taylor, Sabrina Claudio, Queen Naija, Muni Long, Chloe x Halle, Victoria Monét, Normani, Tory Lanez, Ty Dolla $ign, Chris Brown, Usher, Ne-Yo, Trey Songz, Jeremih, August Alsina, Jacquees, KAYTRANADA, Ravyn Lenae, Cautious Clay, Baby Rose, Tiana Major9, Sevyn Streeter, Tone Stith, BROODS, Masego, Tom Misch, FKJ, Jordan Rakei, etc.
+2. DO NOT recommend artists with Grammy nominations/wins (this includes H.E.R., Daniel Caesar, KAYTRANADA, etc.)
+3. DO NOT recommend artists signed to major labels (RCA, Columbia, Atlantic, Interscope, Def Jam, Republic, Motown, Warner, Capitol, etc.)
+4. DO NOT recommend artists with over 500K monthly Spotify listeners
 5. DO NOT recommend songs that have been on any Billboard chart
-6. ONLY recommend truly underground artists like: Pete Bailey, Energy Shift Radio, A.I Delly, Roe Xander, emo designer, Men of Boss, Jvck James, Masn, Givanti, Elijah Blake (early work), Kyle Dion (early work), and similar UNKNOWN artists
-7. If you're unsure if an artist is underground, DO NOT include them` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
+6. DO NOT recommend songs with featured mainstream artists (e.g., "feat. Ty Dolla $ign" or "feat. Swae Lee")
+7. ONLY recommend truly underground artists like: Pete Bailey, Energy Shift Radio, A.I Delly, Roe Xander, emo designer, Men of Boss, Jvck James, Masn, Givanti, DellyBTW, 222Mirr, Classic Boss, and similar UNKNOWN artists with under 100K monthly listeners
+8. If you're unsure if an artist is underground, DO NOT include them - err on the side of caution` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
 
 YOUR TASK:
 Recommend ${Math.ceil(songCount * 2)} specific songs that match this request (we ask for extra because some may not be found on the streaming platform). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
