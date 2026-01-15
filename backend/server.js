@@ -4267,7 +4267,7 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
         // Build track list with genre information for validation
         const trackListForValidation = tracksForSelection.map(t => {
           const artistGenres = t.genres && t.genres.length > 0 ? ` [API genres: ${t.genres.join(', ')}]` : '';
-          return `${t.name} by ${t.artist}${artistGenres}`;
+          return `${t.name} by ${t.artist || 'Unknown Artist'}${artistGenres}`;
         }).join('\n');
 
         const genreValidationResponse = await anthropic.messages.create({
@@ -4519,7 +4519,7 @@ REQUIRED VIBE/CONTEXT:
 - Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: STRICTLY remove ALL mainstream/radio/chart artists' : ''}
 
 Selected tracks:
-${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist || 'Unknown Artist'}`).join('\n')}
 
 Review this track list and identify any songs that are TECHNICALLY correct (right genre) but EMOTIONALLY WRONG (don't fit the vibe/atmosphere/context).
 
@@ -4614,7 +4614,7 @@ Original user request: "${prompt}"
 The user requested artists like "Pete Bailey" and "Energy Shift Radio" - these are PURE INDIE/UNDERGROUND artists with minimal mainstream recognition.
 
 Backfill candidate tracks:
-${backfillCandidates.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+${backfillCandidates.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist || 'Unknown Artist'}`).join('\n')}
 
 CRITICAL FILTERING RULES:
 1. REMOVE any artist that:
