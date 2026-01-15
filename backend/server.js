@@ -3118,14 +3118,27 @@ Respond ONLY with valid JSON in this format:
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       existingPlaylistData = userPlaylistsArray.find(p => p.playlistId === playlistId);
 
-      // If adding more songs to existing playlist, preserve original genre data (especially requestedArtists)
+      // If adding more songs to existing playlist, preserve original genre data (especially requestedArtists and popularity preference)
       if (existingPlaylistData && existingPlaylistData.genreData) {
         console.log('Reusing original genre data from existing playlist to maintain consistency');
-        // Preserve requested artists and other constraints from original prompt
+        // Preserve requested artists from original prompt
         if (existingPlaylistData.genreData.artistConstraints?.requestedArtists) {
           genreData.artistConstraints.requestedArtists = existingPlaylistData.genreData.artistConstraints.requestedArtists;
           genreData.artistConstraints.exclusiveMode = existingPlaylistData.genreData.artistConstraints.exclusiveMode || false;
           console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')} (exclusive: ${genreData.artistConstraints.exclusiveMode})`);
+        }
+        // Preserve popularity preference (underground/mainstream/balanced)
+        if (existingPlaylistData.genreData.trackConstraints?.popularity?.preference) {
+          genreData.trackConstraints.popularity.preference = existingPlaylistData.genreData.trackConstraints.popularity.preference;
+          genreData.trackConstraints.popularity.max = existingPlaylistData.genreData.trackConstraints.popularity.max;
+          genreData.trackConstraints.popularity.min = existingPlaylistData.genreData.trackConstraints.popularity.min;
+          console.log(`Preserved popularity preference: ${genreData.trackConstraints.popularity.preference}`);
+        }
+        // Preserve primary genre
+        if (existingPlaylistData.genreData.primaryGenre) {
+          genreData.primaryGenre = existingPlaylistData.genreData.primaryGenre;
+          genreData.subgenre = existingPlaylistData.genreData.subgenre;
+          console.log(`Preserved genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
         }
       }
     }
@@ -3460,12 +3473,67 @@ DO NOT include any text outside the JSON.`
 
       console.log(`📊 Successfully found ${allTracks.length} out of ${claudeRecommendedTracks.length} Claude-recommended songs`);
 
-      // Trust Claude's recommendations - return them directly
-      // Claude already knows the genre, vibe, popularity level, era, etc.
-      // No need for additional filtering - that's what makes this simple
+      // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
       if (allTracks.length >= 5) {
-        console.log(`🎯 Using Claude's ${allTracks.length} recommended songs directly`);
-        const selectedTracks = allTracks.slice(0, songCount);
+        let selectedTracks = allTracks.slice(0, Math.min(allTracks.length, songCount + 10)); // Take a few extra for filtering
+
+        // Only run quick filter if we have genre/popularity constraints
+        if (genreData.primaryGenre || genreData.trackConstraints.popularity.preference) {
+          console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
+
+          try {
+            const sanityCheckResponse = await anthropic.messages.create({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 1000,
+              messages: [{
+                role: 'user',
+                content: `Quick filter: Remove any songs that clearly don't belong.
+
+Original request: "${prompt}"
+Genre: ${genreData.primaryGenre || 'not specified'}
+Popularity: ${genreData.trackConstraints.popularity.preference || 'any'}
+
+Songs:
+${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+
+Return ONLY a JSON array of indices to KEEP. Remove songs where:
+- The artist clearly doesn't match the genre (e.g., rapper in R&B playlist)
+- The artist is mainstream when underground was requested (e.g., Lil Baby, Drake, etc.)
+- The song obviously doesn't fit the vibe
+
+Example response: [1, 2, 4, 5, 7]
+
+Be lenient - only remove obvious mismatches. When in doubt, keep the song.`
+              }]
+            });
+
+            const sanityContent = sanityCheckResponse.content[0].text.trim()
+              .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+              .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+            const keepMatch = sanityContent.match(/\[([\d,\s]*)\]/);
+            if (keepMatch) {
+              const keepIndices = JSON.parse(keepMatch[0]);
+              const filteredTracks = keepIndices
+                .map(idx => selectedTracks[idx - 1])
+                .filter(t => t !== undefined);
+
+              if (filteredTracks.length >= 5) {
+                const removed = selectedTracks.length - filteredTracks.length;
+                if (removed > 0) {
+                  console.log(`✂️ Sanity check removed ${removed} mismatched tracks`);
+                }
+                selectedTracks = filteredTracks;
+              }
+            }
+          } catch (error) {
+            console.log('Sanity check failed, using tracks as-is:', error.message);
+          }
+        }
+
+        // Return the final tracks
+        selectedTracks = selectedTracks.slice(0, songCount);
+        console.log(`🎯 Returning ${selectedTracks.length} tracks`);
 
         res.json({
           playlistName: claudePlaylistName,
@@ -3473,7 +3541,7 @@ DO NOT include any text outside the JSON.`
           tracks: selectedTracks,
           trackCount: selectedTracks.length
         });
-        return; // Done - Claude gave us what we need
+        return; // Done
       }
     }
 
