@@ -3481,8 +3481,9 @@ DO NOT include any text outside the JSON.`
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
-        // Only run quick filter if we have a genre to match against
-        if (genreData.primaryGenre) {
+        // Run quick filter if we have genre or explicit avoidances from the user
+        const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
+        if (genreData.primaryGenre || hasAvoidances) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
           try {
@@ -3491,23 +3492,22 @@ DO NOT include any text outside the JSON.`
               max_tokens: 1000,
               messages: [{
                 role: 'user',
-                content: `Quick filter: Remove ONLY songs that clearly don't match the SOUND/VIBE of the request.
+                content: `Quick filter: Remove songs that don't match the request.
 
 Original request: "${prompt}"
 Genre: ${genreData.primaryGenre || 'not specified'}
+${hasAvoidances ? `User explicitly wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
 
 Songs:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
 Return ONLY a JSON array of indices to KEEP.
 
-ONLY remove songs where the artist/song clearly doesn't fit the GENRE or SOUND requested. For example:
-- A heavy metal song in an R&B playlist
-- A country song in a hip-hop playlist
+Remove songs where:
+- The artist/song clearly doesn't fit the GENRE or SOUND requested
+${hasAvoidances ? `- The song matches what the user wants to AVOID (${genreData.contextClues.avoidances.join(', ')})` : ''}
 
-Do NOT filter based on artist popularity or fame - only filter based on whether the song SOUNDS right.
-
-Be very lenient - when in doubt, KEEP the song.
+Be lenient on genre matching, but strict on the user's explicit avoidances.
 
 Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }]
