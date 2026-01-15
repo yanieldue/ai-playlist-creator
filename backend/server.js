@@ -3190,6 +3190,18 @@ Respond ONLY with valid JSON in this format:
 
 User's playlist request: "${prompt}"
 
+🚨 CRITICAL CONSTRAINTS - READ FIRST:
+${genreData.primaryGenre ? `- Genre: ${genreData.primaryGenre}${genreData.subgenre ? ` / ${genreData.subgenre}` : ''} - EVERY song must fit this genre` : ''}
+${genreData.trackConstraints.popularity.preference === 'underground' ? `- Popularity: STRICTLY UNDERGROUND - NO mainstream artists allowed. If an artist has millions of streams, Grammy nominations, or is signed to a major label, DO NOT include them.` : genreData.trackConstraints.popularity.preference === 'mainstream' ? `- Popularity: MAINSTREAM - Focus on well-known, popular artists` : ''}
+${genreData.contextClues.avoidances.length > 0 ? `- Avoid: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+
+Before adding ANY song to your list, ask yourself:
+1. Does this artist actually fit the genre "${genreData.primaryGenre || 'requested'}"?
+2. ${genreData.trackConstraints.popularity.preference === 'underground' ? 'Is this artist truly underground (not mainstream)?' : 'Does this match the popularity preference?'}
+3. Does this song match the vibe of the original request?
+
+If the answer to ANY of these is "no" or "maybe", DO NOT include that song.
+
 ${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be included, even if the refinement message seems to minimize them.` : ''}
 ${newArtistsOnly ? 'IMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists.' : ''}
 ${userFeedbackContext}
@@ -3248,12 +3260,13 @@ ${!allowExplicit ? 'IMPORTANT: Only recommend clean/non-explicit songs.' : ''}
 CRITICAL REQUIREMENTS:
 1. Return ${Math.ceil(songCount * 2)} songs (we request extra because some may not be found on the platform)
 2. Each song must include: EXACT track name and EXACT artist name as it appears on streaming platforms
-3. Songs must match the specified genre and vibe
+3. EVERY song must match the genre "${genreData.primaryGenre || 'specified above'}" - do not include songs from other genres
 4. If requested artists are specified, follow the distribution guidelines above
 5. Ensure variety - don't recommend multiple songs from the same album
 6. ONLY recommend songs you are CERTAIN exist on Apple Music and Spotify - do NOT make up or guess song titles
 7. Use well-known songs from each artist rather than obscure tracks that may not be on streaming platforms
-${genreData.trackConstraints.popularity.preference === 'underground' ? `8. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS.` : ''}
+${genreData.trackConstraints.popularity.preference === 'underground' ? `8. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS. Double-check each artist before including them.` : ''}
+9. SELF-CHECK: Before finalizing, review your list and remove any song where the artist doesn't clearly fit the requested genre or popularity level
 
 Return ONLY valid JSON in this exact format:
 {
