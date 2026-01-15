@@ -3481,8 +3481,8 @@ DO NOT include any text outside the JSON.`
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
-        // Only run quick filter if we have genre/popularity constraints
-        if (genreData.primaryGenre || genreData.trackConstraints.popularity.preference) {
+        // Only run quick filter if we have a genre to match against
+        if (genreData.primaryGenre) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
           try {
@@ -3491,23 +3491,25 @@ DO NOT include any text outside the JSON.`
               max_tokens: 1000,
               messages: [{
                 role: 'user',
-                content: `Quick filter: Remove any songs that clearly don't belong.
+                content: `Quick filter: Remove ONLY songs that clearly don't match the SOUND/VIBE of the request.
 
 Original request: "${prompt}"
 Genre: ${genreData.primaryGenre || 'not specified'}
-Popularity: ${genreData.trackConstraints.popularity.preference || 'any'}
 
 Songs:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
-Return ONLY a JSON array of indices to KEEP. Remove songs where:
-- The artist clearly doesn't match the genre (e.g., rapper in R&B playlist)
-- The artist is mainstream when underground was requested (e.g., Lil Baby, Drake, etc.)
-- The song obviously doesn't fit the vibe
+Return ONLY a JSON array of indices to KEEP.
 
-Example response: [1, 2, 4, 5, 7]
+ONLY remove songs where the artist/song clearly doesn't fit the GENRE or SOUND requested. For example:
+- A heavy metal song in an R&B playlist
+- A country song in a hip-hop playlist
 
-Be lenient - only remove obvious mismatches. When in doubt, keep the song.`
+Do NOT filter based on artist popularity or fame - only filter based on whether the song SOUNDS right.
+
+Be very lenient - when in doubt, KEEP the song.
+
+Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }]
             });
 
