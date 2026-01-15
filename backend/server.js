@@ -3216,7 +3216,16 @@ ${genreData.artistConstraints.exclusiveMode
 - Include ~${songCount - Math.min(8, Math.floor(songCount * 0.25))} songs from similar artists with the same vibe`}`
   : '- No specific artists requested - choose songs that match the vibe and genre'}
 
-Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground' ? 'UNDERGROUND/INDIE (avoid mainstream artists with radio hits or millions of streams)' : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
+Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground' ? `STRICTLY UNDERGROUND/INDIE - This is CRITICAL!
+
+⚠️ UNDERGROUND PLAYLIST RULES - YOU MUST FOLLOW THESE:
+1. DO NOT recommend ANY of these mainstream artists (or similar): SZA, Kehlani, H.E.R., Daniel Caesar, Miguel, Summer Walker, Brent Faiyaz, Jhené Aiko, Khalid, Frank Ocean, The Weeknd, Drake, Ella Mai, Lucky Daye, Pink Sweat$, Snoh Aalegra, Giveon, Ari Lennox, 6LACK, Kali Uchis, Jorja Smith, dvsn, PARTYNEXTDOOR, Tinashe, Teyana Taylor, Sabrina Claudio, Queen Naija, Muni Long, Chloe x Halle, Victoria Monét, Normani, Tory Lanez, Ty Dolla $ign, Chris Brown, Usher, Ne-Yo, Trey Songz, Jeremih, August Alsina, Jacquees, etc.
+2. DO NOT recommend artists with Grammy nominations/wins
+3. DO NOT recommend artists signed to major labels (RCA, Columbia, Atlantic, Interscope, Def Jam, Republic, etc.)
+4. DO NOT recommend artists with over 1 million monthly Spotify listeners
+5. DO NOT recommend songs that have been on any Billboard chart
+6. ONLY recommend truly underground artists like: Pete Bailey, Energy Shift Radio, A.I Delly, Roe Xander, emo designer, Men of Boss, Jvck James, Masn, Givanti, Elijah Blake (early work), Kyle Dion (early work), and similar UNKNOWN artists
+7. If you're unsure if an artist is underground, DO NOT include them` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
 
 YOUR TASK:
 Recommend exactly ${songCount} specific songs that match this request. Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
@@ -3230,6 +3239,7 @@ CRITICAL REQUIREMENTS:
 4. If requested artists are specified, follow the distribution guidelines above
 5. Ensure variety - don't recommend multiple songs from the same album
 6. Songs should be real, existing tracks that can be found on music streaming platforms
+${genreData.trackConstraints.popularity.preference === 'underground' ? `7. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS. If you cannot find ${songCount} underground songs, return fewer songs rather than including mainstream artists.` : ''}
 
 Return ONLY valid JSON in this exact format:
 {
@@ -4652,31 +4662,47 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
                     .replace(/^```json\n?/, '').replace(/\n?```$/, '')
                     .replace(/^```\n?/, '').replace(/\n?```$/, '');
 
-                  const backfillJsonMatch = backfillVibeContent.match(/\[([\d,\s]+)\]/);
+                  // Match empty array [] or array with numbers [1, 2, 3]
+                  const backfillJsonMatch = backfillVibeContent.match(/\[([\d,\s]*)\]/);
 
                   if (backfillJsonMatch) {
                     const backfillKeepIndices = JSON.parse(backfillJsonMatch[0]);
-                    const backfillFilteredTracks = backfillKeepIndices
-                      .map(idx => backfillCandidates[idx - 1])
-                      .filter(track => track !== undefined)
-                      .slice(0, neededCount); // Take only what we need
 
-                    console.log(`Backfill vibe check: kept ${backfillFilteredTracks.length}/${backfillCandidates.length} underground tracks`);
-                    tracksAfterVibeCheck.push(...backfillFilteredTracks);
-                    console.log(`Backfilled ${backfillFilteredTracks.length} underground tracks to reach ${tracksAfterVibeCheck.length} total`);
+                    // If Claude returned empty array, it means ALL tracks are mainstream - don't add any
+                    if (backfillKeepIndices.length === 0) {
+                      console.log(`Backfill vibe check: Claude found NO underground tracks in ${backfillCandidates.length} candidates - all are mainstream`);
+                      console.log(`Not adding any backfill tracks to preserve underground-only playlist`);
+                    } else {
+                      const backfillFilteredTracks = backfillKeepIndices
+                        .map(idx => backfillCandidates[idx - 1])
+                        .filter(track => track !== undefined)
+                        .slice(0, neededCount); // Take only what we need
+
+                      console.log(`Backfill vibe check: kept ${backfillFilteredTracks.length}/${backfillCandidates.length} underground tracks`);
+                      tracksAfterVibeCheck.push(...backfillFilteredTracks);
+                      console.log(`Backfilled ${backfillFilteredTracks.length} underground tracks to reach ${tracksAfterVibeCheck.length} total`);
+                    }
                   } else {
-                    // Fallback: take what we need without filtering
+                    // Fallback: for underground preference, don't add unfiltered tracks
                     console.log(`Backfill vibe check failed to parse. Response was: ${backfillVibeContent.substring(0, 500)}`);
-                    const backfillTracks = backfillCandidates.slice(0, neededCount);
-                    tracksAfterVibeCheck.push(...backfillTracks);
-                    console.log(`Backfill vibe check failed to parse, added ${backfillTracks.length} tracks without filtering`);
+                    if (genreData.trackConstraints.popularity.preference !== 'underground') {
+                      const backfillTracks = backfillCandidates.slice(0, neededCount);
+                      tracksAfterVibeCheck.push(...backfillTracks);
+                      console.log(`Backfill vibe check failed to parse, added ${backfillTracks.length} tracks without filtering`);
+                    } else {
+                      console.log(`Underground preference: not adding unfiltered mainstream tracks`);
+                    }
                   }
                 } catch (error) {
                   console.error('Error during backfill vibe check:', error.message);
-                  // Fallback: take what we need without filtering
-                  const backfillTracks = backfillCandidates.slice(0, neededCount);
-                  tracksAfterVibeCheck.push(...backfillTracks);
-                  console.log(`Backfill vibe check error, added ${backfillTracks.length} tracks without filtering`);
+                  // For underground preference, don't add unfiltered tracks on error
+                  if (genreData.trackConstraints.popularity.preference !== 'underground') {
+                    const backfillTracks = backfillCandidates.slice(0, neededCount);
+                    tracksAfterVibeCheck.push(...backfillTracks);
+                    console.log(`Backfill vibe check error, added ${backfillTracks.length} tracks without filtering`);
+                  } else {
+                    console.log(`Underground preference: not adding unfiltered tracks after error`);
+                  }
                 }
               } else {
                 // No underground preference, just backfill normally
