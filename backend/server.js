@@ -3458,6 +3458,22 @@ DO NOT include any text outside the JSON.`
       }
 
       console.log(`📊 Successfully found ${allTracks.length} out of ${claudeRecommendedTracks.length} Claude-recommended songs`);
+
+      // For underground playlists: Trust Claude's recommendations completely
+      // Don't use fallback search queries which contaminate with mainstream artists
+      if (genreData.trackConstraints.popularity.preference === 'underground' && allTracks.length >= 5) {
+        console.log(`🎯 Underground playlist: Using only Claude's ${allTracks.length} recommended songs (no fallback to avoid mainstream contamination)`);
+        // Skip to the end - use Claude's tracks directly without additional filtering
+        const selectedTracks = allTracks.slice(0, songCount);
+
+        res.json({
+          playlistName: claudePlaylistName,
+          description: claudePlaylistDescription,
+          tracks: selectedTracks,
+          trackCount: selectedTracks.length
+        });
+        return; // Exit early - don't run any more processing
+      }
     }
 
     // Fallback: If we don't have enough tracks from Claude recommendations, use traditional search query approach
