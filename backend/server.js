@@ -3228,18 +3228,18 @@ Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'u
 7. If you're unsure if an artist is underground, DO NOT include them` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
 
 YOUR TASK:
-Recommend exactly ${songCount} specific songs that match this request. Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
+Recommend ${Math.ceil(songCount * 1.5)} specific songs that match this request (we ask for extra because some may not be available on streaming platforms). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
 
 ${!allowExplicit ? 'IMPORTANT: Only recommend clean/non-explicit songs.' : ''}
 
 CRITICAL REQUIREMENTS:
-1. Return EXACTLY ${songCount} songs
+1. Return ${Math.ceil(songCount * 1.5)} songs (extra to account for songs not available on streaming platforms)
 2. Each song must include: track name and artist name
 3. Songs must match the specified genre and vibe
 4. If requested artists are specified, follow the distribution guidelines above
 5. Ensure variety - don't recommend multiple songs from the same album
-6. Songs should be real, existing tracks that can be found on music streaming platforms
-${genreData.trackConstraints.popularity.preference === 'underground' ? `7. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS. If you cannot find ${songCount} underground songs, return fewer songs rather than including mainstream artists.` : ''}
+6. Songs should be real, existing tracks that can be found on Apple Music or Spotify
+${genreData.trackConstraints.popularity.preference === 'underground' ? `7. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS.` : ''}
 
 Return ONLY valid JSON in this exact format:
 {
