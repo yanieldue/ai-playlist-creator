@@ -284,7 +284,8 @@ async function getSpotifyRecommendations(seedArtists = [], seedTracks = [], seed
     console.log(`✓ Got ${response.data.tracks.length} recommendations from Spotify`);
     return response.data.tracks;
   } catch (error) {
-    console.error('Spotify recommendations error:', error.response?.data || error.message);
+    console.error('Spotify recommendations error:', error.response?.status, error.response?.data || error.message);
+    console.error('Request params were:', params);
     return [];
   }
 }
