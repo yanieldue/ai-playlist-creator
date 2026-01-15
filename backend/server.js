@@ -196,6 +196,148 @@ function saveTokens() {
   // Database auto-saves, this function is kept for compatibility
 }
 
+// Spotify Client Credentials token (for searching without user auth)
+let spotifyClientToken = null;
+let spotifyClientTokenExpiry = 0;
+
+// Get Spotify access token using Client Credentials Flow (no user auth needed)
+async function getSpotifyClientToken() {
+  // Return cached token if still valid
+  if (spotifyClientToken && Date.now() < spotifyClientTokenExpiry) {
+    return spotifyClientToken;
+  }
+
+  try {
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
+      'grant_type=client_credentials',
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic ' + Buffer.from(
+            process.env.SPOTIFY_CLIENT_ID + ':' + process.env.SPOTIFY_CLIENT_SECRET
+          ).toString('base64')
+        }
+      }
+    );
+
+    spotifyClientToken = response.data.access_token;
+    // Set expiry 5 minutes before actual expiry to be safe
+    spotifyClientTokenExpiry = Date.now() + (response.data.expires_in - 300) * 1000;
+    console.log('✓ Obtained Spotify client credentials token');
+    return spotifyClientToken;
+  } catch (error) {
+    console.error('Failed to get Spotify client token:', error.message);
+    throw error;
+  }
+}
+
+// Search Spotify for tracks using Client Credentials (no user auth needed)
+async function searchSpotifyWithClientCredentials(query, limit = 10) {
+  const token = await getSpotifyClientToken();
+
+  try {
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params: {
+        q: query,
+        type: 'track',
+        limit: limit
+      }
+    });
+
+    return response.data.tracks.items;
+  } catch (error) {
+    console.error('Spotify search error:', error.message);
+    return [];
+  }
+}
+
+// Get Spotify recommendations using seed artists/tracks (no user auth needed)
+async function getSpotifyRecommendations(seedArtists = [], seedTracks = [], seedGenres = [], limit = 50, targetFeatures = {}) {
+  const token = await getSpotifyClientToken();
+
+  try {
+    const params = {
+      limit: Math.min(limit, 100), // Spotify max is 100
+      ...(seedArtists.length > 0 && { seed_artists: seedArtists.slice(0, 5).join(',') }),
+      ...(seedTracks.length > 0 && { seed_tracks: seedTracks.slice(0, 5).join(',') }),
+      ...(seedGenres.length > 0 && { seed_genres: seedGenres.slice(0, 5).join(',') }),
+      // Optional target audio features
+      ...(targetFeatures.energy !== undefined && { target_energy: targetFeatures.energy }),
+      ...(targetFeatures.valence !== undefined && { target_valence: targetFeatures.valence }),
+      ...(targetFeatures.danceability !== undefined && { target_danceability: targetFeatures.danceability }),
+      ...(targetFeatures.tempo !== undefined && { target_tempo: targetFeatures.tempo })
+    };
+
+    // Need at least one seed
+    if (!params.seed_artists && !params.seed_tracks && !params.seed_genres) {
+      console.warn('getSpotifyRecommendations: No seeds provided');
+      return [];
+    }
+
+    const response = await axios.get('https://api.spotify.com/v1/recommendations', {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params
+    });
+
+    console.log(`✓ Got ${response.data.tracks.length} recommendations from Spotify`);
+    return response.data.tracks;
+  } catch (error) {
+    console.error('Spotify recommendations error:', error.response?.data || error.message);
+    return [];
+  }
+}
+
+// Get Spotify artist ID by name (for seeding recommendations)
+async function getSpotifyArtistId(artistName) {
+  const token = await getSpotifyClientToken();
+
+  try {
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params: {
+        q: artistName,
+        type: 'artist',
+        limit: 1
+      }
+    });
+
+    if (response.data.artists.items.length > 0) {
+      return response.data.artists.items[0].id;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Failed to find Spotify artist ID for ${artistName}:`, error.message);
+    return null;
+  }
+}
+
+// Get Spotify track ID by name and artist (for seeding recommendations)
+async function getSpotifyTrackId(trackName, artistName) {
+  const token = await getSpotifyClientToken();
+
+  try {
+    const query = artistName ? `track:${trackName} artist:${artistName}` : trackName;
+    const response = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params: {
+        q: query,
+        type: 'track',
+        limit: 1
+      }
+    });
+
+    if (response.data.tracks.items.length > 0) {
+      return response.data.tracks.items[0].id;
+    }
+    return null;
+  } catch (error) {
+    console.error(`Failed to find Spotify track ID for ${trackName}:`, error.message);
+    return null;
+  }
+}
+
 // Helper function to resolve platform-specific userId from email
 async function resolvePlatformUserId(email, platform) {
   try {
@@ -3176,17 +3318,120 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
-    // Step 1: Use Claude to recommend specific songs based on the prompt
-    console.log('🎵 Requesting song recommendations from Claude...');
+    // Step 1: Try Spotify recommendations first (works for both Spotify and Apple Music users)
+    let spotifyRecommendedTracks = [];
+    let useSpotifyRecommendations = false;
 
+    // Get seed artists from requested artists or use genre
+    if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
+      console.log('🎵 Getting Spotify recommendations based on seed artists...');
+
+      try {
+        // Get Spotify artist IDs for seed artists
+        const seedArtistIds = [];
+        for (const artistName of genreData.artistConstraints.requestedArtists.slice(0, 5)) {
+          const artistId = await getSpotifyArtistId(artistName);
+          if (artistId) {
+            seedArtistIds.push(artistId);
+            console.log(`✓ Found Spotify artist ID for ${artistName}: ${artistId}`);
+          } else {
+            console.log(`✗ Could not find Spotify artist ID for ${artistName}`);
+          }
+        }
+
+        if (seedArtistIds.length > 0) {
+          // Build target features from genreData
+          const targetFeatures = {};
+          if (genreData.audioFeatures.energy.min !== null && genreData.audioFeatures.energy.max !== null) {
+            targetFeatures.energy = (genreData.audioFeatures.energy.min + genreData.audioFeatures.energy.max) / 2;
+          }
+          if (genreData.audioFeatures.valence.min !== null && genreData.audioFeatures.valence.max !== null) {
+            targetFeatures.valence = (genreData.audioFeatures.valence.min + genreData.audioFeatures.valence.max) / 2;
+          }
+          if (genreData.audioFeatures.danceability.min !== null && genreData.audioFeatures.danceability.max !== null) {
+            targetFeatures.danceability = (genreData.audioFeatures.danceability.min + genreData.audioFeatures.danceability.max) / 2;
+          }
+          if (genreData.audioFeatures.bpm.target) {
+            targetFeatures.tempo = genreData.audioFeatures.bpm.target;
+          }
+
+          // Get recommendations from Spotify
+          const recommendations = await getSpotifyRecommendations(
+            seedArtistIds,
+            [], // seed tracks
+            [], // seed genres
+            Math.ceil(songCount * 2), // Request extra
+            targetFeatures
+          );
+
+          if (recommendations.length > 0) {
+            // Convert Spotify tracks to our format
+            spotifyRecommendedTracks = recommendations.map(track => ({
+              track: track.name,
+              artist: track.artists[0]?.name || 'Unknown',
+              spotifyId: track.id,
+              spotifyUri: track.uri,
+              spotifyTrack: track // Keep full track for Spotify users
+            }));
+
+            console.log(`✨ Spotify recommended ${spotifyRecommendedTracks.length} songs`);
+            useSpotifyRecommendations = true;
+          }
+        }
+      } catch (error) {
+        console.log('Spotify recommendations failed:', error.message);
+        console.log('Falling back to Claude recommendations...');
+      }
+    }
+
+    // Variables for playlist metadata
+    var claudePlaylistName = null;
+    var claudePlaylistDescription = null;
+
+    // If using Spotify recommendations, generate a playlist name with Claude
+    if (useSpotifyRecommendations) {
+      try {
+        const nameResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [{
+            role: 'user',
+            content: `Generate a creative playlist name and short description for a playlist based on this request: "${prompt}"
+
+Genre: ${genreData.primaryGenre || 'mixed'}
+Artists mentioned: ${genreData.artistConstraints.requestedArtists.join(', ') || 'various'}
+
+Return ONLY valid JSON in this format:
+{"playlistName": "Creative Name", "description": "Brief description"}`
+          }]
+        });
+
+        const nameText = nameResponse.content[0].text.trim()
+          .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+        const nameData = JSON.parse(nameText);
+        claudePlaylistName = nameData.playlistName;
+        claudePlaylistDescription = nameData.description;
+        console.log('Playlist name:', claudePlaylistName);
+      } catch (error) {
+        // Fallback name
+        claudePlaylistName = `${genreData.primaryGenre || 'Mixed'} Vibes`;
+        claudePlaylistDescription = `Songs similar to ${genreData.artistConstraints.requestedArtists.join(', ') || 'your favorite artists'}`;
+      }
+    }
+
+    // Step 2: Use Claude to recommend specific songs (fallback or if no seed artists)
     let claudeRecommendedTracks = [];
-    try {
-      const songRecommendationResponse = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
-        messages: [{
-          role: 'user',
-          content: `You are a music expert with deep knowledge of songs across all genres and eras.
+
+    if (!useSpotifyRecommendations) {
+      console.log('🎵 Requesting song recommendations from Claude...');
+
+      try {
+        const songRecommendationResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: `You are a music expert with deep knowledge of songs across all genres and eras.
 
 User's playlist request: "${prompt}"
 
@@ -3285,15 +3530,19 @@ DO NOT include any text outside the JSON.`
       console.log('Playlist description:', songRecommendationData.description);
 
       // Store playlist name and description for later use
-      var claudePlaylistName = songRecommendationData.playlistName;
-      var claudePlaylistDescription = songRecommendationData.description;
+      claudePlaylistName = songRecommendationData.playlistName;
+      claudePlaylistDescription = songRecommendationData.description;
 
     } catch (error) {
       console.log('Failed to get song recommendations from Claude:', error.message);
       console.log('Falling back to traditional search query approach...');
     }
+    } // End of if (!useSpotifyRecommendations)
 
-    // Step 2: Search for Claude's recommended songs on the user's platform
+    // Combine recommendations - prefer Spotify if available
+    const recommendedTracks = useSpotifyRecommendations ? spotifyRecommendedTracks : claudeRecommendedTracks;
+
+    // Step 3: Search for recommended songs on the user's platform
     const allTracks = [];
     const seenTrackIds = new Set(); // To prevent exact duplicates
     const seenSongSignatures = new Map(); // To prevent same song by same artist from different albums
@@ -3340,12 +3589,82 @@ DO NOT include any text outside the JSON.`
       return variations.some(variation => lowerName.includes(variation));
     };
 
-    // If we have Claude recommendations, search for those specific songs
-    if (claudeRecommendedTracks.length > 0) {
-      console.log(`🔍 Searching ${platform} for ${claudeRecommendedTracks.length} Claude-recommended songs...`);
+    // If we have recommendations (from Spotify or Claude), search for those specific songs
+    if (recommendedTracks.length > 0) {
+      console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} ${useSpotifyRecommendations ? 'Spotify' : 'Claude'}-recommended songs...`);
 
       if (platform === 'spotify') {
-        for (const recommendedSong of claudeRecommendedTracks) {
+        // For Spotify users with Spotify recommendations, we can use the tracks directly
+        if (useSpotifyRecommendations) {
+          for (const recommendedSong of recommendedTracks) {
+            try {
+              // We already have the full Spotify track, use it directly
+              const track = recommendedSong.spotifyTrack;
+
+              if (!track) {
+                console.log(`✗ No Spotify track data for: "${recommendedSong.track}" by ${recommendedSong.artist}`);
+                continue;
+              }
+
+              // Check if we already have this track
+              if (seenTrackIds.has(track.id)) {
+                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
+                continue;
+              }
+
+              // Skip tracks that are already in the playlist (for replace mode)
+              if (excludeTrackIds.has(track.id)) {
+                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+                continue;
+              }
+
+              // Skip tracks from song history (for manual refresh)
+              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
+                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
+                continue;
+              }
+
+              // Check for explicit content if needed
+              if (!allowExplicit && track.explicit) {
+                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
+                continue;
+              }
+
+              // Check song signature (artist + normalized track name)
+              const normalizedName = normalizeTrackName(track.name);
+              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
+
+              if (seenSongSignatures.has(songSignature)) {
+                if (!isUniqueVariation(track.name)) {
+                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name}`);
+                  continue;
+                }
+              }
+
+              seenTrackIds.add(track.id);
+              seenSongSignatures.set(songSignature, track.name);
+
+              allTracks.push({
+                id: track.id,
+                name: track.name,
+                uri: track.uri,
+                artists: track.artists,
+                album: track.album,
+                duration_ms: track.duration_ms,
+                preview_url: track.preview_url,
+                platform: 'spotify',
+                explicit: track.explicit,
+                artist: track.artists[0]?.name || 'Unknown'
+              });
+
+              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
+            } catch (error) {
+              console.log(`✗ Error processing: "${recommendedSong.track}" by ${recommendedSong.artist} - ${error.message}`);
+            }
+          }
+        } else {
+          // For Claude recommendations, search Spotify
+          for (const recommendedSong of recommendedTracks) {
           try {
             const searchQuery = `track:${recommendedSong.track} artist:${recommendedSong.artist}`;
             const searchPromise = userSpotifyApi.searchTracks(searchQuery, { limit: 5 });
@@ -3409,11 +3728,13 @@ DO NOT include any text outside the JSON.`
             console.log(`Error searching for "${recommendedSong.track}": ${error.message}`);
           }
         }
+        } // End of else (Claude recommendations for Spotify)
       } else if (platform === 'apple') {
+        // For Apple Music users, search Apple Music for recommended songs
         const platformService = new PlatformService();
         const storefront = tokens.storefront || 'us';
 
-        for (const recommendedSong of claudeRecommendedTracks) {
+        for (const recommendedSong of recommendedTracks) {
           try {
             const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
             const tracks = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
