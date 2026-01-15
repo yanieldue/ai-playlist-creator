@@ -3500,9 +3500,9 @@ CRITICAL REQUIREMENTS:
 2. Each song must include: EXACT track name and EXACT artist name as it appears on streaming platforms
 3. EVERY song must match the SOUND and VIBE of the request - this is the most important requirement
 4. If requested artists are specified, include some songs from them and find similar-sounding artists
-5. Ensure variety - don't recommend multiple songs from the same album, spread across different artists
+5. **ARTIST DIVERSITY IS CRITICAL**: Maximum 2-3 songs per artist. Spread recommendations across at least 20 different artists. Do NOT recommend 10+ songs from a single artist.
 6. ONLY recommend songs you are CERTAIN exist on Apple Music and Spotify - do NOT make up or guess song titles
-7. SELF-CHECK: Before finalizing, review your list and remove any song that doesn't match the vibe of the original request
+7. SELF-CHECK: Before finalizing, verify you have at least 20 different artists. If not, replace duplicate artists with new ones.
 
 Return ONLY valid JSON in this exact format:
 {
