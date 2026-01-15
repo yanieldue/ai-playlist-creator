@@ -3368,8 +3368,12 @@ DO NOT include any text outside the JSON.`
 
               seenTrackIds.add(track.id);
               seenSongSignatures.set(songSignature, track.name);
-              allTracks.push(track);
-              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
+              // Normalize track format to have 'artist' property for consistency
+              allTracks.push({
+                ...track,
+                artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist'
+              });
+              console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }
@@ -3428,8 +3432,12 @@ DO NOT include any text outside the JSON.`
 
               seenTrackIds.add(track.id);
               seenSongSignatures.set(songSignature, track.name);
-              allTracks.push(track);
-              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
+              // Normalize track format to have 'artist' property for consistency
+              allTracks.push({
+                ...track,
+                artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist'
+              });
+              console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }
@@ -3748,6 +3756,7 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
     // Helper function to normalize artist names (handles accents like GIVĒON -> GIVEON)
     // Defined at top level so it's available in all scopes
     const normalizeArtistForComparison = (name) => {
+      if (!name) return '';
       return name
         .toLowerCase()
         .normalize('NFD') // Decompose accented characters (ē -> e + combining accent)
