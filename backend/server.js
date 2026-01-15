@@ -3192,9 +3192,11 @@ User's playlist request: "${prompt}"
 
 ${genreData.artistConstraints.requestedArtists.length > 0 ? `The user mentioned these artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
 
-When recommending other artists, match BOTH:
-1. The SOUND/VIBE of these artists
-2. The POPULARITY LEVEL of these artists (if they're underground, recommend underground artists; if they're mainstream, recommend mainstream artists)` : ''}
+Your primary goal is to match the SOUND and VIBE of these artists. Find songs that sound similar in terms of:
+- Musical style and production
+- Mood and atmosphere
+- Vocal style and delivery
+- Overall feel and energy` : ''}
 
 ${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be included, even if the refinement message seems to minimize them.` : ''}
 ${newArtistsOnly ? 'IMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists.' : ''}
@@ -3236,22 +3238,12 @@ ${genreData.artistConstraints.exclusiveMode
   : '- No specific artists requested - choose songs that match the vibe and genre'}
 
 Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground'
-  ? `UNDERGROUND/INDIE ONLY
-
-The requested artists (${genreData.artistConstraints.requestedArtists.join(', ')}) are NOT famous. Most music listeners have never heard of them. They are independent/unsigned artists with small followings.
-
-CRITICAL: Only recommend artists at the SAME level of obscurity. If you would describe an artist as "popular", "well-known", "famous", or "mainstream" - do NOT include them.
-
-Ask yourself for each artist: "Is this artist as unknown as ${genreData.artistConstraints.requestedArtists[0] || 'the requested artists'}?" If no, do not include them.`
+  ? `PREFER UNDERGROUND/INDIE - Try to include lesser-known artists when possible, but prioritize matching the sound/vibe first.`
   : genreData.trackConstraints.popularity.preference === 'mainstream'
-    ? `MAINSTREAM
-
-The requested artists are popular/well-known. Recommend other popular, mainstream artists.`
+    ? `MAINSTREAM - Focus on popular, well-known artists.`
     : genreData.trackConstraints.popularity.preference === 'balanced'
-      ? `BALANCED MIX
-
-Include a mix of well-known and lesser-known artists.`
-      : 'Match the popularity level of any artists mentioned in the request.'}
+      ? `BALANCED - Include a mix of well-known and lesser-known artists.`
+      : 'No specific popularity preference.'}
 
 YOUR TASK:
 Recommend ${Math.ceil(songCount * 2)} specific songs that match this request (we ask for extra because some may not be found on the streaming platform). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
@@ -3261,13 +3253,11 @@ ${!allowExplicit ? 'IMPORTANT: Only recommend clean/non-explicit songs.' : ''}
 CRITICAL REQUIREMENTS:
 1. Return ${Math.ceil(songCount * 2)} songs (we request extra because some may not be found on the platform)
 2. Each song must include: EXACT track name and EXACT artist name as it appears on streaming platforms
-3. EVERY song must match the genre "${genreData.primaryGenre || 'specified above'}" - do not include songs from other genres
-4. If requested artists are specified, follow the distribution guidelines above
-5. Ensure variety - don't recommend multiple songs from the same album
+3. EVERY song must match the SOUND and VIBE of the request - this is the most important requirement
+4. If requested artists are specified, include some songs from them and find similar-sounding artists
+5. Ensure variety - don't recommend multiple songs from the same album, spread across different artists
 6. ONLY recommend songs you are CERTAIN exist on Apple Music and Spotify - do NOT make up or guess song titles
-7. Use well-known songs from each artist rather than obscure tracks that may not be on streaming platforms
-${genreData.trackConstraints.popularity.preference === 'underground' ? `8. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS. Double-check each artist before including them.` : ''}
-9. SELF-CHECK: Before finalizing, review your list and remove any song where the artist doesn't clearly fit the requested genre or popularity level
+7. SELF-CHECK: Before finalizing, review your list and remove any song that doesn't match the vibe of the original request
 
 Return ONLY valid JSON in this exact format:
 {
