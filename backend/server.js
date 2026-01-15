@@ -3190,17 +3190,11 @@ Respond ONLY with valid JSON in this format:
 
 User's playlist request: "${prompt}"
 
-🚨 CRITICAL CONSTRAINTS - READ FIRST:
-${genreData.primaryGenre ? `- Genre: ${genreData.primaryGenre}${genreData.subgenre ? ` / ${genreData.subgenre}` : ''} - EVERY song must fit this genre` : ''}
-${genreData.trackConstraints.popularity.preference === 'underground' ? `- Popularity: STRICTLY UNDERGROUND - NO mainstream artists allowed. If an artist has millions of streams, Grammy nominations, or is signed to a major label, DO NOT include them.` : genreData.trackConstraints.popularity.preference === 'mainstream' ? `- Popularity: MAINSTREAM - Focus on well-known, popular artists` : ''}
-${genreData.contextClues.avoidances.length > 0 ? `- Avoid: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+${genreData.artistConstraints.requestedArtists.length > 0 ? `The user mentioned these artists: ${genreData.artistConstraints.requestedArtists.join(', ')}
 
-Before adding ANY song to your list, ask yourself:
-1. Does this artist actually fit the genre "${genreData.primaryGenre || 'requested'}"?
-2. ${genreData.trackConstraints.popularity.preference === 'underground' ? 'Is this artist truly underground (not mainstream)?' : 'Does this match the popularity preference?'}
-3. Does this song match the vibe of the original request?
-
-If the answer to ANY of these is "no" or "maybe", DO NOT include that song.
+When recommending other artists, match BOTH:
+1. The SOUND/VIBE of these artists
+2. The POPULARITY LEVEL of these artists (if they're underground, recommend underground artists; if they're mainstream, recommend mainstream artists)` : ''}
 
 ${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be included, even if the refinement message seems to minimize them.` : ''}
 ${newArtistsOnly ? 'IMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists.' : ''}
@@ -3241,19 +3235,21 @@ ${genreData.artistConstraints.exclusiveMode
 - Include ~${songCount - Math.min(8, Math.floor(songCount * 0.25))} songs from similar artists with the same vibe`}`
   : '- No specific artists requested - choose songs that match the vibe and genre'}
 
-Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground' ? `STRICTLY UNDERGROUND/INDIE - THIS IS THE MOST IMPORTANT RULE!
+Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground'
+  ? `UNDERGROUND/INDIE
 
-The requested artists (${genreData.artistConstraints.requestedArtists.join(', ')}) are UNDERGROUND artists. They are NOT famous. Most people have never heard of them.
+The requested artists (${genreData.artistConstraints.requestedArtists.join(', ')}) are underground/lesser-known artists.
 
-YOU MUST ONLY recommend artists at the SAME fame level or LESS famous than the requested artists.
+Match their popularity level - only recommend artists who are similarly unknown. Do not recommend artists who are significantly more famous than the ones the user mentioned.`
+  : genreData.trackConstraints.popularity.preference === 'mainstream'
+    ? `MAINSTREAM
 
-DO NOT recommend artists who are MORE famous than ${genreData.artistConstraints.requestedArtists[0] || 'the requested artists'}. This means:
-- NO Grammy winners or nominees (Tems, Daniel Caesar, H.E.R., etc. are TOO FAMOUS)
-- NO artists with millions of Spotify streams (Kali Uchis, SZA, etc. are TOO FAMOUS)
-- NO artists you'd see on award shows or in mainstream media
-- NO artists signed to major labels
+The requested artists are popular/well-known. Recommend other artists at a similar fame level.`
+    : genreData.trackConstraints.popularity.preference === 'balanced'
+      ? `BALANCED MIX
 
-Simple test: If you've heard of the artist before, they're probably too famous. Recommend artists as unknown as ${genreData.artistConstraints.requestedArtists[0] || 'Pete Bailey'}.` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
+Include a mix of well-known and lesser-known artists.`
+      : 'Match the popularity level of any artists mentioned in the request.'}
 
 YOUR TASK:
 Recommend ${Math.ceil(songCount * 2)} specific songs that match this request (we ask for extra because some may not be found on the streaming platform). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
