@@ -3459,11 +3459,11 @@ DO NOT include any text outside the JSON.`
 
       console.log(`📊 Successfully found ${allTracks.length} out of ${claudeRecommendedTracks.length} Claude-recommended songs`);
 
-      // For underground playlists: Trust Claude's recommendations completely
-      // Don't use fallback search queries which contaminate with mainstream artists
-      if (genreData.trackConstraints.popularity.preference === 'underground' && allTracks.length >= 5) {
-        console.log(`🎯 Underground playlist: Using only Claude's ${allTracks.length} recommended songs (no fallback to avoid mainstream contamination)`);
-        // Skip to the end - use Claude's tracks directly without additional filtering
+      // Trust Claude's recommendations - return them directly
+      // Claude already knows the genre, vibe, popularity level, era, etc.
+      // No need for additional filtering - that's what makes this simple
+      if (allTracks.length >= 5) {
+        console.log(`🎯 Using Claude's ${allTracks.length} recommended songs directly`);
         const selectedTracks = allTracks.slice(0, songCount);
 
         res.json({
@@ -3472,15 +3472,15 @@ DO NOT include any text outside the JSON.`
           tracks: selectedTracks,
           trackCount: selectedTracks.length
         });
-        return; // Exit early - don't run any more processing
+        return; // Done - Claude gave us what we need
       }
     }
 
-    // Fallback: If we don't have enough tracks from Claude recommendations, use traditional search query approach
-    let needsFallback = allTracks.length < songCount * 0.5; // If we found less than 50% of requested songs
+    // Fallback: Only if Claude recommendations failed or found less than 5 songs on the platform
+    let needsFallback = allTracks.length < 5;
 
     if (needsFallback || claudeRecommendedTracks.length === 0) {
-      console.log(`🔄 Using fallback search query approach (found ${allTracks.length}/${songCount} songs from Claude)...`);
+      console.log(`🔄 Fallback: Claude found only ${allTracks.length} songs on platform, using search queries...`);
 
       // Step 3: Use Claude to generate search queries (fallback)
     const aiResponse = await anthropic.messages.create({
