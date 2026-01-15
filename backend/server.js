@@ -3228,18 +3228,19 @@ Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'u
 7. If you're unsure if an artist is underground, DO NOT include them` : genreData.trackConstraints.popularity.preference === 'mainstream' ? 'MAINSTREAM (focus on popular artists and well-known tracks)' : 'BALANCED (mix of popular and emerging artists)'}
 
 YOUR TASK:
-Recommend ${Math.ceil(songCount * 1.5)} specific songs that match this request (we ask for extra because some may not be available on streaming platforms). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
+Recommend ${Math.ceil(songCount * 2)} specific songs that match this request (we ask for extra because some may not be found on the streaming platform). Use your music knowledge to select tracks that fit the genre, vibe, atmosphere, and preferences described above.
 
 ${!allowExplicit ? 'IMPORTANT: Only recommend clean/non-explicit songs.' : ''}
 
 CRITICAL REQUIREMENTS:
-1. Return ${Math.ceil(songCount * 1.5)} songs (extra to account for songs not available on streaming platforms)
-2. Each song must include: track name and artist name
+1. Return ${Math.ceil(songCount * 2)} songs (we request extra because some may not be found on the platform)
+2. Each song must include: EXACT track name and EXACT artist name as it appears on streaming platforms
 3. Songs must match the specified genre and vibe
 4. If requested artists are specified, follow the distribution guidelines above
 5. Ensure variety - don't recommend multiple songs from the same album
-6. Songs should be real, existing tracks that can be found on Apple Music or Spotify
-${genreData.trackConstraints.popularity.preference === 'underground' ? `7. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS.` : ''}
+6. ONLY recommend songs you are CERTAIN exist on Apple Music and Spotify - do NOT make up or guess song titles
+7. Use well-known songs from each artist rather than obscure tracks that may not be on streaming platforms
+${genreData.trackConstraints.popularity.preference === 'underground' ? `8. EVERY SINGLE ARTIST must be truly underground - NO EXCEPTIONS.` : ''}
 
 Return ONLY valid JSON in this exact format:
 {
