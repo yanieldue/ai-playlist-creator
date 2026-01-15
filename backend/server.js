@@ -3236,15 +3236,17 @@ ${genreData.artistConstraints.exclusiveMode
   : '- No specific artists requested - choose songs that match the vibe and genre'}
 
 Popularity Preference: ${genreData.trackConstraints.popularity.preference === 'underground'
-  ? `UNDERGROUND/INDIE
+  ? `UNDERGROUND/INDIE ONLY
 
-The requested artists (${genreData.artistConstraints.requestedArtists.join(', ')}) are underground/lesser-known artists.
+The requested artists (${genreData.artistConstraints.requestedArtists.join(', ')}) are NOT famous. Most music listeners have never heard of them. They are independent/unsigned artists with small followings.
 
-Match their popularity level - only recommend artists who are similarly unknown. Do not recommend artists who are significantly more famous than the ones the user mentioned.`
+CRITICAL: Only recommend artists at the SAME level of obscurity. If you would describe an artist as "popular", "well-known", "famous", or "mainstream" - do NOT include them.
+
+Ask yourself for each artist: "Is this artist as unknown as ${genreData.artistConstraints.requestedArtists[0] || 'the requested artists'}?" If no, do not include them.`
   : genreData.trackConstraints.popularity.preference === 'mainstream'
     ? `MAINSTREAM
 
-The requested artists are popular/well-known. Recommend other artists at a similar fame level.`
+The requested artists are popular/well-known. Recommend other popular, mainstream artists.`
     : genreData.trackConstraints.popularity.preference === 'balanced'
       ? `BALANCED MIX
 
