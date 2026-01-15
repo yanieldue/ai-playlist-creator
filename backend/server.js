@@ -3645,14 +3645,14 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
               allTracks.push({
                 id: track.id,
                 name: track.name,
-                artist: track.artists[0].name,
+                artist: track.artists?.[0]?.name || 'Unknown Artist',
                 uri: track.uri,
-                album: track.album.name,
-                image: track.album.images[0]?.url,
+                album: track.album?.name || 'Unknown Album',
+                image: track.album?.images?.[0]?.url,
                 previewUrl: track.preview_url,
-                externalUrl: track.external_urls.spotify,
+                externalUrl: track.external_urls?.spotify,
                 explicit: track.explicit,
-                genres: track.artists[0]?.genres || [] // Store artist genres for filtering
+                genres: track.artists?.[0]?.genres || [] // Store artist genres for filtering
               });
             }
           }
@@ -3729,10 +3729,10 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
               allTracks.push({
                 id: track.id,
                 name: track.name,
-                artist: track.artists[0].name,
+                artist: track.artists?.[0]?.name || 'Unknown Artist',
                 uri: track.uri,
-                album: track.album.name,
-                image: track.album.images?.[0]?.url,
+                album: track.album?.name || 'Unknown Album',
+                image: track.album?.images?.[0]?.url,
                 previewUrl: track.preview_url,
                 externalUrl: track.url || track.external_urls?.spotify || track.external_urls?.appleMusic,
                 explicit: track.explicit || false,
