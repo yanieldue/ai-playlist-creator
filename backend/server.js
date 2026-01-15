@@ -3475,7 +3475,7 @@ DO NOT include any text outside the JSON.`
 
       // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
       if (allTracks.length >= 5) {
-        let selectedTracks = allTracks.slice(0, Math.min(allTracks.length, songCount + 10)); // Take a few extra for filtering
+        let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
         // Only run quick filter if we have genre/popularity constraints
         if (genreData.primaryGenre || genreData.trackConstraints.popularity.preference) {
