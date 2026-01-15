@@ -4443,7 +4443,7 @@ ${hasAudioFeatureFilters ? `AUDIO FEATURES:
 - These songs have already been pre-filtered to match the requested audio characteristics (BPM, energy, danceability, etc.)` : ''}
 
 Songs available:
-${tracksForSelection.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist} (Album: ${t.album})${t.audioFeatures ? ` [BPM: ${t.audioFeatures.bpm}, Energy: ${t.audioFeatures.energy}, Dance: ${t.audioFeatures.danceability}]` : ''} [Artist genres: ${t.genres.join(', ') || 'Unknown'}]`).join('\n')}
+${tracksForSelection.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist || 'Unknown Artist'} (Album: ${t.album || 'Unknown Album'})${t.audioFeatures ? ` [BPM: ${t.audioFeatures.bpm}, Energy: ${t.audioFeatures.energy}, Dance: ${t.audioFeatures.danceability}]` : ''} [Artist genres: ${(t.genres || []).join(', ') || 'Unknown'}]`).join('\n')}
 
 Respond ONLY with a JSON array of the indices (1-based) of the songs you select.
 
