@@ -4015,9 +4015,11 @@ DO NOT include any text outside the JSON.`
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
-        // Run quick filter if we have genre or explicit avoidances from the user
+        // Run quick filter if we have genre, explicit avoidances, or underground preference
         const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
-        if (genreData.primaryGenre || hasAvoidances) {
+        const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
+                                        genreData.trackConstraints.popularity.max <= 50;
+        if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
           try {
@@ -4031,6 +4033,7 @@ DO NOT include any text outside the JSON.`
 Original request: "${prompt}"
 Genre: ${genreData.primaryGenre || 'not specified'}
 ${hasAvoidances ? `User explicitly wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+${wantsUndergroundFilter ? `Popularity preference: UNDERGROUND/INDIE - strictly remove mainstream artists` : ''}
 
 Songs:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
@@ -4040,8 +4043,9 @@ Return ONLY a JSON array of indices to KEEP.
 Remove songs where:
 - The artist/song clearly doesn't fit the GENRE or SOUND requested
 ${hasAvoidances ? `- The song matches what the user wants to AVOID (${genreData.contextClues.avoidances.join(', ')})` : ''}
+${wantsUndergroundFilter ? `- The artist is MAINSTREAM (has chart hits, millions of streams, major label, radio play). Examples to REMOVE: SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Chris Brown, Usher, Ella Mai, Snoh Aalegra, Jorja Smith, etc.` : ''}
 
-Be lenient on genre matching, but strict on the user's explicit avoidances.
+Be lenient on genre matching, but strict on ${wantsUndergroundFilter ? 'removing mainstream artists and ' : ''}the user's explicit avoidances.
 
 Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }]
