@@ -3745,7 +3745,77 @@ DO NOT include any text outside the JSON.`
     } // End of if (!usePlaylistMining)
 
     // Combine recommendations - prefer playlist mining if available
-    const recommendedTracks = usePlaylistMining ? playlistMinedTracks : claudeRecommendedTracks;
+    let recommendedTracks = usePlaylistMining ? playlistMinedTracks : claudeRecommendedTracks;
+
+    // OPTIMIZATION: For playlist mining, run sanity check BEFORE fetching from Spotify/Apple
+    // This avoids fetching 100+ tracks only to filter down to 30
+    if (usePlaylistMining && recommendedTracks.length > songCount * 2) {
+      console.log(`🔍 Pre-filtering ${recommendedTracks.length} mined tracks before API calls...`);
+
+      const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
+      const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
+                                      genreData.trackConstraints.popularity.max <= 50;
+
+      if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter) {
+        try {
+          // Take a sample for the sanity check (max 80 to keep prompt size reasonable)
+          const sampleTracks = recommendedTracks.slice(0, 80);
+
+          const preFilterResponse = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1500,
+            messages: [{
+              role: 'user',
+              content: `Quick filter: Remove songs that don't match the request.
+
+Original request: "${prompt}"
+Genre: ${genreData.primaryGenre || 'not specified'}
+${hasAvoidances ? `User explicitly wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+${wantsUndergroundFilter ? `Popularity preference: UNDERGROUND/INDIE - strictly remove mainstream artists` : ''}
+
+Songs:
+${sampleTracks.map((t, i) => `${i + 1}. "${t.track}" by ${t.artist}`).join('\n')}
+
+Return ONLY a JSON array of indices to KEEP.
+
+Remove songs where:
+- The artist/song clearly doesn't fit the GENRE or SOUND requested
+${hasAvoidances ? `- The song matches what the user wants to AVOID (${genreData.contextClues.avoidances.join(', ')})` : ''}
+${wantsUndergroundFilter ? `- The artist is MAINSTREAM (has chart hits, millions of streams, major label, radio play). Examples to REMOVE: SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Chris Brown, Usher, Ella Mai, Snoh Aalegra, Jorja Smith, etc.` : ''}
+
+Be lenient on genre matching, but strict on ${wantsUndergroundFilter ? 'removing mainstream artists and ' : ''}the user's explicit avoidances.
+
+Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
+            }]
+          });
+
+          const preFilterContent = preFilterResponse.content[0].text.trim()
+            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+            .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+          const keepMatch = preFilterContent.match(/\[([\d,\s]*)\]/);
+          if (keepMatch) {
+            const keepIndices = JSON.parse(keepMatch[0]);
+            const filteredTracks = keepIndices
+              .map(idx => sampleTracks[idx - 1])
+              .filter(t => t !== undefined);
+
+            if (filteredTracks.length >= songCount) {
+              const removed = sampleTracks.length - filteredTracks.length;
+              console.log(`✂️ Pre-filter removed ${removed} mismatched tracks, ${filteredTracks.length} remaining`);
+              recommendedTracks = filteredTracks;
+            } else {
+              console.log(`⚠️ Pre-filter would leave only ${filteredTracks.length} tracks, keeping original ${sampleTracks.length}`);
+              recommendedTracks = sampleTracks;
+            }
+          }
+        } catch (error) {
+          console.log('Pre-filter failed, continuing with all tracks:', error.message);
+          // Limit to first 80 anyway to avoid too many API calls
+          recommendedTracks = recommendedTracks.slice(0, 80);
+        }
+      }
+    }
 
     // Step 3: Search for recommended songs on the user's platform
     const allTracks = [];
@@ -4012,7 +4082,22 @@ DO NOT include any text outside the JSON.`
       console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} ${usePlaylistMining ? 'playlist-mined' : 'Claude'}-recommended songs`);
 
       // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
-      if (allTracks.length >= 5) {
+      // For playlist mining, we already did pre-filtering so just return the results
+      if (usePlaylistMining && allTracks.length >= 5) {
+        const selectedTracks = allTracks.slice(0, songCount);
+        console.log(`🎯 Returning ${selectedTracks.length} playlist-mined tracks (pre-filtered)`);
+
+        res.json({
+          playlistName: claudePlaylistName,
+          description: claudePlaylistDescription,
+          tracks: selectedTracks,
+          trackCount: selectedTracks.length
+        });
+        return; // Done
+      }
+
+      // For non-playlist-mining (Claude recommendations), run sanity check
+      if (allTracks.length >= 5 && !usePlaylistMining) {
         let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
         // Run quick filter if we have genre, explicit avoidances, or underground preference
