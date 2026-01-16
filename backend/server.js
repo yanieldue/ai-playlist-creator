@@ -3394,25 +3394,56 @@ Respond ONLY with valid JSON in this format:
     let usePlaylistMining = false;
     let discoveredArtists = []; // Artists discovered from playlist mining to pass to Claude
 
-    if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
-      console.log('🔍 Mining Spotify playlists to find similar underground artists...');
+    // Check if user wants underground/indie artists (either via specific artists OR via preference)
+    const wantsUnderground = genreData.trackConstraints.popularity.preference === 'underground' ||
+                             genreData.trackConstraints.popularity.max <= 50;
+    const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
+                                 genreData.artistConstraints.requestedArtists.length > 0;
+
+    if (hasRequestedArtists || wantsUnderground) {
+      console.log(`🔍 Mining Spotify playlists for ${hasRequestedArtists ? 'similar artists' : 'underground ' + (genreData.primaryGenre || 'music')}...`);
 
       try {
         const token = await getSpotifyClientToken();
-        const requestedArtists = genreData.artistConstraints.requestedArtists;
+        const requestedArtists = genreData.artistConstraints.requestedArtists || [];
         const requestedLower = requestedArtists.map(a => a.toLowerCase());
 
-        // Search for playlists - use genre-based queries to find curated playlists, not artist playlists
+        // Build search queries based on what we have
         const genreHint = genreData.primaryGenre || 'r&b';
-        const searchQueries = [
-          // Genre-based searches more likely to find curated playlists with multiple artists
-          `${genreHint} ${requestedArtists[0]}`,
-          `indie ${genreHint}`,
-          `underground ${genreHint}`,
-          `christian r&b women`, // Specific to this niche
-          `spiritual r&b`,
-          ...requestedArtists.map(a => `"${a}" mix`),
-        ];
+        const moodHints = genreData.atmosphere || [];
+        const searchQueries = [];
+
+        if (hasRequestedArtists) {
+          // Artist-based searches
+          searchQueries.push(
+            `${genreHint} ${requestedArtists[0]}`,
+            ...requestedArtists.map(a => `"${a}" mix`)
+          );
+        }
+
+        // Genre + underground searches (always add these for underground preference)
+        if (wantsUnderground) {
+          searchQueries.push(
+            `underground ${genreHint}`,
+            `indie ${genreHint}`,
+            `underrated ${genreHint}`,
+            `hidden gems ${genreHint}`,
+            `${genreHint} deep cuts`
+          );
+
+          // Add mood-specific searches if available
+          if (moodHints.length > 0) {
+            searchQueries.push(`${moodHints[0]} ${genreHint} underground`);
+          }
+        }
+
+        // Add general genre searches (these are fallbacks)
+        if (searchQueries.length < 5) {
+          searchQueries.push(
+            `christian r&b women`,
+            `spiritual r&b`
+          );
+        }
 
         const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
         const artistSongCount = new Map(); // artist -> count of songs found
@@ -3456,15 +3487,20 @@ Respond ONLY with valid JSON in this format:
                   continue;
                 }
 
-                // Check if this playlist contains any of our requested artists
-                const hasRequestedArtist = tracksResponse.data.items.some(item =>
+                // Check if this playlist contains any of our requested artists (if we have any)
+                const hasRequestedArtist = hasRequestedArtists && tracksResponse.data.items.some(item =>
                   item.track && requestedArtists.some(ra =>
                     item.track.artists[0].name.toLowerCase().includes(ra.toLowerCase()) ||
                     ra.toLowerCase().includes(item.track.artists[0].name.toLowerCase())
                   )
                 );
 
-                if (hasRequestedArtist) {
+                // Accept playlist if:
+                // 1. We have requested artists AND this playlist contains them, OR
+                // 2. We're doing genre-based underground search (no specific artists) and this is a curated playlist
+                const acceptPlaylist = hasRequestedArtist || (!hasRequestedArtists && wantsUnderground);
+
+                if (acceptPlaylist) {
                   console.log(`✓ Found curated playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks, ${playlistArtists.size} artists)`);
 
                   // Add all tracks from this playlist
@@ -3497,9 +3533,9 @@ Respond ONLY with valid JSON in this format:
 
         // Filter and prepare tracks
         if (allPlaylistTracks.size > 0) {
-          // Get unique artists discovered (excluding the requested ones)
+          // Get unique artists discovered (excluding the requested ones if any)
           discoveredArtists = Array.from(artistSongCount.keys())
-            .filter(a => !requestedLower.some(r => a.toLowerCase().includes(r) || r.includes(a.toLowerCase())))
+            .filter(a => requestedLower.length === 0 || !requestedLower.some(r => a.toLowerCase().includes(r) || r.includes(a.toLowerCase())))
             .slice(0, 30);
 
           console.log(`🎵 Discovered ${discoveredArtists.length} similar artists from playlist mining`);
@@ -3561,7 +3597,9 @@ Return ONLY valid JSON in this format:
       } catch (error) {
         // Fallback name
         claudePlaylistName = `${genreData.primaryGenre || 'Mixed'} Vibes`;
-        claudePlaylistDescription = `Songs similar to ${genreData.artistConstraints.requestedArtists.join(', ') || 'your favorite artists'}`;
+        claudePlaylistDescription = hasRequestedArtists
+          ? `Songs similar to ${genreData.artistConstraints.requestedArtists.join(', ')}`
+          : `Underground ${genreData.primaryGenre || 'music'} picks`;
       }
     }
 
