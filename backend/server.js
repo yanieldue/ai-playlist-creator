@@ -3400,30 +3400,61 @@ Respond ONLY with valid JSON in this format:
       try {
         const token = await getSpotifyClientToken();
         const requestedArtists = genreData.artistConstraints.requestedArtists;
+        const requestedLower = requestedArtists.map(a => a.toLowerCase());
 
-        // Search for playlists that might contain these artists
+        // Search for playlists - use genre-based queries to find curated playlists, not artist playlists
+        const genreHint = genreData.primaryGenre || 'r&b';
         const searchQueries = [
-          requestedArtists.join(' '),
-          ...requestedArtists.map(a => `"${a}"`)
+          // Genre-based searches more likely to find curated playlists with multiple artists
+          `${genreHint} ${requestedArtists[0]}`,
+          `indie ${genreHint}`,
+          `underground ${genreHint}`,
+          `christian r&b women`, // Specific to this niche
+          `spiritual r&b`,
+          ...requestedArtists.map(a => `"${a}" mix`),
         ];
 
         const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
         const artistSongCount = new Map(); // artist -> count of songs found
 
-        for (const query of searchQueries.slice(0, 3)) {
+        for (const query of searchQueries.slice(0, 5)) {
           try {
             const playlistSearch = await axios.get('https://api.spotify.com/v1/search', {
               headers: { 'Authorization': `Bearer ${token}` },
-              params: { q: query, type: 'playlist', limit: 5 }
+              params: { q: query, type: 'playlist', limit: 8 }
             });
 
             for (const playlist of playlistSearch.data.playlists.items || []) {
-              if (!playlist || playlist.tracks.total > 200) continue; // Skip huge playlists
+              if (!playlist || playlist.tracks.total > 200 || playlist.tracks.total < 10) continue;
+
+              // Skip playlists that are just the artist's name (likely their own playlist)
+              const playlistNameLower = playlist.name.toLowerCase();
+              const isArtistPlaylist = requestedLower.some(artist =>
+                playlistNameLower === artist ||
+                playlistNameLower === `${artist} radio` ||
+                playlistNameLower.replace(/[^a-z0-9]/g, '') === artist.replace(/[^a-z0-9]/g, '')
+              );
+              if (isArtistPlaylist) {
+                console.log(`⏭️ Skipping artist-owned playlist: "${playlist.name}"`);
+                continue;
+              }
 
               try {
                 const tracksResponse = await axios.get(playlist.tracks.href + '?limit=100', {
                   headers: { 'Authorization': `Bearer ${token}` }
                 });
+
+                // Count unique artists in this playlist
+                const playlistArtists = new Set();
+                tracksResponse.data.items.forEach(item => {
+                  if (item.track) playlistArtists.add(item.track.artists[0].name.toLowerCase());
+                });
+
+                // Only use playlists with multiple different artists (curated playlists)
+                if (playlistArtists.size < 5) {
+                  console.log(`⏭️ Skipping low-diversity playlist: "${playlist.name}" (only ${playlistArtists.size} artists)`);
+                  continue;
+                }
 
                 // Check if this playlist contains any of our requested artists
                 const hasRequestedArtist = tracksResponse.data.items.some(item =>
@@ -3434,7 +3465,7 @@ Respond ONLY with valid JSON in this format:
                 );
 
                 if (hasRequestedArtist) {
-                  console.log(`✓ Found relevant playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks)`);
+                  console.log(`✓ Found curated playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks, ${playlistArtists.size} artists)`);
 
                   // Add all tracks from this playlist
                   for (const item of tracksResponse.data.items) {
@@ -3467,7 +3498,6 @@ Respond ONLY with valid JSON in this format:
         // Filter and prepare tracks
         if (allPlaylistTracks.size > 0) {
           // Get unique artists discovered (excluding the requested ones)
-          const requestedLower = requestedArtists.map(a => a.toLowerCase());
           discoveredArtists = Array.from(artistSongCount.keys())
             .filter(a => !requestedLower.some(r => a.toLowerCase().includes(r) || r.includes(a.toLowerCase())))
             .slice(0, 30);
@@ -3475,19 +3505,24 @@ Respond ONLY with valid JSON in this format:
           console.log(`🎵 Discovered ${discoveredArtists.length} similar artists from playlist mining`);
           console.log('Sample artists:', discoveredArtists.slice(0, 10).join(', '));
 
-          // Convert to array and shuffle
-          playlistMinedTracks = Array.from(allPlaylistTracks.values());
+          // Only use playlist mining if we found enough diverse artists
+          if (discoveredArtists.length >= 10) {
+            // Convert to array and shuffle
+            playlistMinedTracks = Array.from(allPlaylistTracks.values());
 
-          // Shuffle the tracks
-          for (let i = playlistMinedTracks.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [playlistMinedTracks[i], playlistMinedTracks[j]] = [playlistMinedTracks[j], playlistMinedTracks[i]];
-          }
+            // Shuffle the tracks
+            for (let i = playlistMinedTracks.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [playlistMinedTracks[i], playlistMinedTracks[j]] = [playlistMinedTracks[j], playlistMinedTracks[i]];
+            }
 
-          console.log(`✨ Playlist mining found ${playlistMinedTracks.length} potential tracks`);
+            console.log(`✨ Playlist mining found ${playlistMinedTracks.length} potential tracks from ${discoveredArtists.length} artists`);
 
-          if (playlistMinedTracks.length >= songCount) {
-            usePlaylistMining = true;
+            if (playlistMinedTracks.length >= songCount) {
+              usePlaylistMining = true;
+            }
+          } else {
+            console.log(`⚠️ Not enough artist diversity (${discoveredArtists.length} artists), falling back to Claude...`);
           }
         }
       } catch (error) {
