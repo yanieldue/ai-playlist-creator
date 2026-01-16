@@ -253,39 +253,74 @@ async function searchSpotifyWithClientCredentials(query, limit = 10) {
   }
 }
 
-// Get Spotify recommendations using seed artists/tracks (no user auth needed)
-async function getSpotifyRecommendations(seedArtists = [], seedTracks = [], seedGenres = [], limit = 50, targetFeatures = {}) {
+// Get recommendations from ReccoBeats API (no auth required)
+// Uses Spotify track IDs as seeds and returns similar tracks
+async function getReccoBeatsRecommendations(seedTrackIds = [], size = 60) {
+  if (seedTrackIds.length === 0) {
+    console.warn('getReccoBeatsRecommendations: No seed tracks provided');
+    return [];
+  }
+
+  try {
+    // Build URL with multiple seeds parameters
+    const seedParams = seedTrackIds.slice(0, 5).map(id => `seeds=${id}`).join('&');
+    const url = `https://api.reccobeats.com/v1/track/recommendation?${seedParams}&size=${size}`;
+
+    console.log(`🎵 Calling ReccoBeats API with ${seedTrackIds.length} seed tracks...`);
+
+    const response = await axios.get(url, {
+      timeout: 30000 // 30 second timeout
+    });
+
+    if (response.data && response.data.tracks) {
+      console.log(`✓ ReccoBeats returned ${response.data.tracks.length} recommendations`);
+      return response.data.tracks;
+    } else if (response.data && Array.isArray(response.data)) {
+      console.log(`✓ ReccoBeats returned ${response.data.length} recommendations`);
+      return response.data;
+    }
+
+    console.log('ReccoBeats response format:', typeof response.data, Object.keys(response.data || {}));
+    return [];
+  } catch (error) {
+    console.error('ReccoBeats API error:', error.response?.status, error.response?.data || error.message);
+    return [];
+  }
+}
+
+// Get top tracks for an artist from Spotify (to use as seeds for ReccoBeats)
+async function getArtistTopTrackIds(artistName, limit = 3) {
   const token = await getSpotifyClientToken();
 
   try {
-    const params = {
-      limit: Math.min(limit, 100), // Spotify max is 100
-      ...(seedArtists.length > 0 && { seed_artists: seedArtists.slice(0, 5).join(',') }),
-      ...(seedTracks.length > 0 && { seed_tracks: seedTracks.slice(0, 5).join(',') }),
-      ...(seedGenres.length > 0 && { seed_genres: seedGenres.slice(0, 5).join(',') }),
-      // Optional target audio features
-      ...(targetFeatures.energy !== undefined && { target_energy: targetFeatures.energy }),
-      ...(targetFeatures.valence !== undefined && { target_valence: targetFeatures.valence }),
-      ...(targetFeatures.danceability !== undefined && { target_danceability: targetFeatures.danceability }),
-      ...(targetFeatures.tempo !== undefined && { target_tempo: targetFeatures.tempo })
-    };
+    // First, find the artist
+    const artistResponse = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { 'Authorization': `Bearer ${token}` },
+      params: {
+        q: artistName,
+        type: 'artist',
+        limit: 1
+      }
+    });
 
-    // Need at least one seed
-    if (!params.seed_artists && !params.seed_tracks && !params.seed_genres) {
-      console.warn('getSpotifyRecommendations: No seeds provided');
+    if (artistResponse.data.artists.items.length === 0) {
+      console.log(`Could not find artist: ${artistName}`);
       return [];
     }
 
-    const response = await axios.get('https://api.spotify.com/v1/recommendations', {
+    const artistId = artistResponse.data.artists.items[0].id;
+
+    // Get artist's top tracks
+    const topTracksResponse = await axios.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
       headers: { 'Authorization': `Bearer ${token}` },
-      params
+      params: { market: 'US' }
     });
 
-    console.log(`✓ Got ${response.data.tracks.length} recommendations from Spotify`);
-    return response.data.tracks;
+    const trackIds = topTracksResponse.data.tracks.slice(0, limit).map(track => track.id);
+    console.log(`✓ Got ${trackIds.length} top track IDs for ${artistName}`);
+    return trackIds;
   } catch (error) {
-    console.error('Spotify recommendations error:', error.response?.status, error.response?.data || error.message);
-    console.error('Request params were:', params);
+    console.error(`Failed to get top tracks for ${artistName}:`, error.message);
     return [];
   }
 }
@@ -3319,68 +3354,56 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
-    // Step 1: Try Spotify recommendations first (works for both Spotify and Apple Music users)
-    let spotifyRecommendedTracks = [];
-    let useSpotifyRecommendations = false;
+    // Step 1: Try ReccoBeats recommendations first (works for both Spotify and Apple Music users)
+    // ReccoBeats uses Spotify track IDs as seeds to find similar songs
+    let reccoBeatsRecommendedTracks = [];
+    let useReccoBeatsRecommendations = false;
 
     // Get seed artists from requested artists or use genre
     if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
-      console.log('🎵 Getting Spotify recommendations based on seed artists...');
+      console.log('🎵 Getting ReccoBeats recommendations based on seed artists...');
 
       try {
-        // Get Spotify artist IDs for seed artists
-        const seedArtistIds = [];
+        // Get top track IDs from each requested artist to use as seeds
+        const seedTrackIds = [];
         for (const artistName of genreData.artistConstraints.requestedArtists.slice(0, 5)) {
-          const artistId = await getSpotifyArtistId(artistName);
-          if (artistId) {
-            seedArtistIds.push(artistId);
-            console.log(`✓ Found Spotify artist ID for ${artistName}: ${artistId}`);
+          const trackIds = await getArtistTopTrackIds(artistName, 2); // Get top 2 tracks per artist
+          if (trackIds.length > 0) {
+            seedTrackIds.push(...trackIds);
+            console.log(`✓ Got ${trackIds.length} seed tracks for ${artistName}`);
           } else {
-            console.log(`✗ Could not find Spotify artist ID for ${artistName}`);
+            console.log(`✗ Could not find tracks for ${artistName}`);
           }
         }
 
-        if (seedArtistIds.length > 0) {
-          // Build target features from genreData
-          const targetFeatures = {};
-          if (genreData.audioFeatures.energy.min !== null && genreData.audioFeatures.energy.max !== null) {
-            targetFeatures.energy = (genreData.audioFeatures.energy.min + genreData.audioFeatures.energy.max) / 2;
-          }
-          if (genreData.audioFeatures.valence.min !== null && genreData.audioFeatures.valence.max !== null) {
-            targetFeatures.valence = (genreData.audioFeatures.valence.min + genreData.audioFeatures.valence.max) / 2;
-          }
-          if (genreData.audioFeatures.danceability.min !== null && genreData.audioFeatures.danceability.max !== null) {
-            targetFeatures.danceability = (genreData.audioFeatures.danceability.min + genreData.audioFeatures.danceability.max) / 2;
-          }
-          if (genreData.audioFeatures.bpm.target) {
-            targetFeatures.tempo = genreData.audioFeatures.bpm.target;
-          }
+        if (seedTrackIds.length > 0) {
+          console.log(`🎯 Using ${seedTrackIds.length} seed tracks for ReccoBeats...`);
 
-          // Get recommendations from Spotify
-          const recommendations = await getSpotifyRecommendations(
-            seedArtistIds,
-            [], // seed tracks
-            [], // seed genres
-            Math.ceil(songCount * 2), // Request extra
-            targetFeatures
+          // Get recommendations from ReccoBeats
+          const recommendations = await getReccoBeatsRecommendations(
+            seedTrackIds.slice(0, 5), // ReccoBeats accepts up to 5 seeds
+            Math.ceil(songCount * 2) // Request extra
           );
 
           if (recommendations.length > 0) {
-            // Convert Spotify tracks to our format
-            spotifyRecommendedTracks = recommendations.map(track => ({
+            // Convert ReccoBeats tracks to our format
+            // ReccoBeats returns tracks with: id, name, artists (array), album, etc.
+            reccoBeatsRecommendedTracks = recommendations.map(track => ({
               track: track.name,
-              artist: track.artists[0]?.name || 'Unknown',
+              artist: track.artists?.[0]?.name || track.artist || 'Unknown',
               spotifyId: track.id,
-              spotifyUri: track.uri,
-              spotifyTrack: track // Keep full track for Spotify users
+              spotifyUri: `spotify:track:${track.id}`,
+              reccoBeatsTrack: track // Keep full track data
             }));
 
-            console.log(`✨ Spotify recommended ${spotifyRecommendedTracks.length} songs`);
-            useSpotifyRecommendations = true;
+            console.log(`✨ ReccoBeats recommended ${reccoBeatsRecommendedTracks.length} songs`);
+            useReccoBeatsRecommendations = true;
+          } else {
+            console.log('ReccoBeats returned no recommendations, falling back to Claude...');
           }
         }
       } catch (error) {
-        console.log('Spotify recommendations failed:', error.message);
+        console.log('ReccoBeats recommendations failed:', error.message);
         console.log('Falling back to Claude recommendations...');
       }
     }
@@ -3389,8 +3412,8 @@ Respond ONLY with valid JSON in this format:
     var claudePlaylistName = null;
     var claudePlaylistDescription = null;
 
-    // If using Spotify recommendations, generate a playlist name with Claude
-    if (useSpotifyRecommendations) {
+    // If using ReccoBeats recommendations, generate a playlist name with Claude
+    if (useReccoBeatsRecommendations) {
       try {
         const nameResponse = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
@@ -3423,7 +3446,7 @@ Return ONLY valid JSON in this format:
     // Step 2: Use Claude to recommend specific songs (fallback or if no seed artists)
     let claudeRecommendedTracks = [];
 
-    if (!useSpotifyRecommendations) {
+    if (!useReccoBeatsRecommendations) {
       console.log('🎵 Requesting song recommendations from Claude...');
 
       try {
@@ -3538,10 +3561,10 @@ DO NOT include any text outside the JSON.`
       console.log('Failed to get song recommendations from Claude:', error.message);
       console.log('Falling back to traditional search query approach...');
     }
-    } // End of if (!useSpotifyRecommendations)
+    } // End of if (!useReccoBeatsRecommendations)
 
-    // Combine recommendations - prefer Spotify if available
-    const recommendedTracks = useSpotifyRecommendations ? spotifyRecommendedTracks : claudeRecommendedTracks;
+    // Combine recommendations - prefer ReccoBeats if available
+    const recommendedTracks = useReccoBeatsRecommendations ? reccoBeatsRecommendedTracks : claudeRecommendedTracks;
 
     // Step 3: Search for recommended songs on the user's platform
     const allTracks = [];
@@ -3592,75 +3615,83 @@ DO NOT include any text outside the JSON.`
 
     // If we have recommendations (from Spotify or Claude), search for those specific songs
     if (recommendedTracks.length > 0) {
-      console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} ${useSpotifyRecommendations ? 'Spotify' : 'Claude'}-recommended songs...`);
+      console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} ${useReccoBeatsRecommendations ? 'ReccoBeats' : 'Claude'}-recommended songs...`);
 
       if (platform === 'spotify') {
-        // For Spotify users with Spotify recommendations, we can use the tracks directly
-        if (useSpotifyRecommendations) {
-          for (const recommendedSong of recommendedTracks) {
+        // For Spotify users with ReccoBeats recommendations, fetch full track data using IDs
+        if (useReccoBeatsRecommendations) {
+          // Get track IDs from ReccoBeats recommendations
+          const reccoTrackIds = recommendedTracks
+            .filter(t => t.spotifyId)
+            .map(t => t.spotifyId);
+
+          console.log(`🎯 Fetching ${reccoTrackIds.length} tracks from Spotify by ID...`);
+
+          // Fetch tracks in batches of 50 (Spotify API limit)
+          const batchSize = 50;
+          for (let i = 0; i < reccoTrackIds.length; i += batchSize) {
+            const batchIds = reccoTrackIds.slice(i, i + batchSize);
+
             try {
-              // We already have the full Spotify track, use it directly
-              const track = recommendedSong.spotifyTrack;
+              const tracksResponse = await userSpotifyApi.getTracks(batchIds);
+              const tracks = tracksResponse.body.tracks.filter(t => t !== null);
 
-              if (!track) {
-                console.log(`✗ No Spotify track data for: "${recommendedSong.track}" by ${recommendedSong.artist}`);
-                continue;
-              }
-
-              // Check if we already have this track
-              if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
-                continue;
-              }
-
-              // Skip tracks that are already in the playlist (for replace mode)
-              if (excludeTrackIds.has(track.id)) {
-                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
-                continue;
-              }
-
-              // Skip tracks from song history (for manual refresh)
-              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
-                continue;
-              }
-
-              // Check for explicit content if needed
-              if (!allowExplicit && track.explicit) {
-                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
-                continue;
-              }
-
-              // Check song signature (artist + normalized track name)
-              const normalizedName = normalizeTrackName(track.name);
-              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
-
-              if (seenSongSignatures.has(songSignature)) {
-                if (!isUniqueVariation(track.name)) {
-                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name}`);
+              for (const track of tracks) {
+                // Check if we already have this track
+                if (seenTrackIds.has(track.id)) {
+                  console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
                   continue;
                 }
+
+                // Skip tracks that are already in the playlist (for replace mode)
+                if (excludeTrackIds.has(track.id)) {
+                  console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+                  continue;
+                }
+
+                // Skip tracks from song history (for manual refresh)
+                if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
+                  console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
+                  continue;
+                }
+
+                // Check for explicit content if needed
+                if (!allowExplicit && track.explicit) {
+                  console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
+                  continue;
+                }
+
+                // Check song signature (artist + normalized track name)
+                const normalizedName = normalizeTrackName(track.name);
+                const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
+
+                if (seenSongSignatures.has(songSignature)) {
+                  if (!isUniqueVariation(track.name)) {
+                    console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name}`);
+                    continue;
+                  }
+                }
+
+                seenTrackIds.add(track.id);
+                seenSongSignatures.set(songSignature, track.name);
+
+                allTracks.push({
+                  id: track.id,
+                  name: track.name,
+                  uri: track.uri,
+                  artists: track.artists,
+                  album: track.album,
+                  duration_ms: track.duration_ms,
+                  preview_url: track.preview_url,
+                  platform: 'spotify',
+                  explicit: track.explicit,
+                  artist: track.artists[0]?.name || 'Unknown'
+                });
+
+                console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
               }
-
-              seenTrackIds.add(track.id);
-              seenSongSignatures.set(songSignature, track.name);
-
-              allTracks.push({
-                id: track.id,
-                name: track.name,
-                uri: track.uri,
-                artists: track.artists,
-                album: track.album,
-                duration_ms: track.duration_ms,
-                preview_url: track.preview_url,
-                platform: 'spotify',
-                explicit: track.explicit,
-                artist: track.artists[0]?.name || 'Unknown'
-              });
-
-              console.log(`✓ Found: "${track.name}" by ${track.artists[0].name}`);
             } catch (error) {
-              console.log(`✗ Error processing: "${recommendedSong.track}" by ${recommendedSong.artist} - ${error.message}`);
+              console.log(`✗ Error fetching batch of tracks: ${error.message}`);
             }
           }
         } else {
@@ -3797,7 +3828,7 @@ DO NOT include any text outside the JSON.`
         }
       }
 
-      console.log(`📊 Successfully found ${allTracks.length} out of ${claudeRecommendedTracks.length} Claude-recommended songs`);
+      console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} ${useReccoBeatsRecommendations ? 'ReccoBeats' : 'Claude'}-recommended songs`);
 
       // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
       if (allTracks.length >= 5) {
