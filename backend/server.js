@@ -3399,8 +3399,11 @@ Respond ONLY with valid JSON in this format:
                              genreData.trackConstraints.popularity.max <= 50;
     const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
                                  genreData.artistConstraints.requestedArtists.length > 0;
+    const isExclusiveArtistMode = genreData.artistConstraints.exclusiveMode === true;
 
-    if (hasRequestedArtists || wantsUnderground) {
+    // Skip playlist mining if user wants ONLY songs from specific artists (exclusive mode)
+    // Playlist mining finds similar artists, which is wrong for "only Justin Bieber" requests
+    if ((hasRequestedArtists && !isExclusiveArtistMode) || wantsUnderground) {
       console.log(`🔍 Mining Spotify playlists for ${hasRequestedArtists ? 'similar artists' : 'underground ' + (genreData.primaryGenre || 'music')}...`);
 
       try {
@@ -3704,10 +3707,16 @@ CRITICAL REQUIREMENTS:
 1. Return ${Math.ceil(songCount * 2)} songs (we request extra because some may not be found on the platform)
 2. Each song must include: EXACT track name and EXACT artist name as it appears on streaming platforms
 3. EVERY song must match the SOUND and VIBE of the request - this is the most important requirement
-4. If requested artists are specified, include some songs from them and find similar-sounding artists
-5. **ARTIST DIVERSITY IS CRITICAL**: Maximum 2-3 songs per artist. Spread recommendations across at least 20 different artists. Do NOT recommend 10+ songs from a single artist.
+4. ${genreData.artistConstraints.exclusiveMode
+  ? `EXCLUSIVE MODE: ALL songs MUST be from ${genreData.artistConstraints.requestedArtists.join(' or ')}. Do NOT include any other artists. Include their biggest hits, deep cuts, features, and collaborations.`
+  : 'If requested artists are specified, include some songs from them and find similar-sounding artists'}
+5. ${genreData.artistConstraints.exclusiveMode
+  ? `Include a variety of songs from the artist(s): hits, album tracks, features where they are credited, and collaborations.`
+  : '**ARTIST DIVERSITY IS CRITICAL**: Maximum 2-3 songs per artist. Spread recommendations across at least 20 different artists. Do NOT recommend 10+ songs from a single artist.'}
 6. ONLY recommend songs you are CERTAIN exist on Apple Music and Spotify - do NOT make up or guess song titles
-7. SELF-CHECK: Before finalizing, verify you have at least 20 different artists. If not, replace duplicate artists with new ones.
+7. ${genreData.artistConstraints.exclusiveMode
+  ? 'For features/collabs, include songs where the requested artist is either the main artist OR a featured artist.'
+  : 'SELF-CHECK: Before finalizing, verify you have at least 20 different artists. If not, replace duplicate artists with new ones.'}
 
 Return ONLY valid JSON in this exact format:
 {
