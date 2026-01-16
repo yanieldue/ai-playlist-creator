@@ -3447,15 +3447,26 @@ Respond ONLY with valid JSON in this format:
 
         const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
         const artistSongCount = new Map(); // artist -> count of songs found
+        let playlistsAccepted = 0;
+        const maxPlaylistsToProcess = 5; // Limit to avoid long searches
+        const minTracksNeeded = songCount * 3; // Get 3x the needed tracks for variety
 
         for (const query of searchQueries.slice(0, 5)) {
+          // Early exit if we have enough tracks
+          if (allPlaylistTracks.size >= minTracksNeeded && playlistsAccepted >= 3) {
+            console.log(`✓ Have enough tracks (${allPlaylistTracks.size}), stopping search early`);
+            break;
+          }
+
           try {
             const playlistSearch = await axios.get('https://api.spotify.com/v1/search', {
               headers: { 'Authorization': `Bearer ${token}` },
-              params: { q: query, type: 'playlist', limit: 8 }
+              params: { q: query, type: 'playlist', limit: 5 }
             });
 
             for (const playlist of playlistSearch.data.playlists.items || []) {
+              // Early exit if we have enough playlists
+              if (playlistsAccepted >= maxPlaylistsToProcess) break;
               if (!playlist || playlist.tracks.total > 200 || playlist.tracks.total < 10) continue;
 
               // Skip playlists that are just the artist's name (likely their own playlist)
@@ -3501,7 +3512,8 @@ Respond ONLY with valid JSON in this format:
                 const acceptPlaylist = hasRequestedArtist || (!hasRequestedArtists && wantsUnderground);
 
                 if (acceptPlaylist) {
-                  console.log(`✓ Found curated playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks, ${playlistArtists.size} artists)`);
+                  playlistsAccepted++;
+                  console.log(`✓ Found curated playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks, ${playlistArtists.size} artists) [${playlistsAccepted}/${maxPlaylistsToProcess}]`);
 
                   // Add all tracks from this playlist
                   for (const item of tracksResponse.data.items) {
