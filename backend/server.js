@@ -299,29 +299,63 @@ async function getArtistTopTrackIds(artistName, limit = 3) {
       params: {
         q: artistName,
         type: 'artist',
-        limit: 1
+        limit: 5 // Get multiple results to find best match
       }
     });
 
     if (artistResponse.data.artists.items.length === 0) {
       console.log(`Could not find artist: ${artistName}`);
-      return [];
+      return { trackIds: [], foundArtist: null, isExactMatch: false };
     }
 
-    const artistId = artistResponse.data.artists.items[0].id;
+    // Find the best matching artist
+    const requestedNameLower = artistName.toLowerCase().trim();
+    let bestMatch = null;
+    let isExactMatch = false;
+
+    for (const artist of artistResponse.data.artists.items) {
+      const foundNameLower = artist.name.toLowerCase().trim();
+
+      // Check for exact match
+      if (foundNameLower === requestedNameLower) {
+        bestMatch = artist;
+        isExactMatch = true;
+        break;
+      }
+
+      // Check if one contains the other (e.g., "Pete Bailey" matches "Pete Bailey & Someone")
+      if (foundNameLower.includes(requestedNameLower) || requestedNameLower.includes(foundNameLower)) {
+        if (!bestMatch) {
+          bestMatch = artist;
+        }
+      }
+    }
+
+    // Fall back to first result if no good match found
+    if (!bestMatch) {
+      bestMatch = artistResponse.data.artists.items[0];
+    }
+
+    console.log(`🔍 Searched for "${artistName}" → Found "${bestMatch.name}" (popularity: ${bestMatch.popularity}, exact match: ${isExactMatch})`);
+
+    // If the match is poor (not exact and low popularity), return empty to trigger Claude fallback
+    if (!isExactMatch && bestMatch.popularity < 20) {
+      console.log(`⚠️ Poor match for "${artistName}" - "${bestMatch.name}" has low popularity (${bestMatch.popularity}), skipping`);
+      return { trackIds: [], foundArtist: bestMatch.name, isExactMatch: false };
+    }
 
     // Get artist's top tracks
-    const topTracksResponse = await axios.get(`https://api.spotify.com/v1/artists/${artistId}/top-tracks`, {
+    const topTracksResponse = await axios.get(`https://api.spotify.com/v1/artists/${bestMatch.id}/top-tracks`, {
       headers: { 'Authorization': `Bearer ${token}` },
       params: { market: 'US' }
     });
 
     const trackIds = topTracksResponse.data.tracks.slice(0, limit).map(track => track.id);
-    console.log(`✓ Got ${trackIds.length} top track IDs for ${artistName}`);
-    return trackIds;
+    console.log(`✓ Got ${trackIds.length} top track IDs for ${bestMatch.name}`);
+    return { trackIds, foundArtist: bestMatch.name, isExactMatch };
   } catch (error) {
     console.error(`Failed to get top tracks for ${artistName}:`, error.message);
-    return [];
+    return { trackIds: [], foundArtist: null, isExactMatch: false };
   }
 }
 
@@ -3366,14 +3400,24 @@ Respond ONLY with valid JSON in this format:
       try {
         // Get top track IDs from each requested artist to use as seeds
         const seedTrackIds = [];
+        const matchedArtists = [];
+        const unmatchedArtists = [];
+
         for (const artistName of genreData.artistConstraints.requestedArtists.slice(0, 5)) {
-          const trackIds = await getArtistTopTrackIds(artistName, 2); // Get top 2 tracks per artist
-          if (trackIds.length > 0) {
-            seedTrackIds.push(...trackIds);
-            console.log(`✓ Got ${trackIds.length} seed tracks for ${artistName}`);
+          const result = await getArtistTopTrackIds(artistName, 2); // Get top 2 tracks per artist
+          if (result.trackIds && result.trackIds.length > 0) {
+            seedTrackIds.push(...result.trackIds);
+            matchedArtists.push({ requested: artistName, found: result.foundArtist, exact: result.isExactMatch });
+            console.log(`✓ Got ${result.trackIds.length} seed tracks for ${artistName} (matched to: ${result.foundArtist})`);
           } else {
-            console.log(`✗ Could not find tracks for ${artistName}`);
+            unmatchedArtists.push(artistName);
+            console.log(`✗ Could not find good match for ${artistName}${result.foundArtist ? ` (closest: ${result.foundArtist})` : ''}`);
           }
+        }
+
+        // If we couldn't match ANY artists well, fall back to Claude
+        if (seedTrackIds.length === 0) {
+          console.log('⚠️ Could not find any of the requested artists on Spotify, falling back to Claude...');
         }
 
         if (seedTrackIds.length > 0) {
