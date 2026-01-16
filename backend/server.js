@@ -3388,17 +3388,119 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
-    // Note: ReccoBeats and Spotify's recommendation/related-artists APIs have been deprecated or don't work well
-    // for underground/niche artists. Using Claude directly for all recommendations as it has better knowledge
-    // of indie and lesser-known artists across all genres.
-    let useReccoBeatsRecommendations = false; // Disabled - using Claude instead
+    // Strategy: Mine Spotify playlists to find similar artists at the same popularity level
+    // This works better than APIs for underground/niche artists
+    let playlistMinedTracks = [];
+    let usePlaylistMining = false;
+    let discoveredArtists = []; // Artists discovered from playlist mining to pass to Claude
+
+    if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
+      console.log('🔍 Mining Spotify playlists to find similar underground artists...');
+
+      try {
+        const token = await getSpotifyClientToken();
+        const requestedArtists = genreData.artistConstraints.requestedArtists;
+
+        // Search for playlists that might contain these artists
+        const searchQueries = [
+          requestedArtists.join(' '),
+          ...requestedArtists.map(a => `"${a}"`)
+        ];
+
+        const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
+        const artistSongCount = new Map(); // artist -> count of songs found
+
+        for (const query of searchQueries.slice(0, 3)) {
+          try {
+            const playlistSearch = await axios.get('https://api.spotify.com/v1/search', {
+              headers: { 'Authorization': `Bearer ${token}` },
+              params: { q: query, type: 'playlist', limit: 5 }
+            });
+
+            for (const playlist of playlistSearch.data.playlists.items || []) {
+              if (!playlist || playlist.tracks.total > 200) continue; // Skip huge playlists
+
+              try {
+                const tracksResponse = await axios.get(playlist.tracks.href + '?limit=100', {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                // Check if this playlist contains any of our requested artists
+                const hasRequestedArtist = tracksResponse.data.items.some(item =>
+                  item.track && requestedArtists.some(ra =>
+                    item.track.artists[0].name.toLowerCase().includes(ra.toLowerCase()) ||
+                    ra.toLowerCase().includes(item.track.artists[0].name.toLowerCase())
+                  )
+                );
+
+                if (hasRequestedArtist) {
+                  console.log(`✓ Found relevant playlist: "${playlist.name}" (${tracksResponse.data.items.length} tracks)`);
+
+                  // Add all tracks from this playlist
+                  for (const item of tracksResponse.data.items) {
+                    if (!item.track) continue;
+                    const artistName = item.track.artists[0].name;
+                    const trackId = item.track.id;
+
+                    if (!allPlaylistTracks.has(trackId)) {
+                      allPlaylistTracks.set(trackId, {
+                        track: item.track.name,
+                        artist: artistName,
+                        spotifyId: trackId,
+                        spotifyUri: item.track.uri,
+                        spotifyTrack: item.track
+                      });
+                    }
+
+                    artistSongCount.set(artistName, (artistSongCount.get(artistName) || 0) + 1);
+                  }
+                }
+              } catch (e) {
+                // Skip playlists we can't access
+              }
+            }
+          } catch (e) {
+            console.log('Playlist search error:', e.message);
+          }
+        }
+
+        // Filter and prepare tracks
+        if (allPlaylistTracks.size > 0) {
+          // Get unique artists discovered (excluding the requested ones)
+          const requestedLower = requestedArtists.map(a => a.toLowerCase());
+          discoveredArtists = Array.from(artistSongCount.keys())
+            .filter(a => !requestedLower.some(r => a.toLowerCase().includes(r) || r.includes(a.toLowerCase())))
+            .slice(0, 30);
+
+          console.log(`🎵 Discovered ${discoveredArtists.length} similar artists from playlist mining`);
+          console.log('Sample artists:', discoveredArtists.slice(0, 10).join(', '));
+
+          // Convert to array and shuffle
+          playlistMinedTracks = Array.from(allPlaylistTracks.values());
+
+          // Shuffle the tracks
+          for (let i = playlistMinedTracks.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [playlistMinedTracks[i], playlistMinedTracks[j]] = [playlistMinedTracks[j], playlistMinedTracks[i]];
+          }
+
+          console.log(`✨ Playlist mining found ${playlistMinedTracks.length} potential tracks`);
+
+          if (playlistMinedTracks.length >= songCount) {
+            usePlaylistMining = true;
+          }
+        }
+      } catch (error) {
+        console.log('Playlist mining failed:', error.message);
+      }
+    }
 
     // Variables for playlist metadata
     var claudePlaylistName = null;
     var claudePlaylistDescription = null;
 
-    // If using ReccoBeats recommendations, generate a playlist name with Claude
-    if (useReccoBeatsRecommendations) {
+    // If using playlist mining, generate a playlist name with Claude
+    if (usePlaylistMining) {
       try {
         const nameResponse = await anthropic.messages.create({
           model: 'claude-sonnet-4-20250514',
@@ -3431,7 +3533,7 @@ Return ONLY valid JSON in this format:
     // Step 2: Use Claude to recommend specific songs (fallback or if no seed artists)
     let claudeRecommendedTracks = [];
 
-    if (!useReccoBeatsRecommendations) {
+    if (!usePlaylistMining) {
       console.log('🎵 Requesting song recommendations from Claude...');
 
       try {
@@ -3555,10 +3657,10 @@ DO NOT include any text outside the JSON.`
       console.log('Failed to get song recommendations from Claude:', error.message);
       console.log('Falling back to traditional search query approach...');
     }
-    } // End of if (!useReccoBeatsRecommendations)
+    } // End of if (!usePlaylistMining)
 
-    // Combine recommendations - prefer ReccoBeats if available
-    const recommendedTracks = useReccoBeatsRecommendations ? reccoBeatsRecommendedTracks : claudeRecommendedTracks;
+    // Combine recommendations - prefer playlist mining if available
+    const recommendedTracks = usePlaylistMining ? playlistMinedTracks : claudeRecommendedTracks;
 
     // Step 3: Search for recommended songs on the user's platform
     const allTracks = [];
@@ -3609,22 +3711,22 @@ DO NOT include any text outside the JSON.`
 
     // If we have recommendations (from Spotify or Claude), search for those specific songs
     if (recommendedTracks.length > 0) {
-      console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} ${useReccoBeatsRecommendations ? 'ReccoBeats' : 'Claude'}-recommended songs...`);
+      console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} ${usePlaylistMining ? 'playlist-mined' : 'Claude'}-recommended songs...`);
 
       if (platform === 'spotify') {
-        // For Spotify users with ReccoBeats recommendations, fetch full track data using IDs
-        if (useReccoBeatsRecommendations) {
-          // Get track IDs from ReccoBeats recommendations
-          const reccoTrackIds = recommendedTracks
+        // For Spotify users with playlist mining, we already have full track data
+        if (usePlaylistMining) {
+          // Get track IDs from playlist mining recommendations
+          const minedTrackIds = recommendedTracks
             .filter(t => t.spotifyId)
             .map(t => t.spotifyId);
 
-          console.log(`🎯 Fetching ${reccoTrackIds.length} tracks from Spotify by ID...`);
+          console.log(`🎯 Fetching ${minedTrackIds.length} tracks from Spotify by ID...`);
 
           // Fetch tracks in batches of 50 (Spotify API limit)
           const batchSize = 50;
-          for (let i = 0; i < reccoTrackIds.length; i += batchSize) {
-            const batchIds = reccoTrackIds.slice(i, i + batchSize);
+          for (let i = 0; i < minedTrackIds.length; i += batchSize) {
+            const batchIds = minedTrackIds.slice(i, i + batchSize);
 
             try {
               const tracksResponse = await userSpotifyApi.getTracks(batchIds);
@@ -3822,7 +3924,7 @@ DO NOT include any text outside the JSON.`
         }
       }
 
-      console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} ${useReccoBeatsRecommendations ? 'ReccoBeats' : 'Claude'}-recommended songs`);
+      console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} ${usePlaylistMining ? 'playlist-mined' : 'Claude'}-recommended songs`);
 
       // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
       if (allTracks.length >= 5) {
