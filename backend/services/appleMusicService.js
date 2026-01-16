@@ -524,17 +524,27 @@ class AppleMusicService {
       // Count artist occurrences across all playlists
       const artistCounts = new Map();
 
+      // Helper function to extract primary artist from full credit string
+      // e.g., "JENNIE & Dua Lipa" -> "JENNIE", "JENNIE, Childish Gambino & Kali Uchis" -> "JENNIE"
+      const extractPrimaryArtist = (artistName) => {
+        if (!artistName) return null;
+        // Split by common separators: ", ", " & ", " featuring ", " feat. ", " ft. ", " with ", " x "
+        const separators = /,\s+|\s+&\s+|\s+featuring\s+|\s+feat\.\s+|\s+ft\.\s+|\s+with\s+|\s+x\s+/i;
+        const parts = artistName.split(separators);
+        return parts[0].trim();
+      };
+
       // Fetch tracks from each playlist
       for (const playlist of playlists) {
         console.log(`Fetching tracks from playlist: ${playlist.name}`);
         const tracks = await this.getLibraryPlaylistTracks(userToken, playlist.id);
 
-        // Count each artist
+        // Count each artist (using primary artist only to avoid duplicates)
         for (const track of tracks) {
-          const artistName = track.artistName;
-          if (artistName) {
-            const current = artistCounts.get(artistName) || { count: 0, artwork: null };
-            artistCounts.set(artistName, {
+          const primaryArtist = extractPrimaryArtist(track.artistName);
+          if (primaryArtist) {
+            const current = artistCounts.get(primaryArtist) || { count: 0, artwork: null };
+            artistCounts.set(primaryArtist, {
               count: current.count + 1,
               artwork: track.artwork || current.artwork
             });
