@@ -3388,69 +3388,10 @@ Respond ONLY with valid JSON in this format:
       }
     }
 
-    // Step 1: Try ReccoBeats recommendations first (works for both Spotify and Apple Music users)
-    // ReccoBeats uses Spotify track IDs as seeds to find similar songs
-    let reccoBeatsRecommendedTracks = [];
-    let useReccoBeatsRecommendations = false;
-
-    // Get seed artists from requested artists or use genre
-    if (genreData.artistConstraints.requestedArtists && genreData.artistConstraints.requestedArtists.length > 0) {
-      console.log('🎵 Getting ReccoBeats recommendations based on seed artists...');
-
-      try {
-        // Get top track IDs from each requested artist to use as seeds
-        const seedTrackIds = [];
-        const matchedArtists = [];
-        const unmatchedArtists = [];
-
-        for (const artistName of genreData.artistConstraints.requestedArtists.slice(0, 5)) {
-          const result = await getArtistTopTrackIds(artistName, 2); // Get top 2 tracks per artist
-          if (result.trackIds && result.trackIds.length > 0) {
-            seedTrackIds.push(...result.trackIds);
-            matchedArtists.push({ requested: artistName, found: result.foundArtist, exact: result.isExactMatch });
-            console.log(`✓ Got ${result.trackIds.length} seed tracks for ${artistName} (matched to: ${result.foundArtist})`);
-          } else {
-            unmatchedArtists.push(artistName);
-            console.log(`✗ Could not find good match for ${artistName}${result.foundArtist ? ` (closest: ${result.foundArtist})` : ''}`);
-          }
-        }
-
-        // If we couldn't match ANY artists well, fall back to Claude
-        if (seedTrackIds.length === 0) {
-          console.log('⚠️ Could not find any of the requested artists on Spotify, falling back to Claude...');
-        }
-
-        if (seedTrackIds.length > 0) {
-          console.log(`🎯 Using ${seedTrackIds.length} seed tracks for ReccoBeats...`);
-
-          // Get recommendations from ReccoBeats
-          const recommendations = await getReccoBeatsRecommendations(
-            seedTrackIds.slice(0, 5), // ReccoBeats accepts up to 5 seeds
-            Math.ceil(songCount * 2) // Request extra
-          );
-
-          if (recommendations.length > 0) {
-            // Convert ReccoBeats tracks to our format
-            // ReccoBeats returns tracks with: id, name, artists (array), album, etc.
-            reccoBeatsRecommendedTracks = recommendations.map(track => ({
-              track: track.name,
-              artist: track.artists?.[0]?.name || track.artist || 'Unknown',
-              spotifyId: track.id,
-              spotifyUri: `spotify:track:${track.id}`,
-              reccoBeatsTrack: track // Keep full track data
-            }));
-
-            console.log(`✨ ReccoBeats recommended ${reccoBeatsRecommendedTracks.length} songs`);
-            useReccoBeatsRecommendations = true;
-          } else {
-            console.log('ReccoBeats returned no recommendations, falling back to Claude...');
-          }
-        }
-      } catch (error) {
-        console.log('ReccoBeats recommendations failed:', error.message);
-        console.log('Falling back to Claude recommendations...');
-      }
-    }
+    // Note: ReccoBeats and Spotify's recommendation/related-artists APIs have been deprecated or don't work well
+    // for underground/niche artists. Using Claude directly for all recommendations as it has better knowledge
+    // of indie and lesser-known artists across all genres.
+    let useReccoBeatsRecommendations = false; // Disabled - using Claude instead
 
     // Variables for playlist metadata
     var claudePlaylistName = null;
@@ -3509,7 +3450,16 @@ Your primary goal is to match the SOUND and VIBE of these artists. Find songs th
 - Musical style and production
 - Mood and atmosphere
 - Vocal style and delivery
-- Overall feel and energy` : ''}
+- Overall feel and energy
+
+CRITICAL: Match the POPULARITY LEVEL of the requested artists. If they mention underground/indie artists, recommend OTHER underground/indie artists - NOT mainstream stars. If the requested artists are lesser-known (not chart-topping hits), find similar lesser-known artists in the same niche/scene.
+
+Examples of what NOT to do:
+- If user requests indie R&B artists → Do NOT recommend SZA, H.E.R., Daniel Caesar, Miguel, Jhené Aiko, Kehlani (too mainstream)
+- If user requests underground hip-hop → Do NOT recommend Drake, Kendrick Lamar, J. Cole (too mainstream)
+- If user requests indie rock → Do NOT recommend Coldplay, Imagine Dragons, The Killers (too mainstream)
+
+Instead, dig deep into that specific scene/subgenre and find artists at a similar level of recognition.` : ''}
 
 ${existingPlaylistData && genreData.artistConstraints.requestedArtists.length > 0 ? `⚠️ REFINEMENT CONTEXT: This is a refinement of an existing playlist. The requested artists below were from the ORIGINAL prompt and should STILL be included, even if the refinement message seems to minimize them.` : ''}
 ${newArtistsOnly ? 'IMPORTANT: The user wants to discover NEW artists they have never listened to before. Focus on emerging, indie, underground, or lesser-known artists.' : ''}
