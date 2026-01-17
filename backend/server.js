@@ -3395,8 +3395,11 @@ Respond ONLY with valid JSON in this format:
     let discoveredArtists = []; // Artists discovered from playlist mining to pass to Claude
 
     // Check if user wants underground/indie artists (either via specific artists OR via preference)
+    // Note: must check for null/undefined before comparing, as null <= 50 is true in JS
     const wantsUnderground = genreData.trackConstraints.popularity.preference === 'underground' ||
-                             genreData.trackConstraints.popularity.max <= 50;
+                             (genreData.trackConstraints.popularity.max !== null &&
+                              genreData.trackConstraints.popularity.max !== undefined &&
+                              genreData.trackConstraints.popularity.max <= 50);
     const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
                                  genreData.artistConstraints.requestedArtists.length > 0;
     const isExclusiveArtistMode = genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true';
@@ -3425,7 +3428,7 @@ Respond ONLY with valid JSON in this format:
           );
         }
 
-        // Genre + underground searches (always add these for underground preference)
+        // Genre + underground searches (only when user explicitly wants underground)
         if (wantsUnderground) {
           searchQueries.push(
             `underground ${genreHint}`,
@@ -3434,20 +3437,36 @@ Respond ONLY with valid JSON in this format:
             `hidden gems ${genreHint}`,
             `${genreHint} deep cuts`
           );
+        }
 
-          // Add mood-specific searches if available
-          if (moodHints.length > 0) {
-            searchQueries.push(`${moodHints[0]} ${genreHint} underground`);
+        // Add mood/vibe-based searches from what the user actually asked for
+        if (moodHints.length > 0) {
+          // Use the actual mood/atmosphere from the prompt
+          for (const mood of moodHints.slice(0, 3)) {
+            searchQueries.push(`${mood} ${genreHint}`);
           }
+        }
+
+        // Add style-based search if available
+        if (genreData.style) {
+          searchQueries.push(`${genreData.style} ${genreHint}`);
+        }
+
+        // Add use case search if available
+        if (genreData.contextClues.useCase) {
+          const useCase = genreData.contextClues.useCase.split(' ').slice(0, 3).join(' '); // First 3 words
+          searchQueries.push(`${useCase} ${genreHint}`);
         }
 
         // Add general genre searches (these are fallbacks)
         if (searchQueries.length < 5) {
           searchQueries.push(
-            `christian r&b women`,
-            `spiritual r&b`
+            `best ${genreHint} playlist`,
+            `${genreHint} vibes`
           );
         }
+
+        console.log(`🔎 Search queries: ${searchQueries.slice(0, 5).join(', ')}`);
 
         const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
         const artistSongCount = new Map(); // artist -> count of songs found
