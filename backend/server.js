@@ -3399,7 +3399,8 @@ Respond ONLY with valid JSON in this format:
                              genreData.trackConstraints.popularity.max <= 50;
     const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
                                  genreData.artistConstraints.requestedArtists.length > 0;
-    const isExclusiveArtistMode = genreData.artistConstraints.exclusiveMode === true;
+    const isExclusiveArtistMode = genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true';
+    console.log(`🎯 Exclusive artist mode: ${isExclusiveArtistMode}, hasRequestedArtists: ${hasRequestedArtists}, wantsUnderground: ${wantsUnderground}`);
 
     // Skip playlist mining if user wants ONLY songs from specific artists (exclusive mode)
     // Playlist mining finds similar artists, which is wrong for "only Justin Bieber" requests
