@@ -3800,24 +3800,31 @@ DO NOT include any text outside the JSON.`
             max_tokens: 1500,
             messages: [{
               role: 'user',
-              content: `Quick filter: Remove songs that don't match the request.
+              content: `You are filtering a playlist to ensure all songs match the user's request.
 
-Original request: "${prompt}"
-Genre: ${genreData.primaryGenre || 'not specified'}
-${hasAvoidances ? `User explicitly wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
-${wantsUndergroundFilter ? `Popularity preference: UNDERGROUND/INDIE - strictly remove mainstream artists` : ''}
+User's request: "${prompt}"
 
-Songs:
+The user wants songs that are:
+- Genre: ${genreData.primaryGenre || 'not specified'}
+${genreData.style ? `- Style/Vibe: ${genreData.style}` : ''}
+${genreData.atmosphere && genreData.atmosphere.length > 0 ? `- Atmosphere: ${genreData.atmosphere.join(', ')}` : ''}
+${genreData.contextClues.useCase ? `- Use case: ${genreData.contextClues.useCase}` : ''}
+${hasAvoidances ? `- AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+${wantsUndergroundFilter ? `- Popularity: UNDERGROUND/INDIE only - remove mainstream artists` : ''}
+
+Songs to review:
 ${sampleTracks.map((t, i) => `${i + 1}. "${t.track}" by ${t.artist}`).join('\n')}
 
 Return ONLY a JSON array of indices to KEEP.
 
-Remove songs where:
-- The artist/song clearly doesn't fit the GENRE or SOUND requested
-${hasAvoidances ? `- The song matches what the user wants to AVOID (${genreData.contextClues.avoidances.join(', ')})` : ''}
-${wantsUndergroundFilter ? `- The artist is MAINSTREAM (has chart hits, millions of streams, major label, radio play). Examples to REMOVE: SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Chris Brown, Usher, Ella Mai, Snoh Aalegra, Jorja Smith, etc.` : ''}
+KEEP songs that match the vibe, mood, and style the user requested.
+REMOVE songs that:
+- Don't fit the requested vibe/atmosphere (e.g., upbeat party song in a "chill late night" playlist)
+- Are clearly the wrong genre
+${hasAvoidances ? `- Match what the user wants to AVOID` : ''}
+${wantsUndergroundFilter ? `- Are from mainstream artists with chart hits` : ''}
 
-Be lenient on genre matching, but strict on ${wantsUndergroundFilter ? 'removing mainstream artists and ' : ''}the user's explicit avoidances.
+Be LENIENT - only remove songs that clearly don't fit. When in doubt, KEEP the song.
 
 Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
             }]
@@ -4150,24 +4157,31 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               max_tokens: 1000,
               messages: [{
                 role: 'user',
-                content: `Quick filter: Remove songs that don't match the request.
+                content: `You are filtering a playlist to ensure all songs match the user's request.
 
-Original request: "${prompt}"
-Genre: ${genreData.primaryGenre || 'not specified'}
-${hasAvoidances ? `User explicitly wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
-${wantsUndergroundFilter ? `Popularity preference: UNDERGROUND/INDIE - strictly remove mainstream artists` : ''}
+User's request: "${prompt}"
 
-Songs:
+The user wants songs that are:
+- Genre: ${genreData.primaryGenre || 'not specified'}
+${genreData.style ? `- Style/Vibe: ${genreData.style}` : ''}
+${genreData.atmosphere && genreData.atmosphere.length > 0 ? `- Atmosphere: ${genreData.atmosphere.join(', ')}` : ''}
+${genreData.contextClues.useCase ? `- Use case: ${genreData.contextClues.useCase}` : ''}
+${hasAvoidances ? `- AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
+${wantsUndergroundFilter ? `- Popularity: UNDERGROUND/INDIE only - remove mainstream artists` : ''}
+
+Songs to review:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
 Return ONLY a JSON array of indices to KEEP.
 
-Remove songs where:
-- The artist/song clearly doesn't fit the GENRE or SOUND requested
-${hasAvoidances ? `- The song matches what the user wants to AVOID (${genreData.contextClues.avoidances.join(', ')})` : ''}
-${wantsUndergroundFilter ? `- The artist is MAINSTREAM (has chart hits, millions of streams, major label, radio play). Examples to REMOVE: SZA, Miguel, Khalid, Daniel Caesar, H.E.R., Summer Walker, Brent Faiyaz, Drake, The Weeknd, Jhené Aiko, Kehlani, Frank Ocean, Chris Brown, Usher, Ella Mai, Snoh Aalegra, Jorja Smith, etc.` : ''}
+KEEP songs that match the vibe, mood, and style the user requested.
+REMOVE songs that:
+- Don't fit the requested vibe/atmosphere (e.g., upbeat party song in a "chill late night" playlist)
+- Are clearly the wrong genre
+${hasAvoidances ? `- Match what the user wants to AVOID` : ''}
+${wantsUndergroundFilter ? `- Are from mainstream artists with chart hits` : ''}
 
-Be lenient on genre matching, but strict on ${wantsUndergroundFilter ? 'removing mainstream artists and ' : ''}the user's explicit avoidances.
+Be LENIENT - only remove songs that clearly don't fit. When in doubt, KEEP the song.
 
 Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }]
