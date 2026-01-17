@@ -4039,11 +4039,12 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
 
               seenTrackIds.add(track.id);
               seenSongSignatures.set(songSignature, track.name);
-              // Normalize track format to have 'artist' and 'image' properties for consistency
+              // Normalize track format to have 'artist', 'image', and 'externalUrl' properties for consistency
               allTracks.push({
                 ...track,
                 artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
-                image: track.album?.images?.[0]?.url || null
+                image: track.album?.images?.[0]?.url || null,
+                externalUrl: track.url || track.external_urls?.spotify || null
               });
               console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
             } else {
@@ -4106,11 +4107,12 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
 
               seenTrackIds.add(track.id);
               seenSongSignatures.set(songSignature, track.name);
-              // Normalize track format to have 'artist' and 'image' properties for consistency
+              // Normalize track format to have 'artist', 'image', and 'externalUrl' properties for consistency
               allTracks.push({
                 ...track,
                 artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
-                image: track.album?.images?.[0]?.url || null
+                image: track.album?.images?.[0]?.url || null,
+                externalUrl: track.url || track.external_urls?.spotify || null
               });
               console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
             } else {
