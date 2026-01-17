@@ -3415,58 +3415,60 @@ Respond ONLY with valid JSON in this format:
         const requestedArtists = genreData.artistConstraints.requestedArtists || [];
         const requestedLower = requestedArtists.map(a => a.toLowerCase());
 
-        // Build search queries based on what we have
-        const genreHint = genreData.primaryGenre || 'r&b';
-        const moodHints = genreData.atmosphere || [];
-        const searchQueries = [];
+        // Use Claude to generate dynamic search queries based on the user's prompt
+        let searchQueries = [];
 
-        if (hasRequestedArtists) {
-          // Artist-based searches
-          searchQueries.push(
-            `${genreHint} ${requestedArtists[0]}`,
-            ...requestedArtists.map(a => `"${a}" mix`)
-          );
-        }
+        try {
+          console.log('🤖 Generating dynamic search queries with Claude...');
+          const searchQueryResponse = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 500,
+            messages: [{
+              role: 'user',
+              content: `Generate 5 Spotify playlist search queries to find playlists matching this request:
 
-        // Genre + underground searches (only when user explicitly wants underground)
-        if (wantsUnderground) {
-          searchQueries.push(
-            `underground ${genreHint}`,
-            `indie ${genreHint}`,
-            `underrated ${genreHint}`,
-            `hidden gems ${genreHint}`,
-            `${genreHint} deep cuts`
-          );
-        }
+User prompt: "${prompt}"
+${hasRequestedArtists ? `Mentioned artists: ${requestedArtists.join(', ')}` : ''}
+${wantsUnderground ? 'User wants underground/indie artists' : ''}
 
-        // Add mood/vibe-based searches from what the user actually asked for
-        if (moodHints.length > 0) {
-          // Use the actual mood/atmosphere from the prompt
-          for (const mood of moodHints.slice(0, 3)) {
-            searchQueries.push(`${mood} ${genreHint}`);
+Create search queries that would find curated Spotify playlists with songs matching this vibe.
+Each query should be 2-4 words, optimized for Spotify's playlist search.
+
+Return ONLY a JSON array of 5 search query strings, nothing else.
+Example: ["chill r&b vibes", "late night soul", "mellow r&b 2024", "in your feels r&b", "slow jams playlist"]`
+            }]
+          });
+
+          const queryText = searchQueryResponse.content[0].text.trim()
+            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+            .replace(/^```\n?/, '').replace(/\n?```$/, '');
+
+          const parsedQueries = JSON.parse(queryText);
+          if (Array.isArray(parsedQueries) && parsedQueries.length > 0) {
+            searchQueries = parsedQueries.slice(0, 5);
+            console.log(`✓ Claude generated queries: ${searchQueries.join(', ')}`);
           }
+        } catch (queryError) {
+          console.log('Failed to generate dynamic queries:', queryError.message);
         }
 
-        // Add style-based search if available
-        if (genreData.style) {
-          searchQueries.push(`${genreData.style} ${genreHint}`);
+        // Fallback to basic queries if Claude failed
+        if (searchQueries.length === 0) {
+          const genreHint = genreData.primaryGenre || 'music';
+          if (hasRequestedArtists) {
+            searchQueries.push(`${requestedArtists[0]} mix`, `${genreHint} ${requestedArtists[0]}`);
+          }
+          if (wantsUnderground) {
+            searchQueries.push(`underground ${genreHint}`, `indie ${genreHint}`);
+          }
+          if (genreData.atmosphere && genreData.atmosphere.length > 0) {
+            searchQueries.push(`${genreData.atmosphere[0]} ${genreHint}`);
+          }
+          searchQueries.push(`best ${genreHint} playlist`, `${genreHint} vibes`);
+          searchQueries = searchQueries.slice(0, 5);
         }
 
-        // Add use case search if available
-        if (genreData.contextClues.useCase) {
-          const useCase = genreData.contextClues.useCase.split(' ').slice(0, 3).join(' '); // First 3 words
-          searchQueries.push(`${useCase} ${genreHint}`);
-        }
-
-        // Add general genre searches (these are fallbacks)
-        if (searchQueries.length < 5) {
-          searchQueries.push(
-            `best ${genreHint} playlist`,
-            `${genreHint} vibes`
-          );
-        }
-
-        console.log(`🔎 Search queries: ${searchQueries.slice(0, 5).join(', ')}`);
+        console.log(`🔎 Search queries: ${searchQueries.join(', ')}`);
 
         const allPlaylistTracks = new Map(); // trackId -> {track, artist, songName}
         const artistSongCount = new Map(); // artist -> count of songs found
