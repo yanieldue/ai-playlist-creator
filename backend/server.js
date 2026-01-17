@@ -3784,8 +3784,11 @@ DO NOT include any text outside the JSON.`
       console.log(`🔍 Pre-filtering ${recommendedTracks.length} mined tracks before API calls...`);
 
       const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
+      // Note: must check for null/undefined before comparing, as null <= 50 is true in JS
       const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
-                                      genreData.trackConstraints.popularity.max <= 50;
+                                      (genreData.trackConstraints.popularity.max !== null &&
+                                       genreData.trackConstraints.popularity.max !== undefined &&
+                                       genreData.trackConstraints.popularity.max <= 50);
 
       if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter) {
         try {
@@ -4133,8 +4136,11 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
 
         // Run quick filter if we have genre, explicit avoidances, or underground preference
         const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
+        // Note: must check for null/undefined before comparing, as null <= 50 is true in JS
         const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
-                                        genreData.trackConstraints.popularity.max <= 50;
+                                        (genreData.trackConstraints.popularity.max !== null &&
+                                         genreData.trackConstraints.popularity.max !== undefined &&
+                                         genreData.trackConstraints.popularity.max <= 50);
         if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
