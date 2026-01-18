@@ -101,7 +101,7 @@ class AppleMusicService {
       preview_url: track.attributes.previews?.[0]?.url || null,
       platform: 'apple',
       isrc: track.attributes.isrc,
-      url: track.attributes.url
+      url: track.attributes.url || `https://music.apple.com/us/song/${track.id}`
     }));
   }
 
@@ -262,25 +262,30 @@ class AppleMusicService {
       return [];
     }
 
-    return playlist.tracks.map(track => ({
-      id: track.id,
-      name: track.attributes.name,
-      uri: `apple:track:${track.id}`,
-      artists: [{
-        name: track.attributes.artistName
-      }],
-      album: {
-        name: track.attributes.albumName,
-        images: track.attributes.artwork ? [{
-          url: track.attributes.artwork.url
-            .replace('{w}', '300')
-            .replace('{h}', '300')
-        }] : []
-      },
-      duration_ms: track.attributes.durationInMillis,
-      platform: 'apple',
-      url: track.attributes.url || null
-    }));
+    return playlist.tracks.map(track => {
+      // Apple Music URL - use provided URL or construct one from the track ID
+      const trackUrl = track.attributes.url || `https://music.apple.com/us/song/${track.id}`;
+
+      return {
+        id: track.id,
+        name: track.attributes.name,
+        uri: `apple:track:${track.id}`,
+        artists: [{
+          name: track.attributes.artistName
+        }],
+        album: {
+          name: track.attributes.albumName,
+          images: track.attributes.artwork ? [{
+            url: track.attributes.artwork.url
+              .replace('{w}', '300')
+              .replace('{h}', '300')
+          }] : []
+        },
+        duration_ms: track.attributes.durationInMillis,
+        platform: 'apple',
+        url: trackUrl
+      };
+    });
   }
 
   /**

@@ -32,6 +32,7 @@ const PlaylistGenerator = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [refineLoadingMessage, setRefineLoadingMessage] = useState('');
   const [loadingMoreSongs, setLoadingMoreSongs] = useState(false);
   const [editedPlaylistName, setEditedPlaylistName] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
@@ -47,6 +48,8 @@ const PlaylistGenerator = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [lastRetryFunction, setLastRetryFunction] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showGeneratingChatModal, setShowGeneratingChatModal] = useState(false);
+  const [generatingChatPrompt, setGeneratingChatPrompt] = useState('');
   const [showProductTour, setShowProductTour] = useState(false);
 
   // Search state
@@ -66,6 +69,7 @@ const PlaylistGenerator = () => {
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showPromptTooltip, setShowPromptTooltip] = useState(false);
   const optionsMenuRef = useRef(null);
+  const refineChatBodyRef = useRef(null);
 
   // Toast notifications
   const [toasts, setToasts] = useState([]);
@@ -541,6 +545,13 @@ const PlaylistGenerator = () => {
     return () => document.body.classList.remove('modal-open');
   }, [showArtistSettingsModal, showPlaylistModal]);
 
+  // Auto-scroll refine chat to bottom when opened or when messages change
+  useEffect(() => {
+    if (showChatModal && refineChatBodyRef.current) {
+      refineChatBodyRef.current.scrollTop = refineChatBodyRef.current.scrollHeight;
+    }
+  }, [showChatModal, chatMessages, refineLoadingMessage]);
+
   const fetchUserProfile = async () => {
     // Determine which platform userId to use based on activePlatform
     let platformUserId = userId;
@@ -877,7 +888,9 @@ const PlaylistGenerator = () => {
     // Only set initial state on first attempt
     if (retryCount === 0) {
       setLoading(true);
-      setShowGeneratingModal(true);
+      setGeneratingChatPrompt(prompt.trim());
+      setShowGeneratingChatModal(true);
+      setShowGeneratingModal(false); // Hide old modal
       setError('');
       setGeneratedPlaylist(null);
     }
@@ -899,6 +912,7 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount);
       clearInterval(messageInterval);
       setGeneratingMessage('');
+      setShowGeneratingChatModal(false);
       setShowGeneratingModal(false);
 
       // Store the original prompt and requested song count with the playlist
@@ -962,6 +976,7 @@ const PlaylistGenerator = () => {
         setIsAuthenticated(false);
         setGeneratingError('Your session has expired. Please reconnect with Spotify.');
         setTimeout(() => {
+          setShowGeneratingChatModal(false);
           setShowGeneratingModal(false);
           setGeneratingError(null);
         }, 3000);
@@ -1242,12 +1257,31 @@ const PlaylistGenerator = () => {
     const userMessage = chatInput.trim();
     const maxRetries = 2; // Try up to 3 times total (initial + 2 retries)
 
+    // Refine loading messages
+    const refineMessages = [
+      'Analyzing your request...',
+      'Finding the perfect tracks...',
+      'Curating your updated playlist...',
+      'Almost there...',
+      'Putting the finishing touches...'
+    ];
+
+    let messageInterval;
+
     // Only clear input and add to chat on first attempt
     if (retryCount === 0) {
       setChatInput('');
       setChatLoading(true);
       // Add user message to chat
       setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+
+      // Start cycling through loading messages
+      let messageIndex = 0;
+      setRefineLoadingMessage(refineMessages[messageIndex]);
+      messageInterval = setInterval(() => {
+        messageIndex = (messageIndex + 1) % refineMessages.length;
+        setRefineLoadingMessage(refineMessages[messageIndex]);
+      }, 1500);
     }
 
     try {
@@ -1284,10 +1318,183 @@ const PlaylistGenerator = () => {
         excludedSongUris
       );
 
+      // Clear loading message interval and reset
+      if (messageInterval) clearInterval(messageInterval);
+      setRefineLoadingMessage('');
+
+      // Generate dynamic response based on user's request and accumulated context
+      const generateDynamicResponse = (message, allMessages, originalPrompt) => {
+        // Collect all refinements (user messages) to build cumulative context
+        const allRefinements = allMessages
+          .filter(m => m.role === 'user')
+          .map(m => m.content);
+        allRefinements.push(message); // Include current message
+
+        // Extract artists from text
+        const extractArtists = (text) => {
+          const artists = [];
+          // Words that should never be treated as artist names
+          const excludeWords = ['only', 'new', 'artists', 'songs', 'tracks', 'music', 'more', 'less', 'the', 'some', 'any', 'all', 'playlist', 'vibe', 'mood', 'feel', 'energy', 'chill', 'upbeat', 'relaxing', 'happy', 'sad'];
+
+          // Match patterns like "artists like X and Y", "from artlist like X"
+          const patterns = [
+            /(?:artlist|artists?)\s+like\s+([A-Za-z0-9\s]+?)(?:\s+and\s+([A-Za-z0-9\s]+?))?(?:\.|,|$)/gi,
+            /similar\s+to\s+([A-Za-z0-9\s]+?)(?:\s+and\s+([A-Za-z0-9\s]+?))?(?:\.|,|$)/gi
+          ];
+
+          const isValidArtist = (name) => {
+            if (!name) return false;
+            const trimmed = name.trim().toLowerCase();
+            return trimmed.length > 2 &&
+                   trimmed.length < 40 &&
+                   !excludeWords.includes(trimmed) &&
+                   !trimmed.match(/^(from|the|a|an|with|for|and|or)$/i);
+          };
+
+          for (const pattern of patterns) {
+            let match;
+            const regex = new RegExp(pattern.source, pattern.flags);
+            while ((match = regex.exec(text)) !== null) {
+              if (isValidArtist(match[1])) {
+                artists.push(match[1].trim());
+              }
+              if (isValidArtist(match[2])) {
+                artists.push(match[2].trim());
+              }
+            }
+          }
+          return [...new Set(artists)];
+        };
+
+        // Extract time frame from text
+        const extractTimeFrame = (text) => {
+          const yearMatch = text.match(/(?:from\s+)?(?:the\s+)?(?:last|past)\s+(\d+)\s+years?/i);
+          if (yearMatch) return `songs from the last ${yearMatch[1]} year${yearMatch[1] === '1' ? '' : 's'}`;
+
+          const decadeMatch = text.match(/(?:from\s+)?(?:the\s+)?(\d{4})s/i);
+          if (decadeMatch) return `songs from the ${decadeMatch[1]}s`;
+
+          const specificYearMatch = text.match(/(?:from\s+)?(\d{4})(?:\s|$|,|\.)/);
+          if (specificYearMatch) return `songs from ${specificYearMatch[1]}`;
+
+          const lowerText = text.toLowerCase();
+          if (lowerText.includes('recent') || lowerText.includes('new release') || lowerText.includes('latest')) return 'recent releases';
+          if (lowerText.includes('classic') || lowerText.includes('oldies') || lowerText.includes('throwback')) return 'classic tracks';
+          return null;
+        };
+
+        // Extract mood/vibe from text
+        const extractMood = (text) => {
+          const lowerText = text.toLowerCase();
+          if (lowerText.includes('upbeat') || lowerText.includes('energetic') || lowerText.includes('high energy')) return 'an upbeat';
+          if (lowerText.includes('chill') || lowerText.includes('relaxing') || lowerText.includes('calm') || lowerText.includes('mellow')) return 'a chill';
+          if (lowerText.includes('sad') || lowerText.includes('melancholy') || lowerText.includes('emotional')) return 'a melancholy';
+          if (lowerText.includes('happy') || lowerText.includes('joyful') || lowerText.includes('feel good')) return 'a feel-good';
+          if (lowerText.includes('workout') || lowerText.includes('gym') || lowerText.includes('exercise')) return 'a workout';
+          if (lowerText.includes('party') || lowerText.includes('dance') || lowerText.includes('club')) return 'a party';
+          if (lowerText.includes('focus') || lowerText.includes('study') || lowerText.includes('concentration')) return 'a focus';
+          if (lowerText.includes('romantic') || lowerText.includes('love')) return 'a romantic';
+          return null;
+        };
+
+        // Extract genre from text
+        const extractGenre = (text) => {
+          const genres = [
+            { pattern: /hip[\s-]?hop/i, name: 'hip-hop' },
+            { pattern: /r&b|rnb|r and b/i, name: 'R&B' },
+            { pattern: /\bpop\b/i, name: 'pop' },
+            { pattern: /\brock\b/i, name: 'rock' },
+            { pattern: /\bjazz\b/i, name: 'jazz' },
+            { pattern: /electronic|edm/i, name: 'electronic' },
+            { pattern: /country/i, name: 'country' },
+            { pattern: /indie/i, name: 'indie' },
+            { pattern: /folk/i, name: 'folk' },
+            { pattern: /metal/i, name: 'metal' },
+            { pattern: /classical/i, name: 'classical' },
+            { pattern: /soul/i, name: 'soul' },
+            { pattern: /funk/i, name: 'funk' },
+            { pattern: /reggae/i, name: 'reggae' },
+            { pattern: /latin/i, name: 'Latin' },
+            { pattern: /k-?pop/i, name: 'K-pop' },
+            { pattern: /\brap\b/i, name: 'rap' }
+          ];
+          for (const { pattern, name } of genres) {
+            if (pattern.test(text)) return name;
+          }
+          return null;
+        };
+
+        // Combine all text for context extraction
+        const allText = [originalPrompt, ...allRefinements].join(' ');
+
+        // Extract elements
+        const artists = extractArtists(allText);
+        const currentTimeFrame = extractTimeFrame(message);
+        const allTimeFrame = extractTimeFrame(allText);
+        const mood = extractMood(message) || extractMood(allText);
+        const genre = extractGenre(message) || extractGenre(allText);
+
+        // Build the response dynamically like Spotify
+        const parts = [];
+
+        // Start with time frame if from current message
+        if (currentTimeFrame) {
+          parts.push(currentTimeFrame);
+        }
+
+        // Add mood
+        if (mood) {
+          parts.push(`${mood} vibe`);
+        }
+
+        // Add genre
+        if (genre) {
+          parts.push(`${genre} tracks`);
+        }
+
+        // Build artist string
+        let artistString = '';
+        if (artists.length > 0) {
+          const uniqueArtists = artists.slice(0, 3);
+          if (uniqueArtists.length === 1) {
+            artistString = `a similar vibe to ${uniqueArtists[0]}`;
+          } else if (uniqueArtists.length === 2) {
+            artistString = `a similar vibe to artists like ${uniqueArtists[0]} and ${uniqueArtists[1]}`;
+          } else {
+            artistString = `a similar vibe to artists like ${uniqueArtists.slice(0, -1).join(', ')} and ${uniqueArtists[uniqueArtists.length - 1]}`;
+          }
+        }
+
+        // Construct the final response
+        let response = "Here's a playlist";
+
+        if (parts.length > 0 && artistString) {
+          response += ` with ${parts.join(', ')}, featuring ${artistString}.`;
+        } else if (parts.length > 0) {
+          response += ` with ${parts.join(', ')}.`;
+        } else if (artistString) {
+          response += ` with ${artistString}.`;
+        } else {
+          // Fallback based on action in current message
+          const lowerMessage = message.toLowerCase();
+          if (lowerMessage.includes('remove') || lowerMessage.includes('take out') || lowerMessage.includes('without')) {
+            response = "Done! I've updated your playlist with those changes.";
+          } else if (lowerMessage.includes('more') || lowerMessage.includes('add')) {
+            response = "Here's your updated playlist with the new additions.";
+          } else if (lowerMessage.includes('replace') || lowerMessage.includes('swap')) {
+            response = "Done! I've swapped out those tracks.";
+          } else {
+            response = "Here's your updated playlist.";
+          }
+        }
+
+        return response;
+      };
+
       // Add AI response to chat messages
       const aiResponse = {
         role: 'assistant',
-        content: `I've updated your playlist! I ${userMessage.toLowerCase().includes('add') ? 'added' : userMessage.toLowerCase().includes('remove') ? 'removed' : 'adjusted'} the tracks based on your request.`
+        content: generateDynamicResponse(userMessage, chatMessages, generatedPlaylist.originalPrompt)
       };
 
       const updatedChatMessages = [...chatMessages, { role: 'user', content: userMessage }, aiResponse];
@@ -1354,6 +1561,10 @@ const PlaylistGenerator = () => {
 
       // Show prominent error toast
       showToast(`Failed to refine playlist: ${errorMessage}`, 'error');
+
+      // Clear loading message on error
+      if (messageInterval) clearInterval(messageInterval);
+      setRefineLoadingMessage('');
     } finally {
       setChatLoading(false);
     }
@@ -2120,7 +2331,7 @@ const PlaylistGenerator = () => {
           </div>
 
           {/* Chat Input - Fixed above tab bar */}
-          {activeTab === 'home' && (
+          {activeTab === 'home' && !showGeneratingChatModal && (
             <div className="chat-input-container-apple">
               {showOptionsMenu && (
                 <div
@@ -2582,7 +2793,7 @@ const PlaylistGenerator = () => {
           {/* Chat Modal */}
           {showChatModal && (
             <div className="chat-modal-overlay" onClick={() => setShowChatModal(false)}>
-              <div className="chat-modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="chat-modal-content refine-chat-modal" onClick={(e) => e.stopPropagation()}>
                 <div className="chat-modal-header">
                   <h2>Refine Playlist</h2>
                   <button onClick={() => setShowChatModal(false)} className="close-modal-button">
@@ -2590,25 +2801,35 @@ const PlaylistGenerator = () => {
                   </button>
                 </div>
 
-                <div className="chat-modal-body">
-                  {/* Original Prompt */}
-                  <div className="chat-message original-prompt">
-                    <div className="chat-message-label">Original Request</div>
+                <div className="chat-modal-body refine-chat-body" ref={refineChatBodyRef}>
+                  {/* Original Prompt - styled like user message */}
+                  <div className="chat-message user">
                     <div className="chat-message-content">
                       {generatedPlaylist?.originalPrompt || generatedPlaylist?.playlistName}
                     </div>
                   </div>
 
                   {/* Chat History */}
-                  <div className="chat-history">
-                    {chatMessages.map((msg, index) => (
-                      <div key={index} className={`chat-message ${msg.role}`}>
-                        <div className="chat-message-content">
-                          {msg.content}
-                        </div>
+                  {chatMessages.map((msg, index) => (
+                    <div key={index} className={`chat-message ${msg.role}`}>
+                      <div className="chat-message-content">
+                        {msg.content}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
+
+                  {/* Loading indicator - no bubble, small text */}
+                  {chatLoading && refineLoadingMessage && (
+                    <div className="loading-status">
+                      <div className="wave-loader-small">
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                      </div>
+                      <span className="loading-status-text">{refineLoadingMessage}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Chat Input */}
@@ -2647,6 +2868,62 @@ const PlaylistGenerator = () => {
                       )}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ChatGPT-style Generating Chat Modal */}
+          {showGeneratingChatModal && (
+            <div className="generating-chat-modal-overlay">
+              <div className="generating-chat-modal-content">
+                <div className="generating-chat-header">
+                  <h2>Creating Your Playlist</h2>
+                  <button
+                    onClick={() => {
+                      setShowGeneratingChatModal(false);
+                      setLoading(false);
+                      setGeneratingError(null);
+                    }}
+                    className="close-modal-button"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="generating-chat-body">
+                  {/* User's prompt */}
+                  <div className="chat-message user">
+                    <div className="chat-message-content">
+                      {generatingChatPrompt}
+                    </div>
+                  </div>
+
+                  {/* Loading indicator - no bubble, small text */}
+                  {generatingError ? (
+                    <div className="generating-error-standalone">
+                      <span style={{ color: '#ef4444' }}>{generatingError}</span>
+                      <button
+                        onClick={() => {
+                          setGeneratingError(null);
+                          handleGeneratePlaylist();
+                        }}
+                        className="retry-button-inline"
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="loading-status">
+                      <div className="wave-loader-small">
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                      </div>
+                      <span className="loading-status-text">{generatingMessage || 'Starting to create your playlist...'}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

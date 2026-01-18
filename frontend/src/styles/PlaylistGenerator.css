@@ -3708,3 +3708,338 @@
     font-size: 13px;
   }
 }
+
+
+/* Create Playlist Modal Options */
+.create-playlist-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+.create-playlist-options .option-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.create-playlist-options .option-row:hover {
+  background: #f0f0f0;
+}
+
+.create-playlist-options .option-row.active {
+  background: #e8f4ff;
+}
+
+.create-playlist-options .option-row input[type="number"] {
+  width: 60px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  margin-left: auto;
+  font-size: 14px;
+}
+
+.create-playlist-options .option-row span {
+  color: #333;
+  font-size: 14px;
+}
+
+/* ChatGPT-style Generating Chat Modal */
+.generating-chat-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10002;
+  backdrop-filter: blur(4px);
+}
+
+.generating-chat-modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.generating-chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.generating-chat-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111;
+}
+
+.generating-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.generating-chat-body .chat-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+}
+
+.generating-chat-body .chat-message.user {
+  align-self: flex-end;
+}
+
+.generating-chat-body .chat-message.user .chat-message-content {
+  background: #fbbf24;
+  color: #000;
+  border-radius: 18px 18px 4px 18px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.generating-chat-body .chat-message.assistant {
+  align-self: flex-start;
+}
+
+.generating-chat-body .chat-message.assistant .chat-message-content {
+  background: #e9e9eb;
+  color: #000;
+  border-radius: 18px 18px 18px 4px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.generating-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 4px;
+}
+
+.typing-indicator .dot {
+  width: 6px;
+  height: 6px;
+  background: #888;
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-indicator .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.typing-indicator .dot:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.generating-error {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.retry-button-inline {
+  background: #fbbf24;
+  color: #000;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.2s ease;
+}
+
+.retry-button-inline:hover {
+  background: #f59e0b;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .generating-chat-modal-content {
+    width: 95%;
+    max-height: 70vh;
+  }
+
+  .generating-chat-body .chat-message {
+    max-width: 90%;
+  }
+}
+
+/* Refine Chat Modal - Match generating chat style */
+.refine-chat-modal .chat-modal-body.refine-chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+
+.refine-chat-modal .chat-message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+}
+
+.refine-chat-modal .chat-message.user {
+  align-self: flex-end;
+}
+
+.refine-chat-modal .chat-message.user .chat-message-content {
+  background: #fbbf24;
+  color: #000;
+  border-radius: 18px 18px 4px 18px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.refine-chat-modal .chat-message.assistant {
+  align-self: flex-start;
+}
+
+.refine-chat-modal .chat-message.assistant .chat-message-content {
+  background: #e9e9eb;
+  color: #000;
+  border-radius: 18px 18px 18px 4px;
+  padding: 8px 12px;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .refine-chat-modal .chat-message {
+    max-width: 90%;
+  }
+}
+
+/* Loading status - no bubble, small text like Spotify/ChatGPT */
+.loading-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  padding-left: 12px;
+  align-self: flex-start;
+}
+
+.loading-status-text {
+  font-size: 13px;
+  color: #888;
+  font-weight: 400;
+}
+
+.generating-error-standalone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 0;
+  margin-left: 4px;
+  font-size: 14px;
+}
+
+/* Make typing indicator dots smaller for loading status */
+.loading-status .typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.loading-status .typing-indicator .dot {
+  width: 4px;
+  height: 4px;
+  background: #888;
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out both;
+}
+
+/* Small wave loader for loading status */
+.wave-loader-small {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+}
+
+.wave-loader-small .wave-bar {
+  width: 3px;
+  height: 10px;
+  background: #888;
+  border-radius: 2px;
+  animation: wave-animation 1s ease-in-out infinite;
+}
+
+.wave-loader-small .wave-bar:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.wave-loader-small .wave-bar:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.wave-loader-small .wave-bar:nth-child(3) {
+  animation-delay: 0.2s;
+}
+
+.wave-loader-small .wave-bar:nth-child(4) {
+  animation-delay: 0.3s;
+}
+
+@keyframes wave-animation {
+  0%, 100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
