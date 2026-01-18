@@ -3960,6 +3960,15 @@ Respond ONLY with valid JSON:
 
       if (soundChartsDiscoveredSongs.length > 0) {
         console.log(`✓ SoundCharts discovered ${soundChartsDiscoveredSongs.length} songs`);
+      } else {
+        console.log('⚠️  SoundCharts returned 0 songs - will fall back to search queries');
+      }
+    } else {
+      // Log why SoundCharts isn't being used
+      if (seedArtists.length === 0) {
+        console.log('⚠️  No seed artists available - skipping SoundCharts discovery');
+      } else if (!process.env.SOUNDCHARTS_APP_ID) {
+        console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
       }
     }
 
