@@ -1308,6 +1308,8 @@ const PlaylistGenerator = () => {
       const excludedSongUris = (generatedPlaylist.excludedSongs || []).map(song => song.uri);
 
       // Call AI to adjust playlist based on user request
+      // Pass playlistId so backend can load original genre data (seed artists, popularity, etc.)
+      const playlistIdForRefinement = generatedPlaylist.playlistId || generatedPlaylist.draftId;
       const result = await playlistService.generatePlaylist(
         refinementPrompt,
         userId,
@@ -1315,7 +1317,8 @@ const PlaylistGenerator = () => {
         allowExplicit,
         newArtistsOnly,
         requestedCount,
-        excludedSongUris
+        excludedSongUris,
+        playlistIdForRefinement
       );
 
       // Clear loading message interval and reset

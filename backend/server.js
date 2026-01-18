@@ -3832,8 +3832,15 @@ Respond ONLY with valid JSON:
     // Load existing playlist data if playlistId is provided (for refinements/refreshes)
     let existingPlaylistData = null;
     if (playlistId && userId) {
+      console.log(`🔍 Looking up existing playlist: ${playlistId} for user ${userId}`);
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       existingPlaylistData = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+      if (existingPlaylistData) {
+        console.log(`✓ Found existing playlist: "${existingPlaylistData.playlistName || 'Untitled'}"`);
+      } else {
+        console.log(`⚠️  Playlist ${playlistId} not found in memory cache`);
+      }
 
       // If adding more songs to existing playlist, preserve original genre data (especially requestedArtists and popularity preference)
       if (existingPlaylistData && existingPlaylistData.genreData) {
