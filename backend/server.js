@@ -7663,7 +7663,9 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
                         releaseYear: genreData.era?.yearRange?.min || genreData.era?.yearRange?.max ? {
                           min: genreData.era.yearRange.min,
                           max: genreData.era.yearRange.max
-                        } : null
+                        } : null,
+                        // Pass exclusive mode for proper artist discovery balance
+                        exclusiveMode: genreData.artistConstraints?.exclusiveMode === true || genreData.artistConstraints?.exclusiveMode === 'true'
                       };
 
                       try {
