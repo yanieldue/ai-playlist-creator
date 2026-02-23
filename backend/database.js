@@ -15,6 +15,8 @@ db.exec(`
     platform TEXT,
     user_id TEXT,
     plan TEXT DEFAULT 'free',
+    weekly_generations INTEGER DEFAULT 0,
+    weekly_reset_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT
   );
@@ -86,13 +88,26 @@ function migrateDatabase() {
     console.log('✓ Added storefront column');
   }
 
-  // Add plan column to users table if it doesn't exist
+  // Add plan and weekly generation columns to users table if they don't exist
   const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
   const hasPlan = usersTableInfo.some(col => col.name === 'plan');
+  const hasWeeklyGenerations = usersTableInfo.some(col => col.name === 'weekly_generations');
+  const hasWeeklyResetAt = usersTableInfo.some(col => col.name === 'weekly_reset_at');
+
   if (!hasPlan) {
     console.log('Adding plan column to users table...');
     db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'");
     console.log('✓ Added plan column');
+  }
+  if (!hasWeeklyGenerations) {
+    console.log('Adding weekly_generations column to users table...');
+    db.exec('ALTER TABLE users ADD COLUMN weekly_generations INTEGER DEFAULT 0');
+    console.log('✓ Added weekly_generations column');
+  }
+  if (!hasWeeklyResetAt) {
+    console.log('Adding weekly_reset_at column to users table...');
+    db.exec('ALTER TABLE users ADD COLUMN weekly_reset_at TEXT');
+    console.log('✓ Added weekly_reset_at column');
   }
 
   if (hasUserMusicToken && hasStorefront) {
@@ -129,6 +144,16 @@ const userOps = {
   // Update userId
   updateUserId: db.prepare(`
     UPDATE users SET user_id = ?, updated_at = ? WHERE email = ?
+  `),
+
+  // Increment weekly generation count
+  incrementWeeklyGenerations: db.prepare(`
+    UPDATE users SET weekly_generations = weekly_generations + 1 WHERE email = ?
+  `),
+
+  // Reset weekly generation count
+  resetWeeklyGenerations: db.prepare(`
+    UPDATE users SET weekly_generations = 1, weekly_reset_at = ? WHERE email = ?
   `),
 
   // Delete user
@@ -256,12 +281,24 @@ class DatabaseService {
       password: user.password,
       platform: user.platform,
       userId: user.user_id,
+      plan: user.plan || 'free',
+      weeklyGenerations: user.weekly_generations || 0,
+      weeklyResetAt: user.weekly_reset_at || null,
       createdAt: user.created_at,
       connectedPlatforms: {
         spotify: Boolean(user.spotify),
         apple: Boolean(user.apple)
       }
     };
+  }
+
+  incrementWeeklyGenerations(email) {
+    userOps.incrementWeeklyGenerations.run(email);
+  }
+
+  resetWeeklyGenerations(email) {
+    const now = new Date().toISOString();
+    userOps.resetWeeklyGenerations.run(now, email);
   }
 
   createUser(email, password, platform, userId = null) {

@@ -3275,6 +3275,34 @@ app.post('/api/generate-playlist', async (req, res) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    // Weekly generation limit for free users
+    const requestEmail = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (requestEmail) {
+      const userRecord = await db.getUser(requestEmail);
+      if (userRecord && userRecord.plan !== 'paid') {
+        const now = new Date();
+        const resetAt = userRecord.weeklyResetAt ? new Date(userRecord.weeklyResetAt) : null;
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+        if (resetAt && (now - resetAt) < sevenDaysMs) {
+          // Same week - check limit
+          if (userRecord.weeklyGenerations >= 1) {
+            const nextReset = new Date(resetAt.getTime() + sevenDaysMs);
+            return res.status(429).json({
+              error: 'You have reached your weekly playlist limit. Upgrade to generate more playlists.',
+              code: 'WEEKLY_LIMIT_REACHED',
+              resetsAt: nextReset.toISOString()
+            });
+          } else {
+            await db.incrementWeeklyGenerations(requestEmail);
+          }
+        } else {
+          // New week or first generation - reset counter (sets to 1) and allow
+          await db.resetWeeklyGenerations(requestEmail);
+        }
+      }
+    }
+
     // Extract song count from prompt if user specified it
     // Look for patterns like "30 songs", "create 25 tracks", "give me 20 songs", etc.
     const songCountMatch = prompt.match(/\b(\d+)\s+(?:songs?|tracks?)\b/i);

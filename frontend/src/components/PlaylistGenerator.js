@@ -1002,6 +1002,16 @@ const PlaylistGenerator = () => {
         return;
       }
 
+      // If weekly limit reached, don't retry — show upgrade prompt
+      if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
+        const resetsAt = err.response.data.resetsAt;
+        const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
+        setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}. Upgrade for unlimited generations.`);
+        isGeneratingRef.current = false;
+        setLoading(false);
+        return;
+      }
+
       // Automatic retry with exponential backoff
       if (retryCount < maxRetries) {
         const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s

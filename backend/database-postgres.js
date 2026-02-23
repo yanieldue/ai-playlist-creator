@@ -38,6 +38,8 @@ async function initializeTables() {
         platform TEXT,
         user_id TEXT,
         plan TEXT DEFAULT 'free',
+        weekly_generations INTEGER DEFAULT 0,
+        weekly_reset_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP
       );
@@ -125,10 +127,12 @@ async function migrateDatabase() {
       ADD COLUMN IF NOT EXISTS storefront TEXT
     `);
 
-    // Add plan column to users table if it doesn't exist
+    // Add plan and weekly generation columns to users table if they don't exist
     await client.query(`
       ALTER TABLE users
-      ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free'
+      ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free',
+      ADD COLUMN IF NOT EXISTS weekly_generations INTEGER DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS weekly_reset_at TIMESTAMP
     `);
 
     console.log('✓ PostgreSQL migrations complete');
@@ -151,6 +155,8 @@ class DatabaseService {
   async getUser(email) {
     const result = await pool.query(`
       SELECT u.email, u.password, u.platform, u.user_id as "userId",
+             u.plan, u.weekly_generations as "weeklyGenerations",
+             u.weekly_reset_at as "weeklyResetAt",
              u.created_at as "createdAt", u.updated_at as "updatedAt",
              COALESCE(cp.spotify, false) as spotify,
              COALESCE(cp.apple, false) as apple
@@ -167,12 +173,29 @@ class DatabaseService {
       password: row.password,
       platform: row.platform,
       userId: row.userId,
+      plan: row.plan || 'free',
+      weeklyGenerations: row.weeklyGenerations || 0,
+      weeklyResetAt: row.weeklyResetAt || null,
       createdAt: row.createdAt,
       connectedPlatforms: {
         spotify: row.spotify,
         apple: row.apple
       }
     };
+  }
+
+  async incrementWeeklyGenerations(email) {
+    await pool.query(
+      `UPDATE users SET weekly_generations = weekly_generations + 1 WHERE email = $1`,
+      [email]
+    );
+  }
+
+  async resetWeeklyGenerations(email) {
+    await pool.query(
+      `UPDATE users SET weekly_generations = 1, weekly_reset_at = NOW() WHERE email = $1`,
+      [email]
+    );
   }
 
   async createUser(email, password, platform, userId = null) {
