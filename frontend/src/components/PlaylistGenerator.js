@@ -47,6 +47,7 @@ const PlaylistGenerator = () => {
   const [generatingMessage, setGeneratingMessage] = useState('');
   const [showGeneratingModal, setShowGeneratingModal] = useState(false);
   const [generatingError, setGeneratingError] = useState(null);
+  const [weeklyLimitReached, setWeeklyLimitReached] = useState(false);
   const [errorInfo, setErrorInfo] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const [lastRetryFunction, setLastRetryFunction] = useState(null);
@@ -997,6 +998,7 @@ const PlaylistGenerator = () => {
           setShowGeneratingChatModal(false);
           setShowGeneratingModal(false);
           setGeneratingError(null);
+          setWeeklyLimitReached(false);
         }, 3000);
         setLoading(false);
         return;
@@ -1006,7 +1008,8 @@ const PlaylistGenerator = () => {
       if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
         const resetsAt = err.response.data.resetsAt;
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
-        setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}. Upgrade for unlimited generations.`);
+        setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}.`);
+        setWeeklyLimitReached(true);
         isGeneratingRef.current = false;
         setLoading(false);
         return;
@@ -2549,6 +2552,7 @@ const PlaylistGenerator = () => {
                       onClick={() => {
                         setShowGeneratingModal(false);
                         setGeneratingError(null);
+                        setWeeklyLimitReached(false);
                       }}
                       className="close-modal-button"
                     >
@@ -2559,20 +2563,35 @@ const PlaylistGenerator = () => {
                 <div className="generating-modal-body">
                   {generatingError ? (
                     <>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>{weeklyLimitReached ? '🔒' : '⚠️'}</div>
                       <p className="generating-modal-message" style={{ color: '#ef4444' }}>
                         {generatingError}
                       </p>
-                      <button
-                        onClick={() => {
-                          setShowGeneratingModal(false);
-                          setGeneratingError(null);
-                        }}
-                        className="primary-button"
-                        style={{ marginTop: '20px' }}
-                      >
-                        Close
-                      </button>
+                      {weeklyLimitReached ? (
+                        <button
+                          onClick={() => {
+                            setShowGeneratingModal(false);
+                            setGeneratingError(null);
+                            setWeeklyLimitReached(false);
+                            setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
+                          }}
+                          className="primary-button"
+                          style={{ marginTop: '20px' }}
+                        >
+                          Upgrade
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setShowGeneratingModal(false);
+                            setGeneratingError(null);
+                          }}
+                          className="primary-button"
+                          style={{ marginTop: '20px' }}
+                        >
+                          Close
+                        </button>
+                      )}
                     </>
                   ) : (
                     <>
@@ -2962,6 +2981,7 @@ const PlaylistGenerator = () => {
                       setShowGeneratingChatModal(false);
                       setLoading(false);
                       setGeneratingError(null);
+                      setWeeklyLimitReached(false);
                     }}
                     className="close-modal-button"
                   >
@@ -2981,15 +3001,31 @@ const PlaylistGenerator = () => {
                   {generatingError ? (
                     <div className="generating-error-standalone">
                       <span style={{ color: '#ef4444' }}>{generatingError}</span>
-                      <button
-                        onClick={() => {
-                          setGeneratingError(null);
-                          handleGeneratePlaylist();
-                        }}
-                        className="retry-button-inline"
-                      >
-                        Try Again
-                      </button>
+                      {weeklyLimitReached ? (
+                        <button
+                          onClick={() => {
+                            setShowGeneratingChatModal(false);
+                            setGeneratingError(null);
+                            setWeeklyLimitReached(false);
+                            setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
+                          }}
+                          className="retry-button-inline"
+                          style={{ background: '#af52de', color: '#fff' }}
+                        >
+                          Upgrade
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setGeneratingError(null);
+                            setWeeklyLimitReached(false);
+                            handleGeneratePlaylist();
+                          }}
+                          className="retry-button-inline"
+                        >
+                          Try Again
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div className="loading-status">
