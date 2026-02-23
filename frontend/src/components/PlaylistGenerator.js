@@ -1009,7 +1009,7 @@ const PlaylistGenerator = () => {
         const resetsAt = err.response.data.resetsAt;
         if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
-        setGeneratingError(`Free plan allows 1 playlist per week. You've already generated one — come back on ${resetDate} to create another.`);
+        setGeneratingError(`You've hit your weekly limit! Free accounts get 1 playlist per week. Come back on ${resetDate} to generate again.`);
         setWeeklyLimitReached(true);
         isGeneratingRef.current = false;
         setLoading(false);
@@ -2043,7 +2043,7 @@ const PlaylistGenerator = () => {
         const resetsAt = err.response.data.resetsAt;
         if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
-        setGeneratingError(`Free plan allows 1 playlist per week. You've already generated one — come back on ${resetDate} to create another.`);
+        setGeneratingError(`You've hit your weekly limit! Free accounts get 1 playlist per week. Come back on ${resetDate} to generate again.`);
         setWeeklyLimitReached(true);
         // Keep modal open to show the error + Upgrade button
       } else {
@@ -3115,7 +3115,7 @@ const PlaylistGenerator = () => {
 
                 {isWeeklyLimitActive() && (
                   <div style={{ padding: '0 20px 12px', textAlign: 'center', fontSize: '13px', color: '#888' }}>
-                    🔒 Free plan: 1 playlist per week. Resets {getWeeklyLimitResetDate()}
+                    🔒 You've hit your weekly limit. Free accounts get 1 playlist per week — come back on {getWeeklyLimitResetDate()} to generate again.
                   </div>
                 )}
                 <div className="modal-footer">
