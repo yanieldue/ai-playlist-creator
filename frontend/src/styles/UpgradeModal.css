@@ -1,0 +1,175 @@
+.upgrade-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeInOverlay 0.2s ease-out;
+}
+
+.upgrade-modal {
+  position: relative;
+  background: #ffffff;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 360px;
+  padding: 28px 24px 24px;
+  animation: slideInUp 0.3s ease-out;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.upgrade-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.upgrade-close:hover {
+  background: #e0e0e0;
+}
+
+.upgrade-lock-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+.upgrade-title {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1c1c1e;
+}
+
+.upgrade-feature-name {
+  margin: 0 0 10px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #af52de;
+}
+
+.upgrade-description {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+}
+
+.upgrade-divider {
+  height: 1px;
+  background: #e5e5ea;
+  margin: 0 0 16px 0;
+}
+
+.upgrade-benefits-label {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1c1e;
+  text-align: left;
+}
+
+.upgrade-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  text-align: left;
+}
+
+.upgrade-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #444;
+  padding: 3px 0;
+}
+
+.upgrade-check {
+  color: #34c759;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.upgrade-cta {
+  width: 100%;
+  padding: 14px;
+  background: #af52de;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: not-allowed;
+  opacity: 0.6;
+  font-family: inherit;
+}
+
+/* Dark mode */
+:root.dark-mode .upgrade-modal {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .upgrade-title {
+  color: #ffffff;
+}
+
+:root.dark-mode .upgrade-benefits-label {
+  color: #ffffff;
+}
+
+:root.dark-mode .upgrade-benefits li {
+  color: #ebebf5cc;
+}
+
+:root.dark-mode .upgrade-close {
+  background: #424245;
+  color: #ebebf5;
+}
+
+:root.dark-mode .upgrade-close:hover {
+  background: #545458;
+}
+
+:root.dark-mode .upgrade-divider {
+  background: #424245;
+}
+
+:root.dark-mode .upgrade-description {
+  color: #a0a0a0;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 480px) {
+  .upgrade-modal {
+    width: 95%;
+    padding: 24px 18px 20px;
+  }
+}

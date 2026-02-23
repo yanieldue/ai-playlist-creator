@@ -87,6 +87,7 @@ const SignupForm = ({ onSignupComplete }) => {
       localStorage.setItem('authToken', data.token);
       localStorage.setItem('userEmail', trimmedEmail);
       localStorage.setItem('musicPlatform', data.platform);
+      localStorage.setItem('userPlan', data.plan || 'free');
 
       console.log('SignupForm: Set userEmail to:', trimmedEmail);
 
@@ -139,6 +140,7 @@ const SignupForm = ({ onSignupComplete }) => {
       localStorage.setItem('userEmail', trimmedEmail);
       localStorage.setItem('musicPlatform', 'spotify');
       localStorage.setItem('inSignupFlow', 'true');
+      localStorage.setItem('userPlan', data.plan || 'free');
 
       console.log('Stored in localStorage:', {
         userEmail: localStorage.getItem('userEmail'),

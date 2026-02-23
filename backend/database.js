@@ -14,6 +14,7 @@ db.exec(`
     password TEXT NOT NULL,
     platform TEXT,
     user_id TEXT,
+    plan TEXT DEFAULT 'free',
     created_at TEXT NOT NULL,
     updated_at TEXT
   );
@@ -83,6 +84,15 @@ function migrateDatabase() {
     console.log('Adding storefront column to tokens table...');
     db.exec('ALTER TABLE tokens ADD COLUMN storefront TEXT');
     console.log('✓ Added storefront column');
+  }
+
+  // Add plan column to users table if it doesn't exist
+  const usersTableInfo = db.prepare("PRAGMA table_info(users)").all();
+  const hasPlan = usersTableInfo.some(col => col.name === 'plan');
+  if (!hasPlan) {
+    console.log('Adding plan column to users table...');
+    db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'");
+    console.log('✓ Added plan column');
   }
 
   if (hasUserMusicToken && hasStorefront) {

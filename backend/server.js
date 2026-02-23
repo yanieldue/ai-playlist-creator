@@ -1402,6 +1402,7 @@ app.post('/api/signup', async (req, res) => {
       email: normalizedEmail,
       platform: platform,
       userId: normalizedEmail,
+      plan: 'free',
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -1447,6 +1448,7 @@ app.post('/api/login', async (req, res) => {
       email: normalizedEmail,
       platform: user.platform,
       userId: normalizedEmail, // Always use email as userId
+      plan: user.plan || 'free',
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -1635,7 +1637,8 @@ app.get('/api/account/:email', async (req, res) => {
       },
       userId: memUser?.userId || dbUser.userId,
       spotifyUserId: platformUserIds?.spotify_user_id || memUser?.spotifyUserId,
-      appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId
+      appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
+      plan: dbUser.plan || 'free',
     });
   } catch (error) {
     console.error('Get account error:', error);

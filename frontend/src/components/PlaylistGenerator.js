@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import mp from '../utils/mixpanel';
+import { isPaid } from '../utils/plan';
+import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
 import Account from './Account';
@@ -52,6 +54,7 @@ const PlaylistGenerator = () => {
   const [showGeneratingChatModal, setShowGeneratingChatModal] = useState(false);
   const [generatingChatPrompt, setGeneratingChatPrompt] = useState('');
   const [showProductTour, setShowProductTour] = useState(false);
+  const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -305,6 +308,7 @@ const PlaylistGenerator = () => {
             console.log('PlaylistGenerator: Fetched account info from backend:', accountInfo);
             setConnectedPlatforms(accountInfo.connectedPlatforms);
             localStorage.setItem('connectedPlatforms', JSON.stringify(accountInfo.connectedPlatforms));
+            if (accountInfo.plan) localStorage.setItem('userPlan', accountInfo.plan);
 
             // Update platform userIds from backend (source of truth)
             if (accountInfo.spotifyUserId) {
@@ -924,8 +928,8 @@ const PlaylistGenerator = () => {
       // Store the original prompt and requested song count with the playlist
       const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), requestedSongCount: songCount, chatMessages: [], excludedSongs: [] };
 
-      // Auto-save draft to database for cross-device sync (only once per generation)
-      if (retryCount === 0) {
+      // Auto-save draft to database for cross-device sync (paid users only, only once per generation)
+      if (retryCount === 0 && isPaid()) {
         try {
           // Determine which platform userId to use
           let platformUserId = userId;
@@ -1600,6 +1604,10 @@ const PlaylistGenerator = () => {
   };
 
   const handleAddMoreSongs = async (retryCount = 0) => {
+    if (!isPaid()) {
+      setUpgradeModal({ open: true, feature: 'Add More Songs' });
+      return;
+    }
     if (!userId) {
       showToast('Error: Not logged in', 'error');
       return;
@@ -2049,6 +2057,10 @@ const PlaylistGenerator = () => {
   };
 
   const handleSearchInputChange = (e) => {
+    if (!isPaid()) {
+      setUpgradeModal({ open: true, feature: 'Search' });
+      return;
+    }
     const query = e.target.value;
     setSearchQuery(query);
 
@@ -2064,6 +2076,11 @@ const PlaylistGenerator = () => {
 
   return (
     <div className="playlist-generator">
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ open: false, feature: '' })}
+        featureName={upgradeModal.feature}
+      />
       {isAuthenticated && userId ? (
         <>
           {/* Top Navigation Bar - Apple Style */}
@@ -2164,8 +2181,8 @@ const PlaylistGenerator = () => {
                 {/* Page Title */}
                 <h1 className="page-title">Home</h1>
 
-                {/* Draft Playlists Section */}
-                {draftPlaylists.length > 0 && (
+                {/* Draft Playlists Section - paid only */}
+                {isPaid() && draftPlaylists.length > 0 && (
                   <div className="unfinished-playlists-section">
                     <div className="section-header">
                       <div>
@@ -2748,23 +2765,33 @@ const PlaylistGenerator = () => {
 
                       <div className="form-group">
                         <label htmlFor="update-frequency">Auto-Update Frequency</label>
-                        <select
-                          id="update-frequency"
-                          value={updateFrequency}
-                          onChange={(e) => setUpdateFrequency(e.target.value)}
-                          className="playlist-select"
-                        >
-                          <option value="never">Never - Keep playlist as is</option>
-                          <option value="daily">Daily - Update every day</option>
-                          <option value="weekly">Weekly - Update every week</option>
-                          <option value="monthly">Monthly - Update every month</option>
-                        </select>
+                        {isPaid() ? (
+                          <select
+                            id="update-frequency"
+                            value={updateFrequency}
+                            onChange={(e) => setUpdateFrequency(e.target.value)}
+                            className="playlist-select"
+                          >
+                            <option value="never">Never - Keep playlist as is</option>
+                            <option value="daily">Daily - Update every day</option>
+                            <option value="weekly">Weekly - Update every week</option>
+                            <option value="monthly">Monthly - Update every month</option>
+                          </select>
+                        ) : (
+                          <button
+                            className="upgrade-locked-row"
+                            onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
+                          >
+                            <span>🔒 Never (Free Plan)</span>
+                            <span className="upgrade-locked-badge">Upgrade</span>
+                          </button>
+                        )}
                         <p className="form-help-text">
                           Automatically update your playlist with fresh songs based on the same theme
                         </p>
                       </div>
 
-                      {updateFrequency !== 'never' && (
+                      {isPaid() && updateFrequency !== 'never' && (
                         <div className="form-group">
                           <label htmlFor="update-mode">Update Mode</label>
                           <select

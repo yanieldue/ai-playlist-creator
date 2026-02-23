@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import Icons from './Icons';
+import UpgradeModal from './UpgradeModal';
+import { isPaid } from '../utils/plan';
 import '../styles/Account.css';
 
 const Account = ({ onBack, showToast }) => {
@@ -17,6 +19,7 @@ const Account = ({ onBack, showToast }) => {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState('');
+  const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
 
   // Fallback toast function if not provided
   const toast = showToast || ((message, type) => {
@@ -260,10 +263,15 @@ const Account = ({ onBack, showToast }) => {
         const platformName = platform === 'spotify' ? 'Spotify' : 'Apple Music';
         toast(`${platformName} disconnected successfully`, 'success');
       } else {
-        // If connecting, check if another platform is already connected and warn
+        // If connecting, check if another platform is already connected
         if (platform === 'spotify') {
           // Check if Apple Music is already connected
           if (connectedPlatforms.apple) {
+            if (!isPaid()) {
+              setAccountLoading(false);
+              setUpgradeModal({ open: true, feature: 'Dual Platform' });
+              return;
+            }
             const confirmed = window.confirm(
               'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible. Do you want to continue?'
             );
@@ -292,6 +300,11 @@ const Account = ({ onBack, showToast }) => {
         } else if (platform === 'apple') {
           // Check if Spotify is already connected
           if (connectedPlatforms.spotify) {
+            if (!isPaid()) {
+              setAccountLoading(false);
+              setUpgradeModal({ open: true, feature: 'Dual Platform' });
+              return;
+            }
             const confirmed = window.confirm(
               'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible. Do you want to continue?'
             );
@@ -425,6 +438,11 @@ const Account = ({ onBack, showToast }) => {
 
   return (
     <div className="account-page">
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ open: false, feature: '' })}
+        featureName={upgradeModal.feature}
+      />
       <div className="account-header">
         <h1>Account</h1>
       </div>

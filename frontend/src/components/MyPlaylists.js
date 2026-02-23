@@ -3,6 +3,8 @@ import playlistService from '../services/api';
 import Icons from './Icons';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import ErrorMessage from './ErrorMessage';
+import UpgradeModal from './UpgradeModal';
+import { isPaid } from '../utils/plan';
 import '../styles/MyPlaylists.css';
 import '../styles/EditOptionsModal.css';
 import '../styles/PlaylistGenerator.css';
@@ -46,6 +48,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   // Edit options modal (unified modal with refresh and settings)
   const [showEditOptionsModal, setShowEditOptionsModal] = useState(false);
   const [editOptionsPlaylist, setEditOptionsPlaylist] = useState(null);
+  const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingMessage, setRefreshingMessage] = useState('Updating your playlist...');
   const [refreshError, setRefreshError] = useState(null);
@@ -365,6 +368,10 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   };
 
   const openImportModal = async () => {
+    if (!isPaid()) {
+      setUpgradeModal({ open: true, feature: 'Import Playlists' });
+      return;
+    }
     setShowImportModal(true);
     setLoadingPlaylists(true);
     setError('');
@@ -554,6 +561,10 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   };
 
   const handleManualRefresh = async () => {
+    if (!isPaid()) {
+      setUpgradeModal({ open: true, feature: 'Manual Refresh' });
+      return;
+    }
     if (!editOptionsPlaylist) return;
 
     // Check if tracks are loaded
@@ -722,6 +733,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
   // Handle adding refinement instruction
   const handleAddRefinement = async () => {
+    if (!isPaid()) {
+      setUpgradeModal({ open: true, feature: 'Refinement Instructions' });
+      return;
+    }
     if (!refinementInput.trim() || !editOptionsPlaylist) return;
 
     setAddingRefinement(true);
@@ -817,6 +832,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
   return (
     <div className="my-playlists">
+      <UpgradeModal
+        isOpen={upgradeModal.open}
+        onClose={() => setUpgradeModal({ open: false, feature: '' })}
+        featureName={upgradeModal.feature}
+      />
       <ErrorMessage
         errorLog={errorLog}
         onRetry={handleErrorRetry}
@@ -1183,11 +1203,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
               <div className="modal-section dropdown-section">
                 <button
                   className="dropdown-header"
-                  onClick={() => setExpandManualRefresh(!expandManualRefresh)}
+                  onClick={() => isPaid() ? setExpandManualRefresh(!expandManualRefresh) : setUpgradeModal({ open: true, feature: 'Manual Refresh' })}
                   type="button"
                 >
-                  <span className="dropdown-title">Manual Refresh</span>
-                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>▼</span>
+                  <span className="dropdown-title">Manual Refresh {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</span>
+                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>{isPaid() ? '▼' : '🔒'}</span>
                 </button>
                 <p className="section-description">Refresh your playlist now with new songs</p>
 
@@ -1471,10 +1491,21 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
               {/* Refinement Instructions Section */}
               <div className="modal-section">
-                <h3 className="section-title">Refine Playlist</h3>
+                <h3 className="section-title">Refine Playlist {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
                 <p className="section-description">Add instructions to customize future auto-updates</p>
 
-                {refinementInstructions.length > 0 && (
+                {!isPaid() && (
+                  <button
+                    className="upgrade-locked-row"
+                    onClick={() => setUpgradeModal({ open: true, feature: 'Refinement Instructions' })}
+                    style={{marginBottom: 12}}
+                  >
+                    <span>🔒 Save permanent instructions</span>
+                    <span className="upgrade-locked-badge">Upgrade</span>
+                  </button>
+                )}
+
+                {isPaid() && refinementInstructions.length > 0 && (
                   <div className="refinement-list" style={{ marginBottom: '16px' }}>
                     {refinementInstructions.map((instruction, index) => (
                       <div key={index} className="refinement-item" style={{
@@ -1508,7 +1539,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </div>
                 )}
 
-                <div className="chat-input-container" onClick={() => setShowRefinementModal(true)}>
+                {isPaid() && <div className="chat-input-container" onClick={() => setShowRefinementModal(true)}>
                   <input
                     type="text"
                     value=""
@@ -1530,7 +1561,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       </div>
                     </div>
                   )}
-                </div>
+                </div>}
               </div>
             </div>
 

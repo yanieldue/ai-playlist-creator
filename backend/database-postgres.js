@@ -37,6 +37,7 @@ async function initializeTables() {
         password TEXT NOT NULL,
         platform TEXT,
         user_id TEXT,
+        plan TEXT DEFAULT 'free',
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP
       );
@@ -122,6 +123,12 @@ async function migrateDatabase() {
       ALTER TABLE tokens
       ADD COLUMN IF NOT EXISTS user_music_token TEXT,
       ADD COLUMN IF NOT EXISTS storefront TEXT
+    `);
+
+    // Add plan column to users table if it doesn't exist
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free'
     `);
 
     console.log('✓ PostgreSQL migrations complete');

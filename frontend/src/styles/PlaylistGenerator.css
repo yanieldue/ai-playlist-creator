@@ -4043,3 +4043,43 @@
     transform: scaleY(1);
   }
 }
+
+/* Freemium locked row */
+.upgrade-locked-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f8f8f8;
+  border: 1.5px dashed #d0d0d0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #888;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s;
+}
+
+.upgrade-locked-row:hover {
+  background: #f0f0f0;
+}
+
+.upgrade-locked-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #af52de;
+  background: rgba(175, 82, 222, 0.1);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+:root.dark-mode .upgrade-locked-row {
+  background: #2c2c2e;
+  border-color: #424245;
+  color: #888;
+}
+
+:root.dark-mode .upgrade-locked-row:hover {
+  background: #333336;
+}
