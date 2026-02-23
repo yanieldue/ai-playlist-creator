@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import playlistService from '../services/api';
 import Icons from './Icons';
 import '../styles/SignupForm.css';
+import mp from '../utils/mixpanel';
 
 const SignupForm = ({ onSignupComplete }) => {
   const [email, setEmail] = useState('');
@@ -92,9 +93,15 @@ const SignupForm = ({ onSignupComplete }) => {
       // If user has userId, redirect to app, otherwise send to platform selection
       if (data.userId) {
         localStorage.setItem('userId', data.userId);
+        mp.identify(data.userId);
+        mp.setPeople({ $email: trimmedEmail, platform: data.platform });
+        mp.track('User Logged In', { platform: data.platform });
         // User is already connected, redirect to app
         window.location.href = '/';
       } else {
+        mp.identify(trimmedEmail);
+        mp.setPeople({ $email: trimmedEmail });
+        mp.track('User Logged In', { platform: data.platform });
         // User needs to connect to a music platform
         // Set flag to show platform selection
         localStorage.setItem('inSignupFlow', 'true');
@@ -138,6 +145,11 @@ const SignupForm = ({ onSignupComplete }) => {
         authToken: localStorage.getItem('authToken'),
         inSignupFlow: localStorage.getItem('inSignupFlow')
       });
+
+      mp.alias(trimmedEmail);
+      mp.identify(trimmedEmail);
+      mp.setPeople({ $email: trimmedEmail, platform: 'spotify' });
+      mp.track('User Signed Up', { platform: 'spotify' });
 
       console.log('✓ Signup complete, redirecting to platform selection');
       // Redirect to platform selection page

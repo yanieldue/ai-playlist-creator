@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
+import mp from '../utils/mixpanel';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
 import Account from './Account';
@@ -198,6 +199,7 @@ const PlaylistGenerator = () => {
       console.log('PlaylistGenerator: Found existing userId in localStorage:', storedUserId);
       setUserId(storedUserId);
       setIsAuthenticated(true);
+      mp.identify(storedUserId);
 
       // Note: userId is now email-based (platform-independent)
       // Platform-specific IDs are stored separately as spotifyUserId and appleMusicUserId
@@ -242,6 +244,8 @@ const PlaylistGenerator = () => {
         setUserId(userIdParam);
         setIsAuthenticated(true);
         localStorage.setItem('userId', userIdParam);
+        mp.identify(userIdParam);
+        mp.track('Platform Connected', { platform: spotifyUserIdParam ? 'spotify' : 'apple' });
       }
 
       // If email is provided in callback, update localStorage
@@ -575,6 +579,8 @@ const PlaylistGenerator = () => {
   };
 
   const handleLogout = () => {
+    mp.track('User Logged Out');
+    mp.reset();
     localStorage.removeItem('userId');
     setUserId(null);
     setIsAuthenticated(false);
@@ -946,6 +952,14 @@ const PlaylistGenerator = () => {
       }
 
       setGeneratedPlaylist(playlistWithPrompt);
+      mp.track('Playlist Generated', {
+        prompt: prompt.trim(),
+        song_count: result.tracks?.length || 0,
+        requested_song_count: songCount,
+        platform: activePlatform || 'spotify',
+        new_artists_only: newArtistsOnly,
+        allow_explicit: allowExplicit,
+      });
 
       // Initialize playlist name and description
       setEditedPlaylistName(result.playlistName);
@@ -1088,6 +1102,11 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        mp.track('Playlist Saved', {
+          playlist_name: generatedPlaylist.playlistName,
+          track_count: generatedPlaylist.tracks?.length || 0,
+          platform: result.platform || activePlatform,
+        });
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {
@@ -1153,6 +1172,7 @@ const PlaylistGenerator = () => {
 
   const handleExampleClick = (examplePrompt) => {
     setPrompt(examplePrompt);
+    mp.track('Example Prompt Clicked', { prompt: examplePrompt });
   };
 
   const fetchTopArtists = async () => {
@@ -1514,6 +1534,12 @@ const PlaylistGenerator = () => {
       };
 
       setGeneratedPlaylist(updatedPlaylist);
+      mp.track('Playlist Refined', {
+        refinement_message: userMessage,
+        refinement_number: chatMessages.filter(m => m.role === 'user').length + 1,
+        track_count: result.tracks?.length || 0,
+        platform: activePlatform || 'spotify',
+      });
 
       // Update chat messages in state
       setChatMessages(updatedChatMessages);
@@ -1782,6 +1808,14 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        mp.track('Playlist Saved', {
+          playlist_name: editedPlaylistName.trim(),
+          track_count: generatedPlaylist.tracks?.length || 0,
+          platform: result.platform || activePlatform,
+          update_frequency: updateFrequency,
+          is_public: isPublic,
+          refinement_count: chatMessages.filter(m => m.role === 'user').length,
+        });
 
         // Delete draft from database if it has a draftId
         if (generatedPlaylist.draftId) {
@@ -1892,6 +1926,7 @@ const PlaylistGenerator = () => {
   };
 
   const handleArtistClick = (artist) => {
+    mp.track('Artist Clicked', { artist_name: artist.name, artist_id: artist.id });
     // Open settings modal for this artist
     setSelectedArtist(artist);
     setArtistModalNewArtistsOnly(false);
