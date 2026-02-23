@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import mp from '../utils/mixpanel';
-import { isPaid } from '../utils/plan';
+import { isPaid, isWeeklyLimitActive, getWeeklyLimitResetDate, setWeeklyLimitResetsAt } from '../utils/plan';
 import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
@@ -1007,6 +1007,7 @@ const PlaylistGenerator = () => {
       // If weekly limit reached, don't retry — show upgrade prompt
       if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
         const resetsAt = err.response.data.resetsAt;
+        if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
         setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}.`);
         setWeeklyLimitReached(true);
@@ -2040,6 +2041,7 @@ const PlaylistGenerator = () => {
         setError('Your session has expired. Please reconnect with Spotify.');
       } else if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
         const resetsAt = err.response.data.resetsAt;
+        if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
         setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}.`);
         setWeeklyLimitReached(true);
@@ -3111,13 +3113,31 @@ const PlaylistGenerator = () => {
                   </div>
                 </div>
 
+                {isWeeklyLimitActive() && (
+                  <div style={{ padding: '0 20px 12px', textAlign: 'center', fontSize: '13px', color: '#888' }}>
+                    🔒 Your free playlist resets on {getWeeklyLimitResetDate()}
+                  </div>
+                )}
                 <div className="modal-footer">
                   <button onClick={handleCancelArtistSettings} className="cancel-button">
                     Cancel
                   </button>
-                  <button onClick={handleConfirmArtistSettings} className="refresh-confirm-button">
-                    Generate Playlist
-                  </button>
+                  {isWeeklyLimitActive() ? (
+                    <button
+                      onClick={() => {
+                        handleCancelArtistSettings();
+                        setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
+                      }}
+                      className="refresh-confirm-button"
+                      style={{ background: '#af52de' }}
+                    >
+                      🔒 Upgrade to Generate
+                    </button>
+                  ) : (
+                    <button onClick={handleConfirmArtistSettings} className="refresh-confirm-button">
+                      Generate Playlist
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
