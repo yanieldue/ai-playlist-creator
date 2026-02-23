@@ -2032,13 +2032,20 @@ const PlaylistGenerator = () => {
       setArtistModalSongCount(30);
     } catch (err) {
       clearInterval(messageInterval);
-      setShowGeneratingModal(false);
       if (err.response?.status === 401) {
+        setShowGeneratingModal(false);
         localStorage.removeItem('userId');
         setUserId(null);
         setIsAuthenticated(false);
         setError('Your session has expired. Please reconnect with Spotify.');
+      } else if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
+        const resetsAt = err.response.data.resetsAt;
+        const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
+        setGeneratingError(`You've used your free playlist this week. Your limit resets on ${resetDate}.`);
+        setWeeklyLimitReached(true);
+        // Keep modal open to show the error + Upgrade button
       } else {
+        setShowGeneratingModal(false);
         setError(err.response?.data?.error || 'Failed to generate playlist. Please try again.');
       }
       console.error(err);
