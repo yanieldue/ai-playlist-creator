@@ -1361,25 +1361,35 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
               {/* Auto-Update Settings Section */}
               <div className="modal-section">
-                <h3 className="section-title">Auto-Update Settings</h3>
+                <h3 className="section-title">Auto-Update Settings {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
                 <p className="section-description">Automatically refresh your playlist on schedule (won't run within 24 hours of a manual refresh)</p>
 
                 <div className="form-group">
                   <label htmlFor="update-frequency">Auto-Update Frequency</label>
-                  <select
-                    id="update-frequency"
-                    value={tempUpdateFrequency}
-                    onChange={(e) => setTempUpdateFrequency(e.target.value)}
-                    className="playlist-select"
-                  >
-                    <option value="never">Never</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
+                  {isPaid() ? (
+                    <select
+                      id="update-frequency"
+                      value={tempUpdateFrequency}
+                      onChange={(e) => setTempUpdateFrequency(e.target.value)}
+                      className="playlist-select"
+                    >
+                      <option value="never">Never</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  ) : (
+                    <button
+                      className="upgrade-locked-row"
+                      onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
+                    >
+                      <span>🔒 Never (Free Plan)</span>
+                      <span className="upgrade-locked-badge">Upgrade</span>
+                    </button>
+                  )}
                 </div>
 
-                {tempUpdateFrequency !== 'never' && (
+                {isPaid() && tempUpdateFrequency !== 'never' && (
                   <div className="form-group">
                     <label>Update Time</label>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -1422,7 +1432,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </div>
                 )}
 
-                {tempUpdateFrequency !== 'never' && (
+                {isPaid() && tempUpdateFrequency !== 'never' && (
                   <div className="form-group">
                     <label htmlFor="update-timezone">Timezone</label>
                     <select
