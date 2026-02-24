@@ -25,7 +25,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid #f2f2f7;
-  border-top-color: #fbbf24;
+  border-top-color: #000000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -110,7 +110,7 @@
 
 .back-button {
   background: none;
-  color: #fbbf24;
+  color: #000000;
   border: none;
   padding: 0;
   cursor: pointer;
@@ -125,8 +125,8 @@
 }
 
 .import-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-md) 24px;
   border-radius: 10px;
@@ -138,9 +138,9 @@
 }
 
 .import-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .error-message {
@@ -170,8 +170,8 @@
 }
 
 .create-first-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-md) 32px;
   font-size: 15px;
@@ -183,7 +183,7 @@
 
 .create-first-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .playlists-list {
@@ -254,14 +254,14 @@
 .imported-badge {
   display: inline-block;
   background: #f2f2f7;
-  color: #fbbf24;
+  color: #000000;
   padding: var(--space-xs) var(--space-sm);
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  border: 1px solid #fbbf24;
+  border: 1px solid #000000;
 }
 
 .platform-badge {
@@ -325,7 +325,7 @@
   height: 60px;
   border-radius: 8px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,8 +341,8 @@
 }
 
 .open-spotify-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   padding: var(--space-sm) var(--space-lg);
   border-radius: 8px;
   text-decoration: none;
@@ -352,7 +352,7 @@
 }
 
 .open-spotify-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
 }
 
@@ -511,8 +511,8 @@
 }
 
 .edit-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -523,7 +523,7 @@
 }
 
 .edit-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
 }
 
@@ -603,14 +603,14 @@
 
 .search-input:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .search-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) 24px;
   border-radius: 10px;
@@ -621,7 +621,7 @@
 }
 
 .search-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 .search-button:disabled {
@@ -658,8 +658,8 @@
 }
 
 .add-track-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-xs) var(--space-lg);
   border-radius: 6px;
@@ -671,7 +671,7 @@
 }
 
 .add-track-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: scale(1.05);
 }
 
@@ -795,7 +795,7 @@
   width: 32px;
   height: 32px;
   border: 3px solid #f2f2f7;
-  border-top-color: #fbbf24;
+  border-top-color: #000000;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -892,8 +892,8 @@
 
 .auto-update-badge {
   display: inline-block;
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   padding: var(--space-xs) var(--space-sm);
   border-radius: 10px;
   font-size: 10px;
@@ -903,8 +903,8 @@
 }
 
 .edit-settings-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -916,7 +916,7 @@
 }
 
 .edit-settings-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
 }
 
@@ -957,9 +957,9 @@
 
 .settings-edit .playlist-select:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   background-color: #1c1c1e;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .settings-edit-controls {
@@ -969,8 +969,8 @@
 }
 
 .save-settings-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -981,7 +981,7 @@
 }
 
 .save-settings-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 /* Import Modal Styles */
@@ -1144,7 +1144,7 @@
 
 .modal-loading .spinner {
   border-color: #f2f2f7;
-  border-top-color: #fbbf24;
+  border-top-color: #000000;
 }
 
 .modal-empty p {
@@ -1195,7 +1195,7 @@
 }
 
 .spotify-playlist-meta {
-  color: #fbbf24;
+  color: #000000;
   font-size: 13px;
   font-weight: 500;
   margin-bottom: var(--space-xs);
@@ -1212,8 +1212,8 @@
 }
 
 .import-playlist-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -1225,7 +1225,7 @@
 }
 
 .import-playlist-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: scale(1.05);
 }
 
@@ -1263,8 +1263,8 @@
 
 /* Refresh Button */
 .refresh-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -1275,9 +1275,9 @@
 }
 
 .refresh-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .refresh-button:active {
@@ -1310,18 +1310,18 @@
 
 .refresh-option-item:hover {
   background: #f2f2f7;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 .refresh-option-item.active {
   background: #f5f0ff;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 .option-checkbox {
   width: 22px;
   height: 22px;
-  border: 2px solid #fbbf24;
+  border: 2px solid #000000;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -1331,7 +1331,7 @@
 }
 
 .refresh-option-item.active .option-checkbox {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 .checkmark {
@@ -1353,14 +1353,14 @@
 
 .song-count-input-large:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .refresh-confirm-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
   border: none;
   padding: var(--space-md) 24px;
   border-radius: 10px;
@@ -1371,9 +1371,9 @@
 }
 
 .refresh-confirm-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .refresh-confirm-button:disabled {
@@ -1438,10 +1438,10 @@
 
 .playlist-select:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   background-color: #f2f2f7;
   color: #1c1c1e;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 @media (max-width: 768px) {
@@ -1497,7 +1497,7 @@
 
 :root.dark-mode .loading-container .spinner {
   border-color: #3a3a3c;
-  border-top-color: #fbbf24;
+  border-top-color: #000000;
 }
 
 :root.dark-mode .playlists-header {
@@ -1513,15 +1513,15 @@
 }
 
 :root.dark-mode .back-button {
-  color: #fbbf24;
+  color: #000000;
 }
 
 :root.dark-mode .import-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .import-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .delete-playlist-button {
@@ -1585,11 +1585,11 @@
 }
 
 :root.dark-mode .create-first-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .create-first-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .playlist-card {
@@ -1614,7 +1614,7 @@
 }
 
 :root.dark-mode .playlist-cover-placeholder {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
 }
 
 :root.dark-mode .playlist-description {
@@ -1622,11 +1622,11 @@
 }
 
 :root.dark-mode .open-spotify-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .open-spotify-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .expand-icon {
@@ -1638,11 +1638,11 @@
 }
 
 :root.dark-mode .edit-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .edit-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .cancel-button {
@@ -1678,15 +1678,15 @@
 
 :root.dark-mode .search-input:focus {
   background: #424245;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .search-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .search-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .search-results-label {
@@ -1707,11 +1707,11 @@
 }
 
 :root.dark-mode .add-track-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .add-track-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .tracks-list {
@@ -1753,7 +1753,7 @@
 
 :root.dark-mode .spinner {
   border-color: #3a3a3c;
-  border-top-color: #fbbf24;
+  border-top-color: #000000;
 }
 
 :root.dark-mode .modal-content {
@@ -1818,7 +1818,7 @@
 }
 
 :root.dark-mode .spotify-playlist-meta {
-  color: #fbbf24;
+  color: #000000;
 }
 
 :root.dark-mode .spotify-playlist-description {
@@ -1826,11 +1826,11 @@
 }
 
 :root.dark-mode .import-playlist-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .import-playlist-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .playlist-settings-section {
@@ -1851,15 +1851,15 @@
 }
 
 :root.dark-mode .auto-update-badge {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .edit-settings-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .edit-settings-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .form-group label {
@@ -1875,15 +1875,15 @@
 
 :root.dark-mode .playlist-select:focus {
   background-color: #424245;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .refresh-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .refresh-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .refresh-option-item {
@@ -1894,20 +1894,20 @@
 
 :root.dark-mode .refresh-option-item:hover {
   background: #424245;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .refresh-option-item.active {
-  background: rgba(251, 191, 36, 0.2);
-  border-color: #fbbf24;
+  background: rgba(0, 0, 0, 0.1);
+  border-color: #000000;
 }
 
 :root.dark-mode .option-checkbox {
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .refresh-option-item.active .option-checkbox {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .song-count-input-large {
@@ -1918,15 +1918,15 @@
 
 :root.dark-mode .song-count-input-large:focus {
   background: #424245;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .refresh-confirm-button {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .refresh-confirm-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .modal-body {

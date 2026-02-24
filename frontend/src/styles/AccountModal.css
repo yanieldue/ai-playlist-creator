@@ -48,7 +48,7 @@
   background: none;
   border: none;
   font-size: 28px;
-  color: #fbbf24;
+  color: #000000;
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -169,7 +169,7 @@
 
 .account-input:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -193,7 +193,7 @@
 
 .account-select:focus {
   outline: none;
-  border-color: #fbbf24;
+  border-color: #000000;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -203,7 +203,7 @@
   font-size: 16px;
   font-weight: 600;
   color: #ffffff;
-  background: #fbbf24;
+  background: #000000;
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -285,7 +285,7 @@
   }
 
   .account-back-button {
-    color: #fbbf24;
+    color: #000000;
   }
 
   .account-modal-body {
@@ -334,7 +334,7 @@
 
   .account-input:focus,
   .account-select:focus {
-    border-color: #fbbf24;
+    border-color: #000000;
     background: #2d3748;
   }
 
@@ -343,7 +343,7 @@
   }
 
   .account-button-primary {
-    background: #fbbf24;
+    background: #000000;
   }
 
   .account-button-primary:hover:not(:disabled) {

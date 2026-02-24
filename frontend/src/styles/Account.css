@@ -119,7 +119,7 @@
 }
 
 .platform-option.selected {
-  border-color: #fbbf24;
+  border-color: #000000;
   background-color: #f5ebff;
 }
 
@@ -128,7 +128,7 @@
 }
 
 .platform-check {
-  color: #fbbf24;
+  color: #000000;
   font-size: 18px;
   font-weight: bold;
 }
@@ -256,13 +256,13 @@
 }
 
 .platform-toggle-btn.connected {
-  background: #fbbf24;
-  color: #78350f;
-  border-color: #fbbf24;
+  background: #000000;
+  color: #000000;
+  border-color: #000000;
 }
 
 .platform-toggle-btn.connected:hover {
-  background: #f59e0b;
+  background: #1a1a1a;
   border-color: #0dd9ff;
 }
 
@@ -281,7 +281,7 @@
 }
 
 :root.dark-mode .platform-checkbox-option input[type="checkbox"] {
-  accent-color: #fbbf24;
+  accent-color: #000000;
 }
 
 :root.dark-mode .platform-checkbox-option .platform-name {
@@ -349,7 +349,7 @@
 }
 
 :root.dark-mode .platform-option.selected {
-  border-color: #fbbf24;
+  border-color: #000000;
   background-color: #3a3a3c;
 }
 
@@ -358,7 +358,7 @@
 }
 
 :root.dark-mode .platform-check {
-  color: #fbbf24;
+  color: #000000;
 }
 
 :root.dark-mode .account-section-header {
@@ -429,13 +429,13 @@
 }
 
 :root.dark-mode .platform-toggle-btn.connected {
-  background: #fbbf24;
-  color: #78350f;
-  border-color: #fbbf24;
+  background: #ffffff;
+  color: #000000;
+  border-color: #000000;
 }
 
 :root.dark-mode .platform-toggle-btn.connected:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
   border-color: #0dd9ff;
 }
 

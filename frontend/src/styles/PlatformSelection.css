@@ -238,14 +238,14 @@
 }
 
 .platform-selection-primary-button {
-  background: #fbbf24;
+  background: #000000;
   color: #ffffff;
 }
 
 .platform-selection-primary-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #1a1a1a;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .platform-selection-primary-button:active:not(:disabled) {

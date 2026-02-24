@@ -69,12 +69,12 @@
 
 .generator-context .track-item.selected {
   background: #e8edff;
-  border-left: 4px solid #fbbf24;
+  border-left: 4px solid #000000;
 }
 
 /* Generator selection context checkbox */
 .generator-context .track-checkbox {
-  accent-color: #fbbf24;
+  accent-color: #000000;
 }
 
 /* Dark mode generator context */
@@ -88,12 +88,12 @@
 }
 
 :root.dark-mode .generator-context .track-item.selected {
-  background: rgba(251, 191, 36, 0.2);
-  border-left-color: #fbbf24;
+  background: rgba(0, 0, 0, 0.1);
+  border-left-color: #000000;
 }
 
 :root.dark-mode .generator-context .track-checkbox {
-  accent-color: #fbbf24;
+  accent-color: #000000;
 }
 
 /* ============================================
@@ -122,13 +122,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  accent-color: #fbbf24;
+  accent-color: #000000;
   cursor: pointer;
 }
 
 .apple-theme .track-checkbox.selected {
-  background: #fbbf24;
-  border-color: #fbbf24;
+  background: #000000;
+  border-color: #000000;
 }
 
 .apple-theme .track-checkbox.selected::after {
@@ -148,8 +148,8 @@
 }
 
 :root.dark-mode .apple-theme .track-checkbox.selected {
-  background: #fbbf24;
-  border-color: #fbbf24;
+  background: #000000;
+  border-color: #000000;
 }
 
 /* ============================================
@@ -173,7 +173,7 @@
 
 .modal-context .track-item.selected {
   background: #e8edff;
-  border-left: 4px solid #fbbf24;
+  border-left: 4px solid #000000;
 }
 
 /* Modal context image sizing */
@@ -184,7 +184,7 @@
 
 /* Modal context checkbox */
 .modal-context .track-checkbox {
-  accent-color: #fbbf24;
+  accent-color: #000000;
 }
 
 /* Dark mode modal context */
@@ -198,10 +198,10 @@
 }
 
 :root.dark-mode .modal-context .track-item.selected {
-  background: rgba(251, 191, 36, 0.2);
-  border-left-color: #fbbf24;
+  background: rgba(0, 0, 0, 0.1);
+  border-left-color: #000000;
 }
 
 :root.dark-mode .modal-context .track-checkbox {
-  accent-color: #fbbf24;
+  accent-color: #000000;
 }

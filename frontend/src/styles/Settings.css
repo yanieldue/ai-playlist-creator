@@ -133,7 +133,7 @@
 }
 
 .toggle-switch input:checked + .toggle-slider {
-  background-color: #fbbf24;
+  background-color: #000000;
 }
 
 .toggle-switch input:checked + .toggle-slider:before {
@@ -141,7 +141,7 @@
 }
 
 .toggle-switch input:focus + .toggle-slider {
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.2);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
 }
 
 .settings-item-with-input {
@@ -161,9 +161,10 @@
 }
 
 .song-count-input:focus {
+
   outline: none;
-  border-color: #fbbf24;
-  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+  border-color: #000000;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .song-count-input::-webkit-outer-spin-button,
@@ -181,7 +182,7 @@
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: #fbbf24;
+  background-color: #000000;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -268,11 +269,11 @@
 :root.dark-mode .song-count-input:focus {
   background-color: #3a3a3c;
   color: #ffffff;
-  border-color: #fbbf24;
+  border-color: #000000;
 }
 
 :root.dark-mode .settings-success-message {
-  background-color: #fbbf24;
+  background-color: #000000;
   color: white;
 }
 

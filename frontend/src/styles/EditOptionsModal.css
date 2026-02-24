@@ -338,18 +338,18 @@
 .save-settings-button {
   flex: 1;
   padding: var(--space-md) var(--space-lg);
-  background: #fbbf24;
+  background: #000000;
   border: none;
   border-radius: 12px;
   font-size: 15px;
   font-weight: 600;
-  color: #78350f;
+  color: #000000;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .save-settings-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #1a1a1a;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
 }
@@ -366,20 +366,20 @@
 .refresh-confirm-button {
   flex: 1;
   padding: var(--space-md) var(--space-lg);
-  background: #fbbf24;
+  background: #000000;
   border: none;
   border-radius: 12px;
   font-size: 15px;
   font-weight: 600;
-  color: #78350f;
+  color: #000000;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .refresh-confirm-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #1a1a1a;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .refresh-confirm-button:active:not(:disabled) {
@@ -585,19 +585,19 @@
 }
 
 :root.dark-mode .save-settings-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .save-settings-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .refresh-confirm-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .refresh-confirm-button:hover:not(:disabled) {
-  background: #f59e0b;
+  background: #e5e5e5;
 }

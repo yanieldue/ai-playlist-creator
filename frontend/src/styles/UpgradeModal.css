@@ -62,7 +62,7 @@
   margin: 0 0 10px 0;
   font-size: 15px;
   font-weight: 600;
-  color: #af52de;
+  color: #000000;
 }
 
 .upgrade-description {
@@ -112,7 +112,7 @@
 .upgrade-cta {
   width: 100%;
   padding: 14px;
-  background: #af52de;
+  background: #000000;
   color: #ffffff;
   border: none;
   border-radius: 12px;
@@ -155,6 +155,11 @@
 
 :root.dark-mode .upgrade-description {
   color: #a0a0a0;
+}
+
+:root.dark-mode .upgrade-cta {
+  background: #ffffff;
+  color: #000000;
 }
 
 @keyframes fadeInOverlay {

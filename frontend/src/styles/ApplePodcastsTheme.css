@@ -96,7 +96,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #fbbf24;
+  background: #000000;
   border: none;
   cursor: pointer;
   display: flex;
@@ -108,7 +108,7 @@ body {
 
 .profile-button-apple:hover {
   transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .profile-button-apple svg {
@@ -305,7 +305,7 @@ body {
   width: 180px;
   height: 180px;
   border-radius: 12px;
-  background: #fbbf24;
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -378,7 +378,7 @@ body {
   transform: translate(-50%, -50%) scale(0);
   width: 50px;
   height: 50px;
-  background: rgba(251, 191, 36, 0.9);
+  background: rgba(0, 0, 0, 0.85);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -403,7 +403,7 @@ body {
 }
 
 .artist-card-apple:hover .artist-card-name {
-  color: #fbbf24;
+  color: #000000;
 }
 
 /* Draft Cards - Similar to Artist Cards */
@@ -472,7 +472,7 @@ body {
   transform: translate(-50%, -50%) scale(0);
   width: 50px;
   height: 50px;
-  background: rgba(251, 191, 36, 0.9);
+  background: rgba(0, 0, 0, 0.85);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -510,7 +510,7 @@ body {
 }
 
 .draft-card-apple:hover .draft-card-name {
-  color: #fbbf24;
+  color: #000000;
 }
 
 .draft-card-meta {
@@ -598,12 +598,12 @@ body {
 
 .tab-item.active .tab-icon,
 .tab-item.active .tab-label {
-  color: #fbbf24; /* Purple accent color */
+  color: #000000; /* Purple accent color */
 }
 
 .tab-item:hover .tab-icon,
 .tab-item:hover .tab-label {
-  color: #fbbf24;
+  color: #000000;
 }
 
 /* Profile Button - Apple Style */
@@ -611,7 +611,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 16px;
-  background: #fbbf24;
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -751,7 +751,7 @@ body {
 }
 
 .chat-send-button {
-  background: #fbbf24;
+  background: #000000;
   border: none;
   border-radius: 50%;
   width: 32px;
@@ -769,7 +769,7 @@ body {
 }
 
 .chat-send-button:hover {
-  background: #9b3dc9;
+  background: #e5e5e5;
 }
 
 .chat-send-button:disabled {
@@ -833,8 +833,8 @@ body {
 }
 
 .options-menu-apply-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #000000;
+  color: #000000;
   border: none;
   border-radius: 10px;
   padding: 12px 16px;
@@ -848,9 +848,9 @@ body {
 }
 
 .options-menu-apply-button:hover {
-  background: #f59e0b;
+  background: #1a1a1a;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .options-menu-apply-button:active {
@@ -907,8 +907,8 @@ body {
 
 /* Button Styles - Apple */
 .button-primary-apple {
-  background: #fbbf24;
-  color: #78350f;
+  background: #000000;
+  color: #000000;
   border: none;
   border-radius: 12px;
   padding: 14px 24px;
@@ -919,7 +919,7 @@ body {
 }
 
 .button-primary-apple:hover {
-  background: #9b3dc9;
+  background: #e5e5e5;
   transform: translateY(-1px);
 }
 
@@ -958,7 +958,7 @@ body {
 .loading-spinner-apple > div {
   width: 2px;
   height: 12px;
-  background-color: #fbbf24;
+  background-color: #000000;
   border-radius: 1px;
   will-change: transform, opacity;
 }
@@ -1228,7 +1228,7 @@ body {
 }
 
 :root.dark-mode .chat-send-button {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+  background: #ffffff !important;
   border: none !important;
   border-radius: 50% !important;
   width: 32px !important;
@@ -1246,7 +1246,7 @@ body {
 }
 
 :root.dark-mode .chat-send-button:hover {
-  background: #9b3dc9;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .chat-send-button:disabled {
@@ -1279,12 +1279,12 @@ body {
 }
 
 :root.dark-mode .options-menu-apply-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .options-menu-apply-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .tab-bar {
@@ -1297,7 +1297,7 @@ body {
 }
 
 :root.dark-mode .tab-item.active {
-  color: #fbbf24;
+  color: #000000;
 }
 
 :root.dark-mode .modal-overlay {
@@ -1389,12 +1389,12 @@ body {
 }
 
 :root.dark-mode .modal-button-primary {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .modal-button-primary:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .modal-button-secondary {
@@ -1444,12 +1444,12 @@ body {
 }
 
 :root.dark-mode .account-button-primary {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .account-button-primary:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .account-error-message {
@@ -1475,12 +1475,12 @@ body {
 }
 
 :root.dark-mode .resume-button {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .resume-button:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .discard-button {
@@ -1505,7 +1505,7 @@ body {
 }
 
 :root.dark-mode .profile-button-apple {
-  background: #fbbf24;
+  background: #ffffff;
 }
 
 :root.dark-mode .profile-button-apple:hover {
@@ -1653,12 +1653,12 @@ body {
 }
 
 :root.dark-mode .button-primary-apple {
-  background: #fbbf24;
-  color: #78350f;
+  background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .button-primary-apple:hover {
-  background: #f59e0b;
+  background: #e5e5e5;
 }
 
 :root.dark-mode .nav-tab-item {
