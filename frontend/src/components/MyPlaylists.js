@@ -993,63 +993,61 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           {track.image && (
                             <img src={track.image} alt={track.album} className="track-image" />
                           )}
-                          <div className="track-content">
-                            <div className="track-info">
-                              <div className="track-name">{track.name}</div>
-                              <div className="track-artist">{track.artist}</div>
-                            </div>
-                            <div className="track-actions">
-                              {track.reaction !== 'thumbsDown' && (
-                                <button
-                                  className={`track-reaction-button ${track.reaction === 'thumbsUp' ? 'active-thumbs-up' : ''}`}
-                                  onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                                  title="I like this! Add more songs like this"
-                                >
-                                  {track.reaction === 'thumbsUp' ? (
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
-                                      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-                                      <line x1="7" y1="11" x2="7" y2="22" stroke="var(--track-bg-color)" strokeWidth="2"/>
-                                    </svg>
-                                  ) : (
-                                    <Icons.ThumbsUp size={16} />
-                                  )}
-                                </button>
-                              )}
-                              {track.reaction !== 'thumbsUp' && (
-                                <button
-                                  className={`track-reaction-button ${track.reaction === 'thumbsDown' ? 'active-thumbs-down' : ''}`}
-                                  onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
-                                  title="Not for me. Exclude similar songs"
-                                >
-                                  {track.reaction === 'thumbsDown' ? (
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
-                                      <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
-                                      <line x1="17" y1="2" x2="17" y2="13" stroke="var(--track-bg-color)" strokeWidth="2"/>
-                                    </svg>
-                                  ) : (
-                                    <Icons.ThumbsDown size={16} />
-                                  )}
-                                </button>
-                              )}
-                            </div>
+                          <div className="track-info">
+                            <div className="track-name">{track.name}</div>
+                            <div className="track-artist">{track.artist}</div>
                           </div>
-                          {track.externalUrl && (
-                            <a
-                              href={track.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="spotify-link-button"
-                              title={`Open in ${track.platform === 'apple' ? 'Apple Music' : 'Spotify'}`}
-                            >
-                              <img
-                                src={track.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                                alt={track.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                                width="20"
-                                height="20"
-                                style={{ objectFit: 'contain', display: 'block' }}
-                              />
-                            </a>
-                          )}
+                          <div className="track-actions">
+                            {track.reaction !== 'thumbsDown' && (
+                              <button
+                                className={`track-reaction-button ${track.reaction === 'thumbsUp' ? 'active-thumbs-up' : ''}`}
+                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
+                                title="I like this! Add more songs like this"
+                              >
+                                {track.reaction === 'thumbsUp' ? (
+                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+                                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                                    <line x1="7" y1="11" x2="7" y2="22" stroke="var(--track-bg-color)" strokeWidth="2"/>
+                                  </svg>
+                                ) : (
+                                  <Icons.ThumbsUp size={16} />
+                                )}
+                              </button>
+                            )}
+                            {track.reaction !== 'thumbsUp' && (
+                              <button
+                                className={`track-reaction-button ${track.reaction === 'thumbsDown' ? 'active-thumbs-down' : ''}`}
+                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
+                                title="Not for me. Exclude similar songs"
+                              >
+                                {track.reaction === 'thumbsDown' ? (
+                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+                                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                                    <line x1="17" y1="2" x2="17" y2="13" stroke="var(--track-bg-color)" strokeWidth="2"/>
+                                  </svg>
+                                ) : (
+                                  <Icons.ThumbsDown size={16} />
+                                )}
+                              </button>
+                            )}
+                            {track.externalUrl && (
+                              <a
+                                href={track.externalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="spotify-link-button"
+                                title={`Open in ${track.platform === 'apple' ? 'Apple Music' : 'Spotify'}`}
+                              >
+                                <img
+                                  src={track.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
+                                  alt={track.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                                  width="18"
+                                  height="18"
+                                  style={{ objectFit: 'contain', display: 'block' }}
+                                />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       ))
                     ) : (
