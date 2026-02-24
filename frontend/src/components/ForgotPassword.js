@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import Icons from './Icons';
 import '../styles/SignupForm.css';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -19,7 +20,6 @@ const ForgotPassword = () => {
 
     try {
       const response = await axios.post(`${API_URL}/api/forgot-password`, { email });
-
       if (response.data.success) {
         setSuccess(true);
       }
@@ -31,22 +31,18 @@ const ForgotPassword = () => {
 
   if (success) {
     return (
-      <div className="signup-container">
-        <div className="signup-card">
-          <div className="signup-header">
-            <h1>Check Your Email</h1>
-            <p className="signup-subtitle">
-              If an account exists with {email}, you will receive a password reset link shortly.
-            </p>
+      <div className="auth-container">
+        <div className="auth-card">
+          <div className="auth-logo">
+            <Icons.Music size={28} />
           </div>
-
-          <div className="form-footer">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => navigate('/login')}
-            >
-              Back to Login
+          <h1 className="auth-title">Check your email</h1>
+          <p className="auth-subtitle">
+            If an account exists for {email}, you'll receive a reset link shortly.
+          </p>
+          <div className="auth-form">
+            <button className="auth-cta" onClick={() => navigate('/login')}>
+              Back to login
             </button>
           </div>
         </div>
@@ -55,45 +51,40 @@ const ForgotPassword = () => {
   }
 
   return (
-    <div className="signup-container">
-      <div className="signup-card">
-        <div className="signup-header">
-          <h1>Reset Password</h1>
-          <p className="signup-subtitle">
-            Enter your email address and we'll send you a link to reset your password.
-          </p>
+    <div className="auth-container">
+      <div className="auth-card">
+        <div className="auth-logo">
+          <Icons.Music size={28} />
         </div>
+        <h1 className="auth-title">Reset password</h1>
+        <p className="auth-subtitle">
+          Enter your email and we'll send you a link to reset your password.
+        </p>
 
-        <form onSubmit={handleSubmit} className="signup-form">
-          {error && <div className="error-message">{error}</div>}
+        {error && <div className="auth-error">{error}</div>}
 
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <button type="submit" className="submit-button" disabled={loading}>
-            {loading ? 'Sending...' : 'Send Reset Link'}
+        <form onSubmit={handleSubmit} className="auth-form">
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="name@email.com"
+            className="auth-input"
+            required
+            disabled={loading}
+            autoFocus
+          />
+          <button type="submit" className="auth-cta" disabled={loading}>
+            {loading ? 'Sending...' : 'Send reset link'}
           </button>
-        </form>
-
-        <div className="form-footer">
           <button
             type="button"
-            className="link-button"
+            className="auth-toggle"
             onClick={() => navigate('/login')}
           >
-            Back to Login
+            Back to login
           </button>
-        </div>
+        </form>
       </div>
     </div>
   );
