@@ -3019,7 +3019,7 @@ const PlaylistGenerator = () => {
                             setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
                           }}
                           className="retry-button-inline"
-                          style={{ background: '#af52de', color: '#fff' }}
+                          style={{ background: '#000000', color: '#ffffff' }}
                         >
                           Upgrade
                         </button>
@@ -3129,7 +3129,7 @@ const PlaylistGenerator = () => {
                         setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
                       }}
                       className="refresh-confirm-button"
-                      style={{ background: '#af52de' }}
+                      style={{ background: '#000000', color: '#ffffff' }}
                     >
                       🔒 Upgrade to Generate
                     </button>
