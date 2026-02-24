@@ -2124,7 +2124,7 @@ const PlaylistGenerator = () => {
           {/* Top Navigation Bar - Apple Style */}
           <div className="top-nav">
             <div className="nav-left">
-              <img src="/Fins_logo.png" alt="Fins" className="nav-logo" />
+              {/* Empty for balance */}
             </div>
             <div className="nav-center nav-tabs-center">
               <button
