@@ -3094,11 +3094,13 @@ app.get('/api/user-profile/:userId', async (req, res) => {
 
     } else if (platform === 'apple') {
       // Apple Music doesn't have a "get user profile" endpoint
-      // Return basic info with email
-      const user = await db.getUser(userId);
+      // Resolve email from userId (email-based) or from stored token
+      const emailForLookup = isEmailBasedUserId(userId) ? userId : (tokens?.email || null);
+      const user = emailForLookup ? await db.getUser(emailForLookup) : null;
+      const email = user?.email || tokens?.email || null;
       res.json({
-        displayName: user?.email?.split('@')[0] || 'Music Lover',
-        email: user?.email || userId,
+        displayName: email ? email.split('@')[0] : 'Music Lover',
+        email: email || userId,
         image: null // Apple Music doesn't provide profile images
       });
     }
