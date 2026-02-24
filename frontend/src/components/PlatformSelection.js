@@ -273,7 +273,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
                 onClick={handleConnectSpotify}
                 disabled={isConnecting === 'spotify' || loading}
               >
-                {isConnecting === 'spotify' ? 'Connecting...' : 'Switch to Spotify'}
+                {isConnecting === 'spotify' ? 'Connecting...' : 'Connect'}
               </button>
             ) : (
               <button
@@ -304,7 +304,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
                 onClick={handleConnectApple}
                 disabled={isConnecting === 'apple' || loading}
               >
-                {isConnecting === 'apple' ? 'Connecting...' : 'Switch to Apple Music'}
+                {isConnecting === 'apple' ? 'Connecting...' : 'Connect'}
               </button>
             ) : (
               <button
