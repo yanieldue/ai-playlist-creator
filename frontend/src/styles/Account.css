@@ -257,7 +257,7 @@
 
 .platform-toggle-btn.connected {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border-color: #000000;
 }
 
@@ -430,7 +430,7 @@
 
 :root.dark-mode .platform-toggle-btn.connected {
   background: #ffffff;
-  color: #000000;
+  color: #ffffff;
   border-color: #000000;
 }
 

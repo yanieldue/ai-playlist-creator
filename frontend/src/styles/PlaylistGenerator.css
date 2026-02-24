@@ -976,7 +976,7 @@
 
 .reference-search-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 12px 25px;
   border-radius: 8px;
@@ -1056,7 +1056,7 @@
 
 .add-reference-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 8px 20px;
   border-radius: 6px;
@@ -1168,7 +1168,7 @@
 .generate-button {
   width: 100%;
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 15px;
   font-size: 1.1rem;
@@ -1250,7 +1250,7 @@
 
 .select-all-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 10px 25px;
   border-radius: 8px;
@@ -1301,7 +1301,7 @@
 
 .preview-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   width: 40px;
   height: 40px;
@@ -1730,7 +1730,7 @@
 
 .resume-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 12px 24px;
   border-radius: 12px;
@@ -2131,7 +2131,7 @@
 
 .select-all-button-modal {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -2213,7 +2213,7 @@
 
 .add-more-songs-button-small {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -2333,7 +2333,7 @@
 /* Add More Songs Button */
 .add-more-songs-button {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
   border: none;
   padding: 10px 20px;
   border-radius: 8px;
