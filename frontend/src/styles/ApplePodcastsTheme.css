@@ -1259,13 +1259,13 @@ body {
 :root.dark-mode .chat-send-button svg {
   width: 16px !important;
   height: 16px !important;
-  fill: white !important;
-  stroke: white !important;
+  fill: #000000 !important;
+  stroke: #000000 !important;
 }
 
 :root.dark-mode .chat-send-button svg path {
-  fill: white !important;
-  stroke: white !important;
+  fill: #000000 !important;
+  stroke: #000000 !important;
 }
 
 :root.dark-mode .options-menu-apple {

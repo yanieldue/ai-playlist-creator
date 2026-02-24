@@ -3565,6 +3565,18 @@
   fill: white;
 }
 
+:root.dark-mode .chat-modal-send-button {
+  background: #ffffff;
+}
+
+:root.dark-mode .chat-modal-send-button:hover:not(:disabled) {
+  background: #e5e5e5;
+}
+
+:root.dark-mode .chat-modal-send-button svg {
+  fill: #000000;
+}
+
 /* Dark mode chat modal */
 :root.dark-mode .chat-modal-content {
   background: #2c2c2e;
