@@ -100,6 +100,49 @@
   color: #c7c7cc;
 }
 
+/* Password field with eye toggle */
+.auth-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.auth-input-wrapper .auth-input {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #8e8e93;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.auth-password-toggle:hover {
+  color: #1c1c1e;
+}
+
+.auth-password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+:root.dark-mode .auth-password-toggle {
+  color: #636366;
+}
+
+:root.dark-mode .auth-password-toggle:hover {
+  color: #ffffff;
+}
+
 /* Primary CTA button */
 .auth-cta {
   width: 100%;
