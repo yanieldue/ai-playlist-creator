@@ -188,17 +188,18 @@ const PlaylistGenerator = () => {
 
     // Handle Stripe payment success redirect
     if (urlParams.get('payment') === 'success') {
+      window.history.replaceState({}, '', window.location.pathname);
       const storedEmail = localStorage.getItem('userEmail');
       if (storedEmail) {
-        try {
-          const accountInfo = await playlistService.getAccountInfo(storedEmail);
-          if (accountInfo?.plan) {
-            localStorage.setItem('userPlan', accountInfo.plan);
-          }
-        } catch (e) { /* non-critical */ }
+        playlistService.getAccountInfo(storedEmail)
+          .then(accountInfo => {
+            if (accountInfo?.plan) localStorage.setItem('userPlan', accountInfo.plan);
+          })
+          .catch(() => {})
+          .finally(() => showToast('Welcome to Pro! All features are now unlocked.', 'success'));
+      } else {
+        setTimeout(() => showToast('Welcome to Pro! All features are now unlocked.', 'success'), 500);
       }
-      window.history.replaceState({}, '', window.location.pathname);
-      setTimeout(() => showToast('Welcome to Pro! All features are now unlocked.', 'success'), 500);
     }
 
     // First, check if user has a userId stored (either from signup or previous login)
