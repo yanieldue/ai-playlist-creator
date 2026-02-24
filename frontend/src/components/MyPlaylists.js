@@ -936,7 +936,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                         </span>
                       )}
                       {playlist.isReadOnly && (
-                        <span className="readonly-badge" title={playlist.readOnlyReason}>🔒</span>
+                        <span className="readonly-badge" title={playlist.readOnlyReason}><Icons.Lock size={12} /></span>
                       )}
                       {playlist.error && (
                         <span className="error-badge" title={playlist.error}>⚠️</span>
@@ -1207,7 +1207,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   type="button"
                 >
                   <span className="dropdown-title">Manual Refresh {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</span>
-                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>{isPaid() ? '▼' : '🔒'}</span>
+                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>{isPaid() ? '▼' : <Icons.Lock size={14} />}</span>
                 </button>
                 <p className="section-description">Refresh your playlist now with new songs</p>
 
@@ -1383,7 +1383,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       className="upgrade-locked-row"
                       onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
                     >
-                      <span>🔒 Never (Free Plan)</span>
+                      <span><Icons.Lock size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Never (Free Plan)</span>
                       <span className="upgrade-locked-badge">Upgrade</span>
                     </button>
                   )}
@@ -1510,7 +1510,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     onClick={() => setUpgradeModal({ open: true, feature: 'Refinement Instructions' })}
                     style={{marginBottom: 12}}
                   >
-                    <span>🔒 Save permanent instructions</span>
+                    <span><Icons.Lock size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Save permanent instructions</span>
                     <span className="upgrade-locked-badge">Upgrade</span>
                   </button>
                 )}

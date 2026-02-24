@@ -1,4 +1,5 @@
 import React from 'react';
+import Icons from './Icons';
 import '../styles/UpgradeModal.css';
 
 const FEATURE_DESCRIPTIONS = {
@@ -31,7 +32,7 @@ export default function UpgradeModal({ isOpen, onClose, featureName }) {
       <div className="upgrade-modal" onClick={e => e.stopPropagation()}>
         <button className="upgrade-close" onClick={onClose} aria-label="Close">✕</button>
 
-        <div className="upgrade-lock-icon">🔒</div>
+        <div className="upgrade-lock-icon"><Icons.Lock size={40} /></div>
 
         <h2 className="upgrade-title">Paid Feature</h2>
         <p className="upgrade-feature-name">{featureName}</p>
