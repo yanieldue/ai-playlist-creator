@@ -136,7 +136,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
                 <span className="pricing-check pricing-check-pro">✓</span>
                 <span className="pricing-feature-text">
                   {f.label}
-                  {f.detail && <span className="pricing-feature-detail"> — {f.detail}</span>}
+                  {f.detail && <span className="pricing-feature-detail">{f.detail}</span>}
                 </span>
               </li>
             ))}
