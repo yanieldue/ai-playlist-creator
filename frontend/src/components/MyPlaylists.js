@@ -1041,8 +1041,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 <img
                                   src={track.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
                                   alt={track.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                                  width="18"
-                                  height="18"
+                                  width="16"
+                                  height="16"
                                   style={{ objectFit: 'contain', display: 'block' }}
                                 />
                               </a>
