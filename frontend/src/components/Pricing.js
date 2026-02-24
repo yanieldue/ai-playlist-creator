@@ -21,11 +21,9 @@ const PAID_FEATURES = [
   { label: 'Add More Songs', detail: null },
   { label: 'Draft playlists', detail: null },
   { label: 'Import playlists', detail: null },
-  { label: 'Search songs & artists', detail: null },
   { label: 'Auto-update playlists', detail: 'Daily, weekly, or monthly' },
   { label: 'Manual refresh', detail: null },
   { label: 'Persistent refinement instructions', detail: null },
-  { label: 'Connect Spotify + Apple Music', detail: 'Simultaneously' },
 ];
 
 const Pricing = ({ isOnboarding = false, onContinueFree }) => {
