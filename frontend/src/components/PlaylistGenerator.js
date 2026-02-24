@@ -2141,7 +2141,7 @@ const PlaylistGenerator = () => {
               {showProfileDropdown && (
                 <div className="profile-dropdown-topnav">
                   <div className="dropdown-user-info">
-                    <div className="dropdown-user-name">{userProfile?.displayName || 'User'}</div>
+                    {userProfile?.displayName && <div className="dropdown-user-name">{userProfile.displayName}</div>}
                     {localStorage.getItem('userEmail') && (
                       <div className="dropdown-user-email">{localStorage.getItem('userEmail')}</div>
                     )}

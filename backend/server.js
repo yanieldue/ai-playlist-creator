@@ -3034,7 +3034,7 @@ app.get('/api/user-profile/:userId', async (req, res) => {
         console.log('No platform connection found for email:', userId);
         // Return basic profile for users without platform connection
         return res.json({
-          displayName: 'Music Lover',
+          displayName: null,
           image: null,
           email: userId
         });
@@ -3099,7 +3099,7 @@ app.get('/api/user-profile/:userId', async (req, res) => {
       const user = emailForLookup ? await db.getUser(emailForLookup) : null;
       const email = user?.email || tokens?.email || null;
       res.json({
-        displayName: email ? email.split('@')[0] : 'Music Lover',
+        displayName: email ? email.split('@')[0] : null,
         email: email || userId,
         image: null // Apple Music doesn't provide profile images
       });
