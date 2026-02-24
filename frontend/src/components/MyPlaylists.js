@@ -1078,7 +1078,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
             {loadingPlaylists ? (
               <div className="modal-loading">
                 <span className="spinner"></span>
-                <p>Loading your {activePlatform === 'apple' ? 'Apple Music' : 'Spotify'} playlists...</p>
+                <p>Loading your playlists...</p>
               </div>
             ) : platformPlaylists.length === 0 ? (
               <div className="modal-empty">
