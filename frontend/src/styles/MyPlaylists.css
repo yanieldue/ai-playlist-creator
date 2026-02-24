@@ -125,8 +125,8 @@
 }
 
 .import-button {
-  background: #ffffff;
-  color: #000000;
+  background: #1c1c1e;
+  color: #ffffff;
   border: none;
   padding: var(--space-md) 24px;
   border-radius: 10px;
@@ -138,9 +138,8 @@
 }
 
 .import-button:hover {
-  background: #e5e5e5;
+  opacity: 0.82;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .error-message {
@@ -1518,10 +1517,11 @@
 
 :root.dark-mode .import-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .import-button:hover {
-  background: #e5e5e5;
+  opacity: 0.88;
 }
 
 :root.dark-mode .delete-playlist-button {
