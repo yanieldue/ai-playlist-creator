@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import Icons from './Icons';
 import '../styles/UpgradeModal.css';
 
@@ -25,7 +26,13 @@ const PAID_BENEFITS = [
 ];
 
 export default function UpgradeModal({ isOpen, onClose, featureName }) {
+  const navigate = useNavigate();
   if (!isOpen) return null;
+
+  const handleUpgradeClick = () => {
+    onClose();
+    navigate('/pricing');
+  };
 
   return (
     <div className="upgrade-overlay" onClick={onClose}>
@@ -53,8 +60,8 @@ export default function UpgradeModal({ isOpen, onClose, featureName }) {
           ))}
         </ul>
 
-        <button className="upgrade-cta" disabled>
-          Upgrade Coming Soon
+        <button className="upgrade-cta" onClick={handleUpgradeClick}>
+          See Plans
         </button>
       </div>
     </div>

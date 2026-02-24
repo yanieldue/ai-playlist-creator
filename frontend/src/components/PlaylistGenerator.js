@@ -186,6 +186,21 @@ const PlaylistGenerator = () => {
     const success = urlParams.get('success');
     const spotifyConnected = urlParams.get('spotify') === 'connected';
 
+    // Handle Stripe payment success redirect
+    if (urlParams.get('payment') === 'success') {
+      const storedEmail = localStorage.getItem('userEmail');
+      if (storedEmail) {
+        try {
+          const accountInfo = await playlistService.getAccountInfo(storedEmail);
+          if (accountInfo?.plan) {
+            localStorage.setItem('userPlan', accountInfo.plan);
+          }
+        } catch (e) { /* non-critical */ }
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+      setTimeout(() => showToast('Welcome to Pro! All features are now unlocked.', 'success'), 500);
+    }
+
     // First, check if user has a userId stored (either from signup or previous login)
     const storedUserId = localStorage.getItem('userId');
     if (storedUserId) {
@@ -2154,6 +2169,15 @@ const PlaylistGenerator = () => {
                     <span className="dropdown-icon"><Icons.User size={18} /></span>
                     Account
                   </button>
+                  {!isPaid() && (
+                    <button className="dropdown-item" onClick={() => {
+                      setShowProfileDropdown(false);
+                      window.location.href = '/pricing';
+                    }}>
+                      <span className="dropdown-icon"><Icons.Lock size={18} /></span>
+                      Upgrade to Pro
+                    </button>
+                  )}
                   <button className="dropdown-item" onClick={() => {
                     setShowProfileDropdown(false);
                     setActiveTab('settings');

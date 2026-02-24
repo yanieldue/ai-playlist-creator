@@ -10,6 +10,7 @@ const path = require('path');
 const cron = require('node-cron');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { handleCriticalError } = require('./services/errorNotificationService');
 
 // Load services with error handling
@@ -66,6 +67,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+// Stripe webhook needs raw body — must be before express.json()
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' })); // Increase limit for Apple Music tokens
 
 // Initialize Spotify API
@@ -8514,6 +8517,117 @@ app.post('/api/log-error', async (req, res) => {
     res.status(500).json({ error: 'Failed to log error' });
   }
 });
+
+// ─── Stripe Endpoints ────────────────────────────────────────────────────────
+
+// POST /api/stripe/create-checkout-session
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  try {
+    const { userId, billingPeriod } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const priceId = billingPeriod === 'annual'
+      ? process.env.STRIPE_PRICE_ANNUAL
+      : process.env.STRIPE_PRICE_MONTHLY;
+    if (!priceId) return res.status(500).json({ error: 'Stripe price not configured' });
+
+    // Create or reuse Stripe customer
+    const userRecord = await db.getUser(email);
+    let stripeCustomerId = userRecord?.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({ email, metadata: { email } });
+      stripeCustomerId = customer.id;
+      await db.updateStripeCustomer(email, stripeCustomerId);
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: stripeCustomerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${frontendUrl}/?payment=success`,
+      cancel_url: `${frontendUrl}/pricing`,
+      metadata: { email },
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('Stripe create-checkout-session error:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+// POST /api/stripe/webhook
+app.post('/api/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Stripe webhook signature error:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const email = session.metadata?.email;
+      if (email) {
+        const subscriptionId = session.subscription;
+        await db.updateSubscription(email, { subscriptionId, status: 'active', endsAt: null, plan: 'paid' });
+        console.log(`✓ Stripe: upgraded ${email} to paid`);
+      }
+    } else if (event.type === 'customer.subscription.updated') {
+      const sub = event.data.object;
+      const user = await db.getUserByStripeCustomerId(sub.customer);
+      if (user) {
+        const status = sub.status;
+        const plan = (status === 'active' || status === 'trialing') ? 'paid' : 'free';
+        const endsAt = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+        await db.updateSubscription(user.email, { subscriptionId: sub.id, status, endsAt, plan });
+      }
+    } else if (event.type === 'customer.subscription.deleted') {
+      const sub = event.data.object;
+      const user = await db.getUserByStripeCustomerId(sub.customer);
+      if (user) {
+        await db.updateSubscription(user.email, { subscriptionId: null, status: 'canceled', endsAt: null, plan: 'free' });
+        console.log(`✓ Stripe: downgraded ${user.email} to free`);
+      }
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Stripe webhook handler error:', error);
+    res.status(500).json({ error: 'Webhook handler failed' });
+  }
+});
+
+// GET /api/stripe/billing-portal/:userId
+app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer found' });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: userRecord.stripeCustomerId,
+      return_url: `${frontendUrl}/account`,
+    });
+
+    res.json({ url: portalSession.url });
+  } catch (error) {
+    console.error('Stripe billing portal error:', error);
+    res.status(500).json({ error: 'Failed to create billing portal session' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Initialize database and start server
 async function startServer() {

@@ -110,6 +110,28 @@ function migrateDatabase() {
     console.log('✓ Added weekly_reset_at column');
   }
 
+  const hasStripeCustomerId = usersTableInfo.some(col => col.name === 'stripe_customer_id');
+  const hasStripeSubscriptionId = usersTableInfo.some(col => col.name === 'stripe_subscription_id');
+  const hasSubscriptionStatus = usersTableInfo.some(col => col.name === 'subscription_status');
+  const hasSubscriptionEndsAt = usersTableInfo.some(col => col.name === 'subscription_ends_at');
+
+  if (!hasStripeCustomerId) {
+    db.exec('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+    console.log('✓ Added stripe_customer_id column');
+  }
+  if (!hasStripeSubscriptionId) {
+    db.exec('ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT');
+    console.log('✓ Added stripe_subscription_id column');
+  }
+  if (!hasSubscriptionStatus) {
+    db.exec('ALTER TABLE users ADD COLUMN subscription_status TEXT');
+    console.log('✓ Added subscription_status column');
+  }
+  if (!hasSubscriptionEndsAt) {
+    db.exec('ALTER TABLE users ADD COLUMN subscription_ends_at TEXT');
+    console.log('✓ Added subscription_ends_at column');
+  }
+
   if (hasUserMusicToken && hasStorefront) {
     console.log('✓ Database schema is up to date');
   }
@@ -284,6 +306,9 @@ class DatabaseService {
       plan: user.plan || 'free',
       weeklyGenerations: user.weekly_generations || 0,
       weeklyResetAt: user.weekly_reset_at || null,
+      stripeCustomerId: user.stripe_customer_id || null,
+      stripeSubscriptionId: user.stripe_subscription_id || null,
+      subscriptionStatus: user.subscription_status || null,
       createdAt: user.created_at,
       connectedPlatforms: {
         spotify: Boolean(user.spotify),
@@ -299,6 +324,23 @@ class DatabaseService {
   resetWeeklyGenerations(email) {
     const now = new Date().toISOString();
     userOps.resetWeeklyGenerations.run(now, email);
+  }
+
+  updateStripeCustomer(email, stripeCustomerId) {
+    const updatedAt = new Date().toISOString();
+    db.prepare('UPDATE users SET stripe_customer_id = ?, updated_at = ? WHERE email = ?').run(stripeCustomerId, updatedAt, email);
+  }
+
+  updateSubscription(email, { subscriptionId, status, endsAt, plan }) {
+    const updatedAt = new Date().toISOString();
+    db.prepare('UPDATE users SET stripe_subscription_id = ?, subscription_status = ?, subscription_ends_at = ?, plan = ?, updated_at = ? WHERE email = ?')
+      .run(subscriptionId || null, status || null, endsAt || null, plan || 'free', updatedAt, email);
+  }
+
+  getUserByStripeCustomerId(stripeCustomerId) {
+    const user = db.prepare('SELECT * FROM users WHERE stripe_customer_id = ?').get(stripeCustomerId);
+    if (!user) return null;
+    return { email: user.email, plan: user.plan, stripeCustomerId: user.stripe_customer_id, stripeSubscriptionId: user.stripe_subscription_id };
   }
 
   createUser(email, password, platform, userId = null) {

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import Icons from './Icons';
@@ -6,12 +8,16 @@ import UpgradeModal from './UpgradeModal';
 import { isPaid } from '../utils/plan';
 import '../styles/Account.css';
 
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
 const Account = ({ onBack, showToast }) => {
+  const navigate = useNavigate();
   const [accountEmail, setAccountEmail] = useState('');
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
   const [showEditEmailModal, setShowEditEmailModal] = useState(false);
   const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
   const [showPlatformsDropdown, setShowPlatformsDropdown] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -179,6 +185,19 @@ const Account = ({ onBack, showToast }) => {
 
   const togglePlatformsDropdown = () => {
     setShowPlatformsDropdown(!showPlatformsDropdown);
+  };
+
+  const handleManageBilling = async () => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+    setBillingLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/stripe/billing-portal/${encodeURIComponent(userId)}`);
+      window.location.href = data.url;
+    } catch (err) {
+      setAccountError('Could not open billing portal. Please try again.');
+      setBillingLoading(false);
+    }
   };
 
   const handleTogglePlatform = async (platform) => {
@@ -469,6 +488,26 @@ const Account = ({ onBack, showToast }) => {
               <Icons.ChevronRight size={20} color="#c7c7cc" />
             </div>
           </button>
+
+          {isPaid() ? (
+            <button className="account-list-item" onClick={handleManageBilling} disabled={billingLoading}>
+              <span className="account-list-label">Plan</span>
+              <div className="account-list-value">
+                <span className="account-plan-badge account-plan-badge-pro">Pro</span>
+                <span style={{ fontSize: 13, color: '#8e8e93' }}>{billingLoading ? 'Loading…' : 'Manage Billing'}</span>
+                <Icons.ChevronRight size={20} color="#c7c7cc" />
+              </div>
+            </button>
+          ) : (
+            <button className="account-list-item" onClick={() => navigate('/pricing')}>
+              <span className="account-list-label">Plan</span>
+              <div className="account-list-value">
+                <span className="account-plan-badge">Free</span>
+                <span style={{ fontSize: 13, color: '#8e8e93' }}>Upgrade to Pro</span>
+                <Icons.ChevronRight size={20} color="#c7c7cc" />
+              </div>
+            </button>
+          )}
 
           <button className="account-list-item platforms-dropdown-header" onClick={togglePlatformsDropdown}>
             <span className="account-list-label">Connected Music Platforms</span>

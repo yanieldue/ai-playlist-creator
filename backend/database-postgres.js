@@ -135,6 +135,15 @@ async function migrateDatabase() {
       ADD COLUMN IF NOT EXISTS weekly_reset_at TIMESTAMP
     `);
 
+    // Add Stripe columns
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT,
+      ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT,
+      ADD COLUMN IF NOT EXISTS subscription_status TEXT,
+      ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP
+    `);
+
     console.log('✓ PostgreSQL migrations complete');
   } catch (error) {
     console.error('Error running migrations:', error);
@@ -157,6 +166,9 @@ class DatabaseService {
       SELECT u.email, u.password, u.platform, u.user_id as "userId",
              u.plan, u.weekly_generations as "weeklyGenerations",
              u.weekly_reset_at as "weeklyResetAt",
+             u.stripe_customer_id as "stripeCustomerId",
+             u.stripe_subscription_id as "stripeSubscriptionId",
+             u.subscription_status as "subscriptionStatus",
              u.created_at as "createdAt", u.updated_at as "updatedAt",
              COALESCE(cp.spotify, false) as spotify,
              COALESCE(cp.apple, false) as apple
@@ -176,6 +188,9 @@ class DatabaseService {
       plan: row.plan || 'free',
       weeklyGenerations: row.weeklyGenerations || 0,
       weeklyResetAt: row.weeklyResetAt || null,
+      stripeCustomerId: row.stripeCustomerId || null,
+      stripeSubscriptionId: row.stripeSubscriptionId || null,
+      subscriptionStatus: row.subscriptionStatus || null,
       createdAt: row.createdAt,
       connectedPlatforms: {
         spotify: row.spotify,
@@ -196,6 +211,29 @@ class DatabaseService {
       `UPDATE users SET weekly_generations = 1, weekly_reset_at = NOW() WHERE email = $1`,
       [email]
     );
+  }
+
+  async updateStripeCustomer(email, stripeCustomerId) {
+    await pool.query(
+      `UPDATE users SET stripe_customer_id = $1, updated_at = NOW() WHERE email = $2`,
+      [stripeCustomerId, email]
+    );
+  }
+
+  async updateSubscription(email, { subscriptionId, status, endsAt, plan }) {
+    await pool.query(
+      `UPDATE users SET stripe_subscription_id = $1, subscription_status = $2, subscription_ends_at = $3, plan = $4, updated_at = NOW() WHERE email = $5`,
+      [subscriptionId || null, status || null, endsAt || null, plan || 'free', email]
+    );
+  }
+
+  async getUserByStripeCustomerId(stripeCustomerId) {
+    const result = await pool.query(
+      `SELECT email, plan, stripe_customer_id as "stripeCustomerId", stripe_subscription_id as "stripeSubscriptionId" FROM users WHERE stripe_customer_id = $1`,
+      [stripeCustomerId]
+    );
+    if (result.rows.length === 0) return null;
+    return result.rows[0];
   }
 
   async createUser(email, password, platform, userId = null) {

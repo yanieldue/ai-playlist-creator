@@ -439,6 +439,33 @@
   border-color: #0dd9ff;
 }
 
+/* Plan badges */
+.account-plan-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #f2f2f7;
+  color: #8e8e93;
+  margin-right: 4px;
+}
+
+.account-plan-badge-pro {
+  background: #000000;
+  color: #ffffff;
+}
+
+:root.dark-mode .account-plan-badge {
+  background: #3a3a3c;
+  color: #ebebf5cc;
+}
+
+:root.dark-mode .account-plan-badge-pro {
+  background: #ffffff;
+  color: #000000;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .account-list {
