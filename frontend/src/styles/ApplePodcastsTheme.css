@@ -1510,6 +1510,10 @@ body {
   background: #ffffff;
 }
 
+:root.dark-mode .profile-button-apple svg {
+  fill: #000000;
+}
+
 :root.dark-mode .profile-button-apple:hover {
   box-shadow: 0 2px 8px rgba(251, 191, 36, 0.5);
 }

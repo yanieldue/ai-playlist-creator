@@ -1595,6 +1595,7 @@
 
 :root.dark-mode .create-first-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .create-first-button:hover {
@@ -1632,6 +1633,7 @@
 
 :root.dark-mode .open-spotify-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .open-spotify-button:hover {
@@ -1648,6 +1650,7 @@
 
 :root.dark-mode .edit-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .edit-button:hover {
@@ -1692,6 +1695,7 @@
 
 :root.dark-mode .search-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .search-button:hover:not(:disabled) {
@@ -1717,6 +1721,7 @@
 
 :root.dark-mode .add-track-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .add-track-button:hover {
@@ -1836,6 +1841,7 @@
 
 :root.dark-mode .import-playlist-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .import-playlist-button:hover:not(:disabled) {
@@ -1865,6 +1871,7 @@
 
 :root.dark-mode .edit-settings-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .edit-settings-button:hover {
@@ -1889,6 +1896,7 @@
 
 :root.dark-mode .refresh-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .refresh-button:hover {
@@ -1932,6 +1940,7 @@
 
 :root.dark-mode .refresh-confirm-button {
   background: #ffffff;
+  color: #000000;
 }
 
 :root.dark-mode .refresh-confirm-button:hover {
