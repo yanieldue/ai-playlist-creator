@@ -266,13 +266,10 @@
 .platform-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   background: #f2f2f7;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
+  padding: 4px 6px;
+  border-radius: 8px;
   margin-left: 8px;
 }
 
