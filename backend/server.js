@@ -10,7 +10,10 @@ const path = require('path');
 const cron = require('node-cron');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const getStripe = () => {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not configured');
+  return require('stripe')(process.env.STRIPE_SECRET_KEY);
+};
 const { handleCriticalError } = require('./services/errorNotificationService');
 
 // Load services with error handling
@@ -8535,6 +8538,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     if (!priceId) return res.status(500).json({ error: 'Stripe price not configured' });
 
     // Create or reuse Stripe customer
+    const stripe = getStripe();
     const userRecord = await db.getUser(email);
     let stripeCustomerId = userRecord?.stripeCustomerId;
     if (!stripeCustomerId) {
@@ -8565,6 +8569,7 @@ app.post('/api/stripe/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
   try {
+    const stripe = getStripe();
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Stripe webhook signature error:', err.message);
@@ -8614,6 +8619,7 @@ app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
     const userRecord = await db.getUser(email);
     if (!userRecord?.stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer found' });
 
+    const stripe = getStripe();
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: userRecord.stripeCustomerId,
