@@ -710,14 +710,14 @@
 .track-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
 .track-reaction-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: 6px;
   background: none;
   border: none;
   color: #8e8e93;
@@ -769,7 +769,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding: 6px;
   color: #1DB954;
   border-radius: 50%;
   text-decoration: none;
@@ -843,6 +843,15 @@
   .cancel-button,
   .remove-button {
     width: 100%;
+  }
+
+  .track-item {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .track-actions {
+    gap: 0;
   }
 }
 
