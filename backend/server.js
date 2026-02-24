@@ -1373,26 +1373,11 @@ app.post('/api/signup', async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Check if user already exists
-    if (registeredUsers.has(normalizedEmail)) {
+    // Check if user already exists (await for PostgreSQL compatibility)
+    const existingUser = await db.getUser(normalizedEmail);
+    if (existingUser) {
       return res.status(400).json({ error: 'An account with this email already exists' });
     }
-
-    // Create user account (in production, you should hash the password)
-    // Use email as the userId (platform-independent)
-    const user = {
-      email: normalizedEmail,
-      password: password, // TODO: Hash password in production
-      platform: platform,
-      connectedPlatforms: {
-        spotify: platform === 'spotify',
-        apple: platform === 'apple'
-      },
-      createdAt: new Date().toISOString(),
-      userId: normalizedEmail, // Use email as userId (platform-independent)
-    };
-
-    registeredUsers.set(normalizedEmail, user);
 
     // Create user in database
     await db.createUser(normalizedEmail, password, platform, normalizedEmail);
