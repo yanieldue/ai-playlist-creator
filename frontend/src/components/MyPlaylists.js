@@ -1035,21 +1035,23 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               )}
                             </div>
                           </div>
-                          <a
-                            href={track.externalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="spotify-link-button"
-                            title={`Open in ${track.platform === 'apple' ? 'Apple Music' : 'Spotify'}`}
-                          >
-                            <img
-                              src={track.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                              alt={track.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                              width="20"
-                              height="20"
-                              style={{ objectFit: 'contain', display: 'block' }}
-                            />
-                          </a>
+                          {track.externalUrl && (
+                            <a
+                              href={track.externalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="spotify-link-button"
+                              title={`Open in ${track.platform === 'apple' ? 'Apple Music' : 'Spotify'}`}
+                            >
+                              <img
+                                src={track.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
+                                alt={track.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                                width="20"
+                                height="20"
+                                style={{ objectFit: 'contain', display: 'block' }}
+                              />
+                            </a>
+                          )}
                         </div>
                       ))
                     ) : (

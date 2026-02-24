@@ -6172,7 +6172,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
                 uri: track.uri,
                 album: track.album.name,
                 image: track.album.images?.[0]?.url || null,
-                externalUrl: track.url || `https://music.apple.com/us/song/${trackId}`,
+                externalUrl: track.url || null,
                 platform: 'apple',
                 reaction: reaction
               };

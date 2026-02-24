@@ -263,8 +263,11 @@ class AppleMusicService {
     }
 
     return playlist.tracks.map(track => {
-      // Apple Music URL - use provided URL or construct one from the track ID
-      const trackUrl = track.attributes.url || `https://music.apple.com/us/song/${track.id}`;
+      // Apple Music URL - library track IDs (i.XXXXX) don't work as public URLs.
+      // Use the catalog ID from playParams for a valid public link.
+      const catalogId = track.attributes.playParams?.catalogId || track.attributes.playParams?.id;
+      const trackUrl = track.attributes.url ||
+        (catalogId ? `https://music.apple.com/song/${catalogId}` : null);
 
       return {
         id: track.id,
