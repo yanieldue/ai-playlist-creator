@@ -1220,8 +1220,8 @@
 }
 
 .import-playlist-button {
-  background: #ffffff;
-  color: #000000;
+  background: #1c1c1e;
+  color: #ffffff;
   border: none;
   padding: var(--space-sm) var(--space-xl);
   border-radius: 8px;
@@ -1233,7 +1233,7 @@
 }
 
 .import-playlist-button:hover:not(:disabled) {
-  background: #e5e5e5;
+  background: #3a3a3c;
   transform: scale(1.05);
 }
 
