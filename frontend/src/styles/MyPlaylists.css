@@ -697,7 +697,7 @@
   border-radius: 4px;
 }
 
-.track-actions {
+.tracks-list .track-actions {
   display: flex;
   align-items: center;
   gap: 2px;
