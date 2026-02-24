@@ -51,11 +51,11 @@ body {
 }
 
 .nav-logo {
-  height: 28px;
-  width: auto;
-  object-fit: contain;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
   display: block;
-  border-radius: 6px;
+  border-radius: 50%;
 }
 
 .nav-center {
