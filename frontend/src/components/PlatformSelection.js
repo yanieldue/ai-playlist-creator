@@ -104,8 +104,9 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     setError('');
 
     try {
-      console.log('PlatformSelection: Getting Spotify auth URL for:', email);
-      const authData = await playlistService.getSpotifyAuthUrl(email);
+      const userEmail = email || localStorage.getItem('userEmail');
+      console.log('PlatformSelection: Getting Spotify auth URL for:', userEmail);
+      const authData = await playlistService.getSpotifyAuthUrl(userEmail);
 
       if (authData && authData.url) {
         console.log('PlatformSelection: Redirecting to Spotify OAuth');
