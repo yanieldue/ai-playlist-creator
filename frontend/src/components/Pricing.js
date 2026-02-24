@@ -11,9 +11,6 @@ const FREE_FEATURES = [
   { label: 'Generate playlists', detail: '1 per week' },
   { label: 'Chat refinement', detail: null },
   { label: 'Song reactions', detail: null },
-  { label: 'My Playlists tab', detail: null },
-  { label: 'Top & New Artists', detail: null },
-  { label: 'Connect one platform', detail: null },
 ];
 
 const PAID_FEATURES = [
