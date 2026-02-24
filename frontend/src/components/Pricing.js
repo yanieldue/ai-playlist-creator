@@ -8,19 +8,19 @@ import '../styles/Pricing.css';
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const FREE_FEATURES = [
-  { label: 'Generate playlists', detail: '1 per week' },
-  { label: 'Chat refinement', detail: null },
-  { label: 'Song reactions', detail: null },
+  { label: 'Generate playlists', detail: '1 per week, describe any vibe or mood' },
+  { label: 'Chat refinement', detail: 'Adjust genre, tempo, or mood via AI chat' },
+  { label: 'Song reactions', detail: 'Like or skip songs to improve future playlists' },
 ];
 
 const PAID_FEATURES = [
-  { label: 'Everything in Free', detail: 'Unlimited generations' },
-  { label: 'Add More Songs', detail: null },
-  { label: 'Draft playlists', detail: null },
-  { label: 'Import playlists', detail: null },
-  { label: 'Auto-update playlists', detail: 'Daily, weekly, or monthly' },
-  { label: 'Manual refresh', detail: null },
-  { label: 'Persistent refinement instructions', detail: null },
+  { label: 'Unlimited generations', detail: 'Create as many playlists as you want' },
+  { label: 'Add More Songs', detail: 'Expand any playlist with fresh tracks anytime' },
+  { label: 'Draft playlists', detail: 'Save unfinished playlists and come back later' },
+  { label: 'Import playlists', detail: 'Bring in existing playlists from Spotify' },
+  { label: 'Auto-update playlists', detail: 'Get new songs added daily, weekly, or monthly' },
+  { label: 'Manual refresh', detail: 'Refresh a playlist with new songs on demand' },
+  { label: 'Saved refinement instructions', detail: 'AI remembers your preferences on every refresh' },
 ];
 
 const Pricing = ({ isOnboarding = false, onContinueFree }) => {
@@ -101,7 +101,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
                 <span className="pricing-check">✓</span>
                 <span className="pricing-feature-text">
                   {f.label}
-                  {f.detail && <span className="pricing-feature-detail"> — {f.detail}</span>}
+                  {f.detail && <span className="pricing-feature-detail">{f.detail}</span>}
                 </span>
               </li>
             ))}

@@ -221,6 +221,9 @@
   font-size: 14px;
   color: #3a3a3c;
   line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .pricing-card-pro .pricing-feature-text {
@@ -229,7 +232,8 @@
 
 .pricing-feature-detail {
   color: #8e8e93;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 .pricing-card-pro .pricing-feature-detail {
