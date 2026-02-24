@@ -51,7 +51,7 @@
 /* Toast Types */
 .toast-success {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
 }
 
 .toast-error {
@@ -61,7 +61,7 @@
 
 .toast-info {
   background: #000000;
-  color: #000000;
+  color: #ffffff;
 }
 
 /* Toast Icon */
