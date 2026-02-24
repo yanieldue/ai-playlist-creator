@@ -1383,7 +1383,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       className="upgrade-locked-row"
                       onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
                     >
-                      <span><Icons.Lock size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Never (Free Plan)</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
                       <span className="upgrade-locked-badge">Upgrade</span>
                     </button>
                   )}
@@ -1510,7 +1510,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     onClick={() => setUpgradeModal({ open: true, feature: 'Refinement Instructions' })}
                     style={{marginBottom: 12}}
                   >
-                    <span><Icons.Lock size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Save permanent instructions</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Save permanent instructions</span></span>
                     <span className="upgrade-locked-badge">Upgrade</span>
                   </button>
                 )}

@@ -2820,7 +2820,7 @@ const PlaylistGenerator = () => {
                             className="upgrade-locked-row"
                             onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
                           >
-                            <span><Icons.Lock size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} /> Never (Free Plan)</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
                             <span className="upgrade-locked-badge">Upgrade</span>
                           </button>
                         )}
@@ -3114,8 +3114,8 @@ const PlaylistGenerator = () => {
                 </div>
 
                 {isWeeklyLimitActive() && (
-                  <div style={{ padding: '0 20px 12px', textAlign: 'center', fontSize: '13px', color: '#888' }}>
-                    <Icons.Lock size={13} style={{ marginRight: '5px', verticalAlign: 'middle' }} />You've hit your weekly limit. Free accounts get 1 playlist per week — come back on {getWeeklyLimitResetDate()} to generate again.
+                  <div style={{ padding: '0 20px 12px', textAlign: 'center', fontSize: '13px', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                    <Icons.Lock size={13} /><span>You've hit your weekly limit. Free accounts get 1 playlist per week — come back on {getWeeklyLimitResetDate()} to generate again.</span>
                   </div>
                 )}
                 <div className="modal-footer">
@@ -3131,7 +3131,7 @@ const PlaylistGenerator = () => {
                       className="refresh-confirm-button"
                       style={{ background: '#000000', color: '#ffffff' }}
                     >
-                      <Icons.Lock size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />Upgrade to Generate
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}><Icons.Lock size={14} /><span>Upgrade to Generate</span></span>
                     </button>
                   ) : (
                     <button onClick={handleConfirmArtistSettings} className="refresh-confirm-button">
