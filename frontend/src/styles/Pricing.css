@@ -391,3 +391,29 @@
     padding: 24px 20px 20px;
   }
 }
+
+/* Continue with Free (onboarding paywall) */
+.pricing-skip-btn {
+  display: block;
+  margin: 8px auto 0;
+  background: none;
+  border: none;
+  color: #8e8e93;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 10px 20px;
+  font-family: inherit;
+  transition: color 0.2s;
+}
+
+.pricing-skip-btn:hover {
+  color: #1c1c1e;
+}
+
+:root.dark-mode .pricing-skip-btn {
+  color: #636366;
+}
+
+:root.dark-mode .pricing-skip-btn:hover {
+  color: #ffffff;
+}

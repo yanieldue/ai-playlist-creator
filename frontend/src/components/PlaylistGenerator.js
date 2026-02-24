@@ -10,6 +10,7 @@ import Account from './Account';
 import FAQ from './FAQ';
 import SignupForm from './SignupForm';
 import PlatformSelection from './PlatformSelection';
+import Pricing from './Pricing';
 import Toast from './Toast';
 import Icons from './Icons';
 import ErrorMessage from './ErrorMessage';
@@ -23,6 +24,7 @@ const PlaylistGenerator = () => {
   const [userId, setUserId] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [inSignupFlow, setInSignupFlow] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState(null);
   const [error, setError] = useState('');
@@ -189,6 +191,7 @@ const PlaylistGenerator = () => {
     // Handle Stripe payment success redirect
     if (urlParams.get('payment') === 'success') {
       window.history.replaceState({}, '', window.location.pathname);
+      localStorage.setItem('seenPricingPage', 'true'); // skip paywall for paid users
       const storedEmail = localStorage.getItem('userEmail');
       if (storedEmail) {
         playlistService.getAccountInfo(storedEmail)
@@ -220,6 +223,11 @@ const PlaylistGenerator = () => {
       setUserId(storedUserId);
       setIsAuthenticated(true);
       mp.identify(storedUserId);
+
+      // Show paywall once for free users who haven't seen it yet
+      if (!isPaid() && !localStorage.getItem('seenPricingPage')) {
+        setShowPaywall(true);
+      }
 
       // Note: userId is now email-based (platform-independent)
       // Platform-specific IDs are stored separately as spotifyUserId and appleMusicUserId
@@ -597,6 +605,11 @@ const PlaylistGenerator = () => {
     } catch (err) {
       console.error('Failed to fetch user profile:', err);
     }
+  };
+
+  const handlePaywallDismiss = () => {
+    localStorage.setItem('seenPricingPage', 'true');
+    setShowPaywall(false);
   };
 
   const handleLogout = () => {
@@ -2119,7 +2132,9 @@ const PlaylistGenerator = () => {
         onClose={() => setUpgradeModal({ open: false, feature: '' })}
         featureName={upgradeModal.feature}
       />
-      {isAuthenticated && userId ? (
+      {isAuthenticated && userId && showPaywall ? (
+        <Pricing isOnboarding onContinueFree={handlePaywallDismiss} />
+      ) : isAuthenticated && userId ? (
         <>
           {/* Top Navigation Bar - Apple Style */}
           <div className="top-nav">

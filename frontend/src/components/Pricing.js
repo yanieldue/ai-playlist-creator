@@ -28,7 +28,7 @@ const PAID_FEATURES = [
   { label: 'Connect Spotify + Apple Music', detail: 'Simultaneously' },
 ];
 
-const Pricing = () => {
+const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = useState('monthly');
   const [loading, setLoading] = useState(false);
@@ -51,6 +51,7 @@ const Pricing = () => {
         userId,
         billingPeriod,
       });
+      localStorage.setItem('seenPricingPage', 'true');
       window.location.href = data.url;
     } catch (err) {
       setError('Something went wrong. Please try again.');
@@ -60,9 +61,11 @@ const Pricing = () => {
 
   return (
     <div className="pricing-page">
-      <button className="pricing-back-btn" onClick={() => navigate(-1)}>
-        <Icons.ChevronLeft size={18} /> Back
-      </button>
+      {!isOnboarding && (
+        <button className="pricing-back-btn" onClick={() => navigate(-1)}>
+          <Icons.ChevronLeft size={18} /> Back
+        </button>
+      )}
 
       <div className="pricing-header">
         <h1 className="pricing-title">Simple, honest pricing</h1>
@@ -159,6 +162,12 @@ const Pricing = () => {
       <p className="pricing-footer-note">
         Secure payments via Stripe · Cancel anytime · No hidden fees
       </p>
+
+      {isOnboarding && (
+        <button className="pricing-skip-btn" onClick={onContinueFree}>
+          Continue with Free
+        </button>
+      )}
     </div>
   );
 };
