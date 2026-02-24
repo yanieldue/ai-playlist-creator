@@ -842,15 +842,19 @@
   }
 
   .tracks-list .track-actions {
+    display: grid;
+    grid-template-columns: 24px 24px 24px;
     gap: 4px;
+    align-items: center;
+    justify-items: center;
   }
 
-  .tracks-list .track-reaction-button {
-    padding: 2px;
-  }
-
+  .tracks-list .track-reaction-button,
   .tracks-list .spotify-link-button {
-    padding: 2px;
+    padding: 0;
+    width: auto;
+    height: auto;
+    min-width: unset;
   }
 }
 
