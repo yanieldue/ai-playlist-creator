@@ -700,7 +700,7 @@
 .tracks-list .track-actions {
   display: flex;
   align-items: center;
-  gap: 0px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -708,7 +708,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3px;
+  padding: 5px;
   background: none;
   border: none;
   color: #8e8e93;
@@ -760,7 +760,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3px;
+  padding: 6px;
   color: #1DB954;
   border-radius: 50%;
   text-decoration: none;
@@ -839,6 +839,18 @@
   .track-item {
     gap: 6px;
     padding: 6px 8px;
+  }
+
+  .tracks-list .track-actions {
+    gap: 0px;
+  }
+
+  .tracks-list .track-reaction-button {
+    padding: 3px;
+  }
+
+  .tracks-list .spotify-link-button {
+    padding: 3px;
   }
 }
 
