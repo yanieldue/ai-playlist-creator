@@ -1059,8 +1059,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       <p className="no-tracks">No tracks available</p>
                     )}
                   </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
