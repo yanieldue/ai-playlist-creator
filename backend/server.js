@@ -3431,7 +3431,7 @@ Respond ONLY with valid JSON in this format:
     "region": "geographic region or null",
     "movement": "cultural movement or null",
     "scene": "music scene or null",
-    "language": "language preference (e.g., 'English only', 'Spanish', 'Korean', 'any') or null"
+    "language": { "prefer": ["list of preferred languages, e.g. 'Spanish', 'Korean'"], "exclude": ["list of excluded languages"] }
   },
   "contextClues": {
     "useCase": "intended use or null",
@@ -3551,6 +3551,14 @@ SONG COUNT:
 - Size descriptors: "short playlist" = 10, "quick playlist" = 10, "big playlist" = 50, "massive playlist" = 75, "full playlist" = 30
 - If no count is implied at all → null
 
+LANGUAGE (culturalContext.language):
+- "I want Spanish songs", "Spanish music", "songs in Spanish" → prefer: ["Spanish"], exclude: []
+- "English songs only", "English only" → prefer: ["English"], exclude: []
+- "no English songs", "not in English" → prefer: [], exclude: ["English"]
+- "Korean pop", "K-pop" → prefer: ["Korean"], exclude: []
+- "French music" → prefer: ["French"], exclude: []
+- If no language is implied → prefer: [], exclude: []
+
 SEED ARTISTS (CRITICAL):
 When the user doesn't mention specific artists, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
 These are used to find similar artists and build the playlist.
@@ -3591,7 +3599,7 @@ DO NOT include any text outside the JSON.`
         region: null,
         movement: null,
         scene: null,
-        language: null
+        language: { prefer: [], exclude: [] }
       },
       contextClues: {
         useCase: null,
