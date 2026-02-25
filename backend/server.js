@@ -5342,13 +5342,17 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
                                  lowerPrompt.includes('sound like');
 
     // Strict artist mode: specific artist keywords WITHOUT similarity indicators
+    // Note: ' songs', ' tracks', ' music' intentionally excluded — they match song-count
+    // phrases like "50 songs of hip hop" and incorrectly trigger artist-only mode.
     const artistKeywords = [
-      'from', 'by', 'songs by', 'tracks by', 'music by',
-      'playlist with songs from', ' songs', ' tracks', ' music'
+      'songs by', 'tracks by', 'music by',
+      'playlist with songs from',
     ];
     const hasSpecificArtists = !isSimilarityRequest && (
       artistKeywords.some(keyword => lowerPrompt.includes(keyword)) ||
-      /\b(and|,)\b/i.test(prompt) || // Has "and" or commas
+      // Only treat "by X" / "from X" as artist indicators when followed by a word (not end of sentence)
+      /\bby\s+[A-Z]/.test(prompt) ||
+      /\bfrom\s+[A-Z]/.test(prompt) ||
       isSingleArtistPlaylist // Greatest hits/best of also counts
     );
 
