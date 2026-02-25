@@ -1911,16 +1911,16 @@
 
 :root.dark-mode .refresh-option-item:hover {
   background: #424245;
-  border-color: #000000;
+  border-color: #636366;
 }
 
 :root.dark-mode .refresh-option-item.active {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: #000000;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #ffffff;
 }
 
 :root.dark-mode .option-checkbox {
-  border-color: #000000;
+  border-color: #ffffff;
 }
 
 :root.dark-mode .refresh-option-item.active .option-checkbox {
