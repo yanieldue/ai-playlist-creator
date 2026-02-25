@@ -2003,6 +2003,7 @@ const PlaylistGenerator = () => {
 
     // Get messages for this genre
     const promptText = `Songs similar to ${selectedArtist.name}`;
+    setGeneratingChatPrompt(promptText);
     const messages = getGenreMessages(promptText);
     let messageIndex = 0;
 
@@ -2592,30 +2593,33 @@ const PlaylistGenerator = () => {
 
           {/* Generation Modal */}
           {showGeneratingModal && (
-            <div className="generating-modal-overlay">
-              <div className="generating-modal-content">
-                <div className="generating-modal-header">
+            <div className="generating-chat-modal-overlay">
+              <div className="generating-chat-modal-content">
+                <div className="generating-chat-header">
                   <h2>Creating Your Playlist</h2>
-                  {generatingError && (
-                    <button
-                      onClick={() => {
-                        setShowGeneratingModal(false);
-                        setGeneratingError(null);
-                        setWeeklyLimitReached(false);
-                      }}
-                      className="close-modal-button"
-                    >
-                      ×
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      setShowGeneratingModal(false);
+                      setLoading(false);
+                      setGeneratingError(null);
+                      setWeeklyLimitReached(false);
+                    }}
+                    className="close-modal-button"
+                  >
+                    ×
+                  </button>
                 </div>
-                <div className="generating-modal-body">
+
+                <div className="generating-chat-body">
+                  <div className="chat-message user">
+                    <div className="chat-message-content">
+                      {generatingChatPrompt}
+                    </div>
+                  </div>
+
                   {generatingError ? (
-                    <>
-                      <div style={{ fontSize: '48px', marginBottom: '16px' }}>{weeklyLimitReached ? <Icons.Lock size={48} /> : '⚠️'}</div>
-                      <p className="generating-modal-message" style={{ color: '#ef4444' }}>
-                        {generatingError}
-                      </p>
+                    <div className="generating-error-standalone">
+                      <span style={{ color: '#ef4444' }}>{generatingError}</span>
                       {weeklyLimitReached ? (
                         <button
                           onClick={() => {
@@ -2624,33 +2628,34 @@ const PlaylistGenerator = () => {
                             setWeeklyLimitReached(false);
                             setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
                           }}
-                          className="primary-button"
-                          style={{ marginTop: '20px' }}
+                          className="retry-button-inline"
+                          style={{ background: '#000000', color: '#ffffff' }}
                         >
                           Upgrade
                         </button>
                       ) : (
                         <button
                           onClick={() => {
-                            setShowGeneratingModal(false);
                             setGeneratingError(null);
+                            setWeeklyLimitReached(false);
+                            handleConfirmArtistSettings();
                           }}
-                          className="primary-button"
-                          style={{ marginTop: '20px' }}
+                          className="retry-button-inline"
                         >
-                          Close
+                          Try Again
                         </button>
                       )}
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      <div className="generating-modal-spinner">
-                        <div className="wave-bar-1"></div>
-                        <div className="wave-bar-2"></div>
-                        <div className="wave-bar-3"></div>
+                    <div className="loading-status">
+                      <div className="wave-loader-small">
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
+                        <div className="wave-bar"></div>
                       </div>
-                      <p className="generating-modal-message">{generatingMessage}</p>
-                    </>
+                      <span className="loading-status-text">{generatingMessage || 'Starting to create your playlist...'}</span>
+                    </div>
                   )}
                 </div>
               </div>
