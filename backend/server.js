@@ -3295,17 +3295,6 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // Apply AI-extracted song count from prompt (replaces regex approach).
-    // If the prompt implies a count, it overrides the options-menu value.
-    // If null, the options-menu value (req.body.songCount) is used as-is.
-    if (genreData.songCount !== null && typeof genreData.songCount === 'number') {
-      const clampedCount = Math.min(Math.max(5, Math.round(genreData.songCount)), 100);
-      songCount = clampedCount;
-      console.log(`AI extracted song count from prompt: ${songCount}`);
-    } else {
-      console.log(`Using provided song count: ${songCount}`);
-    }
-
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
     if (isEmailBasedUserId(userId)) {
@@ -3653,6 +3642,17 @@ DO NOT include any text outside the JSON.`
     }
 
     console.log('Extracted genre data:', genreData);
+
+    // Apply AI-extracted song count from prompt (replaces regex approach).
+    // If the prompt implies a count, it overrides the options-menu value.
+    // If null, the options-menu value (req.body.songCount) is used as-is.
+    if (genreData.songCount !== null && typeof genreData.songCount === 'number') {
+      const clampedCount = Math.min(Math.max(5, Math.round(genreData.songCount)), 100);
+      songCount = clampedCount;
+      console.log(`AI extracted song count from prompt: ${songCount}`);
+    } else {
+      console.log(`Using provided song count: ${songCount}`);
+    }
 
     // Step 0.5: If no explicit genre was specified but artists were requested, analyze those artists to infer the genre
     if ((!genreData.primaryGenre || genreData.primaryGenre === 'not specified') &&
