@@ -926,17 +926,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       {playlist.imported && (
                         <span className="imported-badge">Imported</span>
                       )}
-                      {playlist.platform && (
-                        <span className={`platform-badge platform-${playlist.platform}`} title={`${playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'} playlist`}>
-                          <img
-                            src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                            alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                            width="14"
-                            height="14"
-                            style={{ objectFit: 'contain', display: 'block' }}
-                          />
-                        </span>
-                      )}
                       {playlist.isReadOnly && (
                         <span className="readonly-badge" title={playlist.readOnlyReason}><Icons.Lock size={12} /></span>
                       )}
