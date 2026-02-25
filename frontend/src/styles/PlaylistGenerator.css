@@ -2067,7 +2067,7 @@
 
 .description-more {
   color: #000000;
-  font-weight: 600;
+  font-weight: normal;
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: underline;
@@ -2075,6 +2075,14 @@
 
 .description-more:hover {
   color: #1a1a1a;
+}
+
+:root.dark-mode .description-more {
+  color: #8e8e93;
+}
+
+:root.dark-mode .description-more:hover {
+  color: #ffffff;
 }
 
 .description-more:active {
@@ -2821,7 +2829,7 @@
 
   .description-more {
     color: #000000;
-    font-weight: 600;
+    font-weight: normal;
     font-size: 0.85rem;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
