@@ -5322,8 +5322,12 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
             console.warn('Warning: No tracks passed genre validation, falling back to original tracks');
             genreValidatedTracks = tracksForSelection;
           } else if (genreValidatedTracks.length < songCount) {
-            console.warn(`Warning: Genre validation left only ${genreValidatedTracks.length} tracks (needed ${songCount}), falling back to unvalidated tracks`);
-            genreValidatedTracks = tracksForSelection;
+            // Not enough validated tracks — keep all validated ones at the front,
+            // then append unvalidated tracks to fill the gap (selection AI will pick best).
+            const validatedIds = new Set(genreValidatedTracks.map(t => t.id));
+            const unvalidatedTracks = tracksForSelection.filter(t => !validatedIds.has(t.id));
+            console.warn(`Warning: Genre validation left only ${genreValidatedTracks.length} tracks (needed ${songCount}), supplementing with ${unvalidatedTracks.length} unvalidated tracks`);
+            genreValidatedTracks = [...genreValidatedTracks, ...unvalidatedTracks];
           }
         } catch (parseError) {
           console.log('Could not parse genre validation response:', parseError.message);
@@ -5573,8 +5577,10 @@ DO NOT include any text outside the JSON.`;
             // If still below target after vibe check, try to backfill from remaining pool
             console.log(`Below target count (${tracksAfterVibeCheck.length}/${songCount}), attempting to backfill from remaining tracks...`);
 
-            const selectedTrackIds = new Set(tracksAfterVibeCheck.map(t => t.id));
-            const remainingTracks = tracksForSelection.filter(t => !selectedTrackIds.has(t.id));
+            // Exclude both surviving tracks AND vibe-check-rejected tracks from backfill pool.
+            // Only backfill from tracks that were never evaluated (not in the original selection).
+            const vibeCheckedIds = new Set(selectedTracks.map(t => t.id));
+            const remainingTracks = tracksForSelection.filter(t => !vibeCheckedIds.has(t.id));
 
             if (remainingTracks.length > 0) {
               const neededCount = songCount - tracksAfterVibeCheck.length;
