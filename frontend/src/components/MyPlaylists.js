@@ -244,7 +244,13 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      const url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
+      let url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
+      // Fix legacy broken Apple Music URL scheme stored in older playlists
+      if (url === 'music://music.apple.com/library/playlists') {
+        url = playlist.playlistId
+          ? `https://music.apple.com/library/p.${playlist.playlistId}`
+          : 'https://music.apple.com/library/playlists';
+      }
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
