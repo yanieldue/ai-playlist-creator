@@ -3295,17 +3295,15 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // Extract song count from prompt if user specified it
-    // Matches "30 songs", "50 pop songs", "25 indie rock tracks", etc.
-    // Allows up to 4 descriptive words between the number and songs/tracks.
-    const songCountMatch = prompt.match(/\b(\d+)(?:\s+\w+){0,4}\s+(?:songs?|tracks?)\b/i);
-    if (songCountMatch) {
-      const extractedCount = parseInt(songCountMatch[1], 10);
-      // Only override if it's a reasonable number (between 5 and 100)
-      if (extractedCount >= 5 && extractedCount <= 100) {
-        songCount = extractedCount;
-        console.log(`Extracted song count from prompt: ${songCount}`);
-      }
+    // Apply AI-extracted song count from prompt (replaces regex approach).
+    // If the prompt implies a count, it overrides the options-menu value.
+    // If null, the options-menu value (req.body.songCount) is used as-is.
+    if (genreData.songCount !== null && typeof genreData.songCount === 'number') {
+      const clampedCount = Math.min(Math.max(5, Math.round(genreData.songCount)), 100);
+      songCount = clampedCount;
+      console.log(`AI extracted song count from prompt: ${songCount}`);
+    } else {
+      console.log(`Using provided song count: ${songCount}`);
     }
 
     // If userId is email-based, resolve to platform userId
@@ -3470,7 +3468,8 @@ Respond ONLY with valid JSON in this format:
   },
   "discoveryBalance": {
     "preference": "cohesive/varied/unexpected" or null
-  }
+  },
+  "songCount": integer (5-100) or null
 }
 
 EXTRACTION GUIDELINES:
@@ -3544,6 +3543,13 @@ DISCOVERY:
 - "cohesive", "similar sound": preference: "cohesive"
 - "variety", "eclectic": preference: "varied"
 - "surprise me", "unexpected picks": preference: "unexpected"
+
+SONG COUNT:
+- Explicit numbers: "50 songs", "25 tracks", "30 pop songs", "give me 40" → extract that number
+- Vague quantities: "a few songs" = 10, "a handful" = 10, "a couple" = 6, "a lot of songs" = 50, "loads of tracks" = 50, "a ton of music" = 60
+- Duration-based: "an hour of music" = 15, "a 30-minute playlist" = 8, "a 2-hour mix" = 30
+- Size descriptors: "short playlist" = 10, "quick playlist" = 10, "big playlist" = 50, "massive playlist" = 75, "full playlist" = 30
+- If no count is implied at all → null
 
 SEED ARTISTS (CRITICAL):
 When the user doesn't mention specific artists, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
@@ -3621,7 +3627,8 @@ DO NOT include any text outside the JSON.`
       },
       discoveryBalance: {
         preference: null
-      }
+      },
+      songCount: null
     };
     try {
       let genreText = genreExtractionResponse.content[0].text.trim();
