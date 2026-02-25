@@ -5449,9 +5449,7 @@ IMPORTANT: Prioritize reaching the target of ${selectionTarget} songs while main
 
 ${isSingleArtistPlaylist || hasSpecificArtists
   ? `CRITICAL: This is a specific-artist playlist. ONLY select songs where the artist name EXACTLY matches one of the artists mentioned in the prompt: "${prompt}". DO NOT include similar artists, related artists, or artists from the same genre. Be extremely strict about artist matching.`
-  : genreData.primaryGenre
-    ? `CRITICAL: The playlist MUST be in the ${genreData.primaryGenre} genre. ONLY select songs where the artist genres contain or strongly align with "${genreData.primaryGenre}". REJECT any songs from unrelated genres even if they match the mood or theme.`
-    : 'Use the theme and characteristics to guide your selection.'}
+  : 'Use the theme, era, and characteristics above to guide your selection. Prioritize reaching the target count.'}
 
 Example format: [1, 5, 8, 12, ...]
 
