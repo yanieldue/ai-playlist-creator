@@ -3296,8 +3296,9 @@ app.post('/api/generate-playlist', async (req, res) => {
     }
 
     // Extract song count from prompt if user specified it
-    // Look for patterns like "30 songs", "create 25 tracks", "give me 20 songs", etc.
-    const songCountMatch = prompt.match(/\b(\d+)\s+(?:songs?|tracks?)\b/i);
+    // Matches "30 songs", "50 pop songs", "25 indie rock tracks", etc.
+    // Allows up to 4 descriptive words between the number and songs/tracks.
+    const songCountMatch = prompt.match(/\b(\d+)(?:\s+\w+){0,4}\s+(?:songs?|tracks?)\b/i);
     if (songCountMatch) {
       const extractedCount = parseInt(songCountMatch[1], 10);
       // Only override if it's a reasonable number (between 5 and 100)
