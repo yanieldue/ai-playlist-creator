@@ -10,6 +10,8 @@
   align-items: center;
   justify-content: flex-start;
   padding: 20px 2px 16px 2px;
+  margin-left: 200px;
+  margin-right: 200px;
   background-color: transparent;
   border-bottom: none;
 }
@@ -468,7 +470,8 @@
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-  .account-list {
+  .account-list,
+  .account-header {
     margin-left: 0;
     margin-right: 0;
   }
