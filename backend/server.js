@@ -5255,15 +5255,15 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
           max_tokens: 4000,
           messages: [{
             role: 'user',
-            content: `You are a strict music genre expert with comprehensive knowledge of artists, songs, and musical styles across all platforms and eras. The user wants ONLY songs that match this genre: "${genreData.primaryGenre}".
+            content: `You are a music genre expert. Filter out tracks that clearly do not belong in a "${genreData.primaryGenre}" playlist. When in doubt, keep the track.
 
 CRITICAL: The user's playlist description is: "${prompt}"
 
 IMPORTANT DISTINCTION:
 - The playlist DESCRIPTION (like "focus while working" or "chill vibes") is about the MOOD/USE CASE
 - The GENRE requirement ("${genreData.primaryGenre}") is about the MUSICAL STYLE
-- DO NOT match songs based on title keywords that match the description!
-- Example: For an R&B playlist with description "music to focus while working", REJECT a song called "Focus" if it's not R&B genre
+- DO NOT reject songs based on title keywords that match the description!
+- Example: For an R&B playlist with description "music to focus while working", only reject "Focus" by Ariana Grande if it is clearly not R&B
 
 YOUR KNOWLEDGE BASE:
 - Use your comprehensive training data about artists, genres, musical styles, and song classifications
@@ -5271,24 +5271,19 @@ YOUR KNOWLEDGE BASE:
 - Consider the artist's full discography, typical style, and the specific song's characteristics
 - Account for artists who cross genres - evaluate each SONG individually, not just the artist
 
-Below is a list of tracks with API genre tags when available. Be EXTREMELY STRICT - even a single genre mismatch ruins the playlist.
+Below is a list of tracks with API genre tags when available. Reject only obvious genre mismatches — it is worse to have too few tracks than to include a borderline case.
 
 RULES FOR "${genreData.primaryGenre}" PLAYLISTS:
-- If the genre is R&B: REJECT all jazz, soul-jazz, smooth jazz, fusion, and neo-soul/jazz crossover tracks
-- If the genre is Hip-Hop: REJECT all R&B-pop crossover unless explicitly hip-hop
-- If the genre is Rock: REJECT all pop-rock unless clearly rock
-- REJECT all study music, focus playlists, background instrumentals, and compilation tracks
-- REJECT any track where the primary MUSICAL GENRE differs from "${genreData.primaryGenre}"
-- REJECT tracks that are "close but not quite" - be strict about genre boundaries
-- REJECT tracks whose title matches the mood/description but whose genre doesn't match
-- Use your music knowledge to identify genre mismatches even when API tags are missing or incorrect
+- If the genre is Pop: ACCEPT dance-pop, indie pop, electropop, pop-R&B, synth-pop, and mainstream crossover artists. Only REJECT tracks that are clearly classical, jazz, heavy metal, or pure hip-hop with no pop elements.
+- If the genre is R&B: ACCEPT R&B-pop, neo-soul, and soul. REJECT only pure jazz, smooth jazz, and classical.
+- If the genre is Hip-Hop: ACCEPT rap-pop and hip-hop-R&B crossovers. REJECT classical, jazz, and rock with no hip-hop elements.
+- If the genre is Rock: ACCEPT pop-rock, indie rock, and alternative rock. REJECT classical, jazz, and pure pop with no rock elements.
+- REJECT study music, ambient focus instrumentals, and background music ONLY if the requested genre is not ambient/instrumental.
+- DO NOT over-reject — keep borderline tracks; the AI selection step will refine further.
 
-Examples of REJECTIONS for R&B playlists:
+Examples of REJECTIONS for R&B playlists (only truly off-genre):
 - "Soulful" by Cal Harris Jr. (this is JAZZ, not R&B)
-- "Focus" by Ariana Grande or any cover (this is POP, not R&B, even though "focus" might be in the playlist description)
-- Any track with "Jazz" in artist genres or style
-- Smooth jazz vocals (even if soulful)
-- Neo-soul/jazz fusion tracks
+- Any track that is clearly classical or smooth jazz with no R&B elements
 - "Pieces of Me" by Smooth Jazz All Stars (this is SMOOTH JAZZ, not R&B)
 
 Tracks to evaluate:
@@ -5325,6 +5320,9 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
 
           if (genreValidatedTracks.length === 0) {
             console.warn('Warning: No tracks passed genre validation, falling back to original tracks');
+            genreValidatedTracks = tracksForSelection;
+          } else if (genreValidatedTracks.length < songCount) {
+            console.warn(`Warning: Genre validation left only ${genreValidatedTracks.length} tracks (needed ${songCount}), falling back to unvalidated tracks`);
             genreValidatedTracks = tracksForSelection;
           }
         } catch (parseError) {
