@@ -413,7 +413,7 @@ const Account = ({ onBack, showToast }) => {
     try {
       setAccountLoading(true);
       setAccountError('');
-      await playlistService.updateEmail(newEmail, emailPassword);
+      await playlistService.updateEmail(accountEmail, newEmail, emailPassword);
       localStorage.setItem('userEmail', newEmail);
       setAccountEmail(newEmail);
       closeEditEmailModal();
