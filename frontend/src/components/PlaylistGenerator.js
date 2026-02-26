@@ -2458,10 +2458,14 @@ const PlaylistGenerator = () => {
                     <span>Songs: </span>
                     <input
                       type="number"
-                      min="10"
-                      max="50"
                       value={songCount}
-                      onChange={(e) => setSongCount(parseInt(e.target.value) || 30)}
+                      onChange={(e) => setSongCount(e.target.value)}
+                      onBlur={(e) => {
+                        const num = parseInt(e.target.value, 10);
+                        if (isNaN(num) || num < 10) setSongCount(10);
+                        else if (num > 50) setSongCount(50);
+                        else setSongCount(num);
+                      }}
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         width: '60px',
