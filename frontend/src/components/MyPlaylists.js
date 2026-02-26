@@ -244,29 +244,8 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      if (playlist.platform === 'apple') {
-        const fallbackUrl = playlist.appleMusicUrl;
-        if (!fallbackUrl) {
-          showToast && showToast('No Apple Music URL available for this playlist', 'error');
-          return;
-        }
-        // Make a real async network call before navigating. This is the same pattern
-        // used by the playlist creation flow: the gesture context expires during the
-        // network round-trip, so window.location.href in the .then() does NOT trigger
-        // iOS Universal Links — music.apple.com opens in the web player, not the native app.
-        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-        fetch(`${apiUrl}/api/apple-music/playlist-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, playlistId: playlist.playlistId, playlistName: playlist.playlistName })
-        })
-          .then(res => res.json())
-          .then(data => { window.location.href = data.url || fallbackUrl; })
-          .catch(() => { window.location.href = fallbackUrl; });
-      } else {
-        const url = playlist.spotifyUrl;
-        if (url) window.open(url, '_blank');
-      }
+      const url = playlist.spotifyUrl;
+      if (url) window.open(url, '_blank');
     }
   };
 
@@ -903,19 +882,21 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     </button>
                     {openMenuId === playlist.playlistId && (
                       <div className="playlist-dropdown-menu">
-                        <button
-                          className="playlist-dropdown-item"
-                          onClick={(e) => handleMenuAction('open', playlist, e)}
-                        >
-                          <img
-                            src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                            alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                            width="16"
-                            height="16"
-                            style={{ objectFit: 'contain', display: 'block' }}
-                          />
-                          Open in {playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                        </button>
+                        {playlist.platform !== 'apple' && (
+                          <button
+                            className="playlist-dropdown-item"
+                            onClick={(e) => handleMenuAction('open', playlist, e)}
+                          >
+                            <img
+                              src="/spotify-logo.png"
+                              alt="Spotify"
+                              width="16"
+                              height="16"
+                              style={{ objectFit: 'contain', display: 'block' }}
+                            />
+                            Open in Spotify
+                          </button>
+                        )}
                         <button
                           className="playlist-dropdown-item delete-item"
                           onClick={(e) => handleMenuAction('delete', playlist, e)}

@@ -1170,21 +1170,11 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
-        // Show toast and open URL after state is cleared (small delay to avoid flicker)
-        setTimeout(() => {
-          if (activePlatform === 'apple') {
-            showToast('Playlist created successfully! Check your Apple Music library.', 'success');
-            // Try to open Apple Music app to Library/Playlists
-            if (result.playlistUrl) {
-              window.location.href = result.playlistUrl; // Use location.href for custom URL schemes
-            }
-          } else {
-            showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
-            if (result.playlistUrl) {
-              window.open(result.playlistUrl, '_blank');
-            }
-          }
-        }, 100);
+        if (activePlatform === 'apple') {
+          showToast('Playlist created successfully! Check your Apple Music library.', 'success');
+        } else {
+          showToast('Playlist created successfully!', 'success');
+        }
       }
     } catch (err) {
       // If authentication failed, clear stored userId and prompt re-authentication
@@ -1875,21 +1865,11 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
-        // Show toast and open URL after state is cleared (small delay to avoid flicker)
-        setTimeout(() => {
-          if (activePlatform === 'apple') {
-            showToast('Playlist created successfully! Check your Apple Music library.', 'success');
-            // Try to open Apple Music app to Library/Playlists
-            if (result.playlistUrl) {
-              window.location.href = result.playlistUrl; // Use location.href for custom URL schemes
-            }
-          } else {
-            showToast(`Playlist created successfully! Opening ${platformName}...`, 'success');
-            if (result.playlistUrl) {
-              window.open(result.playlistUrl, '_blank');
-            }
-          }
-        }, 100);
+        if (activePlatform === 'apple') {
+          showToast('Playlist created successfully! Check your Apple Music library.', 'success');
+        } else {
+          showToast('Playlist created successfully!', 'success');
+        }
       }
     } catch (err) {
       if (err.response?.status === 401) {
