@@ -201,8 +201,8 @@ class PlatformService {
         id: playlist.id,
         name: playlist.name,
         description,
-        // User library playlist URL — works in Apple Music web player and deep-links to app on iOS/Mac
-        url: `https://music.apple.com/library/p.${playlist.id}`,
+        // Apple Music library — user library playlists have no direct web URL, link to library root
+        url: `https://music.apple.com/library`,
         platform: 'apple',
         trackCount: trackUris.length
       };
