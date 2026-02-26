@@ -246,9 +246,9 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     } else if (action === 'open') {
       let url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
       if (playlist.platform === 'apple' && playlist.playlistId) {
-        // Use window.location.href so iOS Universal Links properly deep-links into the Music app.
-        // window.open(_blank) loses the URL path on iOS and lands on the Music app home instead.
-        window.location.href = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
+        // music:// scheme directly launches the native Music app and deep-links to the playlist,
+        // bypassing Safari/web player entirely (avoids "item not available" from web player).
+        window.open(`music://music.apple.com/library/playlist/${playlist.playlistId}`, '_blank');
         return;
       }
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
