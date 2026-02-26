@@ -244,23 +244,9 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      if (playlist.platform === 'apple' && playlist.playlistId) {
-        const appleUrl = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
-        // iOS won't deep-link user library playlists from any in-page navigation.
-        // Web Share API shows the native share sheet where "Open in Music" works correctly.
-        if (navigator.share) {
-          navigator.share({ title: playlist.playlistName, url: appleUrl }).catch(() => {});
-        } else {
-          // Desktop fallback: copy URL to clipboard
-          navigator.clipboard?.writeText(appleUrl).then(() => {
-            showToast('Link copied — paste in Safari to open in Apple Music', 'success');
-          }).catch(() => {
-            window.open(appleUrl, '_blank', 'noopener,noreferrer');
-          });
-        }
-        return;
-      }
-      const url = playlist.spotifyUrl;
+      let url = playlist.platform === 'apple'
+        ? `https://music.apple.com/library/playlist/${playlist.playlistId}`
+        : playlist.spotifyUrl;
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
