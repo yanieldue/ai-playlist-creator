@@ -2077,8 +2077,7 @@ const PlaylistGenerator = () => {
         setWeeklyLimitReached(true);
         // Keep modal open to show the error + Upgrade button
       } else {
-        setShowGeneratingModal(false);
-        setError(err.response?.data?.error || 'Failed to generate playlist. Please try again.');
+        setGeneratingError(err.response?.data?.error || 'Failed to generate playlist. Please try again.');
       }
       console.error(err);
     } finally {
