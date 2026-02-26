@@ -245,15 +245,24 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
       if (playlist.platform === 'apple') {
-        const url = playlist.appleMusicUrl;
-        if (!url) {
+        const fallbackUrl = playlist.appleMusicUrl;
+        if (!fallbackUrl) {
           showToast && showToast('No Apple Music URL available for this playlist', 'error');
           return;
         }
-        // Navigate to same-origin redirect page first (no Universal Links triggered).
-        // The redirect page's useEffect then navigates to music.apple.com outside of
-        // the user-gesture context, preventing iOS from opening the native Music app.
-        window.location.href = '/apple-music-redirect?url=' + encodeURIComponent(url);
+        // Make a real async network call before navigating. This is the same pattern
+        // used by the playlist creation flow: the gesture context expires during the
+        // network round-trip, so window.location.href in the .then() does NOT trigger
+        // iOS Universal Links — music.apple.com opens in the web player, not the native app.
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+        fetch(`${apiUrl}/api/apple-music/playlist-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, playlistId: playlist.playlistId, playlistName: playlist.playlistName })
+        })
+          .then(res => res.json())
+          .then(data => { window.location.href = data.url || fallbackUrl; })
+          .catch(() => { window.location.href = fallbackUrl; });
       } else {
         const url = playlist.spotifyUrl;
         if (url) window.open(url, '_blank');
