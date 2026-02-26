@@ -562,6 +562,7 @@ const PlaylistGenerator = () => {
       }
       if (showOptionsMenu && optionsMenuRef.current && !optionsMenuRef.current.contains(event.target)) {
         setShowOptionsMenu(false);
+        setSongCountDraft(songCount);
       }
       if (showTrackListMenu && trackListMenuRef.current && !trackListMenuRef.current.contains(event.target)) {
         setShowTrackListMenu(false);
@@ -2471,7 +2472,6 @@ const PlaylistGenerator = () => {
                       type="number"
                       value={songCountDraft}
                       onChange={(e) => setSongCountDraft(e.target.value)}
-                      onBlur={() => setSongCountDraft(songCount)}
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         width: '60px',
