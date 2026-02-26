@@ -254,11 +254,12 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           // Shareable pl.u-xxx URL — open directly, works on all devices
           window.open(stored, '_blank');
         } else {
-          // p.xxx library URL: route through an async fetch so window.open runs
-          // outside the direct user-gesture context. On iOS this prevents Universal
-          // Links from opening the native Music app (which can't navigate to p.xxx
-          // cross-device) and instead opens the Apple Music web player, which shows
-          // the playlist correctly because the user is logged in.
+          // p.xxx library URL: open a blank window now (from the user-gesture context
+          // so popup blocker won't intervene), then navigate it asynchronously.
+          // Navigating an already-open window's location from async code does NOT
+          // trigger iOS Universal Links, so the Apple Music web player opens instead
+          // of the native app (which can't route to p.xxx cross-device).
+          const appleWindow = window.open('', '_blank');
           const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
           fetch(`${apiUrl}/api/apple-music/playlist-url`, {
             method: 'POST',
@@ -271,10 +272,10 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           })
             .then(r => r.json())
             .then(data => {
-              window.open(data.url || stored, '_blank');
+              appleWindow.location.href = data.url || stored;
             })
             .catch(() => {
-              window.open(stored, '_blank');
+              appleWindow.location.href = stored;
             });
         }
       } else {
