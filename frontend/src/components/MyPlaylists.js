@@ -254,29 +254,11 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           // Shareable pl.u-xxx URL — open directly, works on all devices
           window.open(stored, '_blank');
         } else {
-          // p.xxx library URL: open a blank window now (from the user-gesture context
-          // so popup blocker won't intervene), then navigate it asynchronously.
-          // Navigating an already-open window's location from async code does NOT
-          // trigger iOS Universal Links, so the Apple Music web player opens instead
-          // of the native app (which can't route to p.xxx cross-device).
-          const appleWindow = window.open('', '_blank');
-          const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-          fetch(`${apiUrl}/api/apple-music/playlist-url`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId,
-              playlistId: playlist.playlistId,
-              playlistName: playlist.playlistName
-            })
-          })
-            .then(r => r.json())
-            .then(data => {
-              appleWindow.location.href = data.url || stored;
-            })
-            .catch(() => {
-              appleWindow.location.href = stored;
-            });
+          // p.xxx library URL: use window.location.href which is never blocked by
+          // the popup blocker. JS-driven navigation (unlike a user tap on a link)
+          // typically does not trigger iOS Universal Links, so Safari opens the
+          // Apple Music web player which correctly shows the library playlist.
+          window.location.href = stored;
         }
       } else {
         const url = playlist.spotifyUrl;
