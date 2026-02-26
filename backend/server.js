@@ -2193,11 +2193,20 @@ app.post('/api/apple-music/playlist-url', async (req, res) => {
   if (!userId || !playlistId) return res.status(400).json({ error: 'Missing userId or playlistId' });
 
   try {
-    const email = userId.includes('@') ? userId : await getEmailUserIdFromPlatform(userId);
-    const tokens = await db.getTokens(email, 'apple');
+    // Resolve to the apple_music_xxx platform userId
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'apple');
+    }
+    if (!platformUserId) return res.status(401).json({ error: 'Not authenticated with Apple Music' });
+
+    const tokens = await getUserTokens(platformUserId);
     if (!tokens?.access_token) return res.status(401).json({ error: 'Not authenticated with Apple Music' });
 
-    const appleMusicApi = new AppleMusicService(generateAppleMusicToken());
+    const appleMusicDevToken = generateAppleMusicToken();
+    if (!appleMusicDevToken) return res.status(500).json({ error: 'Apple Music service unavailable' });
+
+    const appleMusicApi = new AppleMusicService(appleMusicDevToken);
     const url = await appleMusicApi.getPlaylistShareableUrl(tokens.access_token, playlistId, playlistName);
     return res.json({ url });
   } catch (err) {
