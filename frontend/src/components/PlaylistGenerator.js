@@ -1269,7 +1269,8 @@ const PlaylistGenerator = () => {
         setError('Please reconnect your Spotify account to grant the required permissions. Go to Settings to reconnect.');
       }
 
-      setTopArtists([]);
+      // Don't clear existing artists on error — keep whatever is already showing
+      setTopArtists(prev => prev.length > 0 ? prev : []);
     } finally {
       setLoadingTopArtists(false);
     }
@@ -1316,7 +1317,8 @@ const PlaylistGenerator = () => {
         setError('Please reconnect your Spotify account to grant the required permissions. Go to Settings to reconnect.');
       }
 
-      setNewArtists([]);
+      // Don't clear existing artists on error — keep whatever is already showing
+      setNewArtists(prev => prev.length > 0 ? prev : []);
       setNewArtistsFetched(true);
     } finally {
       setLoadingNewArtists(false);
