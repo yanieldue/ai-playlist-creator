@@ -8725,3 +8725,12 @@ async function startServer() {
 }
 
 startServer();
+
+// Prevent unhandled rejections/exceptions from crashing the process
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
