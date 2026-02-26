@@ -3169,7 +3169,6 @@ const PlaylistGenerator = () => {
                       min="1"
                       value={artistModalSongCountDraft}
                       onChange={(e) => setArtistModalSongCountDraft(e.target.value)}
-                      onBlur={() => setArtistModalSongCountDraft(artistModalSongCount)}
                       className="song-count-input-large"
                     />
                     <p className="form-help-text">
