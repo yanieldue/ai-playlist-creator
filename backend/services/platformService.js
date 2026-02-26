@@ -197,13 +197,13 @@ class PlatformService {
         );
       }
 
+      const resolvedUrl = playlist.url || `https://music.apple.com/library/playlist/${playlist.id}`;
+      console.log(`Apple Music playlist URL stored: ${resolvedUrl} (from API: ${playlist.url})`);
       return {
         id: playlist.id,
         name: playlist.name,
         description,
-        // Use the shareable URL from the API (pl.u-xxx format) if returned,
-        // otherwise fall back to the library URL
-        url: playlist.url || `https://music.apple.com/library/playlist/${playlist.id}`,
+        url: resolvedUrl,
         platform: 'apple',
         trackCount: trackUris.length
       };
