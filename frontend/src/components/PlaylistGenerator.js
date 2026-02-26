@@ -56,6 +56,7 @@ const PlaylistGenerator = () => {
   const [showChatModal, setShowChatModal] = useState(false);
   const [showGeneratingChatModal, setShowGeneratingChatModal] = useState(false);
   const [generatingChatPrompt, setGeneratingChatPrompt] = useState('');
+  const [creationResult, setCreationResult] = useState(null); // { success, message, playlistName }
   const [showProductTour, setShowProductTour] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
 
@@ -1138,6 +1139,7 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        const savedPlaylistName = generatedPlaylist.playlistName;
         mp.track('Playlist Saved', {
           playlist_name: generatedPlaylist.playlistName,
           track_count: generatedPlaylist.tracks?.length || 0,
@@ -1160,7 +1162,7 @@ const PlaylistGenerator = () => {
           : draftPlaylists.filter(d => (d.playlistId || d.id) !== generatedPlaylist.draftId);
         setDraftPlaylists(updatedDrafts);
 
-        // Clear state first
+        // Clear state
         setShowPlaylistModal(false);
         setModalStep(1);
         setChatMessages([]);
@@ -1170,11 +1172,11 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
-        if (activePlatform === 'apple') {
-          showToast('Playlist created successfully! Check your Apple Music library.', 'success');
-        } else {
-          showToast('Playlist created successfully!', 'success');
-        }
+        setCreationResult({
+          success: true,
+          message: `Your playlist has been created! Open your ${platformName} app to view it in your library.`,
+          playlistName: savedPlaylistName,
+        });
       }
     } catch (err) {
       // If authentication failed, clear stored userId and prompt re-authentication
@@ -1187,7 +1189,14 @@ const PlaylistGenerator = () => {
         const errorMessage = err.response?.data?.details
           ? `${err.response.data.error}: ${err.response.data.details}`
           : err.response?.data?.error || 'Failed to create playlist. Please try again.';
-        setError(errorMessage);
+        const savedPlaylistName = generatedPlaylist?.playlistName || 'Your playlist';
+        setShowPlaylistModal(false);
+        setGeneratedPlaylist(null);
+        setCreationResult({
+          success: false,
+          message: errorMessage,
+          playlistName: savedPlaylistName,
+        });
         console.error('Create playlist error:', err.response?.data);
       }
       console.error(err);
@@ -1827,6 +1836,7 @@ const PlaylistGenerator = () => {
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        const savedPlaylistName = editedPlaylistName.trim();
         mp.track('Playlist Saved', {
           playlist_name: editedPlaylistName.trim(),
           track_count: generatedPlaylist.tracks?.length || 0,
@@ -1855,7 +1865,7 @@ const PlaylistGenerator = () => {
             );
         setDraftPlaylists(updatedDrafts);
 
-        // Clear state first
+        // Clear state
         setShowPlaylistModal(false);
         setModalStep(1);
         setChatMessages([]);
@@ -1865,11 +1875,11 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
-        if (activePlatform === 'apple') {
-          showToast('Playlist created successfully! Check your Apple Music library.', 'success');
-        } else {
-          showToast('Playlist created successfully!', 'success');
-        }
+        setCreationResult({
+          success: true,
+          message: `Your playlist has been created! Open your ${platformName} app to view it in your library.`,
+          playlistName: savedPlaylistName,
+        });
       }
     } catch (err) {
       if (err.response?.status === 401) {
@@ -1881,7 +1891,14 @@ const PlaylistGenerator = () => {
         const errorMessage = err.response?.data?.details
           ? `${err.response.data.error}: ${err.response.data.details}`
           : err.response?.data?.error || 'Failed to create playlist. Please try again.';
-        setError(errorMessage);
+        const savedPlaylistName = editedPlaylistName.trim() || generatedPlaylist?.playlistName || 'Your playlist';
+        setShowPlaylistModal(false);
+        setGeneratedPlaylist(null);
+        setCreationResult({
+          success: false,
+          message: errorMessage,
+          playlistName: savedPlaylistName,
+        });
       }
     } finally {
       setCreatingPlaylist(false);
@@ -3050,6 +3067,35 @@ const PlaylistGenerator = () => {
                       <span className="loading-status-text">{generatingMessage || 'Starting to create your playlist...'}</span>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Playlist Creation Result Modal */}
+          {creationResult && (
+            <div className="generating-chat-modal-overlay" onClick={() => setCreationResult(null)}>
+              <div className="generating-chat-modal-content" onClick={(e) => e.stopPropagation()}>
+                <div className="generating-chat-header">
+                  <h2>{creationResult.success ? 'Playlist Created' : 'Something went wrong'}</h2>
+                  <button onClick={() => setCreationResult(null)} className="close-modal-button">×</button>
+                </div>
+                <div className="generating-chat-body">
+                  <div className="chat-message user">
+                    <div className="chat-message-content">{creationResult.playlistName}</div>
+                  </div>
+                  <div className="chat-message assistant">
+                    <div className="chat-message-content">{creationResult.message}</div>
+                  </div>
+                </div>
+                <div style={{ padding: '0 20px 20px', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setCreationResult(null)}
+                    className="create-playlist-button"
+                    style={{ marginTop: 0 }}
+                  >
+                    Confirm
+                  </button>
                 </div>
               </div>
             </div>
