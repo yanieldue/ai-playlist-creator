@@ -23,6 +23,29 @@
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.explicit-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: #8e8e93;
+  border: 1px solid #8e8e93;
+  border-radius: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+:root.dark-mode .explicit-badge {
+  color: #636366;
+  border-color: #636366;
 }
 
 .track-artist {

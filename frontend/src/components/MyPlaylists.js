@@ -982,7 +982,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             <img src={track.image} alt={track.album} className="track-image" />
                           )}
                           <div className="track-info">
-                            <div className="track-name">{track.name}</div>
+                            <div className="track-name">
+                              {track.name}
+                              {track.explicit && <span className="explicit-badge">E</span>}
+                            </div>
                             <div className="track-artist">{track.artist}</div>
                           </div>
                           <div className="track-actions">
