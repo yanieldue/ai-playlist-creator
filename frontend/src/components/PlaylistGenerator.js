@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import mp from '../utils/mixpanel';
 import { isPaid, isWeeklyLimitActive, getWeeklyLimitResetDate, setWeeklyLimitResetsAt } from '../utils/plan';
+import { categorizeError, ERROR_CATEGORIES } from '../utils/errorHandler';
 import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
@@ -1115,6 +1116,22 @@ const PlaylistGenerator = () => {
     showToast('Track removed', 'success');
   };
 
+  // Returns the user-facing error message for the creation result modal.
+  // Transient/validation errors tell the user to try again;
+  // 5xx/unknown errors say our team is looking into it.
+  const getCreationErrorMessage = (err) => {
+    const { category, userMessage } = categorizeError(err);
+    if (category === ERROR_CATEGORIES.CRITICAL) {
+      return 'Something went wrong on our end. Our team is looking into it.';
+    }
+    if (category === ERROR_CATEGORIES.TRANSIENT) {
+      const base = err.response?.data?.error || 'Something went wrong.';
+      return `${base} Please try again.`;
+    }
+    // VALIDATION / NOT_FOUND — use the specific message from the API
+    return userMessage || err.response?.data?.error || 'Failed to create playlist. Please try again.';
+  };
+
   const handleCreatePlaylist = async () => {
     if (!generatedPlaylist) return;
 
@@ -1186,15 +1203,12 @@ const PlaylistGenerator = () => {
         setIsAuthenticated(false);
         setError('Your session has expired. Please reconnect with Spotify.');
       } else {
-        const errorMessage = err.response?.data?.details
-          ? `${err.response.data.error}: ${err.response.data.details}`
-          : err.response?.data?.error || 'Failed to create playlist. Please try again.';
         const savedPlaylistName = generatedPlaylist?.playlistName || 'Your playlist';
         setShowPlaylistModal(false);
         setGeneratedPlaylist(null);
         setCreationResult({
           success: false,
-          message: errorMessage,
+          message: getCreationErrorMessage(err),
           playlistName: savedPlaylistName,
         });
         console.error('Create playlist error:', err.response?.data);
@@ -1888,15 +1902,12 @@ const PlaylistGenerator = () => {
         setIsAuthenticated(false);
         setError('Your session has expired. Please reconnect with Spotify.');
       } else {
-        const errorMessage = err.response?.data?.details
-          ? `${err.response.data.error}: ${err.response.data.details}`
-          : err.response?.data?.error || 'Failed to create playlist. Please try again.';
         const savedPlaylistName = editedPlaylistName.trim() || generatedPlaylist?.playlistName || 'Your playlist';
         setShowPlaylistModal(false);
         setGeneratedPlaylist(null);
         setCreationResult({
           success: false,
-          message: errorMessage,
+          message: getCreationErrorMessage(err),
           playlistName: savedPlaylistName,
         });
       }
