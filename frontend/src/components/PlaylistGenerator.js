@@ -75,6 +75,7 @@ const PlaylistGenerator = () => {
   });
   const [newArtistsOnly, setNewArtistsOnly] = useState(false);
   const [songCount, setSongCount] = useState(30);
+  const [songCountDraft, setSongCountDraft] = useState(30);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showPromptTooltip, setShowPromptTooltip] = useState(false);
   const optionsMenuRef = useRef(null);
@@ -2458,13 +2459,9 @@ const PlaylistGenerator = () => {
                     <span>Songs: </span>
                     <input
                       type="number"
-                      value={songCount}
-                      onChange={(e) => setSongCount(e.target.value)}
-                      onBlur={(e) => {
-                        const num = parseInt(e.target.value, 10);
-                        if (isNaN(num) || num < 1) setSongCount(30);
-                        else setSongCount(num);
-                      }}
+                      value={songCountDraft}
+                      onChange={(e) => setSongCountDraft(e.target.value)}
+                      onBlur={() => setSongCountDraft(songCount)}
                       onClick={(e) => e.stopPropagation()}
                       style={{
                         width: '60px',
@@ -2476,7 +2473,13 @@ const PlaylistGenerator = () => {
                     />
                   </div>
                   <button
-                    onClick={() => setShowOptionsMenu(false)}
+                    onClick={() => {
+                      const num = parseInt(songCountDraft, 10);
+                      const committed = isNaN(num) || num < 1 ? 30 : num;
+                      setSongCount(committed);
+                      setSongCountDraft(committed);
+                      setShowOptionsMenu(false);
+                    }}
                     className="options-menu-apply-button"
                   >
                     Apply
@@ -2486,7 +2489,7 @@ const PlaylistGenerator = () => {
               <div className="chat-input-wrapper">
                 <div className="options-menu-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <button
-                    onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+                    onClick={() => { setSongCountDraft(songCount); setShowOptionsMenu(!showOptionsMenu); }}
                     style={{
                       background: 'none',
                       border: 'none',
