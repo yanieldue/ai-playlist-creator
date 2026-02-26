@@ -7631,6 +7631,9 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
                     platformUserId = await resolvePlatformUserId(userId, 'spotify');
                     if (!platformUserId) {
                       console.log(`[AUTO-UPDATE] No Spotify connection for user ${userId}, skipping playlist ${playlist.playlistName}`);
+                      // Advance nextUpdate so the scheduler doesn't retry every minute
+                      playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+                      await savePlaylist(userId, playlist);
                       continue; // Skip to next playlist
                     }
                   }
@@ -8527,6 +8530,9 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
 
               } catch (updateError) {
                 console.error(`[AUTO-UPDATE] Error updating playlist ${playlist.playlistName}:`, updateError.message);
+                // Advance nextUpdate so the scheduler doesn't retry every minute on failure
+                playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+                await savePlaylist(userId, playlist);
               }
             }
           }
