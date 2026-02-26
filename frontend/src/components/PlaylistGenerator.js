@@ -106,6 +106,7 @@ const PlaylistGenerator = () => {
   const [selectedArtist, setSelectedArtist] = useState(null);
   const [artistModalNewArtistsOnly, setArtistModalNewArtistsOnly] = useState(false);
   const [artistModalSongCount, setArtistModalSongCount] = useState(30);
+  const [artistModalSongCountDraft, setArtistModalSongCountDraft] = useState(30);
 
   // Account settings modal
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -1969,6 +1970,7 @@ const PlaylistGenerator = () => {
     setSelectedArtist(artist);
     setArtistModalNewArtistsOnly(false);
     setArtistModalSongCount(30);
+    setArtistModalSongCountDraft(30);
     setShowArtistSettingsModal(true);
   };
 
@@ -1977,10 +1979,17 @@ const PlaylistGenerator = () => {
     setSelectedArtist(null);
     setArtistModalNewArtistsOnly(false);
     setArtistModalSongCount(30);
+    setArtistModalSongCountDraft(30);
   };
 
   const handleConfirmArtistSettings = async () => {
     if (!selectedArtist) return;
+
+    // Commit draft song count
+    const draftNum = parseInt(artistModalSongCountDraft, 10);
+    const committedSongCount = isNaN(draftNum) || draftNum < 1 ? 30 : draftNum;
+    setArtistModalSongCount(committedSongCount);
+    setArtistModalSongCountDraft(committedSongCount);
 
     setShowArtistSettingsModal(false);
     setLoading(true);
@@ -2011,14 +2020,14 @@ const PlaylistGenerator = () => {
         activePlatform || 'spotify',
         allowExplicit,
         artistModalNewArtistsOnly,
-        artistModalSongCount
+        committedSongCount
       );
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
 
       // Store the original prompt and requested song count with the playlist
-      const playlistWithPrompt = { ...result, originalPrompt: promptText, requestedSongCount: artistModalSongCount, chatMessages: [], excludedSongs: [] };
+      const playlistWithPrompt = { ...result, originalPrompt: promptText, requestedSongCount: committedSongCount, chatMessages: [], excludedSongs: [] };
 
       // Auto-save draft to database for cross-device sync
       try {
@@ -2048,6 +2057,7 @@ const PlaylistGenerator = () => {
       setSelectedArtist(null);
       setArtistModalNewArtistsOnly(false);
       setArtistModalSongCount(30);
+      setArtistModalSongCountDraft(30);
     } catch (err) {
       clearInterval(messageInterval);
       if (err.response?.status === 401) {
@@ -3156,25 +3166,14 @@ const PlaylistGenerator = () => {
                     <input
                       type="number"
                       id="artist-song-count"
-                      min="10"
-                      max="50"
-                      value={artistModalSongCount}
-                      onChange={(e) => setArtistModalSongCount(e.target.value)}
-                      onBlur={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || val === null) {
-                          setArtistModalSongCount(30);
-                        } else {
-                          const num = parseInt(val, 10);
-                          if (!isNaN(num) && num > 0) {
-                            setArtistModalSongCount(Math.min(Math.max(num, 10), 50));
-                          }
-                        }
-                      }}
+                      min="1"
+                      value={artistModalSongCountDraft}
+                      onChange={(e) => setArtistModalSongCountDraft(e.target.value)}
+                      onBlur={() => setArtistModalSongCountDraft(artistModalSongCount)}
                       className="song-count-input-large"
                     />
                     <p className="form-help-text">
-                      Choose between 10 and 50 songs
+                      Minimum 1 song
                     </p>
                   </div>
                 </div>
