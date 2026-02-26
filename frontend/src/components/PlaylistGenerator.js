@@ -3093,7 +3093,7 @@ const PlaylistGenerator = () => {
                 </div>
                 <div className="generating-chat-body">
                   <div className="chat-message user">
-                    <div className="chat-message-content">{creationResult.playlistName}</div>
+                    <div className="chat-message-content">{generatingChatPrompt || creationResult.playlistName}</div>
                   </div>
                   <div className="chat-message assistant">
                     <div className="chat-message-content">{creationResult.message}</div>
@@ -3102,7 +3102,7 @@ const PlaylistGenerator = () => {
                 <div style={{ padding: '0 20px 20px', display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => setCreationResult(null)}
-                    className="create-playlist-button"
+                    className="generate-button"
                     style={{ marginTop: 0 }}
                   >
                     Confirm
