@@ -244,18 +244,23 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      let url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
       if (playlist.platform === 'apple' && playlist.playlistId) {
-        // Clicking a hidden <a> tag triggers iOS Universal Links reliably.
-        // window.open() and window.location.href don't properly fire Universal Links from JS.
-        const a = document.createElement('a');
-        a.href = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => document.body.removeChild(a), 0);
+        const appleUrl = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
+        // iOS won't deep-link user library playlists from any in-page navigation.
+        // Web Share API shows the native share sheet where "Open in Music" works correctly.
+        if (navigator.share) {
+          navigator.share({ title: playlist.playlistName, url: appleUrl }).catch(() => {});
+        } else {
+          // Desktop fallback: copy URL to clipboard
+          navigator.clipboard?.writeText(appleUrl).then(() => {
+            showToast('Link copied — paste in Safari to open in Apple Music', 'success');
+          }).catch(() => {
+            window.open(appleUrl, '_blank', 'noopener,noreferrer');
+          });
+        }
         return;
       }
+      const url = playlist.spotifyUrl;
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     }
   };
@@ -893,39 +898,19 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     </button>
                     {openMenuId === playlist.playlistId && (
                       <div className="playlist-dropdown-menu">
-                        {playlist.platform === 'apple' && playlist.playlistId ? (
-                          // Real <a> tag so the user's own tap fires iOS Universal Links correctly.
-                          // Programmatic clicks (window.open, a.click()) don't trigger Universal Links.
-                          <a
-                            className="playlist-dropdown-item"
-                            href={`https://music.apple.com/library/playlist/${playlist.playlistId}`}
-                            onClick={() => setOpenMenuId(null)}
-                            style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '8px' }}
-                          >
-                            <img
-                              src="/apple-music-logo.png"
-                              alt="Apple Music"
-                              width="16"
-                              height="16"
-                              style={{ objectFit: 'contain', display: 'block' }}
-                            />
-                            Open in Apple Music
-                          </a>
-                        ) : (
-                          <button
-                            className="playlist-dropdown-item"
-                            onClick={(e) => handleMenuAction('open', playlist, e)}
-                          >
-                            <img
-                              src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                              alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                              width="16"
-                              height="16"
-                              style={{ objectFit: 'contain', display: 'block' }}
-                            />
-                            Open in {playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                          </button>
-                        )}
+                        <button
+                          className="playlist-dropdown-item"
+                          onClick={(e) => handleMenuAction('open', playlist, e)}
+                        >
+                          <img
+                            src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
+                            alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                            width="16"
+                            height="16"
+                            style={{ objectFit: 'contain', display: 'block' }}
+                          />
+                          Open in {playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                        </button>
                         <button
                           className="playlist-dropdown-item delete-item"
                           onClick={(e) => handleMenuAction('delete', playlist, e)}
