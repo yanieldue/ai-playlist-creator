@@ -244,8 +244,38 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      const url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
-      if (url) window.open(url, '_blank');
+      if (playlist.platform === 'apple') {
+        // Use stored URL if it looks valid (pl.u- format), otherwise fetch fresh from API
+        const stored = playlist.appleMusicUrl;
+        const isValidUrl = stored && stored.includes('pl.u-');
+        if (isValidUrl) {
+          window.open(stored, '_blank');
+        } else {
+          // Fetch the shareable pl.u-xxx URL from the backend
+          const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+          fetch(`${apiUrl}/api/apple-music/playlist-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              playlistId: playlist.playlistId,
+              playlistName: playlist.playlistName
+            })
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data.url) {
+                window.open(data.url, '_blank');
+              } else {
+                showToast && showToast('Could not get Apple Music URL for this playlist', 'error');
+              }
+            })
+            .catch(() => showToast && showToast('Could not open playlist', 'error'));
+        }
+      } else {
+        const url = playlist.spotifyUrl;
+        if (url) window.open(url, '_blank');
+      }
     }
   };
 

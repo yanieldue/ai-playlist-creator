@@ -2187,6 +2187,25 @@ app.get('/api/apple-music/developer-token', (req, res) => {
   }
 });
 
+// Get shareable Apple Music URL for a library playlist (resolves pl.u-xxx from p.xxx)
+app.post('/api/apple-music/playlist-url', async (req, res) => {
+  const { userId, playlistId, playlistName } = req.body;
+  if (!userId || !playlistId) return res.status(400).json({ error: 'Missing userId or playlistId' });
+
+  try {
+    const email = userId.includes('@') ? userId : await getEmailUserIdFromPlatform(userId);
+    const tokens = await db.getTokens(email, 'apple');
+    if (!tokens?.access_token) return res.status(401).json({ error: 'Not authenticated with Apple Music' });
+
+    const appleMusicApi = new AppleMusicService(generateAppleMusicToken());
+    const url = await appleMusicApi.getPlaylistShareableUrl(tokens.access_token, playlistId, playlistName);
+    return res.json({ url });
+  } catch (err) {
+    console.error('Error fetching Apple Music playlist URL:', err.message);
+    return res.status(500).json({ error: 'Failed to fetch playlist URL' });
+  }
+});
+
 // Connect Apple Music with user music token from MusicKit JS
 app.post('/api/apple-music/connect', async (req, res) => {
   console.log('🔵 Apple Music connect endpoint HIT - request received');

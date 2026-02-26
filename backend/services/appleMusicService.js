@@ -197,12 +197,50 @@ class AppleMusicService {
       }
     });
 
+    const playlist = data.data[0];
+    console.log('Apple Music create playlist response:', JSON.stringify(playlist, null, 2));
+
+    // attributes.url gives us the shareable pl.u-xxx URL when synced to iCloud.
+    // attributes.playParams.globalId also contains the pl.u-xxx ID if available.
+    const attrs = playlist.attributes || {};
+    let shareableUrl = attrs.url || null;
+
+    if (!shareableUrl && attrs.playParams?.globalId) {
+      const globalId = attrs.playParams.globalId; // e.g. "pl.u-qxylKvYs07B48r"
+      shareableUrl = `https://music.apple.com/us/playlist/${encodeURIComponent(name)}/${globalId}`;
+    }
+
     return {
-      id: data.data[0].id,
-      name: data.data[0].attributes.name,
-      url: data.data[0].attributes.url || null, // shareable URL (e.g. https://music.apple.com/us/playlist/name/pl.u-xxx)
+      id: playlist.id,
+      name: attrs.name,
+      url: shareableUrl, // null if not yet synced to iCloud; fallback handled in platformService
       platform: 'apple'
     };
+  }
+
+  /**
+   * Get the shareable URL for a library playlist (pl.u-xxx format).
+   * Falls back to constructing from playParams.globalId if attributes.url is absent.
+   * @param {string} userToken - User's music token
+   * @param {string} playlistId - Library playlist ID (p.xxx)
+   * @param {string} name - Playlist name (used to construct URL if needed)
+   */
+  async getPlaylistShareableUrl(userToken, playlistId, name = '') {
+    const data = await this.request(`/me/library/playlists/${playlistId}`, userToken);
+
+    if (!data.data || data.data.length === 0) return null;
+
+    const attrs = data.data[0].attributes || {};
+    console.log('getPlaylistShareableUrl attrs.url:', attrs.url, 'playParams:', attrs.playParams);
+
+    if (attrs.url) return attrs.url;
+
+    const globalId = attrs.playParams?.globalId;
+    if (globalId) {
+      return `https://music.apple.com/us/playlist/${encodeURIComponent(name || attrs.name)}/${globalId}`;
+    }
+
+    return null;
   }
 
   /**
