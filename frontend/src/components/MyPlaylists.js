@@ -250,11 +250,10 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           showToast && showToast('No Apple Music URL available for this playlist', 'error');
           return;
         }
-        // Use the same pattern as playlist creation: setTimeout + window.location.href.
-        // The 100ms delay moves the navigation out of the user-gesture context so iOS
-        // does not trigger Universal Links — the Apple Music web player opens instead
-        // of the native app (which cannot navigate to the p.xxx library playlist ID).
-        setTimeout(() => { window.location.href = url; }, 100);
+        // Navigate to same-origin redirect page first (no Universal Links triggered).
+        // The redirect page's useEffect then navigates to music.apple.com outside of
+        // the user-gesture context, preventing iOS from opening the native Music app.
+        window.location.href = '/apple-music-redirect?url=' + encodeURIComponent(url);
       } else {
         const url = playlist.spotifyUrl;
         if (url) window.open(url, '_blank');
