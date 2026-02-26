@@ -1126,22 +1126,11 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      // Determine which platform userId to use based on activePlatform
-      let platformUserId = userId;
-      if (activePlatform === 'spotify' && spotifyUserId) {
-        platformUserId = spotifyUserId;
-      } else if (activePlatform === 'apple' && appleMusicUserId) {
-        platformUserId = appleMusicUserId;
-      } else if (spotifyUserId) {
-        platformUserId = spotifyUserId;
-      } else if (appleMusicUserId) {
-        platformUserId = appleMusicUserId;
-      }
-
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
+      // Send email userId — backend resolves to the correct platform userId itself
       const result = await playlistService.createPlaylist(
-        platformUserId,
+        userId,
         generatedPlaylist.playlistName,
         generatedPlaylist.description,
         trackUris
@@ -1824,18 +1813,6 @@ const PlaylistGenerator = () => {
     setError('');
 
     try {
-      // Determine which platform userId to use based on activePlatform
-      let platformUserId = userId;
-      if (activePlatform === 'spotify' && spotifyUserId) {
-        platformUserId = spotifyUserId;
-      } else if (activePlatform === 'apple' && appleMusicUserId) {
-        platformUserId = appleMusicUserId;
-      } else if (spotifyUserId) {
-        platformUserId = spotifyUserId;
-      } else if (appleMusicUserId) {
-        platformUserId = appleMusicUserId;
-      }
-
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
 
@@ -1844,8 +1821,9 @@ const PlaylistGenerator = () => {
       const chatMessagesToStore = chatMessages || [];
       const excludedSongsToStore = generatedPlaylist.excludedSongs || [];
 
+      // Send email userId — backend resolves to the correct platform userId itself
       const result = await playlistService.createPlaylist(
-        platformUserId,
+        userId,
         editedPlaylistName.trim(),
         editedDescription.trim(),
         trackUris,
