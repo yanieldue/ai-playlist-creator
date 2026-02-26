@@ -1339,7 +1339,8 @@
 }
 
 .refresh-option-item.active .option-checkbox {
-  background: #ffffff;
+  background: #000000;
+  border-color: #000000;
 }
 
 .checkmark {
@@ -1925,6 +1926,11 @@
 
 :root.dark-mode .refresh-option-item.active .option-checkbox {
   background: #ffffff;
+  border-color: #ffffff;
+}
+
+:root.dark-mode .refresh-option-item.active .checkmark {
+  color: #000000;
 }
 
 :root.dark-mode .song-count-input-large {
