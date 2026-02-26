@@ -237,7 +237,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     setOpenMenuId(openMenuId === playlistId ? null : playlistId);
   };
 
-  const handleMenuAction = async (action, playlist, e) => {
+  const handleMenuAction = (action, playlist, e) => {
     e.stopPropagation();
     setOpenMenuId(null);
 
@@ -245,31 +245,16 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
       if (playlist.platform === 'apple') {
-        const stored = playlist.appleMusicUrl;
-        if (!stored) {
+        const url = playlist.appleMusicUrl;
+        if (!url) {
           showToast && showToast('No Apple Music URL available for this playlist', 'error');
           return;
         }
-        if (stored.includes('pl.u-')) {
-          window.open(stored, '_blank');
-        } else {
-          // Mirror the playlist-creation pattern exactly: async function + await + window.open.
-          // iOS tracks user activation through async/await chains (unlike .then() callbacks),
-          // so window.open after an await opens in Safari without triggering Universal Links —
-          // the same behaviour as opening the web player right after creation.
-          try {
-            const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-            const res = await fetch(`${apiUrl}/api/apple-music/playlist-url`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId, playlistId: playlist.playlistId, playlistName: playlist.playlistName })
-            });
-            const data = await res.json();
-            window.open(data.url || stored, '_blank');
-          } catch {
-            window.open(stored, '_blank');
-          }
-        }
+        // Use the same pattern as playlist creation: setTimeout + window.location.href.
+        // The 100ms delay moves the navigation out of the user-gesture context so iOS
+        // does not trigger Universal Links — the Apple Music web player opens instead
+        // of the native app (which cannot navigate to the p.xxx library playlist ID).
+        setTimeout(() => { window.location.href = url; }, 100);
       } else {
         const url = playlist.spotifyUrl;
         if (url) window.open(url, '_blank');
