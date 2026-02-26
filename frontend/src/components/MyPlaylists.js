@@ -247,7 +247,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       let url = playlist.platform === 'apple'
         ? `https://music.apple.com/library/playlist/${playlist.playlistId}`
         : playlist.spotifyUrl;
-      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      if (url) window.open(url, '_blank');
     }
   };
 
