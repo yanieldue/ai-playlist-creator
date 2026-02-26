@@ -99,6 +99,7 @@ class AppleMusicService {
       },
       duration_ms: track.attributes.durationInMillis,
       preview_url: track.attributes.previews?.[0]?.url || null,
+      explicit: track.attributes.contentRating === 'explicit',
       platform: 'apple',
       isrc: track.attributes.isrc,
       url: track.attributes.url || `https://music.apple.com/us/song/${track.id}`

@@ -118,6 +118,7 @@ class PlatformService {
         },
         duration_ms: track.duration_ms,
         preview_url: track.preview_url,
+        explicit: track.explicit,
         platform: 'spotify',
         external_urls: track.external_urls
       }));
