@@ -200,6 +200,7 @@ class AppleMusicService {
     return {
       id: data.data[0].id,
       name: data.data[0].attributes.name,
+      url: data.data[0].attributes.url || null, // shareable URL (e.g. https://music.apple.com/us/playlist/name/pl.u-xxx)
       platform: 'apple'
     };
   }

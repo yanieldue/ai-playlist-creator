@@ -201,7 +201,9 @@ class PlatformService {
         id: playlist.id,
         name: playlist.name,
         description,
-        url: `https://music.apple.com/library/playlist/${playlist.id}`,
+        // Use the shareable URL from the API (pl.u-xxx format) if returned,
+        // otherwise fall back to the library URL
+        url: playlist.url || `https://music.apple.com/library/playlist/${playlist.id}`,
         platform: 'apple',
         trackCount: trackUris.length
       };

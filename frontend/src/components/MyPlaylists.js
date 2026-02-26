@@ -244,9 +244,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (action === 'delete') {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
-      let url = playlist.platform === 'apple'
-        ? `https://music.apple.com/library/playlist/${playlist.playlistId}`
-        : playlist.spotifyUrl;
+      const url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
       if (url) window.open(url, '_blank');
     }
   };
