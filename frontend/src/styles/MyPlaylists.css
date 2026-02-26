@@ -6,7 +6,7 @@
 .my-playlists {
   min-height: 100%;
   background: #ffffff;
-  padding: 0 2px var(--space-lg) 2px;
+  padding: 0 20px var(--space-lg) 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
   --track-bg-color: #f2f2f7;
 }
