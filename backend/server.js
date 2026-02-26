@@ -6116,6 +6116,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
                 album: item.track.album.name,
                 image: item.track.album.images[0]?.url,
                 externalUrl: item.track.external_urls.spotify,
+                explicit: item.track.explicit,
                 platform: 'spotify',
                 reaction: reaction
               };
@@ -6212,6 +6213,7 @@ app.get('/api/playlists/:userId', async (req, res) => {
                 album: track.album.name,
                 image: track.album.images?.[0]?.url || null,
                 externalUrl: track.url || null,
+                explicit: track.explicit,
                 platform: 'apple',
                 reaction: reaction
               };
@@ -6565,7 +6567,8 @@ app.get('/api/playlists/:playlistId/tracks', async (req, res) => {
       uri: item.track.uri,
       album: item.track.album.name,
       image: item.track.album.images[0]?.url,
-      externalUrl: item.track.external_urls.spotify
+      externalUrl: item.track.external_urls.spotify,
+      explicit: item.track.explicit
     }));
 
     res.json({ tracks });

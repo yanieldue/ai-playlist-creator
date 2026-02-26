@@ -325,6 +325,7 @@ class AppleMusicService {
           }] : []
         },
         duration_ms: track.attributes.durationInMillis,
+        explicit: track.attributes.contentRating === 'explicit',
         platform: 'apple',
         url: trackUrl
       };
