@@ -237,7 +237,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     setOpenMenuId(openMenuId === playlistId ? null : playlistId);
   };
 
-  const handleMenuAction = (action, playlist, e) => {
+  const handleMenuAction = async (action, playlist, e) => {
     e.stopPropagation();
     setOpenMenuId(null);
 
@@ -251,14 +251,24 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           return;
         }
         if (stored.includes('pl.u-')) {
-          // Shareable pl.u-xxx URL — open directly, works on all devices
           window.open(stored, '_blank');
         } else {
-          // p.xxx library URL: use window.location.href which is never blocked by
-          // the popup blocker. JS-driven navigation (unlike a user tap on a link)
-          // typically does not trigger iOS Universal Links, so Safari opens the
-          // Apple Music web player which correctly shows the library playlist.
-          window.location.href = stored;
+          // Mirror the playlist-creation pattern exactly: async function + await + window.open.
+          // iOS tracks user activation through async/await chains (unlike .then() callbacks),
+          // so window.open after an await opens in Safari without triggering Universal Links —
+          // the same behaviour as opening the web player right after creation.
+          try {
+            const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+            const res = await fetch(`${apiUrl}/api/apple-music/playlist-url`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId, playlistId: playlist.playlistId, playlistName: playlist.playlistName })
+            });
+            const data = await res.json();
+            window.open(data.url || stored, '_blank');
+          } catch {
+            window.open(stored, '_blank');
+          }
         }
       } else {
         const url = playlist.spotifyUrl;
