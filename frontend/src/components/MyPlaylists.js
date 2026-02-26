@@ -245,9 +245,11 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       openDeleteModal(playlist.playlistId, playlist.playlistName);
     } else if (action === 'open') {
       let url = playlist.platform === 'apple' ? playlist.appleMusicUrl : playlist.spotifyUrl;
-      // Fix any legacy broken Apple Music URLs — correct format is /library/playlist/{id}
       if (playlist.platform === 'apple' && playlist.playlistId) {
-        url = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
+        // Use window.location.href so iOS Universal Links properly deep-links into the Music app.
+        // window.open(_blank) loses the URL path on iOS and lands on the Music app home instead.
+        window.location.href = `https://music.apple.com/library/playlist/${playlist.playlistId}`;
+        return;
       }
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
     }
