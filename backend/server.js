@@ -1652,7 +1652,8 @@ app.put('/api/account/email', async (req, res) => {
     const normalizedCurrentEmail = currentEmail.trim().toLowerCase();
     const normalizedNewEmail = newEmail.trim().toLowerCase();
 
-    const user = registeredUsers.get(normalizedCurrentEmail);
+    // Read from DB (not cache) to ensure we have the latest password
+    const user = await db.getUser(normalizedCurrentEmail);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -1706,7 +1707,8 @@ app.put('/api/account/password', async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const user = registeredUsers.get(normalizedEmail);
+    // Read from DB (not cache) to ensure we have the latest password
+    const user = await db.getUser(normalizedEmail);
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -1717,7 +1719,7 @@ app.put('/api/account/password', async (req, res) => {
       return res.status(401).json({ error: 'Current password is incorrect' });
     }
 
-    // Update password
+    // Update password in DB and cache
     user.password = newPassword;
     registeredUsers.set(normalizedEmail, user);
     saveUsers();
