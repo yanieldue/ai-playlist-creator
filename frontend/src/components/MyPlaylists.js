@@ -893,19 +893,39 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     </button>
                     {openMenuId === playlist.playlistId && (
                       <div className="playlist-dropdown-menu">
-                        <button
-                          className="playlist-dropdown-item"
-                          onClick={(e) => handleMenuAction('open', playlist, e)}
-                        >
-                          <img
-                            src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
-                            alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                            width="16"
-                            height="16"
-                            style={{ objectFit: 'contain', display: 'block' }}
-                          />
-                          Open in {playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
-                        </button>
+                        {playlist.platform === 'apple' && playlist.playlistId ? (
+                          // Real <a> tag so the user's own tap fires iOS Universal Links correctly.
+                          // Programmatic clicks (window.open, a.click()) don't trigger Universal Links.
+                          <a
+                            className="playlist-dropdown-item"
+                            href={`https://music.apple.com/library/playlist/${playlist.playlistId}`}
+                            onClick={() => setOpenMenuId(null)}
+                            style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '8px' }}
+                          >
+                            <img
+                              src="/apple-music-logo.png"
+                              alt="Apple Music"
+                              width="16"
+                              height="16"
+                              style={{ objectFit: 'contain', display: 'block' }}
+                            />
+                            Open in Apple Music
+                          </a>
+                        ) : (
+                          <button
+                            className="playlist-dropdown-item"
+                            onClick={(e) => handleMenuAction('open', playlist, e)}
+                          >
+                            <img
+                              src={playlist.platform === 'apple' ? '/apple-music-logo.png' : '/spotify-logo.png'}
+                              alt={playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                              width="16"
+                              height="16"
+                              style={{ objectFit: 'contain', display: 'block' }}
+                            />
+                            Open in {playlist.platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                          </button>
+                        )}
                         <button
                           className="playlist-dropdown-item delete-item"
                           onClick={(e) => handleMenuAction('delete', playlist, e)}
