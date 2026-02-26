@@ -246,13 +246,36 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     } else if (action === 'open') {
       if (playlist.platform === 'apple') {
         const stored = playlist.appleMusicUrl;
-        if (stored) {
-          // Use whatever URL was stored at creation time — works on the same device.
-          // The Apple Music library API doesn't expose a cross-device pl.u-xxx URL,
-          // so the stored URL is the best we have.
+        if (!stored) {
+          showToast && showToast('No Apple Music URL available for this playlist', 'error');
+          return;
+        }
+        if (stored.includes('pl.u-')) {
+          // Shareable pl.u-xxx URL — open directly, works on all devices
           window.open(stored, '_blank');
         } else {
-          showToast && showToast('No Apple Music URL available for this playlist', 'error');
+          // p.xxx library URL: route through an async fetch so window.open runs
+          // outside the direct user-gesture context. On iOS this prevents Universal
+          // Links from opening the native Music app (which can't navigate to p.xxx
+          // cross-device) and instead opens the Apple Music web player, which shows
+          // the playlist correctly because the user is logged in.
+          const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+          fetch(`${apiUrl}/api/apple-music/playlist-url`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              playlistId: playlist.playlistId,
+              playlistName: playlist.playlistName
+            })
+          })
+            .then(r => r.json())
+            .then(data => {
+              window.open(data.url || stored, '_blank');
+            })
+            .catch(() => {
+              window.open(stored, '_blank');
+            });
         }
       } else {
         const url = playlist.spotifyUrl;
