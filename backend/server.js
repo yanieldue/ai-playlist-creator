@@ -6753,88 +6753,117 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       addSample: tracksToAdd?.slice(0, 2)
     });
 
-    // If userId is email-based, resolve to Spotify platform userId
-    let platformUserId = userId;
-    if (isEmailBasedUserId(userId)) {
-      platformUserId = await resolvePlatformUserId(userId, 'spotify');
-      if (!platformUserId) {
-        return res.status(404).json({ error: 'Spotify not connected' });
-      }
-    }
+    // Determine the playlist's platform
+    const emailUserId = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    const playlistRecord = emailUserId ? await db.getPlaylist(emailUserId, playlistId) : null;
+    const playlistPlatform = playlistRecord?.platform || 'spotify';
 
-    const tokens = await getUserTokens(platformUserId);
-    if (!tokens) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    const userSpotifyApi = new SpotifyWebApi({
-      clientId: process.env.SPOTIFY_CLIENT_ID,
-      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-    });
-    userSpotifyApi.setAccessToken(tokens.access_token);
-    userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-    // Refresh token if needed
-    try {
-      const refreshData = await userSpotifyApi.refreshAccessToken();
-      const newAccessToken = refreshData.body.access_token;
-      userSpotifyApi.setAccessToken(newAccessToken);
-      tokens.access_token = newAccessToken;
-      userTokens.set(platformUserId, tokens);
-      // Save updated token to database
-      await db.updateAccessToken(platformUserId, newAccessToken);
-    } catch (refreshError) {
-      console.log('Token refresh failed or not needed:', refreshError.message);
-    }
-
-    // If we're both removing and adding tracks, use replace API for better performance
-    if (tracksToRemove && tracksToRemove.length > 0 && tracksToAdd && tracksToAdd.length > 0) {
-      // This is a replace operation - use Spotify's replace API
-      const validTracksToAdd = tracksToAdd.filter(isValidSpotifyTrackUri);
-
-      if (validTracksToAdd.length > 0) {
-        console.log(`Replacing all tracks in playlist ${playlistId} with ${validTracksToAdd.length} new tracks`);
-        try {
-          await userSpotifyApi.replaceTracksInPlaylist(playlistId, validTracksToAdd);
-          console.log(`Successfully replaced tracks in playlist ${playlistId}`);
-        } catch (replaceErr) {
-          console.error(`Error replacing tracks: ${replaceErr.message}`);
-          throw replaceErr;
+    if (playlistPlatform === 'apple') {
+      // ── Apple Music update ──────────────────────────────────────
+      let applePlatformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        applePlatformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (!applePlatformUserId) {
+          return res.status(404).json({ error: 'Apple Music not connected' });
         }
       }
-    } else {
-      // Separate remove and add operations
-      // Remove tracks if specified
-      if (tracksToRemove && tracksToRemove.length > 0) {
-        // tracksToRemove is expected to be in format [{ uri: 'spotify:track:...' }]
-        const validTracksToRemove = tracksToRemove.filter(track =>
-          track && track.uri && isValidSpotifyTrackUri(track.uri)
-        );
+      const appleTokens = await getUserTokens(applePlatformUserId);
+      if (!appleTokens) {
+        return res.status(401).json({ error: 'Apple Music not authenticated' });
+      }
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) {
+        return res.status(500).json({ error: 'Apple Music service unavailable' });
+      }
+      const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
 
-        if (validTracksToRemove.length > 0) {
-          console.log(`Removing ${validTracksToRemove.length} tracks from playlist ${playlistId}`);
+      if (tracksToAdd && tracksToAdd.length > 0) {
+        // Convert apple:track:ID URIs to plain IDs
+        const trackIds = tracksToAdd.map(uri =>
+          typeof uri === 'string' && uri.startsWith('apple:track:') ? uri.replace('apple:track:', '') : uri
+        ).filter(Boolean);
+        if (trackIds.length > 0) {
+          await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlistId, trackIds);
+          console.log(`Added ${trackIds.length} tracks to Apple Music playlist ${playlistId}`);
+        }
+      }
+      // Note: Apple Music API does not support removing tracks from playlists
+    } else {
+      // ── Spotify update ──────────────────────────────────────────
+      let platformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        if (!platformUserId) {
+          return res.status(404).json({ error: 'Spotify not connected' });
+        }
+      }
+
+      const tokens = await getUserTokens(platformUserId);
+      if (!tokens) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+      // Refresh token if needed
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        const newAccessToken = refreshData.body.access_token;
+        userSpotifyApi.setAccessToken(newAccessToken);
+        tokens.access_token = newAccessToken;
+        userTokens.set(platformUserId, tokens);
+        await db.updateAccessToken(platformUserId, newAccessToken);
+      } catch (refreshError) {
+        console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      // If we're both removing and adding tracks, use replace API for better performance
+      if (tracksToRemove && tracksToRemove.length > 0 && tracksToAdd && tracksToAdd.length > 0) {
+        const validTracksToAdd = tracksToAdd.filter(isValidSpotifyTrackUri);
+        if (validTracksToAdd.length > 0) {
+          console.log(`Replacing all tracks in playlist ${playlistId} with ${validTracksToAdd.length} new tracks`);
           try {
-            await userSpotifyApi.removeTracksFromPlaylist(playlistId, validTracksToRemove);
-            console.log(`Removed ${validTracksToRemove.length} tracks from playlist ${playlistId}`);
-          } catch (removeErr) {
-            console.error(`Error removing tracks: ${removeErr.message}`);
-            throw removeErr;
+            await userSpotifyApi.replaceTracksInPlaylist(playlistId, validTracksToAdd);
+            console.log(`Successfully replaced tracks in playlist ${playlistId}`);
+          } catch (replaceErr) {
+            console.error(`Error replacing tracks: ${replaceErr.message}`);
+            throw replaceErr;
           }
         }
-      }
+      } else {
+        // Separate remove and add operations
+        if (tracksToRemove && tracksToRemove.length > 0) {
+          const validTracksToRemove = tracksToRemove.filter(track =>
+            track && track.uri && isValidSpotifyTrackUri(track.uri)
+          );
+          if (validTracksToRemove.length > 0) {
+            console.log(`Removing ${validTracksToRemove.length} tracks from playlist ${playlistId}`);
+            try {
+              await userSpotifyApi.removeTracksFromPlaylist(playlistId, validTracksToRemove);
+              console.log(`Removed ${validTracksToRemove.length} tracks from playlist ${playlistId}`);
+            } catch (removeErr) {
+              console.error(`Error removing tracks: ${removeErr.message}`);
+              throw removeErr;
+            }
+          }
+        }
 
-      // Add tracks if specified
-      if (tracksToAdd && tracksToAdd.length > 0) {
-        const validTracksToAdd = tracksToAdd.filter(isValidSpotifyTrackUri);
-
-        if (validTracksToAdd.length > 0) {
-          try {
-            await userSpotifyApi.addTracksToPlaylist(playlistId, validTracksToAdd);
-            console.log(`Added ${validTracksToAdd.length} tracks to playlist ${playlistId}`);
-          } catch (addErr) {
-            console.error(`Error adding tracks: ${addErr.message}`);
-            throw addErr;
+        if (tracksToAdd && tracksToAdd.length > 0) {
+          const validTracksToAdd = tracksToAdd.filter(isValidSpotifyTrackUri);
+          if (validTracksToAdd.length > 0) {
+            try {
+              await userSpotifyApi.addTracksToPlaylist(playlistId, validTracksToAdd);
+              console.log(`Added ${validTracksToAdd.length} tracks to playlist ${playlistId}`);
+            } catch (addErr) {
+              console.error(`Error adding tracks: ${addErr.message}`);
+              throw addErr;
+            }
           }
         }
       }

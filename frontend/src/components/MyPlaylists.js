@@ -650,17 +650,21 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
 IMPORTANT: Pay close attention to the original request and description to understand the exact genre and mood. Generate songs that precisely match the genre, mood, and energy level indicated by the playlist description.`;
       }
 
-      // Build list of URIs to exclude from new generation
+      // Detect platform from the playlist being refreshed
+      const platform = editOptionsPlaylist.platform || 'spotify';
+      const isApple = platform === 'apple';
+
+      // Build list of URIs/IDs to exclude from new generation
       const excludeUris = [];
 
       // For replace mode, exclude existing tracks
       if (manualRefreshMode === 'replace' && currentTracks && currentTracks.length > 0) {
-        excludeUris.push(...currentTracks.map(track => track.uri));
+        excludeUris.push(...currentTracks.map(track => track.uri).filter(Boolean));
       }
 
       // Always exclude songs that user removed with minus button
       if (editOptionsPlaylist.excludedSongs && editOptionsPlaylist.excludedSongs.length > 0) {
-        const excludedSongUris = editOptionsPlaylist.excludedSongs.map(song => song.uri);
+        const excludedSongUris = editOptionsPlaylist.excludedSongs.map(song => song.uri).filter(Boolean);
         excludeUris.push(...excludedSongUris);
         console.log(`[MANUAL-REFRESH] Excluding ${excludedSongUris.length} user-removed song(s)`);
       }
@@ -668,7 +672,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
       const result = await playlistService.generatePlaylist(
         prompt,
         userId,
-        'spotify',
+        platform,
         true, // allowExplicit
         manualRefreshNewArtistsOnly,
         manualRefreshSongCount,
@@ -676,32 +680,21 @@ IMPORTANT: Pay close attention to the original request and description to unders
         editOptionsPlaylist.playlistId // Pass playlistId so backend can load song history
       );
 
-      // Get the new track URIs
-      const newTrackUris = result.tracks.map(track => track.uri);
+      // Get new track URIs (works for both Spotify spotify:track:ID and Apple Music apple:track:ID)
+      const newTrackUris = result.tracks.map(track => track.uri).filter(Boolean);
 
       setRefreshingMessage('Updating your playlist...');
 
-      if (manualRefreshMode === 'replace') {
-        // Get all current track URIs to remove - filter out invalid URIs
-        // Use tracks if available, otherwise fall back to trackUris
+      if (!isApple && manualRefreshMode === 'replace') {
+        // Spotify replace: remove old tracks and add new ones
         let trackUrisToRemove = [];
         if (editOptionsPlaylist.tracks && editOptionsPlaylist.tracks.length > 0) {
           trackUrisToRemove = editOptionsPlaylist.tracks.map(track => track.uri);
         } else if (editOptionsPlaylist.trackUris && editOptionsPlaylist.trackUris.length > 0) {
           trackUrisToRemove = editOptionsPlaylist.trackUris;
         }
-
         const currentTrackUris = trackUrisToRemove.filter(isValidSpotifyTrackUri);
 
-        console.log('Replace mode:', {
-          playlistId: editOptionsPlaylist.playlistId,
-          tracksToRemove: currentTrackUris.length,
-          tracksToAdd: newTrackUris.length,
-          removeData: currentTrackUris.slice(0, 3),
-          invalidTracksFiltered: editOptionsPlaylist.tracks.length - currentTrackUris.length
-        });
-
-        // Update playlist: remove old tracks and add new ones
         await playlistService.updatePlaylist(
           editOptionsPlaylist.playlistId,
           userId,
@@ -710,14 +703,17 @@ IMPORTANT: Pay close attention to the original request and description to unders
         );
         showToast(`Replaced ${currentTrackUris.length} tracks with ${newTrackUris.length} new ones!`, 'success');
       } else {
-        // Append mode: just add new tracks
+        // Append mode (both platforms), or Apple Music replace (API doesn't support removal)
         await playlistService.updatePlaylist(
           editOptionsPlaylist.playlistId,
           userId,
           newTrackUris,
           []
         );
-        showToast(`Added ${newTrackUris.length} new tracks!`, 'success');
+        const msg = isApple && manualRefreshMode === 'replace'
+          ? `Added ${newTrackUris.length} new tracks (Apple Music doesn't support removing tracks via API)`
+          : `Added ${newTrackUris.length} new tracks!`;
+        showToast(msg, 'success');
       }
 
       // Refresh the playlists list
