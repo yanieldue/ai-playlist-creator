@@ -3828,7 +3828,8 @@ DO NOT include any text outside the JSON.`
     // Apply AI-extracted song count from prompt (replaces regex approach).
     // If the prompt implies a count, it overrides the options-menu value.
     // If null, the options-menu value (req.body.songCount) is used as-is.
-    if (genreData.songCount !== null && typeof genreData.songCount === 'number') {
+    // During refinements (playlistId set), never override — keep the original count.
+    if (!playlistId && genreData.songCount !== null && typeof genreData.songCount === 'number') {
       const clampedCount = Math.min(Math.max(5, Math.round(genreData.songCount)), 100);
       songCount = clampedCount;
       console.log(`AI extracted song count from prompt: ${songCount}`);
