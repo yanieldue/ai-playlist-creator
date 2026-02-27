@@ -10,6 +10,7 @@ const path = require('path');
 const cron = require('node-cron');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 const getStripe = () => {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not configured');
   return require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -90,8 +91,32 @@ const anthropic = new Anthropic({
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
   console.log('SendGrid email configured');
+} else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  console.log('Gmail email configured via nodemailer');
 } else {
-  console.log('Email not configured. Password reset emails will be logged to console.');
+  console.log('No email provider configured. Password reset emails will be logged to console.');
+}
+
+// Unified email sender: tries SendGrid first, falls back to nodemailer/Gmail
+async function sendEmail({ to, subject, html }) {
+  if (process.env.SENDGRID_API_KEY) {
+    await sgMail.send({
+      to,
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@aiplaylistcreator.com',
+      subject,
+      html,
+    });
+    return;
+  }
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const transporter = nodemailer.createTransport({
+      service: process.env.EMAIL_SERVICE || 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, html });
+    return;
+  }
+  throw new Error('No email provider configured');
 }
 
 // Helper function to validate Spotify track URIs
@@ -1478,36 +1503,29 @@ app.post('/api/forgot-password', async (req, res) => {
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
     // Send email
-    if (process.env.SENDGRID_API_KEY) {
-      try {
-        await sgMail.send({
-          to: normalizedEmail,
-          from: process.env.SENDGRID_FROM_EMAIL || 'noreply@yourdomain.com',
-          subject: 'Password Reset Request - AI Playlist Creator',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">Password Reset Request</h2>
-              <p>You requested to reset your password for AI Playlist Creator.</p>
-              <p>Click the button below to reset your password:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${resetLink}" style="background-color: #1DB954; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block;">Reset Password</a>
-              </div>
-              <p>Or copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; color: #666;">${resetLink}</p>
-              <p style="color: #999; font-size: 14px;">This link will expire in 1 hour.</p>
-              <p style="color: #999; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+    try {
+      await sendEmail({
+        to: normalizedEmail,
+        subject: 'Password Reset Request - AI Playlist Creator',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Password Reset Request</h2>
+            <p>You requested to reset your password for AI Playlist Creator.</p>
+            <p>Click the button below to reset your password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetLink}" style="background-color: #000000; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; display: inline-block;">Reset Password</a>
             </div>
-          `
-        });
-        console.log(`Password reset email sent to ${normalizedEmail}`);
-      } catch (emailError) {
-        console.error('Failed to send email:', emailError);
-        console.error('SendGrid error details:', emailError.response?.body);
-        // Log the reset link for development
-        console.log(`Password reset link for ${normalizedEmail}: ${resetLink}`);
-      }
-    } else {
-      // For development without email configured
+            <p>Or copy and paste this link into your browser:</p>
+            <p style="word-break: break-all; color: #666;">${resetLink}</p>
+            <p style="color: #999; font-size: 14px;">This link will expire in 1 hour.</p>
+            <p style="color: #999; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+          </div>
+        `
+      });
+      console.log(`Password reset email sent to ${normalizedEmail}`);
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError.message);
+      // Log the link so it's not completely lost
       console.log(`Password reset link for ${normalizedEmail}: ${resetLink}`);
     }
 
