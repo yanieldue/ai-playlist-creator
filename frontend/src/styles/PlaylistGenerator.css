@@ -3909,7 +3909,7 @@
 
 .retry-button-inline {
   background: #000000;
-  color: #000;
+  color: #ffffff;
   border: none;
   padding: 8px 16px;
   border-radius: 8px;
@@ -3922,6 +3922,15 @@
 
 .retry-button-inline:hover {
   background: #1a1a1a;
+}
+
+:root.dark-mode .retry-button-inline {
+  background: #ffffff;
+  color: #000000;
+}
+
+:root.dark-mode .retry-button-inline:hover {
+  background: #e5e5e5;
 }
 
 /* Mobile responsive */
