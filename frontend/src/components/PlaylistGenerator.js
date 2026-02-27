@@ -94,6 +94,7 @@ const PlaylistGenerator = () => {
   const [loadingNewArtists, setLoadingNewArtists] = useState(false);
   const [newArtistsFetched, setNewArtistsFetched] = useState(false);
   const newArtistsScrollRef = useRef(null);
+  const fetchNewArtistsInFlight = useRef(false);
 
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
@@ -494,6 +495,9 @@ const PlaylistGenerator = () => {
         fetchTopArtists();
         fetchUserProfile();
         fetchNewArtists();
+      } else {
+        // No platform connected — clear artists so the section hides
+        setNewArtists([]);
       }
 
       // Check if user has completed the tour (only on initial load)
@@ -1293,9 +1297,16 @@ const PlaylistGenerator = () => {
     // Guard: Don't fetch if no userId OR no platform connected
     if (!userId || (!spotifyUserId && !appleMusicUserId)) {
       console.log('[fetchNewArtists] Skipping - no userId or no platform connected');
-      setNewArtists([]);
+      // Don't clear existing artists — state may still be settling across renders
       return;
     }
+
+    // Prevent concurrent fetches (multiple dep changes can fire the useEffect rapidly)
+    if (fetchNewArtistsInFlight.current) {
+      console.log('[fetchNewArtists] Already in flight, skipping duplicate call');
+      return;
+    }
+    fetchNewArtistsInFlight.current = true;
 
     // Determine which platform userId to use based on activePlatform
     let platformUserId = userId;
@@ -1335,6 +1346,7 @@ const PlaylistGenerator = () => {
       setNewArtistsFetched(true);
     } finally {
       setLoadingNewArtists(false);
+      fetchNewArtistsInFlight.current = false;
     }
   };
 
