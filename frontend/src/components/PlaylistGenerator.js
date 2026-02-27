@@ -94,7 +94,7 @@ const PlaylistGenerator = () => {
   const [loadingNewArtists, setLoadingNewArtists] = useState(false);
   const [newArtistsFetched, setNewArtistsFetched] = useState(false);
   const newArtistsScrollRef = useRef(null);
-  const fetchNewArtistsInFlight = useRef(false);
+  const newArtistsDebounceRef = useRef(null);
 
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
@@ -1293,61 +1293,60 @@ const PlaylistGenerator = () => {
     }
   };
 
-  const fetchNewArtists = async () => {
-    // Guard: Don't fetch if no userId OR no platform connected
+  const fetchNewArtists = () => {
+    // Guard: skip if state isn't ready — don't clear existing artists
     if (!userId || (!spotifyUserId && !appleMusicUserId)) {
-      console.log('[fetchNewArtists] Skipping - no userId or no platform connected');
-      // Don't clear existing artists — state may still be settling across renders
+      console.log('[fetchNewArtists] Skipping - state not ready yet');
       return;
     }
 
-    // Prevent concurrent fetches (multiple dep changes can fire the useEffect rapidly)
-    if (fetchNewArtistsInFlight.current) {
-      console.log('[fetchNewArtists] Already in flight, skipping duplicate call');
-      return;
-    }
-    fetchNewArtistsInFlight.current = true;
-
-    // Determine which platform userId to use based on activePlatform
-    let platformUserId = userId;
-    if (activePlatform === 'spotify' && spotifyUserId) {
-      platformUserId = spotifyUserId;
-      console.log('[fetchNewArtists] Using Spotify userId:', platformUserId);
-    } else if (activePlatform === 'apple' && appleMusicUserId) {
-      platformUserId = appleMusicUserId;
-      console.log('[fetchNewArtists] Using Apple Music userId:', platformUserId);
-    } else if (spotifyUserId) {
-      platformUserId = spotifyUserId;
-      console.log('[fetchNewArtists] Fallback to Spotify userId:', platformUserId);
-    } else if (appleMusicUserId) {
-      platformUserId = appleMusicUserId;
-      console.log('[fetchNewArtists] Fallback to Apple Music userId:', platformUserId);
+    // Debounce: cancel any pending call so only the last one after rapid dep changes fires
+    if (newArtistsDebounceRef.current) {
+      clearTimeout(newArtistsDebounceRef.current);
     }
 
-    console.log('[fetchNewArtists] Starting fetch for platform userId:', platformUserId, 'activePlatform:', activePlatform);
-    setLoadingNewArtists(true);
-    try {
-      const data = await playlistService.getNewArtists(platformUserId);
-      console.log('[fetchNewArtists] Received data:', data);
-      console.log('[fetchNewArtists] Number of artists:', data.artists?.length || 0);
-      setNewArtists(data.artists);
-      setNewArtistsFetched(true);
-    } catch (err) {
-      console.log('Failed to fetch new artists (non-critical):', err.message);
-      console.error('Error details:', err.response?.data);
+    // Capture current state values in this closure so the delayed call uses the latest values
+    const currentUserId = userId;
+    const currentSpotifyUserId = spotifyUserId;
+    const currentAppleMusicUserId = appleMusicUserId;
+    const currentActivePlatform = activePlatform;
 
-      // Check if it's a scope error requiring reauth
-      if (err.response?.status === 403 && err.response?.data?.requiresReauth) {
-        setError('Please reconnect your Spotify account to grant the required permissions. Go to Settings to reconnect.');
+    newArtistsDebounceRef.current = setTimeout(async () => {
+      newArtistsDebounceRef.current = null;
+
+      // Determine which platform userId to use
+      let platformUserId = currentUserId;
+      if (currentActivePlatform === 'spotify' && currentSpotifyUserId) {
+        platformUserId = currentSpotifyUserId;
+      } else if (currentActivePlatform === 'apple' && currentAppleMusicUserId) {
+        platformUserId = currentAppleMusicUserId;
+      } else if (currentSpotifyUserId) {
+        platformUserId = currentSpotifyUserId;
+      } else if (currentAppleMusicUserId) {
+        platformUserId = currentAppleMusicUserId;
       }
 
-      // Don't clear existing artists on error — keep whatever is already showing
-      setNewArtists(prev => prev.length > 0 ? prev : []);
-      setNewArtistsFetched(true);
-    } finally {
-      setLoadingNewArtists(false);
-      fetchNewArtistsInFlight.current = false;
-    }
+      console.log('[fetchNewArtists] Starting fetch for platform userId:', platformUserId, 'activePlatform:', currentActivePlatform);
+      setLoadingNewArtists(true);
+      try {
+        const data = await playlistService.getNewArtists(platformUserId);
+        console.log('[fetchNewArtists] Number of artists:', data.artists?.length || 0);
+        // Only overwrite artists if we got a real result — never wipe good data with empty
+        if (data.artists && data.artists.length > 0) {
+          setNewArtists(data.artists);
+        }
+        setNewArtistsFetched(true);
+      } catch (err) {
+        console.log('Failed to fetch new artists (non-critical):', err.message);
+        if (err.response?.status === 403 && err.response?.data?.requiresReauth) {
+          setError('Please reconnect your Spotify account to grant the required permissions. Go to Settings to reconnect.');
+        }
+        // Don't clear existing artists on error
+        setNewArtistsFetched(true);
+      } finally {
+        setLoadingNewArtists(false);
+      }
+    }, 200);
   };
 
   const handleChatSubmit = async (retryCount = 0) => {
