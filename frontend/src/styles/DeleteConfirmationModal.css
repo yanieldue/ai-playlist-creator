@@ -181,12 +181,12 @@
 }
 
 :root.dark-mode .confirm-modal-confirm {
-  background: #ffffff;
+  background: #e5e5ea;
   color: #1c1c1e;
 }
 
 :root.dark-mode .confirm-modal-confirm:hover {
-  background: #e5e5ea;
+  background: #d1d1d6;
 }
 
 /* Mobile responsive */
