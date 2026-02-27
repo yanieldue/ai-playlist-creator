@@ -1668,7 +1668,7 @@ app.put('/api/account/email', async (req, res) => {
     if (normalizedNewEmail !== normalizedCurrentEmail) {
       const existingUser = await db.getUser(normalizedNewEmail);
       if (existingUser) {
-        return res.status(409).json({ error: 'Email already in use' });
+        return res.status(409).json({ error: 'An account with that email already exists' });
       }
     }
 
