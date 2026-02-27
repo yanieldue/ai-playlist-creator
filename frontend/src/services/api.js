@@ -291,11 +291,13 @@ export const playlistService = {
   // Update user email
   updateEmail: async (currentEmail, newEmail, password) => {
     const authToken = localStorage.getItem('authToken') || '';
+    const userId = localStorage.getItem('userId') || '';
     const response = await api.put('/api/account/email', {
       currentEmail,
       newEmail,
       password,
       authToken,
+      userId,
     });
     return response.data;
   },

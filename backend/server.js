@@ -1643,7 +1643,7 @@ app.get('/api/account/:email', async (req, res) => {
 // Update user email
 app.put('/api/account/email', async (req, res) => {
   try {
-    const { currentEmail, newEmail, password, authToken } = req.body;
+    const { currentEmail, newEmail, password, authToken, userId } = req.body;
 
     if (!currentEmail || !newEmail || !password) {
       return res.status(400).json({ error: 'Current email, new email, and password are required' });
@@ -1652,26 +1652,45 @@ app.put('/api/account/email', async (req, res) => {
     let normalizedCurrentEmail = currentEmail.trim().toLowerCase();
     const normalizedNewEmail = newEmail.trim().toLowerCase();
 
+    console.log('[updateEmail] Looking up user by currentEmail:', normalizedCurrentEmail);
+
     // Read from DB to ensure we have the latest data
     let user = await db.getUser(normalizedCurrentEmail);
+    console.log('[updateEmail] DB lookup by currentEmail result:', user ? 'found' : 'not found');
 
-    // Fallback: if email not in DB (can happen when a previous update only saved to cache),
-    // decode the auth token to find the real DB email
+    // Fallback 1: decode the auth token to find the real DB email
     if (!user && authToken) {
       try {
         const decoded = Buffer.from(authToken, 'base64').toString('utf8');
         const tokenEmail = decoded.split(':')[0].trim().toLowerCase();
+        console.log('[updateEmail] Trying authToken fallback email:', tokenEmail);
         if (tokenEmail && tokenEmail !== normalizedCurrentEmail) {
           const tokenUser = await db.getUser(tokenEmail);
+          console.log('[updateEmail] authToken fallback result:', tokenUser ? 'found' : 'not found');
           if (tokenUser) {
             user = tokenUser;
             normalizedCurrentEmail = tokenEmail;
           }
         }
-      } catch (e) { /* ignore decode errors */ }
+      } catch (e) { console.error('[updateEmail] authToken decode error:', e.message); }
+    }
+
+    // Fallback 2: look up by userId (also the email for email-based accounts)
+    if (!user && userId) {
+      const normalizedUserId = userId.trim().toLowerCase();
+      console.log('[updateEmail] Trying userId fallback:', normalizedUserId);
+      if (normalizedUserId !== normalizedCurrentEmail) {
+        const userByUserId = await db.getUser(normalizedUserId);
+        console.log('[updateEmail] userId fallback result:', userByUserId ? 'found' : 'not found');
+        if (userByUserId) {
+          user = userByUserId;
+          normalizedCurrentEmail = normalizedUserId;
+        }
+      }
     }
 
     if (!user) {
+      console.log('[updateEmail] All lookups failed for currentEmail:', normalizedCurrentEmail);
       return res.status(404).json({ error: 'User not found' });
     }
 
