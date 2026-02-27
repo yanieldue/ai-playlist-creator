@@ -91,7 +91,7 @@ const anthropic = new Anthropic({
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
   console.log('SendGrid email configured');
-} else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+} else if (process.env.GMAIL_ACCOUNT && process.env.GMAIL_APP_PASSWORD) {
   console.log('Gmail email configured via nodemailer');
 } else {
   console.log('No email provider configured. Password reset emails will be logged to console.');
@@ -102,18 +102,18 @@ async function sendEmail({ to, subject, html }) {
   if (process.env.SENDGRID_API_KEY) {
     await sgMail.send({
       to,
-      from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@aiplaylistcreator.com',
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.GMAIL_ACCOUNT || 'noreply@aiplaylistcreator.com',
       subject,
       html,
     });
     return;
   }
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+  if (process.env.GMAIL_ACCOUNT && process.env.GMAIL_APP_PASSWORD) {
     const transporter = nodemailer.createTransport({
-      service: process.env.EMAIL_SERVICE || 'gmail',
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      service: process.env.GMAIL_SERVICE || 'gmail',
+      auth: { user: process.env.GMAIL_ACCOUNT, pass: process.env.GMAIL_APP_PASSWORD },
     });
-    await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, html });
+    await transporter.sendMail({ from: process.env.GMAIL_ACCOUNT, to, subject, html });
     return;
   }
   throw new Error('No email provider configured');
