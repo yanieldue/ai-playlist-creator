@@ -6911,7 +6911,7 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
 
     // If isPublic setting changed, update it on the platform
     if (isPublic !== undefined && isPublic !== userPlaylistHistory[playlistIndex].isPublic) {
-      const playlistPlatform = userPlaylistHistory[playlistIndex].platform;
+      const playlistPlatform = userPlaylistHistory[playlistIndex].platform || 'spotify';
 
       // Apple Music library playlists are always private, cannot be made public
       if (playlistPlatform === 'apple') {
