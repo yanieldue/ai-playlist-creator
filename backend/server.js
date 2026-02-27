@@ -6162,9 +6162,16 @@ app.get('/api/playlists/:userId', async (req, res) => {
       }
 
       if (!platformUserId) {
-        // User doesn't have any platform connected, return empty playlists
-        console.log('No music platform connection found for email:', userId);
-        return res.json({ playlists: [] });
+        // User doesn't have any platform connected — return stored playlists in read-only mode
+        console.log('No music platform connection found for email:', userId, '— returning stored playlists as read-only');
+        const readOnlyPlaylists = userPlaylistHistory.map(playlist => ({
+          ...playlist,
+          tracks: [],
+          trackCount: playlist.trackCount || 0,
+          isReadOnly: true,
+          readOnlyReason: 'Connect a music platform to view and manage this playlist.'
+        }));
+        return res.json({ playlists: readOnlyPlaylists });
       }
     } else {
       // Direct platform userId
