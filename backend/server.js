@@ -1664,9 +1664,12 @@ app.put('/api/account/email', async (req, res) => {
       return res.status(401).json({ error: 'Invalid password' });
     }
 
-    // Check if new email is already taken
-    if (normalizedNewEmail !== normalizedCurrentEmail && registeredUsers.has(normalizedNewEmail)) {
-      return res.status(409).json({ error: 'Email already in use' });
+    // Check if new email is already taken (check DB, not stale cache)
+    if (normalizedNewEmail !== normalizedCurrentEmail) {
+      const existingUser = await db.getUser(normalizedNewEmail);
+      if (existingUser) {
+        return res.status(409).json({ error: 'Email already in use' });
+      }
     }
 
     // Update email
