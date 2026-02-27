@@ -375,6 +375,8 @@ class DatabaseService {
       db.prepare('UPDATE connected_platforms SET email = ? WHERE email = ?').run(newEmail, oldEmail);
       db.prepare('UPDATE platform_user_ids SET email = ? WHERE email = ?').run(newEmail, oldEmail);
       db.prepare('UPDATE tokens SET email = ? WHERE email = ?').run(newEmail, oldEmail);
+      db.prepare('UPDATE playlists SET user_id = ? WHERE user_id = ?').run(newEmail, oldEmail);
+      db.prepare('UPDATE artist_history SET user_id = ? WHERE user_id = ?').run(newEmail, oldEmail);
     });
     updateAll();
   }

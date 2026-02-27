@@ -1597,6 +1597,56 @@ app.post('/api/reset-password', async (req, res) => {
   }
 });
 
+// Temporary admin diagnostic: find all users with their playlist counts and plan
+app.get('/api/admin/users', async (req, res) => {
+  const adminKey = req.query.key;
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const users = await db.getAllUsers();
+    const result = await Promise.all(users.map(async (u) => {
+      const playlists = await db.getUserPlaylists(u.email);
+      return {
+        email: u.email,
+        plan: u.plan || 'free',
+        playlistCount: playlists ? playlists.length : 0,
+        stripeCustomerId: u.stripeCustomerId || null,
+        createdAt: u.createdAt,
+      };
+    }));
+    res.json(result.sort((a, b) => b.playlistCount - a.playlistCount));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Temporary admin: copy plan + Stripe fields from one account to another
+app.post('/api/admin/transfer-plan', async (req, res) => {
+  const adminKey = req.query.key;
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { fromEmail, toEmail } = req.body;
+    if (!fromEmail || !toEmail) return res.status(400).json({ error: 'fromEmail and toEmail required' });
+    const fromUser = await db.getUser(fromEmail.trim().toLowerCase());
+    if (!fromUser) return res.status(404).json({ error: 'Source user not found' });
+    await db.updateSubscription(toEmail.trim().toLowerCase(), {
+      subscriptionId: fromUser.stripeSubscriptionId,
+      status: fromUser.subscriptionStatus,
+      endsAt: null,
+      plan: fromUser.plan || 'paid',
+    });
+    if (fromUser.stripeCustomerId) {
+      await db.updateStripeCustomer(toEmail.trim().toLowerCase(), fromUser.stripeCustomerId);
+    }
+    res.json({ success: true, plan: fromUser.plan, stripeCustomerId: fromUser.stripeCustomerId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get user account info
 app.get('/api/account/:email', async (req, res) => {
   try {

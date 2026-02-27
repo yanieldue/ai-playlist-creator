@@ -419,6 +419,7 @@ const Account = ({ onBack, showToast }) => {
       setAccountError('');
       const data = await playlistService.updateEmail(accountEmail, newEmail, emailPassword);
       localStorage.setItem('userEmail', newEmail);
+      localStorage.setItem('userId', newEmail);
       if (data.token) localStorage.setItem('authToken', data.token);
       setAccountEmail(newEmail);
       closeEditEmailModal();
@@ -449,7 +450,7 @@ const Account = ({ onBack, showToast }) => {
     try {
       setAccountLoading(true);
       setAccountError('');
-      await playlistService.updatePassword(currentPassword, newPassword);
+      await playlistService.updatePassword(accountEmail, currentPassword, newPassword);
       closeEditPasswordModal();
       toast('Password updated successfully', 'success');
     } catch (err) {

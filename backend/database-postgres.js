@@ -294,6 +294,14 @@ class DatabaseService {
         'UPDATE tokens SET email = $1 WHERE email = $2',
         [newEmail, oldEmail]
       );
+      await client.query(
+        'UPDATE playlists SET user_id = $1 WHERE user_id = $2',
+        [newEmail, oldEmail]
+      );
+      await client.query(
+        'UPDATE artist_history SET user_id = $1 WHERE user_id = $2',
+        [newEmail, oldEmail]
+      );
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
