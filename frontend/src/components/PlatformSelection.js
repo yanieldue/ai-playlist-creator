@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
+import ConfirmModal from './ConfirmModal';
 import '../styles/PlatformSelection.css';
 
 const PlatformSelection = ({ email, authToken, onComplete }) => {
@@ -11,6 +12,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     apple: false
   });
   const [isConnecting, setIsConnecting] = useState(null); // 'spotify' or 'apple' while connecting
+  const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
 
   useEffect(() => {
     const fetchConnectedPlatforms = async () => {
@@ -90,15 +92,21 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   const handleConnectSpotify = async () => {
     // Check if Apple Music is already connected
     if (connectedPlatforms.apple) {
-      const confirmed = window.confirm(
-        'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible. Do you want to continue?'
-      );
-      if (!confirmed) {
-        return;
-      }
-      // Clear Apple Music data from localStorage
-      localStorage.removeItem('appleMusicUserId');
+      setConfirmModal({
+        title: 'Switch to Spotify?',
+        message: 'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible.',
+        onConfirm: () => {
+          setConfirmModal(null);
+          localStorage.removeItem('appleMusicUserId');
+          proceedConnectSpotify();
+        },
+      });
+      return;
     }
+    proceedConnectSpotify();
+  };
+
+  const proceedConnectSpotify = async () => {
 
     setIsConnecting('spotify');
     setError('');
@@ -125,16 +133,21 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   const handleConnectApple = async () => {
     // Check if Spotify is already connected
     if (connectedPlatforms.spotify) {
-      const confirmed = window.confirm(
-        'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible. Do you want to continue?'
-      );
-      if (!confirmed) {
-        return;
-      }
-      // Clear Spotify data from localStorage
-      localStorage.removeItem('spotifyUserId');
+      setConfirmModal({
+        title: 'Switch to Apple Music?',
+        message: 'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible.',
+        onConfirm: () => {
+          setConfirmModal(null);
+          localStorage.removeItem('spotifyUserId');
+          proceedConnectApple();
+        },
+      });
+      return;
     }
+    proceedConnectApple();
+  };
 
+  const proceedConnectApple = async () => {
     setIsConnecting('apple');
     setError('');
 
@@ -246,6 +259,15 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   };
 
   return (
+    <>
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title={confirmModal?.title}
+        message={confirmModal?.message}
+        confirmLabel="Continue"
+        onConfirm={confirmModal?.onConfirm}
+        onCancel={() => setConfirmModal(null)}
+      />
     <div className="platform-selection-container">
       <div className="platform-selection-card">
         <div className="platform-selection-header">
@@ -335,6 +357,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
         </p>
       </div>
     </div>
+    </>
   );
 };
 

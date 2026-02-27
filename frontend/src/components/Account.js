@@ -5,6 +5,7 @@ import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import Icons from './Icons';
 import UpgradeModal from './UpgradeModal';
+import ConfirmModal from './ConfirmModal';
 import { isPaid } from '../utils/plan';
 import '../styles/Account.css';
 
@@ -28,6 +29,7 @@ const Account = ({ onBack, showToast }) => {
   const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
+  const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
 
   // Fallback toast function if not provided
   const toast = showToast || ((message, type) => {
@@ -295,31 +297,20 @@ const Account = ({ onBack, showToast }) => {
               setUpgradeModal({ open: true, feature: 'Dual Platform' });
               return;
             }
-            const confirmed = window.confirm(
-              'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible. Do you want to continue?'
-            );
-            if (!confirmed) {
-              setAccountLoading(false);
-              return;
-            }
-            // Clear Apple Music data from localStorage
-            localStorage.removeItem('appleMusicUserId');
-          }
-
-          // Always get fresh email from localStorage (don't rely on state)
-          const emailToUse = localStorage.getItem('userEmail');
-          if (!emailToUse) {
-            setAccountError('Error: User email not found. Please try logging in again.');
             setAccountLoading(false);
+            setConfirmModal({
+              title: 'Switch to Spotify?',
+              message: 'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible.',
+              onConfirm: async () => {
+                setConfirmModal(null);
+                localStorage.removeItem('appleMusicUserId');
+                await proceedConnectSpotify();
+              },
+            });
             return;
           }
-          console.log('Getting Spotify auth URL for:', emailToUse);
-          // Set flag to indicate we're connecting from Account page
-          localStorage.setItem('connectingFromAccount', 'true');
-          const response = await playlistService.getSpotifyAuthUrl(emailToUse, true);
-          console.log('Spotify auth URL received:', response);
-          console.log('Redirecting to:', response.url);
-          window.location.href = response.url;
+          await proceedConnectSpotify();
+          return;
         } else if (platform === 'apple') {
           // Check if Spotify is already connected
           if (connectedPlatforms.spotify) {
@@ -328,82 +319,88 @@ const Account = ({ onBack, showToast }) => {
               setUpgradeModal({ open: true, feature: 'Dual Platform' });
               return;
             }
-            const confirmed = window.confirm(
-              'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible. Do you want to continue?'
-            );
-            if (!confirmed) {
-              setAccountLoading(false);
-              return;
-            }
-            // Clear Spotify data from localStorage
-            localStorage.removeItem('spotifyUserId');
-          }
-
-          // Use MusicKit JS for Apple Music authentication
-          const emailToUse = localStorage.getItem('userEmail');
-          if (!emailToUse) {
-            setAccountError('Error: User email not found. Please try logging in again.');
             setAccountLoading(false);
+            setConfirmModal({
+              title: 'Switch to Apple Music?',
+              message: 'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible.',
+              onConfirm: async () => {
+                setConfirmModal(null);
+                localStorage.removeItem('spotifyUserId');
+                await proceedConnectApple();
+              },
+            });
             return;
           }
 
-          console.log('Connecting to Apple Music with MusicKit for:', emailToUse);
-
-          // Step 1: Get developer token
-          const developerToken = await playlistService.getAppleMusicDeveloperToken();
-
-          // Step 2: Configure MusicKit
-          await musicKitService.configure(developerToken);
-
-          // Step 3: Authorize user (opens Apple sign-in)
-          const userMusicToken = await musicKitService.authorize();
-
-          // Step 4: Send user music token to backend
-          const result = await playlistService.connectAppleMusicWithToken(userMusicToken, emailToUse);
-          console.log('Apple Music connected successfully:', result);
-
-          // Step 5: Update state and localStorage
-          // First, clear ALL Spotify data when switching to Apple Music
-          console.log('Clearing Spotify data before switching to Apple Music');
-          localStorage.removeItem('spotifyUserId');
-
-          // Then set Apple Music data
-          if (result.userId) {
-            localStorage.setItem('appleMusicUserId', result.userId);
-            localStorage.setItem('userId', result.userId);
-            localStorage.setItem('activePlatform', 'apple');
-            console.log('Set Apple Music data:', {
-              appleMusicUserId: result.userId,
-              userId: result.userId,
-              activePlatform: 'apple'
-            });
-          }
-
-          const updatedPlatforms = {
-            spotify: false,  // Disconnect Spotify when connecting Apple Music
-            apple: true
-          };
-          setConnectedPlatforms(updatedPlatforms);
-          localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
-          console.log('Updated connectedPlatforms:', updatedPlatforms);
-
-          // Dispatch custom event to notify other components of platform changes
-          // Use setTimeout to ensure localStorage updates are complete before event is processed
-          setTimeout(() => {
-            console.log('Dispatching platformsChanged event for Apple Music');
-            window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
-          }, 300);
-
-          setAccountError('');
-          setAccountLoading(false);
-          toast('Apple Music connected successfully!', 'success');
-          return; // Exit early since we handled everything
+          await proceedConnectApple();
+          return;
         }
       }
     } catch (err) {
       console.error('Error details:', err);
       setAccountError(err.response?.data?.error || err.message || `Failed to update ${platform}`);
     } finally {
+      setAccountLoading(false);
+    }
+  };
+
+  const proceedConnectSpotify = async () => {
+    setAccountLoading(true);
+    try {
+      const emailToUse = localStorage.getItem('userEmail');
+      if (!emailToUse) {
+        setAccountError('Error: User email not found. Please try logging in again.');
+        setAccountLoading(false);
+        return;
+      }
+      console.log('Getting Spotify auth URL for:', emailToUse);
+      localStorage.setItem('connectingFromAccount', 'true');
+      const response = await playlistService.getSpotifyAuthUrl(emailToUse, true);
+      console.log('Redirecting to:', response.url);
+      window.location.href = response.url;
+    } catch (err) {
+      setAccountError(err.response?.data?.error || err.message || 'Failed to connect to Spotify');
+      setAccountLoading(false);
+    }
+  };
+
+  const proceedConnectApple = async () => {
+    setAccountLoading(true);
+    try {
+      const emailToUse = localStorage.getItem('userEmail');
+      if (!emailToUse) {
+        setAccountError('Error: User email not found. Please try logging in again.');
+        setAccountLoading(false);
+        return;
+      }
+      console.log('Connecting to Apple Music with MusicKit for:', emailToUse);
+
+      const developerToken = await playlistService.getAppleMusicDeveloperToken();
+      await musicKitService.configure(developerToken);
+      const userMusicToken = await musicKitService.authorize();
+      const result = await playlistService.connectAppleMusicWithToken(userMusicToken, emailToUse);
+      console.log('Apple Music connected successfully:', result);
+
+      localStorage.removeItem('spotifyUserId');
+      if (result.userId) {
+        localStorage.setItem('appleMusicUserId', result.userId);
+        localStorage.setItem('userId', result.userId);
+        localStorage.setItem('activePlatform', 'apple');
+      }
+
+      const updatedPlatforms = { spotify: false, apple: true };
+      setConnectedPlatforms(updatedPlatforms);
+      localStorage.setItem('connectedPlatforms', JSON.stringify(updatedPlatforms));
+
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('platformsChanged', { detail: updatedPlatforms }));
+      }, 300);
+
+      setAccountError('');
+      setAccountLoading(false);
+      toast('Apple Music connected successfully!', 'success');
+    } catch (err) {
+      setAccountError(err.response?.data?.error || err.message || 'Failed to connect to Apple Music');
       setAccountLoading(false);
     }
   };
@@ -467,6 +464,14 @@ const Account = ({ onBack, showToast }) => {
         isOpen={upgradeModal.open}
         onClose={() => setUpgradeModal({ open: false, feature: '' })}
         featureName={upgradeModal.feature}
+      />
+      <ConfirmModal
+        isOpen={!!confirmModal}
+        title={confirmModal?.title}
+        message={confirmModal?.message}
+        confirmLabel="Continue"
+        onConfirm={confirmModal?.onConfirm}
+        onCancel={() => setConfirmModal(null)}
       />
       <div className="account-header">
         <h1>Account</h1>
