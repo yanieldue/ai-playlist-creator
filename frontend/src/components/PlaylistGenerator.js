@@ -223,10 +223,23 @@ const PlaylistGenerator = () => {
         return;
       }
 
-      console.log('PlaylistGenerator: Found existing userId in localStorage:', storedUserId);
-      setUserId(storedUserId);
+      // If userId is email-based but doesn't match userEmail, sync to userEmail.
+      // This fixes cases where an email update changed userEmail but not userId.
+      const storedUserEmail = localStorage.getItem('userEmail');
+      const isEmailId = storedUserId.includes('@');
+      if (isEmailId && storedUserEmail && storedUserId !== storedUserEmail.trim().toLowerCase()) {
+        console.log('PlaylistGenerator: Syncing userId to match updated userEmail', storedUserEmail);
+        localStorage.setItem('userId', storedUserEmail.trim().toLowerCase());
+      }
+
+      const resolvedUserId = (isEmailId && storedUserEmail)
+        ? storedUserEmail.trim().toLowerCase()
+        : storedUserId;
+
+      console.log('PlaylistGenerator: Found existing userId in localStorage:', resolvedUserId);
+      setUserId(resolvedUserId);
       setIsAuthenticated(true);
-      mp.identify(storedUserId);
+      mp.identify(resolvedUserId);
 
       // Show paywall once for free users who haven't seen it yet
       if (!isPaid() && !localStorage.getItem('seenPricingPage')) {

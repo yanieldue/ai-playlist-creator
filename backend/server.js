@@ -1597,6 +1597,28 @@ app.post('/api/reset-password', async (req, res) => {
   }
 });
 
+// Temporary admin: directly set plan for a user
+app.post('/api/admin/set-plan', async (req, res) => {
+  const adminKey = req.query.key;
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  try {
+    const { email, plan } = req.body;
+    if (!email || !plan) return res.status(400).json({ error: 'email and plan required' });
+    const normalizedEmail = email.trim().toLowerCase();
+    await db.updateSubscription(normalizedEmail, {
+      subscriptionId: null,
+      status: plan === 'paid' ? 'active' : null,
+      endsAt: null,
+      plan,
+    });
+    res.json({ success: true, email: normalizedEmail, plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Temporary admin diagnostic: find all users with their playlist counts and plan
 app.get('/api/admin/users', async (req, res) => {
   const adminKey = req.query.key;
