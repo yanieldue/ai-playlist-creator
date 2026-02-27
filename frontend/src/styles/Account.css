@@ -263,7 +263,7 @@
 
 .platform-toggle-btn.connected:hover {
   background: #1a1a1a;
-  border-color: #0dd9ff;
+  border-color: #1a1a1a;
 }
 
 .platform-toggle-btn:disabled {
@@ -430,13 +430,13 @@
 
 :root.dark-mode .platform-toggle-btn.connected {
   background: #ffffff;
-  color: #ffffff;
-  border-color: #000000;
+  color: #1c1c1e;
+  border-color: #ffffff;
 }
 
 :root.dark-mode .platform-toggle-btn.connected:hover {
-  background: #e5e5e5;
-  border-color: #0dd9ff;
+  background: #e5e5ea;
+  border-color: #e5e5ea;
 }
 
 /* Plan badges */
