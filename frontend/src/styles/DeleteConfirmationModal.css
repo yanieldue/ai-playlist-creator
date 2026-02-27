@@ -166,14 +166,14 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: inherit;
-  background: #007aff;
+  background: #1c1c1e;
   color: #ffffff;
 }
 
 .confirm-modal-confirm:hover {
-  background: #0066d6;
+  background: #3a3a3c;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .confirm-modal-confirm:active {
@@ -181,11 +181,12 @@
 }
 
 :root.dark-mode .confirm-modal-confirm {
-  background: #0a84ff;
+  background: #ffffff;
+  color: #1c1c1e;
 }
 
 :root.dark-mode .confirm-modal-confirm:hover {
-  background: #409cff;
+  background: #e5e5ea;
 }
 
 /* Mobile responsive */
