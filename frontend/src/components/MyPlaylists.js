@@ -1200,7 +1200,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   type="button"
                 >
                   <span className="dropdown-title">Manual Refresh {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</span>
-                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>{isPaid() ? '▼' : <Icons.Lock size={14} />}</span>
+                  <span className={`dropdown-arrow ${expandManualRefresh ? 'expanded' : ''}`}>{isPaid() ? <Icons.ChevronDown size={14} /> : <Icons.Lock size={14} />}</span>
                 </button>
                 <p className="section-description">Refresh your playlist now with new songs</p>
 
