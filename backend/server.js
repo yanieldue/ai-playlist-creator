@@ -1689,6 +1689,24 @@ app.put('/api/account/email', async (req, res) => {
       }
     }
 
+    // Fallback 3: account missing from DB (e.g. SQLite→Postgres migration, data loss).
+    // Re-create it using the authToken email + the password the user just provided.
+    if (!user && authToken) {
+      try {
+        const decoded = Buffer.from(authToken, 'base64').toString('utf8');
+        const tokenEmail = decoded.split(':')[0].trim().toLowerCase();
+        if (tokenEmail && tokenEmail.includes('@')) {
+          console.log('[updateEmail] Account not in DB — recovering account for:', tokenEmail);
+          await db.createUser(tokenEmail, password, 'none', tokenEmail);
+          user = await db.getUser(tokenEmail);
+          normalizedCurrentEmail = tokenEmail;
+          console.log('[updateEmail] Account recovered:', user ? 'success' : 'failed');
+        }
+      } catch (e) {
+        console.error('[updateEmail] Account recovery error:', e.message);
+      }
+    }
+
     if (!user) {
       console.log('[updateEmail] All lookups failed for currentEmail:', normalizedCurrentEmail);
       return res.status(404).json({ error: 'User not found' });
