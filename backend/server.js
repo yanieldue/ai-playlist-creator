@@ -7700,6 +7700,8 @@ const scheduleAutoUpdates = () => {
                 // Generate new tracks using the same AI-based generation logic as the main endpoint
                 let newTrackUris = [];
                 let tracksForHistory = []; // Store tracks to add to history after successful Spotify update
+                const playlistPlatform = playlist.platform || 'spotify';
+                let platformUserId = userId;
 
                 try {
                   // Extract genre and characteristics using Claude
@@ -7787,11 +7789,86 @@ Generate 12-15 diverse search queries. DO NOT include any text outside the JSON.
                     searchQueries = [];
                   }
 
-                  // Search Spotify for tracks matching the queries
+                  // Determine platform and resolve platformUserId
+                  if (playlistPlatform === 'apple') {
+                    // ── Apple Music auto-update ──────────────────────────────
+                    if (isEmailBasedUserId(userId)) {
+                      platformUserId = await resolvePlatformUserId(userId, 'apple');
+                      if (!platformUserId) {
+                        console.log(`[AUTO-UPDATE] No Apple Music connection for user ${userId}, skipping playlist ${playlist.playlistName}`);
+                        playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+                        await savePlaylist(userId, playlist);
+                        continue;
+                      }
+                    }
+
+                    const appleTokens = await getUserTokens(platformUserId);
+                    if (appleTokens && searchQueries.length > 0) {
+                      const appleMusicDevToken = generateAppleMusicToken();
+                      if (appleMusicDevToken) {
+                        const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
+                        const platformServiceInstance = new PlatformService();
+                        const storefront = appleTokens.storefront || 'us';
+                        const desiredCount = playlist.requestedSongCount || 30;
+
+                        // Build history set for deduplication
+                        const historicalTrackKeys = new Set(playlist.songHistory || []);
+                        const seenIds = new Set();
+                        const seenNormalizedAppleNames = new Set();
+                        const uniqueAppleTracks = [];
+
+                        for (const query of searchQueries) {
+                          if (uniqueAppleTracks.length >= desiredCount) break;
+                          try {
+                            const results = await platformServiceInstance.searchTracks(platformUserId, query, appleTokens, storefront, 15);
+                            for (const track of results) {
+                              if (uniqueAppleTracks.length >= desiredCount) break;
+                              if (seenIds.has(track.id)) continue;
+                              const normalizedName = (track.name || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+                              const trackKey = `${normalizedName}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
+                              if (seenNormalizedAppleNames.has(trackKey)) continue;
+                              if (historicalTrackKeys.has(trackKey)) continue;
+                              seenIds.add(track.id);
+                              seenNormalizedAppleNames.add(trackKey);
+                              uniqueAppleTracks.push(track);
+                            }
+                          } catch (appleSearchErr) {
+                            console.log(`[AUTO-UPDATE] Apple Music search failed for "${query}":`, appleSearchErr.message);
+                          }
+                        }
+
+                        console.log(`[AUTO-UPDATE] Found ${uniqueAppleTracks.length} Apple Music tracks for ${playlist.playlistName}`);
+
+                        if (uniqueAppleTracks.length > 0) {
+                          const newAppleTrackIds = uniqueAppleTracks.map(t => t.id);
+                          try {
+                            // Apple Music API doesn't support removing tracks — always append new songs
+                            await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlist.playlistId, newAppleTrackIds);
+                            console.log(`[AUTO-UPDATE] Added ${newAppleTrackIds.length} tracks to Apple Music playlist ${playlist.playlistName}`);
+
+                            // Update song history
+                            if (!playlist.songHistory) playlist.songHistory = [];
+                            const newAppleHistoryEntries = uniqueAppleTracks.map(track => {
+                              const normalizedName = (track.name || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+                              return `${normalizedName}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
+                            });
+                            playlist.songHistory = [...playlist.songHistory, ...newAppleHistoryEntries].slice(-200);
+                            console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} — ${playlist.songHistory.length} tracks`);
+                          } catch (appleUpdateError) {
+                            console.error(`[AUTO-UPDATE] Failed to update Apple Music playlist ${playlist.playlistName}:`, appleUpdateError.message);
+                          }
+                        } else {
+                          console.log(`[AUTO-UPDATE] No new Apple Music tracks found for ${playlist.playlistName}`);
+                        }
+                      } else {
+                        console.error('[AUTO-UPDATE] Failed to generate Apple Music developer token');
+                      }
+                    }
+                  } else {
+                  // ── Spotify auto-update ───────────────────────────────────
                   const allSearchResults = [];
 
                   // If userId is email-based, resolve to Spotify platform userId
-                  let platformUserId = userId;
                   if (isEmailBasedUserId(userId)) {
                     platformUserId = await resolvePlatformUserId(userId, 'spotify');
                     if (!platformUserId) {
@@ -8574,12 +8651,14 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
 
                     console.log(`[AUTO-UPDATE] Validated URIs: ${newTrackUris.length} valid out of original ${validatedUris.length + invalidUris.length}`);
                   }
+                  } // end Spotify else branch
                 } catch (generationError) {
                   console.error(`[AUTO-UPDATE] Track generation failed for ${playlist.playlistName}:`, generationError.message);
                   newTrackUris = [];
                 }
 
-                // Get user tokens (use platformUserId resolved earlier)
+                // Get user tokens (use platformUserId resolved earlier) — Spotify only
+                if (playlistPlatform !== 'apple') {
                 const tokens = await getUserTokens(platformUserId);
                 if (tokens && newTrackUris.length > 0) {
                   const userSpotifyApi = new SpotifyWebApi({
@@ -8685,6 +8764,7 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                     console.error(`[AUTO-UPDATE] Failed to update ${playlist.playlistName}:`, updateError.message);
                   }
                 }
+                } // end if (playlistPlatform !== 'apple')
 
                 // Update the nextUpdate timestamp, lastUpdated, and updatedAt
                 const now = new Date().toISOString();
