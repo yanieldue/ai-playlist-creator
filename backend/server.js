@@ -1672,11 +1672,13 @@ app.put('/api/account/email', async (req, res) => {
       }
     }
 
-    // Update email
+    // Update email in database (persists across restarts)
+    await db.updateEmail(normalizedCurrentEmail, normalizedNewEmail);
+
+    // Update in-memory cache
     registeredUsers.delete(normalizedCurrentEmail);
     user.email = normalizedNewEmail;
     registeredUsers.set(normalizedNewEmail, user);
-    saveUsers();
 
     // Generate new auth token
     const token = Buffer.from(`${normalizedNewEmail}:${Date.now()}`).toString('base64');

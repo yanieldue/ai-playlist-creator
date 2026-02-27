@@ -368,6 +368,17 @@ class DatabaseService {
     userOps.updateUserId.run(userId, updatedAt, email);
   }
 
+  updateEmail(oldEmail, newEmail) {
+    const updatedAt = new Date().toISOString();
+    const updateAll = db.transaction(() => {
+      db.prepare('UPDATE users SET email = ?, updated_at = ? WHERE email = ?').run(newEmail, updatedAt, oldEmail);
+      db.prepare('UPDATE connected_platforms SET email = ? WHERE email = ?').run(newEmail, oldEmail);
+      db.prepare('UPDATE platform_user_ids SET email = ? WHERE email = ?').run(newEmail, oldEmail);
+      db.prepare('UPDATE tokens SET email = ? WHERE email = ?').run(newEmail, oldEmail);
+    });
+    updateAll();
+  }
+
   deleteUser(email) {
     userOps.delete.run(email);
   }

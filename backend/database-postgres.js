@@ -274,6 +274,35 @@ class DatabaseService {
     `, [userId, email]);
   }
 
+  async updateEmail(oldEmail, newEmail) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'UPDATE users SET email = $1, updated_at = NOW() WHERE email = $2',
+        [newEmail, oldEmail]
+      );
+      await client.query(
+        'UPDATE connected_platforms SET email = $1 WHERE email = $2',
+        [newEmail, oldEmail]
+      );
+      await client.query(
+        'UPDATE platform_user_ids SET email = $1 WHERE email = $2',
+        [newEmail, oldEmail]
+      );
+      await client.query(
+        'UPDATE tokens SET email = $1 WHERE email = $2',
+        [newEmail, oldEmail]
+      );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   async deleteUser(email) {
     await pool.query(`DELETE FROM users WHERE email = $1`, [email]);
   }
