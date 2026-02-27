@@ -1643,17 +1643,33 @@ app.get('/api/account/:email', async (req, res) => {
 // Update user email
 app.put('/api/account/email', async (req, res) => {
   try {
-    const { currentEmail, newEmail, password } = req.body;
+    const { currentEmail, newEmail, password, authToken } = req.body;
 
     if (!currentEmail || !newEmail || !password) {
       return res.status(400).json({ error: 'Current email, new email, and password are required' });
     }
 
-    const normalizedCurrentEmail = currentEmail.trim().toLowerCase();
+    let normalizedCurrentEmail = currentEmail.trim().toLowerCase();
     const normalizedNewEmail = newEmail.trim().toLowerCase();
 
-    // Read from DB (not cache) to ensure we have the latest password
-    const user = await db.getUser(normalizedCurrentEmail);
+    // Read from DB to ensure we have the latest data
+    let user = await db.getUser(normalizedCurrentEmail);
+
+    // Fallback: if email not in DB (can happen when a previous update only saved to cache),
+    // decode the auth token to find the real DB email
+    if (!user && authToken) {
+      try {
+        const decoded = Buffer.from(authToken, 'base64').toString('utf8');
+        const tokenEmail = decoded.split(':')[0].trim().toLowerCase();
+        if (tokenEmail && tokenEmail !== normalizedCurrentEmail) {
+          const tokenUser = await db.getUser(tokenEmail);
+          if (tokenUser) {
+            user = tokenUser;
+            normalizedCurrentEmail = tokenEmail;
+          }
+        }
+      } catch (e) { /* ignore decode errors */ }
+    }
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });

@@ -415,8 +415,9 @@ const Account = ({ onBack, showToast }) => {
     try {
       setAccountLoading(true);
       setAccountError('');
-      await playlistService.updateEmail(accountEmail, newEmail, emailPassword);
+      const data = await playlistService.updateEmail(accountEmail, newEmail, emailPassword);
       localStorage.setItem('userEmail', newEmail);
+      if (data.token) localStorage.setItem('authToken', data.token);
       setAccountEmail(newEmail);
       closeEditEmailModal();
       toast('Email updated successfully', 'success');

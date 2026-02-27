@@ -290,10 +290,12 @@ export const playlistService = {
 
   // Update user email
   updateEmail: async (currentEmail, newEmail, password) => {
+    const authToken = localStorage.getItem('authToken') || '';
     const response = await api.put('/api/account/email', {
       currentEmail,
       newEmail,
       password,
+      authToken,
     });
     return response.data;
   },
