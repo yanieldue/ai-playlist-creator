@@ -1510,23 +1510,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </button>
                 )}
 
-                {isPaid() && refinementInstructions.length > 0 && (
-                  <div className="refinement-list" style={{ marginBottom: '16px' }}>
-                    {refinementInstructions.map((instruction, index) => (
-                      <div key={index} className="refinement-item">
-                        <span className="refinement-item-text">{instruction}</span>
-                        <button
-                          onClick={() => handleRemoveRefinement(instruction)}
-                          className="remove-refinement-button"
-                          title="Remove instruction"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
                 {isPaid() && <div className="chat-input-container" onClick={() => setShowRefinementModal(true)}>
                   <input
                     type="text"
@@ -1590,19 +1573,30 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 </div>
               </div>
 
+              {/* Saved refinement instructions */}
+              {refinementInstructions && refinementInstructions.length > 0 && (
+                <div className="refinement-list" style={{ padding: '0 0 8px 0' }}>
+                  {refinementInstructions.map((instruction, index) => (
+                    <div key={index} className="refinement-item">
+                      <span className="refinement-item-text">{instruction}</span>
+                      <button
+                        onClick={() => handleRemoveRefinement(instruction)}
+                        className="remove-refinement-button"
+                        title="Remove instruction"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Chat History */}
               <div className="chat-history">
                 {editOptionsPlaylist.chatMessages && editOptionsPlaylist.chatMessages.map((msg, index) => (
                   <div key={index} className={`chat-message ${msg.role}`}>
                     <div className="chat-message-content">
                       {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {refinementInstructions && refinementInstructions.map((instruction, index) => (
-                  <div key={`refinement-${index}`} className="chat-message user">
-                    <div className="chat-message-content">
-                      {instruction.instruction}
                     </div>
                   </div>
                 ))}
