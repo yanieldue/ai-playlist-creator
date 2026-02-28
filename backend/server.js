@@ -4064,10 +4064,10 @@ Respond ONLY with valid JSON:
         console.log(`⚠️  Playlist ${playlistId} not found in memory cache`);
       }
 
-      // For refinements, restore the FULL original genreData to prevent the refinement message
-      // from accidentally shifting genre/style. E.g. "add more chill songs" should not turn a
-      // hip-hop playlist into lofi — the refinement message text only guides song selection, not
-      // the core musical DNA which is already captured in the stored genreData.
+      // For refinements/refreshes, restore the FULL original genreData to prevent the
+      // refinement message from accidentally shifting genre/style. E.g. "add more chill songs"
+      // should not turn a hip-hop playlist into lofi — the refinement message text only guides
+      // song selection, not the core musical DNA captured in the stored genreData.
       if (existingPlaylistData && existingPlaylistData.genreData) {
         console.log('Restoring full original genre data for refinement consistency');
         genreData = JSON.parse(JSON.stringify(existingPlaylistData.genreData));
@@ -4077,6 +4077,14 @@ Respond ONLY with valid JSON:
         if (genreData.primaryGenre) {
           console.log(`Preserved genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
         }
+      }
+
+      // Also restore the original prompt so the AI call doesn't see a frontend-built prompt
+      // that references stale (possibly wrong-genre) tracks or concatenated refinement text.
+      // The original prompt is the clearest signal of the user's intent.
+      if (existingPlaylistData && existingPlaylistData.originalPrompt) {
+        console.log(`Restoring original prompt for AI: "${existingPlaylistData.originalPrompt}"`);
+        prompt = existingPlaylistData.originalPrompt;
       }
     }
 
