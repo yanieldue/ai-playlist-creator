@@ -4064,26 +4064,17 @@ Respond ONLY with valid JSON:
         console.log(`⚠️  Playlist ${playlistId} not found in memory cache`);
       }
 
-      // If adding more songs to existing playlist, preserve original genre data (especially requestedArtists and popularity preference)
+      // For refinements, restore the FULL original genreData to prevent the refinement message
+      // from accidentally shifting genre/style. E.g. "add more chill songs" should not turn a
+      // hip-hop playlist into lofi — the refinement message text only guides song selection, not
+      // the core musical DNA which is already captured in the stored genreData.
       if (existingPlaylistData && existingPlaylistData.genreData) {
-        console.log('Reusing original genre data from existing playlist to maintain consistency');
-        // Preserve requested artists from original prompt
-        if (existingPlaylistData.genreData.artistConstraints?.requestedArtists) {
-          genreData.artistConstraints.requestedArtists = existingPlaylistData.genreData.artistConstraints.requestedArtists;
-          genreData.artistConstraints.exclusiveMode = existingPlaylistData.genreData.artistConstraints.exclusiveMode || false;
+        console.log('Restoring full original genre data for refinement consistency');
+        genreData = JSON.parse(JSON.stringify(existingPlaylistData.genreData));
+        if (genreData.artistConstraints?.requestedArtists?.length) {
           console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')} (exclusive: ${genreData.artistConstraints.exclusiveMode})`);
         }
-        // Preserve popularity preference (underground/mainstream/balanced)
-        if (existingPlaylistData.genreData.trackConstraints?.popularity?.preference) {
-          genreData.trackConstraints.popularity.preference = existingPlaylistData.genreData.trackConstraints.popularity.preference;
-          genreData.trackConstraints.popularity.max = existingPlaylistData.genreData.trackConstraints.popularity.max;
-          genreData.trackConstraints.popularity.min = existingPlaylistData.genreData.trackConstraints.popularity.min;
-          console.log(`Preserved popularity preference: ${genreData.trackConstraints.popularity.preference}`);
-        }
-        // Preserve primary genre
-        if (existingPlaylistData.genreData.primaryGenre) {
-          genreData.primaryGenre = existingPlaylistData.genreData.primaryGenre;
-          genreData.subgenre = existingPlaylistData.genreData.subgenre;
+        if (genreData.primaryGenre) {
           console.log(`Preserved genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
         }
       }
@@ -7733,13 +7724,22 @@ const scheduleAutoUpdates = () => {
                 let platformUserId = userId;
 
                 try {
-                  // Extract genre and characteristics using Claude
-                  const genreExtractionResponse = await anthropic.messages.create({
-                    model: 'claude-sonnet-4-20250514',
-                    max_tokens: 500,
-                    messages: [{
-                      role: 'user',
-                      content: `Extract the primary genre and key musical characteristics from this playlist prompt.
+                  // Use stored genreData from the original playlist — this is more accurate than
+                  // re-extracting genre from the combined prompt (which can be polluted by
+                  // refinement phrasing like "add chill songs" drifting the genre to lofi).
+                  // Fall back to AI extraction only for older playlists without stored genreData.
+                  let genreData = { primaryGenre: null, secondaryGenres: [], keyCharacteristics: [], style: '' };
+                  if (playlist.genreData && playlist.genreData.primaryGenre) {
+                    genreData = playlist.genreData;
+                    console.log(`[AUTO-UPDATE] Using stored genre data: ${genreData.primaryGenre}`);
+                  } else {
+                    console.log('[AUTO-UPDATE] No stored genre data — extracting from prompt');
+                    const genreExtractionResponse = await anthropic.messages.create({
+                      model: 'claude-sonnet-4-20250514',
+                      max_tokens: 500,
+                      messages: [{
+                        role: 'user',
+                        content: `Extract the primary genre and key musical characteristics from this playlist prompt.
 
 Prompt: "${prompt}"
 
@@ -7752,21 +7752,21 @@ Respond ONLY with valid JSON in this format:
 }
 
 DO NOT include any text outside the JSON.`
-                    }]
-                  });
+                      }]
+                    });
 
-                  let genreData = { primaryGenre: null, secondaryGenres: [], keyCharacteristics: [], style: '' };
-                  try {
-                    let genreText = genreExtractionResponse.content[0].text.trim();
-                    // Remove markdown code blocks if present
-                    if (genreText.startsWith('```json')) {
-                      genreText = genreText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-                    } else if (genreText.startsWith('```')) {
-                      genreText = genreText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+                    try {
+                      let genreText = genreExtractionResponse.content[0].text.trim();
+                      // Remove markdown code blocks if present
+                      if (genreText.startsWith('```json')) {
+                        genreText = genreText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+                      } else if (genreText.startsWith('```')) {
+                        genreText = genreText.replace(/^```\n?/, '').replace(/\n?```$/, '');
+                      }
+                      genreData = JSON.parse(genreText);
+                    } catch (parseError) {
+                      console.log('Could not parse genre extraction in auto-update:', parseError.message);
                     }
-                    genreData = JSON.parse(genreText);
-                  } catch (parseError) {
-                    console.log('Could not parse genre extraction in auto-update:', parseError.message);
                   }
 
                   // Generate search queries using Claude
@@ -7782,8 +7782,9 @@ ${playlist.refinementInstructions && playlist.refinementInstructions.length > 0 
 
 IMPORTANT GUIDELINES:
 - The primary genre for this playlist is: ${genreData.primaryGenre || 'not specified'}
-- Secondary genres to consider: ${genreData.secondaryGenres.join(', ') || 'none'}
-- Key characteristics: ${genreData.keyCharacteristics.join(', ') || 'not specified'}
+- Secondary genres to consider: ${(genreData.secondaryGenres || []).join(', ') || 'none'}
+- Key characteristics: ${(genreData.keyCharacteristics || []).join(', ') || 'not specified'}
+${genreData.artistConstraints?.requestedArtists?.length > 0 ? `- REQUESTED ARTISTS: ${genreData.artistConstraints.requestedArtists.join(', ')} — always include search queries for these specific artists and artists similar to them` : ''}
 - For GENRE-SPECIFIC playlists, PRIORITIZE genre-specific queries HEAVILY (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists", "R&B vocalists", etc.)
 - Include at least 8 genre-specific queries if a primary genre is mentioned
 - Mix specific artist searches with broader genre searches to get good variety within the correct genre
