@@ -738,7 +738,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
     setAddingRefinement(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -776,7 +777,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
     if (!editOptionsPlaylist) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
