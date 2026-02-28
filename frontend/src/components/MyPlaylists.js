@@ -1513,28 +1513,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 {isPaid() && refinementInstructions.length > 0 && (
                   <div className="refinement-list" style={{ marginBottom: '16px' }}>
                     {refinementInstructions.map((instruction, index) => (
-                      <div key={index} className="refinement-item" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        backgroundColor: '#f5f5f5',
-                        borderRadius: '6px',
-                        marginBottom: '8px'
-                      }}>
-                        <span style={{ flex: 1, fontSize: '14px' }}>{instruction}</span>
+                      <div key={index} className="refinement-item">
+                        <span className="refinement-item-text">{instruction}</span>
                         <button
                           onClick={() => handleRemoveRefinement(instruction)}
                           className="remove-refinement-button"
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ff4444',
-                            cursor: 'pointer',
-                            fontSize: '18px',
-                            padding: '0 8px',
-                            fontWeight: 'bold'
-                          }}
                           title="Remove instruction"
                         >
                           ×

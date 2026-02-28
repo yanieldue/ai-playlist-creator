@@ -601,3 +601,39 @@
 :root.dark-mode .refresh-confirm-button:hover:not(:disabled) {
   background: #e5e5e5;
 }
+
+/* Refinement instruction chips */
+.refinement-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.refinement-item-text {
+  flex: 1;
+  font-size: 14px;
+  color: #1c1c1e;
+}
+
+.remove-refinement-button {
+  background: none;
+  border: none;
+  color: #ff4444;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0 8px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+:root.dark-mode .refinement-item {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .refinement-item-text {
+  color: #ebebf5;
+}
