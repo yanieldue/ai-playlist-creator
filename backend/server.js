@@ -1029,16 +1029,19 @@ Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
 
   console.log(`   Discovered ${discoveredSongs.length} songs from SoundCharts`);
 
-  // Filter by audio features, themes, moods, and popularity if specified
-  const needsFiltering = criteria.audioFeatures || criteria.targetMoods || criteria.targetThemes || criteria.popularity;
+  // Filter by themes/moods only — when seed artists are specified, trust the similarity graph
+  // for audio fit and don't apply BPM/energy/popularity filters (they cut too aggressively)
+  const hasSeedArtists = criteria.seedArtists && criteria.seedArtists.length > 0;
+  const needsFiltering = (!hasSeedArtists && (criteria.audioFeatures || criteria.popularity)) ||
+    criteria.targetMoods || criteria.targetThemes || criteria.releaseYear;
   if (needsFiltering && discoveredSongs.length > 0) {
     console.log('   Filtering songs by criteria...');
     const filteredSongs = [];
 
-    // Determine what data we need to fetch
+    // Only fetch details for mood/theme/year filtering — skip audio/popularity when artists specified
     const fetchOptions = {
       includeLyrics: !!(criteria.targetMoods || criteria.targetThemes),
-      includePopularity: !!(criteria.popularity)
+      includePopularity: !hasSeedArtists && !!(criteria.popularity)
     };
 
     for (const song of discoveredSongs.slice(0, Math.min(discoveredSongs.length, 40))) {
@@ -1047,9 +1050,8 @@ Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
 
       let matches = true;
 
-      // Check audio feature requirements (with tolerance - these are approximate)
-      // We use a 0.15 tolerance to avoid being too strict
-      if (criteria.audioFeatures && details.audio) {
+      // Check audio feature requirements only when no seed artists (trust similarity graph instead)
+      if (!hasSeedArtists && criteria.audioFeatures && details.audio) {
         const af = criteria.audioFeatures;
         const tolerance = 0.15; // Allow 15% tolerance for audio features
 
@@ -1077,8 +1079,8 @@ Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
         }
       }
 
-      // Check popularity requirements (0-100 scale)
-      if (criteria.popularity && details.spotifyPopularity !== undefined) {
+      // Check popularity requirements only when no seed artists
+      if (!hasSeedArtists && criteria.popularity && details.spotifyPopularity !== undefined) {
         if (criteria.popularity.min !== null && details.spotifyPopularity < criteria.popularity.min) matches = false;
         if (criteria.popularity.max !== null && details.spotifyPopularity > criteria.popularity.max) matches = false;
       }
