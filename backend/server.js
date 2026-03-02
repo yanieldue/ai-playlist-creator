@@ -462,7 +462,7 @@ async function resolvePlatformUserId(email, platform) {
 }
 
 // Helper function to search artist on SoundCharts
-async function searchSoundChartsArtist(artistName) {
+async function searchSoundChartsArtist(artistName, expectedGenre = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
 
@@ -478,17 +478,48 @@ async function searchSoundChartsArtist(artistName) {
           'x-app-id': appId,
           'x-api-key': apiKey
         },
-        params: { offset: 0, limit: 5 },
+        params: { offset: 0, limit: 10 },
         timeout: 10000
       }
     );
 
     if (response.data?.items?.length > 0) {
-      // Find exact match (case-insensitive)
-      const exactMatch = response.data.items.find(a =>
+      // Collect all exact name matches (case-insensitive)
+      const exactMatches = response.data.items.filter(a =>
         a.name.toLowerCase() === artistName.toLowerCase()
       );
-      return exactMatch || response.data.items[0];
+      const candidates = exactMatches.length > 0 ? exactMatches : response.data.items;
+
+      // If only one candidate, return it directly
+      if (candidates.length === 1) {
+        console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (genres: ${(candidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
+        return candidates[0];
+      }
+
+      // Multiple candidates with same name — disambiguate by genre if we know the expected genre
+      if (expectedGenre) {
+        const genreLower = expectedGenre.toLowerCase();
+        const genreRanked = candidates.map(a => {
+          const artistGenres = (a.genres || []).map(g => (g.root || '').toLowerCase());
+          const artistSubgenres = (a.genres || []).flatMap(g => (g.sub || []).map(s => s.toLowerCase()));
+          const allGenres = [...artistGenres, ...artistSubgenres];
+          const score = allGenres.reduce((acc, g) => {
+            if (g.includes(genreLower) || genreLower.includes(g)) return acc + 2;
+            // Partial overlap bonus (e.g. "hip-hop" vs "hip hop")
+            if (g.replace(/[-\s]/g, '').includes(genreLower.replace(/[-\s]/g, ''))) return acc + 1;
+            return acc;
+          }, 0);
+          return { artist: a, score };
+        }).sort((a, b) => b.score - a.score);
+
+        const best = genreRanked[0].artist;
+        console.log(`🔍 SoundCharts: "${best.name}" selected from ${candidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
+        return best;
+      }
+
+      // No genre hint — return first exact match (SoundCharts sorts by relevance)
+      console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (first of ${candidates.length}; no genre hint)`);
+      return candidates[0];
     }
     return null;
   } catch (error) {
@@ -534,8 +565,8 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
 }
 
 // Helper function to get artist info including genres and similar artists from SoundCharts
-async function getSoundChartsArtistInfo(artistName) {
-  const artist = await searchSoundChartsArtist(artistName);
+async function getSoundChartsArtistInfo(artistName, expectedGenre = null) {
+  const artist = await searchSoundChartsArtist(artistName, expectedGenre);
   if (!artist) {
     console.log(`🔍 SoundCharts: "${artistName}" not found`);
     return null;
@@ -732,7 +763,7 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        const artistInfo = await getSoundChartsArtistInfo(artistName);
+        const artistInfo = await getSoundChartsArtistInfo(artistName, criteria.genre);
         if (!artistInfo) continue;
 
         const songs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
@@ -764,7 +795,7 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        const artistInfo = await getSoundChartsArtistInfo(artistName);
+        const artistInfo = await getSoundChartsArtistInfo(artistName, criteria.genre);
         if (!artistInfo) continue;
 
         allArtists.push({
@@ -780,7 +811,7 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
           if (processedArtists.has(similarArtist.toLowerCase())) continue;
           processedArtists.add(similarArtist.toLowerCase());
 
-          const similarInfo = await searchSoundChartsArtist(similarArtist);
+          const similarInfo = await searchSoundChartsArtist(similarArtist, criteria.genre);
           if (!similarInfo) continue;
 
           const artistData = {
