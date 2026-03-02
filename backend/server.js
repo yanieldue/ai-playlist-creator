@@ -670,7 +670,8 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
       const result = response.data.items.map(song => ({
         uuid: song.uuid,
         name: song.name,
-        releaseDate: song.releaseDate
+        releaseDate: song.releaseDate,
+        isrc: song.isrc?.value || song.isrc || null
       }));
       setSCCache(cacheKey, result);
       return result;
@@ -680,6 +681,68 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
   } catch (error) {
     console.log(`⚠️  SoundCharts artist songs error: ${error.message}`);
     return [];
+  }
+}
+
+// Helper function to search for a specific song on SoundCharts by title + artist
+// Returns the matching song's artist UUID directly — no ambiguity from artist name search
+// Helper: get artist info when UUID is already known (skips the name-search step entirely)
+async function getSoundChartsArtistInfoByUuid(uuid, displayName) {
+  const similarArtists = await getSoundChartsSimilarArtists(uuid, 10);
+  console.log(`🔍 SoundCharts: Using confirmed UUID for "${displayName}"`);
+  if (similarArtists.length > 0) {
+    console.log(`   Similar artists: ${similarArtists.slice(0, 5).map(a => a.name).join(', ')}${similarArtists.length > 5 ? '...' : ''}`);
+  }
+  return {
+    name: displayName,
+    uuid,
+    genres: [],
+    similarArtists: similarArtists.map(a => a.name)
+  };
+}
+
+async function searchSoundChartsSong(title, artist) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey) return null;
+
+  const cacheKey = `songsearch:${title.toLowerCase()}:${artist.toLowerCase()}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
+  try {
+    await throttleSoundCharts();
+    const response = await axios.get(
+      `https://customer.api.soundcharts.com/api/v2/song/search/${encodeURIComponent(title)}`,
+      {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+        params: { offset: 0, limit: 10 },
+        timeout: 10000
+      }
+    );
+
+    const items = response.data?.items || [];
+    const artistNorm = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Find a result whose artist name matches
+    const match = items.find(song => {
+      const creditNorm = (song.creditName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const artistsNorm = (song.artists || []).map(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      return creditNorm === artistNorm || artistsNorm.some(n => n === artistNorm || n.startsWith(artistNorm) || artistNorm.startsWith(n));
+    });
+
+    if (match) {
+      const artistUuid = match.artists?.[0]?.uuid || null;
+      const artistName = match.artists?.[0]?.name || match.creditName;
+      console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}`);
+      const result = { songUuid: match.uuid, artistUuid, artistName };
+      setSCCache(cacheKey, result);
+      return result;
+    }
+    setSCCache(cacheKey, null);
+    return null;
+  } catch (error) {
+    console.log(`⚠️  SoundCharts song search error for "${title}": ${error.message}`);
+    return null;
   }
 }
 
@@ -811,8 +874,10 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        const artistConfirmedGenreExcl = criteria.confirmedArtistGenres?.[artistName.toLowerCase()]?.[0] || criteria.genre;
-        const artistInfo = await getSoundChartsArtistInfo(artistName, artistConfirmedGenreExcl);
+        const confirmedUuidExcl = criteria.confirmedArtistUuids?.[artistName.toLowerCase()];
+        const artistInfo = confirmedUuidExcl
+          ? await getSoundChartsArtistInfoByUuid(confirmedUuidExcl, artistName)
+          : await getSoundChartsArtistInfo(artistName, criteria.genre);
         if (!artistInfo) continue;
 
         const songs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
@@ -844,9 +909,11 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        // Use confirmed genre from Spotify reference-song lookup if available; fall back to playlist genre
-        const artistConfirmedGenre = criteria.confirmedArtistGenres?.[artistName.toLowerCase()]?.[0] || criteria.genre;
-        const artistInfo = await getSoundChartsArtistInfo(artistName, artistConfirmedGenre);
+        // Use confirmed UUID from SoundCharts reference-song lookup if available; otherwise search by name
+        const confirmedUuid = criteria.confirmedArtistUuids?.[artistName.toLowerCase()];
+        const artistInfo = confirmedUuid
+          ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
+          : await getSoundChartsArtistInfo(artistName, criteria.genre);
         if (!artistInfo) continue;
 
         allArtists.push({
@@ -862,7 +929,7 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
           if (processedArtists.has(similarArtist.toLowerCase())) continue;
           processedArtists.add(similarArtist.toLowerCase());
 
-          const similarInfo = await searchSoundChartsArtist(similarArtist, artistConfirmedGenre);
+          const similarInfo = await searchSoundChartsArtist(similarArtist, criteria.genre);
           if (!similarInfo) continue;
 
           const artistData = {
@@ -1035,105 +1102,18 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
   console.log(`   Discovered ${discoveredSongs.length} songs from SoundCharts`);
 
-  // When seed artists are specified, trust the similarity graph entirely —
-  // skip audio, popularity, mood, and theme filters (they cut too aggressively).
-  // Only apply release year when explicitly requested, as it's pure metadata.
-  const hasSeedArtists = criteria.seedArtists && criteria.seedArtists.length > 0;
-  const needsFiltering = (!hasSeedArtists && (criteria.audioFeatures || criteria.popularity || criteria.targetMoods || criteria.targetThemes)) ||
-    criteria.releaseYear;
-  if (needsFiltering && discoveredSongs.length > 0) {
-    console.log('   Filtering songs by criteria...');
-    const filteredSongs = [];
-
-    // Only fetch details for mood/theme/year filtering — skip audio/popularity when artists specified
-    const fetchOptions = {
-      includeLyrics: !!(criteria.targetMoods || criteria.targetThemes),
-      includePopularity: !hasSeedArtists && !!(criteria.popularity)
-    };
-
-    for (const song of discoveredSongs.slice(0, Math.min(discoveredSongs.length, 40))) {
-      const details = await getSoundChartsSongDetails(song.uuid, fetchOptions);
-      if (!details) continue;
-
-      let matches = true;
-
-      // Check audio feature requirements only when no seed artists (trust similarity graph instead)
-      if (!hasSeedArtists && criteria.audioFeatures && details.audio) {
-        const af = criteria.audioFeatures;
-        const tolerance = 0.15; // Allow 15% tolerance for audio features
-
-        if (af.energy) {
-          if (af.energy.min !== null && details.audio.energy < (af.energy.min - tolerance)) matches = false;
-          if (af.energy.max !== null && details.audio.energy > (af.energy.max + tolerance)) matches = false;
-        }
-        if (af.valence) {
-          if (af.valence.min !== null && details.audio.valence < (af.valence.min - tolerance)) matches = false;
-          if (af.valence.max !== null && details.audio.valence > (af.valence.max + tolerance)) matches = false;
-        }
-        if (af.tempo || af.bpm) {
-          const tempoConstraint = af.tempo || af.bpm;
-          const tempoTolerance = 15; // 15 BPM tolerance
-          if (tempoConstraint.min !== null && details.audio.tempo < (tempoConstraint.min - tempoTolerance)) matches = false;
-          if (tempoConstraint.max !== null && details.audio.tempo > (tempoConstraint.max + tempoTolerance)) matches = false;
-        }
-        if (af.danceability) {
-          if (af.danceability.min !== null && details.audio.danceability < (af.danceability.min - tolerance)) matches = false;
-          if (af.danceability.max !== null && details.audio.danceability > (af.danceability.max + tolerance)) matches = false;
-        }
-        if (af.acousticness) {
-          if (af.acousticness.min !== null && details.audio.acousticness < (af.acousticness.min - tolerance)) matches = false;
-          if (af.acousticness.max !== null && details.audio.acousticness > (af.acousticness.max + tolerance)) matches = false;
-        }
-      }
-
-      // Check popularity requirements only when no seed artists
-      if (!hasSeedArtists && criteria.popularity && details.spotifyPopularity !== undefined) {
-        if (criteria.popularity.min !== null && details.spotifyPopularity < criteria.popularity.min) matches = false;
-        if (criteria.popularity.max !== null && details.spotifyPopularity > criteria.popularity.max) matches = false;
-      }
-
-      // Check mood requirements (e.g., "Joyful", "Melancholic", "Euphoric")
-      if (criteria.targetMoods && criteria.targetMoods.length > 0 && details.moods) {
-        const songMoodsLower = details.moods.map(m => m.toLowerCase());
-        const hasMatchingMood = criteria.targetMoods.some(targetMood =>
-          songMoodsLower.some(songMood => songMood.includes(targetMood.toLowerCase()))
-        );
-        // Only filter out if song has mood data but doesn't match
-        if (details.moods.length > 0 && !hasMatchingMood) {
-          matches = false;
-        }
-      }
-
-      // Check theme requirements (e.g., "Love", "Celebration", "Empowerment")
-      if (criteria.targetThemes && criteria.targetThemes.length > 0 && details.themes) {
-        const songThemesLower = details.themes.map(t => t.toLowerCase());
-        const hasMatchingTheme = criteria.targetThemes.some(targetTheme =>
-          songThemesLower.some(songTheme => songTheme.includes(targetTheme.toLowerCase()))
-        );
-        // Only filter out if song has theme data but doesn't match
-        if (details.themes.length > 0 && !hasMatchingTheme) {
-          matches = false;
-        }
-      }
-
-      // Check release date requirements
-      if (criteria.releaseYear && details.releaseDate) {
-        const releaseYear = new Date(details.releaseDate).getFullYear();
-        if (criteria.releaseYear.min !== null && releaseYear < criteria.releaseYear.min) matches = false;
-        if (criteria.releaseYear.max !== null && releaseYear > criteria.releaseYear.max) matches = false;
-      }
-
-      if (matches) {
-        filteredSongs.push({
-          ...song,
-          ...details,
-          audio: details.audio
-        });
-      }
-    }
-
-    console.log(`   ${filteredSongs.length} songs match all criteria`);
-    return filteredSongs.slice(0, limit);
+  // Apply release year filter if specified (pure metadata — no extra API calls needed)
+  if (criteria.releaseYear && (criteria.releaseYear.min || criteria.releaseYear.max)) {
+    const before = discoveredSongs.length;
+    const filtered = discoveredSongs.filter(song => {
+      if (!song.releaseDate) return true; // keep if unknown
+      const year = new Date(song.releaseDate).getFullYear();
+      if (criteria.releaseYear.min && year < criteria.releaseYear.min) return false;
+      if (criteria.releaseYear.max && year > criteria.releaseYear.max) return false;
+      return true;
+    });
+    if (filtered.length < before) console.log(`   Release year filter: ${before} → ${filtered.length} songs`);
+    return filtered.slice(0, limit);
   }
 
   return discoveredSongs.slice(0, limit);
@@ -3706,13 +3686,6 @@ Respond ONLY with valid JSON in this format:
     "useCase": "intended use or null",
     "avoidances": ["what NOT to include"]
   },
-  "audioFeatures": {
-    "bpm": { "min": number or null, "max": number or null, "target": number or null },
-    "energy": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
-    "danceability": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
-    "valence": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
-    "acousticness": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null }
-  },
   "trackConstraints": {
     "popularity": { "min": 0-100 or null, "max": 0-100 or null, "preference": "mainstream/underground/balanced" or null },
     "duration": { "min": seconds or null, "max": seconds or null },
@@ -3847,13 +3820,6 @@ Examples:
 - "2000s rock hits" → suggestedSeedArtists: ["Linkin Park", "Green Day", "Fall Out Boy", "My Chemical Romance"]
 Choose artists that match the popularity level implied (mainstream vs underground).
 
-AUDIO FEATURES:
-- BPM: "fast" = 140-180, "slow" = 60-90, "moderate/mid-tempo" = 90-120, "very slow" = 50-75
-- Energy: "energetic/hype" = 0.7-1.0, "chill/relaxed/laid-back" = 0.0-0.4, "mellow/smooth" = 0.2-0.5, "moderate" = 0.4-0.7
-- Valence: "happy/upbeat/feel-good" = 0.6-1.0, "sad/melancholic/moody" = 0.0-0.4, "emotional/in your feels" = 0.2-0.5
-- Danceability: "danceable/groovy" = 0.6-1.0, "not danceable/slow jam" = 0.0-0.4, "moderate groove" = 0.4-0.6
-- Acousticness: "acoustic/stripped" = 0.6-1.0, "electronic/produced" = 0.0-0.3
-
 Use null, [], or false for any feature not mentioned.
 
 DO NOT include any text outside the JSON.`
@@ -3881,13 +3847,6 @@ DO NOT include any text outside the JSON.`
       contextClues: {
         useCase: null,
         avoidances: []
-      },
-      audioFeatures: {
-        bpm: { min: null, max: null, target: null },
-        energy: { min: null, max: null },
-        danceability: { min: null, max: null },
-        valence: { min: null, max: null },
-        acousticness: { min: null, max: null }
       },
       trackConstraints: {
         popularity: { min: null, max: null, preference: null },
@@ -4233,31 +4192,20 @@ Respond ONLY with valid JSON:
       : genreData.artistConstraints.suggestedSeedArtists || [];
 
     // Step 1.5: If the user mentioned specific reference songs (e.g. "Take It Slow by Dante"),
-    // look them up on Spotify to get confirmed artist genres for SoundCharts disambiguation.
-    // This prevents matching the wrong artist when multiple artists share a name.
-    const confirmedArtistGenres = {}; // { artistNameLower: [genres] }
+    // search SoundCharts directly by song title + artist to get the exact artist UUID.
+    // This avoids the wrong-artist disambiguation problem entirely.
+    const confirmedArtistUuids = {}; // { artistNameLower: uuid }
     const referenceSongs = genreData.referenceSongs || [];
-    if (referenceSongs.length > 0 && userSpotifyApi) {
-      console.log(`🎯 Looking up ${referenceSongs.length} reference song(s) on Spotify to confirm artist identity...`);
+    if (referenceSongs.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
+      console.log(`🎯 Looking up ${referenceSongs.length} reference song(s) on SoundCharts to confirm artist identity...`);
       for (const refSong of referenceSongs) {
         try {
-          const searchQuery = `track:${refSong.title} artist:${refSong.artist}`;
-          const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 3 });
-          const tracks = results.body.tracks?.items || [];
-          // Find track whose artist name matches
-          const refArtistNorm = refSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const match = tracks.find(t => {
-            const foundNorm = (t.artists[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            return foundNorm === refArtistNorm || foundNorm.startsWith(refArtistNorm) || refArtistNorm.startsWith(foundNorm);
-          });
-          if (match) {
-            const artistId = match.artists[0].id;
-            const artistData = await userSpotifyApi.getArtist(artistId);
-            const genres = artistData.body.genres || [];
-            confirmedArtistGenres[refSong.artist.toLowerCase()] = genres;
-            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.join(', ') || 'none'}]`);
+          const result = await searchSoundChartsSong(refSong.title, refSong.artist);
+          if (result?.artistUuid) {
+            confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
+            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — SoundCharts UUID: ${result.artistUuid}`);
           } else {
-            console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on Spotify`);
+            console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on SoundCharts`);
           }
         } catch (refErr) {
           console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
@@ -4304,23 +4252,19 @@ Respond ONLY with valid JSON:
       const criteria = {
         seedArtists: seedArtists,
         genre: genreData.primaryGenre,
-        audioFeatures: genreData.audioFeatures,
         targetMoods: targetMoods.length > 0 ? targetMoods : null,
         targetThemes: targetThemes.length > 0 ? targetThemes : null,
-        // Add popularity constraints
         popularity: genreData.trackConstraints?.popularity?.min || genreData.trackConstraints?.popularity?.max ? {
           min: genreData.trackConstraints.popularity.min,
           max: genreData.trackConstraints.popularity.max
         } : null,
-        // Add release year constraints from era
         releaseYear: genreData.era?.yearRange?.min || genreData.era?.yearRange?.max ? {
           min: genreData.era.yearRange.min,
           max: genreData.era.yearRange.max
         } : null,
-        // Pass exclusive mode - if false, prioritize similar artists over seed artists
         exclusiveMode: genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true',
-        // Confirmed artist genres from Spotify reference-song lookup (for disambiguation)
-        confirmedArtistGenres: Object.keys(confirmedArtistGenres).length > 0 ? confirmedArtistGenres : null
+        // Confirmed artist UUIDs from SoundCharts reference-song lookup (skips artist name search)
+        confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
       };
 
       soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, 60);
@@ -4460,7 +4404,10 @@ Return ONLY valid JSON:
         // Search Spotify for each recommended song
         for (const recommendedSong of recommendedTracks) {
           try {
-            const searchQuery = `track:${recommendedSong.track} artist:${recommendedSong.artist}`;
+            // Prefer ISRC lookup (exact match) — fall back to text search
+            const searchQuery = recommendedSong.isrc
+              ? `isrc:${recommendedSong.isrc}`
+              : `track:${recommendedSong.track} artist:${recommendedSong.artist}`;
             const searchPromise = userSpotifyApi.searchTracks(searchQuery, { limit: 5 });
             const searchResult = await Promise.race([
               searchPromise,
@@ -4469,28 +4416,20 @@ Return ONLY valid JSON:
             const tracks = searchResult.body.tracks.items;
 
             if (tracks.length > 0) {
-              // Find a track that matches the requested artist (not just any track with similar name)
-              const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+              let matchedTrack = tracks[0]; // ISRC search returns exact match; text search needs artist check
 
-              let matchedTrack = null;
-              for (const track of tracks) {
-                const foundArtistNorm = (track.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                // For short artist names (< 6 chars normalized), require exact match to avoid false positives
-                // e.g., "dante" should not match "dante1981" or "dantesco"
-                if (requestedArtistNorm.length < 6) {
-                  if (foundArtistNorm === requestedArtistNorm) {
-                    matchedTrack = track;
-                    break;
-                  }
-                } else {
-                  // For longer names, allow partial matches but be careful
-                  // Only match if one is a substring at a word boundary (start/end)
-                  if (foundArtistNorm === requestedArtistNorm ||
-                      foundArtistNorm.startsWith(requestedArtistNorm) ||
-                      requestedArtistNorm.startsWith(foundArtistNorm)) {
-                    matchedTrack = track;
-                    break;
+              if (!recommendedSong.isrc) {
+                // Text search: find a track that matches the requested artist
+                const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+                matchedTrack = null;
+                for (const track of tracks) {
+                  const foundArtistNorm = (track.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (requestedArtistNorm.length < 6) {
+                    if (foundArtistNorm === requestedArtistNorm) { matchedTrack = track; break; }
+                  } else {
+                    if (foundArtistNorm === requestedArtistNorm ||
+                        foundArtistNorm.startsWith(requestedArtistNorm) ||
+                        requestedArtistNorm.startsWith(foundArtistNorm)) { matchedTrack = track; break; }
                   }
                 }
               }
