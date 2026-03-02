@@ -5148,14 +5148,16 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
         if (uniqueArtistNames.length > 1) {
           try {
+            // Cap at 150 artists — normalization is for deduplication, not exhaustive cataloging
+            const artistsToNormalize = uniqueArtistNames.slice(0, 150);
             const artistNormalizationResponse = await anthropic.messages.create({
               model: 'claude-sonnet-4-20250514',
-              max_tokens: 1000,
+              max_tokens: 4000,
               messages: [{
                 role: 'user',
                 content: `Given this list of artist names from music metadata, identify which names refer to the same artist despite spelling variations.
 
-Artist names: ${uniqueArtistNames.join(', ')}
+Artist names: ${artistsToNormalize.join(', ')}
 
 For each group of names that refer to the same artist, return them as a group. Use the most common/complete name as the canonical name.
 
