@@ -8758,6 +8758,31 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                       console.log(`[AUTO-UPDATE] Successfully appended ${newTrackUris.length} tracks to ${playlist.playlistName}`);
                     }
 
+                    // Sync playlist.tracks in the DB record so Fins reflects the real Spotify state
+                    const newTracksForRecord = uniqueTracks.slice(0, songCount).map(track => ({
+                      id: track.id,
+                      name: track.name,
+                      artist: track.artists[0]?.name || 'Unknown',
+                      uri: track.uri,
+                      album: track.album?.name || '',
+                      image: track.album?.images[0]?.url || null,
+                      externalUrl: track.external_urls?.spotify || null,
+                      explicit: track.explicit || false
+                    }));
+
+                    if (playlist.updateMode === 'replace') {
+                      playlist.tracks = newTracksForRecord;
+                      playlist.trackUris = newTrackUris;
+                      playlist.trackCount = newTrackUris.length;
+                    } else {
+                      if (!playlist.tracks) playlist.tracks = [];
+                      if (!playlist.trackUris) playlist.trackUris = [];
+                      playlist.tracks = [...playlist.tracks, ...newTracksForRecord];
+                      playlist.trackUris = [...playlist.trackUris, ...newTrackUris];
+                      playlist.trackCount = playlist.trackUris.length;
+                    }
+                    console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
+
                     // Update song history to prevent repeats
                     // Accumulate tracks over multiple updates to keep playlists fresh
                     if (tracksForHistory.length > 0) {
