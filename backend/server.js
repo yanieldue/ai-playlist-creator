@@ -1034,11 +1034,12 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
   console.log(`   Discovered ${discoveredSongs.length} songs from SoundCharts`);
 
-  // Filter by themes/moods only — when seed artists are specified, trust the similarity graph
-  // for audio fit and don't apply BPM/energy/popularity filters (they cut too aggressively)
+  // When seed artists are specified, trust the similarity graph entirely —
+  // skip audio, popularity, mood, and theme filters (they cut too aggressively).
+  // Only apply release year when explicitly requested, as it's pure metadata.
   const hasSeedArtists = criteria.seedArtists && criteria.seedArtists.length > 0;
-  const needsFiltering = (!hasSeedArtists && (criteria.audioFeatures || criteria.popularity)) ||
-    criteria.targetMoods || criteria.targetThemes || criteria.releaseYear;
+  const needsFiltering = (!hasSeedArtists && (criteria.audioFeatures || criteria.popularity || criteria.targetMoods || criteria.targetThemes)) ||
+    criteria.releaseYear;
   if (needsFiltering && discoveredSongs.length > 0) {
     console.log('   Filtering songs by criteria...');
     const filteredSongs = [];
@@ -4752,20 +4753,24 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
         selectedTracks = selectedTracks.slice(0, songCount);
         console.log(`🎯 Returning ${selectedTracks.length} tracks`);
 
-        res.json({
-          playlistName: claudePlaylistName,
-          description: claudePlaylistDescription,
-          tracks: selectedTracks,
-          trackCount: selectedTracks.length
-        });
-        return; // Done
+        // Only take the early return if we have enough tracks — otherwise fall through to fallback
+        if (selectedTracks.length >= Math.min(songCount, 15)) {
+          res.json({
+            playlistName: claudePlaylistName,
+            description: claudePlaylistDescription,
+            tracks: selectedTracks,
+            trackCount: selectedTracks.length
+          });
+          return; // Done
+        }
+        console.log(`⚠️ Only ${selectedTracks.length}/${songCount} tracks found, trying fallback...`);
       }
     }
 
-    // Fallback: Only if Claude recommendations failed or found less than 5 songs on the platform
+    // Fallback: Claude recommendations found too few songs — use keyword search
     let needsFallback = allTracks.length < 5;
 
-    if (needsFallback || claudeRecommendedTracks.length === 0) {
+    if (needsFallback) {
       console.log(`🔄 Fallback: Claude found only ${allTracks.length} songs on platform, using search queries...`);
 
       // Step 3: Use Claude to generate search queries (fallback)
