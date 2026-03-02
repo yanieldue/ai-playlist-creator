@@ -4253,23 +4253,9 @@ Respond ONLY with valid JSON:
           if (match) {
             const artistId = match.artists[0].id;
             const artistData = await userSpotifyApi.getArtist(artistId);
-            let genres = artistData.body.genres || [];
-            // If Spotify has no genres for this artist (common for small artists),
-            // look up related artists to infer the scene for SoundCharts disambiguation
-            if (genres.length === 0) {
-              try {
-                const relatedData = await userSpotifyApi.getArtistRelatedArtists(artistId);
-                const relatedGenres = (relatedData.body.artists || []).flatMap(a => a.genres || []);
-                const genreCounts = {};
-                relatedGenres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
-                genres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
-                if (genres.length > 0) {
-                  console.log(`   No direct genres — inferred from related artists: ${genres.slice(0, 3).join(', ')}`);
-                }
-              } catch (relErr) { /* skip */ }
-            }
+            const genres = artistData.body.genres || [];
             confirmedArtistGenres[refSong.artist.toLowerCase()] = genres;
-            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.slice(0, 3).join(', ') || 'none'}]`);
+            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.join(', ') || 'none'}]`);
           } else {
             console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on Spotify`);
           }
