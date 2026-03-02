@@ -763,7 +763,8 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        const artistInfo = await getSoundChartsArtistInfo(artistName, criteria.genre);
+        const artistConfirmedGenreExcl = criteria.confirmedArtistGenres?.[artistName.toLowerCase()]?.[0] || criteria.genre;
+        const artistInfo = await getSoundChartsArtistInfo(artistName, artistConfirmedGenreExcl);
         if (!artistInfo) continue;
 
         const songs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
@@ -795,7 +796,9 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
         if (processedArtists.has(artistName.toLowerCase())) continue;
         processedArtists.add(artistName.toLowerCase());
 
-        const artistInfo = await getSoundChartsArtistInfo(artistName, criteria.genre);
+        // Use confirmed genre from Spotify reference-song lookup if available; fall back to playlist genre
+        const artistConfirmedGenre = criteria.confirmedArtistGenres?.[artistName.toLowerCase()]?.[0] || criteria.genre;
+        const artistInfo = await getSoundChartsArtistInfo(artistName, artistConfirmedGenre);
         if (!artistInfo) continue;
 
         allArtists.push({
@@ -811,7 +814,7 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
           if (processedArtists.has(similarArtist.toLowerCase())) continue;
           processedArtists.add(similarArtist.toLowerCase());
 
-          const similarInfo = await searchSoundChartsArtist(similarArtist, criteria.genre);
+          const similarInfo = await searchSoundChartsArtist(similarArtist, artistConfirmedGenre);
           if (!similarInfo) continue;
 
           const artistData = {
@@ -3680,7 +3683,8 @@ Respond ONLY with valid JSON in this format:
   "discoveryBalance": {
     "preference": "cohesive/varied/unexpected" or null
   },
-  "songCount": integer (5-100) or null
+  "songCount": integer (5-100) or null,
+  "referenceSongs": [{ "title": "song title", "artist": "artist name" }] or []
 }
 
 EXTRACTION GUIDELINES:
@@ -3769,6 +3773,13 @@ LANGUAGE (culturalContext.language):
 - "Korean pop", "K-pop" → prefer: ["Korean"], exclude: []
 - "French music" → prefer: ["French"], exclude: []
 - If no language is implied → prefer: [], exclude: []
+
+REFERENCE SONGS:
+If the user mentions a specific song title + artist (e.g. "songs like Take It Slow by Dante", "similar to Need My Baby by Reo Xander"), extract them into referenceSongs. These are used to confirm the correct artist identity.
+- "songs like Take It Slow by Dante" → referenceSongs: [{ "title": "Take It Slow", "artist": "Dante" }]
+- "songs similar to Need My Baby by Reo Xander" → referenceSongs: [{ "title": "Need My Baby", "artist": "Reo Xander" }]
+- "songs like Dante and Ansel King" (no specific song title) → referenceSongs: []
+- Only extract when the user clearly names BOTH a song title AND an artist.
 
 SEED ARTISTS (CRITICAL):
 When the user doesn't mention specific artists, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
@@ -4168,6 +4179,39 @@ Respond ONLY with valid JSON:
       ? genreData.artistConstraints.requestedArtists
       : genreData.artistConstraints.suggestedSeedArtists || [];
 
+    // Step 1.5: If the user mentioned specific reference songs (e.g. "Take It Slow by Dante"),
+    // look them up on Spotify to get confirmed artist genres for SoundCharts disambiguation.
+    // This prevents matching the wrong artist when multiple artists share a name.
+    const confirmedArtistGenres = {}; // { artistNameLower: [genres] }
+    const referenceSongs = genreData.referenceSongs || [];
+    if (referenceSongs.length > 0 && userSpotifyApi) {
+      console.log(`🎯 Looking up ${referenceSongs.length} reference song(s) on Spotify to confirm artist identity...`);
+      for (const refSong of referenceSongs) {
+        try {
+          const searchQuery = `track:${refSong.title} artist:${refSong.artist}`;
+          const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 3 });
+          const tracks = results.body.tracks?.items || [];
+          // Find track whose artist name matches
+          const refArtistNorm = refSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const match = tracks.find(t => {
+            const foundNorm = (t.artists[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            return foundNorm === refArtistNorm || foundNorm.startsWith(refArtistNorm) || refArtistNorm.startsWith(foundNorm);
+          });
+          if (match) {
+            const artistId = match.artists[0].id;
+            const artistData = await userSpotifyApi.getArtist(artistId);
+            const genres = artistData.body.genres || [];
+            confirmedArtistGenres[refSong.artist.toLowerCase()] = genres;
+            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.join(', ') || 'none'}]`);
+          } else {
+            console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on Spotify`);
+          }
+        } catch (refErr) {
+          console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
+        }
+      }
+    }
+
     if (seedArtists.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
       console.log('🎵 Using SoundCharts for song discovery...');
       console.log(`   Seed artists: ${seedArtists.join(', ')}`);
@@ -4221,7 +4265,9 @@ Respond ONLY with valid JSON:
           max: genreData.era.yearRange.max
         } : null,
         // Pass exclusive mode - if false, prioritize similar artists over seed artists
-        exclusiveMode: genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true'
+        exclusiveMode: genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true',
+        // Confirmed artist genres from Spotify reference-song lookup (for disambiguation)
+        confirmedArtistGenres: Object.keys(confirmedArtistGenres).length > 0 ? confirmedArtistGenres : null
       };
 
       soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, 60);
