@@ -461,6 +461,29 @@ async function resolvePlatformUserId(email, platform) {
   }
 }
 
+// SoundCharts cache — reduces duplicate lookups and prevents 429 rate-limit errors
+const soundChartsCache = new Map();
+const SOUNDCHARTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+let soundChartsLastCallTime = 0;
+
+function getSCCache(key) {
+  const entry = soundChartsCache.get(key);
+  if (entry && Date.now() - entry.ts < SOUNDCHARTS_CACHE_TTL) return entry.data;
+  soundChartsCache.delete(key);
+  return undefined; // explicitly undefined so null results can still be cached
+}
+
+function setSCCache(key, data) {
+  soundChartsCache.set(key, { data, ts: Date.now() });
+}
+
+async function throttleSoundCharts() {
+  const now = Date.now();
+  const elapsed = now - soundChartsLastCallTime;
+  if (elapsed < 300) await new Promise(r => setTimeout(r, 300 - elapsed));
+  soundChartsLastCallTime = Date.now();
+}
+
 // Helper function to search artist on SoundCharts
 async function searchSoundChartsArtist(artistName, expectedGenre = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
@@ -470,7 +493,12 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
     return null;
   }
 
+  const cacheKey = `search:${artistName.toLowerCase()}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
+    await throttleSoundCharts();
     const response = await axios.get(
       `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(artistName)}`,
       {
@@ -493,6 +521,7 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
       // If only one candidate, return it directly
       if (candidates.length === 1) {
         console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (genres: ${(candidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
+        setSCCache(cacheKey, candidates[0]);
         return candidates[0];
       }
 
@@ -514,13 +543,16 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
 
         const best = genreRanked[0].artist;
         console.log(`🔍 SoundCharts: "${best.name}" selected from ${candidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
+        setSCCache(cacheKey, best);
         return best;
       }
 
       // No genre hint — return first exact match (SoundCharts sorts by relevance)
       console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (first of ${candidates.length}; no genre hint)`);
+      setSCCache(cacheKey, candidates[0]);
       return candidates[0];
     }
+    setSCCache(cacheKey, null);
     return null;
   } catch (error) {
     console.log(`⚠️  SoundCharts search error for "${artistName}": ${error.message}`);
@@ -537,7 +569,12 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
     return [];
   }
 
+  const cacheKey = `similar:${artistUuid}:${limit}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
+    await throttleSoundCharts();
     const response = await axios.get(
       `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/related`,
       {
@@ -551,12 +588,15 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
     );
 
     if (response.data?.items?.length > 0) {
-      return response.data.items.map(a => ({
+      const result = response.data.items.map(a => ({
         name: a.name,
         uuid: a.uuid,
         slug: a.slug
       }));
+      setSCCache(cacheKey, result);
+      return result;
     }
+    setSCCache(cacheKey, []);
     return [];
   } catch (error) {
     console.log(`⚠️  SoundCharts similar artists error: ${error.message}`);
@@ -608,7 +648,12 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
     return [];
   }
 
+  const cacheKey = `songs:${artistUuid}:${limit}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
   try {
+    await throttleSoundCharts();
     const response = await axios.get(
       `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/songs`,
       {
@@ -622,12 +667,15 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
     );
 
     if (response.data?.items?.length > 0) {
-      return response.data.items.map(song => ({
+      const result = response.data.items.map(song => ({
         uuid: song.uuid,
         name: song.name,
         releaseDate: song.releaseDate
       }));
+      setSCCache(cacheKey, result);
+      return result;
     }
+    setSCCache(cacheKey, []);
     return [];
   } catch (error) {
     console.log(`⚠️  SoundCharts artist songs error: ${error.message}`);
