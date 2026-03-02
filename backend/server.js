@@ -4704,6 +4704,7 @@ SEARCH QUERY REQUIREMENTS:
 - Mix specific artist searches with broader genre/era/region searches
 - AVOID queries that would return songs from different genres, eras, or regions
 - AVOID vague emotional queries alone - always ground them in genre/style/era
+- CRITICAL: Any refinement instructions should ADJUST THE STYLE WITHIN the anchor artists' genre — they must NOT switch to a completely different genre. Example: if anchor artist is a trap/hip-hop artist and a refinement says "more R&B", this means lean toward hip-hop/R&B crossover and melodic trap — NOT classic rock, 80s pop, soft rock, or artists from unrelated eras/genres like Phil Collins, Coldplay, or Ed Sheeran. Stay within the same cultural scene and era as the anchor artists.
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -7792,14 +7793,15 @@ IMPORTANT GUIDELINES:
 - The primary genre for this playlist is: ${genreData.primaryGenre || 'not specified'}
 - Secondary genres to consider: ${(genreData.secondaryGenres || []).join(', ') || 'none'}
 - Key characteristics: ${(genreData.keyCharacteristics || []).join(', ') || 'not specified'}
-${genreData.artistConstraints?.requestedArtists?.length > 0 ? `- REQUESTED ARTISTS: ${genreData.artistConstraints.requestedArtists.join(', ')} — always include search queries for these specific artists and artists similar to them` : ''}
-- For GENRE-SPECIFIC playlists, PRIORITIZE genre-specific queries HEAVILY (e.g., for R&B: "R&B singles", "contemporary R&B", "soulful R&B artists", "R&B vocalists", etc.)
+${genreData.artistConstraints?.requestedArtists?.length > 0 ? `- ANCHOR ARTISTS: ${genreData.artistConstraints.requestedArtists.join(', ')} — these define the sound of this playlist. Always include queries for these artists and artists with a SIMILAR style/scene.` : ''}
+- For GENRE-SPECIFIC playlists, PRIORITIZE genre-specific queries HEAVILY
 - Include at least 8 genre-specific queries if a primary genre is mentioned
 - Mix specific artist searches with broader genre searches to get good variety within the correct genre
 - AVOID queries that would return songs from different genres
 - AVOID vague emotional queries alone - always ground them in the genre/style
 - CRITICAL: If the prompt specifies a time period (e.g., "last 5 years", "2020s"), only suggest recent/contemporary artists who are active in that timeframe
 - CRITICAL: If refinement instructions exclude specific artists, DO NOT include those artists in any search queries
+- CRITICAL: Refinement instructions should ADJUST THE STYLE WITHIN the anchor artists' genre — they must NOT switch to a completely different genre. Example: if anchor artist is a trap/hip-hop artist and a refinement says "more R&B", this means lean toward hip-hop/R&B crossover and melodic trap artists — NOT classic rock, 80s pop, soft rock, or artists from unrelated eras/genres like Phil Collins, Coldplay, or Ed Sheeran. Stay in the same cultural scene and era as the anchor artists.
 - Maintain ALL constraints from the original prompt while applying refinements
 
 Respond ONLY with valid JSON in this exact format:
