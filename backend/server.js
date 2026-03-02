@@ -4534,15 +4534,23 @@ Return ONLY valid JSON:
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
 
-        // Run quick filter if we have genre, explicit avoidances, or underground preference
+        // Run quick filter if we have genre, seed artists, explicit avoidances, or underground preference
         const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
         // Note: must check for null/undefined before comparing, as null <= 50 is true in JS
         const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
                                         (genreData.trackConstraints.popularity.max !== null &&
                                          genreData.trackConstraints.popularity.max !== undefined &&
                                          genreData.trackConstraints.popularity.max <= 50);
-        if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter) {
+        if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter || hasRequestedArtists) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
+
+          // Build seed artist instruction for "similar to X" playlists
+          const seedArtistNames = hasRequestedArtists && !isExclusiveArtistMode
+            ? genreData.artistConstraints.requestedArtists
+            : [];
+          const seedArtistInstruction = seedArtistNames.length > 0
+            ? `- Reference artists: ${seedArtistNames.join(', ')}. Songs should fit a playlist alongside these artists — same general scene, sound, and energy. REMOVE songs that clearly come from a completely different scene or sound world (e.g., wrong era, unrelated genre, or totally different vibe).`
+            : '';
 
           try {
             const sanityCheckResponse = await anthropic.messages.create({
@@ -4573,6 +4581,7 @@ REMOVE songs that:
 - Are clearly the wrong genre
 ${hasAvoidances ? `- Match what the user wants to AVOID` : ''}
 ${wantsUndergroundFilter ? `- Are from mainstream artists with chart hits` : ''}
+${seedArtistInstruction}
 
 Be LENIENT - only remove songs that clearly don't fit. When in doubt, KEEP the song.
 
