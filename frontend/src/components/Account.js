@@ -201,7 +201,9 @@ const Account = ({ onBack, showToast }) => {
       const { data } = await axios.get(`${API_BASE}/api/stripe/billing-portal/${encodeURIComponent(userId)}`);
       window.location.href = data.url;
     } catch (err) {
-      setAccountError('Could not open billing portal. Please try again.');
+      const msg = err.response?.data?.error || err.message || 'Could not open billing portal.';
+      console.error('Billing portal error:', msg, err);
+      setAccountError(msg);
       setBillingLoading(false);
     }
   };
@@ -474,6 +476,13 @@ const Account = ({ onBack, showToast }) => {
         onCancel={() => setConfirmModal(null)}
       />
       <div className="account-header">
+        <button
+          className="account-back-btn"
+          onClick={() => onBack ? onBack() : navigate('/')}
+          aria-label="Back"
+        >
+          <Icons.ChevronLeft size={20} />
+        </button>
         <h1>Account</h1>
       </div>
 

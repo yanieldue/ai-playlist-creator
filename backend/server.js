@@ -833,11 +833,20 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
       console.log(`   Total: ${allArtists.length} unique artists to pull songs from`);
 
       // Get songs from each artist with even distribution
-      // Shuffle to mix all levels together for variety
-      const shuffledArtists = allArtists.sort(() => Math.random() - 0.5);
+      // In non-exclusive (similar-vibe) mode: prioritize similar/discovery artists over seed artists
+      // Seed artists appear last so similar artists fill the pool first.
+      // This prevents seed artists from dominating when similar artists fail Spotify lookup.
+      const seedArtistList = allArtists.filter(a => a.level === 0);
+      const nonSeedArtists = allArtists.filter(a => a.level > 0).sort(() => Math.random() - 0.5);
+      const orderedArtists = [...nonSeedArtists, ...seedArtistList];
 
-      for (const artist of shuffledArtists) {
-        const songs = await getSoundChartsArtistSongs(artist.uuid, songsPerArtist);
+      // Seed artists get fewer songs (they're the reference point, not the focus)
+      // Similar/discovery artists get full songsPerArtist allocation
+      const seedSongsPerArtist = Math.min(2, songsPerArtist);
+
+      for (const artist of orderedArtists) {
+        const artistSongLimit = artist.level === 0 ? seedSongsPerArtist : songsPerArtist;
+        const songs = await getSoundChartsArtistSongs(artist.uuid, artistSongLimit);
         for (const song of songs) {
           discoveredSongs.push({
             ...song,
@@ -4593,6 +4602,29 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
           } catch (error) {
             console.log('Sanity check failed, using tracks as-is:', error.message);
           }
+        }
+
+        // In non-exclusive (similar-vibe) mode, cap seed artist songs to prevent domination.
+        // e.g. "Songs similar to Dre Dior" should mostly have similar artists, not Dre Dior songs.
+        if (!isExclusiveArtistMode && hasRequestedArtists) {
+          const maxPerSeedArtist = Math.max(2, Math.ceil(songCount * 0.20)); // max 20% from any seed artist
+          const seedArtistTrackCounts = new Map();
+          selectedTracks = selectedTracks.filter(track => {
+            const artistLower = (track.artist || '').toLowerCase();
+            const isSeedArtist = genreData.artistConstraints.requestedArtists.some(ra => {
+              const raLower = ra.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const aLower = artistLower.replace(/[^a-z0-9]/g, '');
+              return aLower === raLower || aLower.startsWith(raLower) || raLower.startsWith(aLower);
+            });
+            if (!isSeedArtist) return true;
+            const count = seedArtistTrackCounts.get(artistLower) || 0;
+            if (count >= maxPerSeedArtist) {
+              console.log(`[VARIETY-CAP] Limiting seed artist songs: removing "${track.name}" by ${track.artist}`);
+              return false;
+            }
+            seedArtistTrackCounts.set(artistLower, count + 1);
+            return true;
+          });
         }
 
         // Return the final tracks
@@ -8705,8 +8737,12 @@ app.post('/api/stripe/webhook', async (req, res) => {
       const email = session.metadata?.email;
       if (email) {
         const subscriptionId = session.subscription;
+        // Also save stripeCustomerId — the checkout session always has it
+        if (session.customer) {
+          await db.updateStripeCustomer(email, session.customer);
+        }
         await db.updateSubscription(email, { subscriptionId, status: 'active', endsAt: null, plan: 'paid' });
-        console.log(`✓ Stripe: upgraded ${email} to paid`);
+        console.log(`✓ Stripe: upgraded ${email} to paid (customer: ${session.customer})`);
       }
     } else if (event.type === 'customer.subscription.updated') {
       const sub = event.data.object;
@@ -8736,23 +8772,55 @@ app.post('/api/stripe/webhook', async (req, res) => {
 app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log(`[BILLING-PORTAL] Request for userId: ${userId}`);
     const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
-    if (!email) return res.status(400).json({ error: 'User not found' });
+    if (!email) {
+      console.error(`[BILLING-PORTAL] Could not resolve email for userId: ${userId}`);
+      return res.status(400).json({ error: 'User not found' });
+    }
 
     const userRecord = await db.getUser(email);
-    if (!userRecord?.stripeCustomerId) return res.status(400).json({ error: 'No Stripe customer found' });
+    let stripeCustomerId = userRecord?.stripeCustomerId;
 
+    // Recovery: if no stripeCustomerId in DB, look up Stripe customer by email
+    if (!stripeCustomerId) {
+      console.warn(`[BILLING-PORTAL] No stripeCustomerId in DB for ${email} (plan: ${userRecord?.plan}). Attempting Stripe lookup...`);
+      try {
+        const stripe = getStripe();
+        const customers = await stripe.customers.list({ email, limit: 1 });
+        if (customers.data.length > 0) {
+          stripeCustomerId = customers.data[0].id;
+          await db.updateStripeCustomer(email, stripeCustomerId);
+          console.log(`[BILLING-PORTAL] Recovered stripeCustomerId: ${stripeCustomerId} for ${email}`);
+        }
+      } catch (lookupErr) {
+        console.error(`[BILLING-PORTAL] Stripe customer lookup failed:`, lookupErr.message);
+      }
+    }
+
+    if (!stripeCustomerId) {
+      console.error(`[BILLING-PORTAL] No Stripe customer found for email: ${email}`);
+      return res.status(400).json({ error: 'No billing account found. Please contact support.' });
+    }
+
+    console.log(`[BILLING-PORTAL] Creating portal session for ${email}, customer: ${stripeCustomerId}`);
     const stripe = getStripe();
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: userRecord.stripeCustomerId,
-      return_url: `${frontendUrl}/account`,
+      customer: stripeCustomerId,
+      return_url: `${frontendUrl}/`,
     });
 
+    console.log(`[BILLING-PORTAL] Portal session created successfully for ${email}`);
     res.json({ url: portalSession.url });
   } catch (error) {
-    console.error('Stripe billing portal error:', error);
-    res.status(500).json({ error: 'Failed to create billing portal session' });
+    console.error('Stripe billing portal error:', error.message, error.type || '');
+    // Detect "portal not configured" Stripe error
+    const isPortalNotConfigured = error.message?.includes('No customer portal settings');
+    const clientMsg = isPortalNotConfigured
+      ? 'Billing portal is not yet configured. Please contact support.'
+      : 'Failed to open billing portal. Please try again.';
+    res.status(500).json({ error: clientMsg });
   }
 });
 
