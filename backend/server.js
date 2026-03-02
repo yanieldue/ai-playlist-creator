@@ -4042,11 +4042,7 @@ Respond ONLY with valid JSON:
   "subgenre": "more specific subgenre if applicable",
   "keyCharacteristics": ["characteristic1", "characteristic2"],
   "style": "overall style description",
-  "atmosphere": ["mood1", "mood2"],
-  "audioFeatures": {
-    "energy": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null },
-    "valence": { "min": 0.0-1.0 or null, "max": 0.0-1.0 or null }
-  }
+  "atmosphere": ["mood1", "mood2"]
 }`;
         } else {
           // No SoundCharts genre data found - be very conservative and don't guess
@@ -4098,15 +4094,6 @@ Respond ONLY with valid JSON:
         if (artistGenreData.atmosphere && artistGenreData.atmosphere.length > 0 && genreData.atmosphere.length === 0) {
           genreData.atmosphere = artistGenreData.atmosphere;
         }
-        if (artistGenreData.audioFeatures) {
-          if (artistGenreData.audioFeatures.energy && !genreData.audioFeatures.energy.min && !genreData.audioFeatures.energy.max) {
-            genreData.audioFeatures.energy = artistGenreData.audioFeatures.energy;
-          }
-          if (artistGenreData.audioFeatures.valence && !genreData.audioFeatures.valence.min && !genreData.audioFeatures.valence.max) {
-            genreData.audioFeatures.valence = artistGenreData.audioFeatures.valence;
-          }
-        }
-
         console.log('Updated genre data with artist analysis:', genreData);
       } catch (error) {
         console.error('Failed to analyze artist genres:', error.message);
@@ -4739,12 +4726,6 @@ VIBE & ATMOSPHERE:
 - Atmosphere tags: ${genreData.atmosphere.join(', ') || 'not specified'}
 - Use case: ${genreData.contextClues.useCase || 'not specified'} ${genreData.contextClues.useCase ? '← CRITICAL: Tailor queries to this use case' : ''}
 - Avoid: ${genreData.contextClues.avoidances.join(', ') || 'nothing specified'}
-
-AUDIO CHARACTERISTICS (VERY IMPORTANT):
-- BPM range: ${genreData.audioFeatures.bpm.min || genreData.audioFeatures.bpm.max ? `${genreData.audioFeatures.bpm.min || 'any'}-${genreData.audioFeatures.bpm.max || 'any'}` : 'not specified'}${genreData.audioFeatures.bpm.min && genreData.audioFeatures.bpm.min < 95 ? ' ← SLOW TEMPO REQUIRED' : ''}
-- Energy level: ${genreData.audioFeatures.energy.min !== null || genreData.audioFeatures.energy.max !== null ? `${genreData.audioFeatures.energy.min || 0.0}-${genreData.audioFeatures.energy.max || 1.0}` : 'not specified'}${genreData.audioFeatures.energy.max && genreData.audioFeatures.energy.max < 0.5 ? ' ← LOW ENERGY/MELLOW REQUIRED' : ''}
-- Danceability: ${genreData.audioFeatures.danceability.min !== null || genreData.audioFeatures.danceability.max !== null ? `${genreData.audioFeatures.danceability.min || 0.0}-${genreData.audioFeatures.danceability.max || 1.0}` : 'not specified'}
-- Valence (mood): ${genreData.audioFeatures.valence.min !== null || genreData.audioFeatures.valence.max !== null ? `${genreData.audioFeatures.valence.min || 0.0}-${genreData.audioFeatures.valence.max || 1.0}` : 'not specified'}${genreData.audioFeatures.valence.max && genreData.audioFeatures.valence.max < 0.6 ? ' ← MOODY/EMOTIONAL VIBE' : ''}
 
 ERA & CULTURAL CONTEXT:
 - Decade: ${genreData.era.decade || 'not specified'} ${genreData.era.decade ? '← MUST stick to this era' : ''}
@@ -7723,7 +7704,6 @@ DO NOT include any text outside the JSON.`
                       const soundChartsCriteria = {
                         seedArtists: seedArtists,
                         genre: genreData.primaryGenre,
-                        audioFeatures: genreData.audioFeatures,
                         targetMoods: targetMoods.length > 0 ? targetMoods : null,
                         targetThemes: targetThemes.length > 0 ? targetThemes : null,
                         popularity: genreData.trackConstraints?.popularity?.min || genreData.trackConstraints?.popularity?.max ? {
@@ -7746,7 +7726,9 @@ DO NOT include any text outside the JSON.`
                           // Convert SoundCharts songs to Spotify tracks by searching for them
                           for (const scSong of soundChartsDiscoveredSongs.slice(0, 30)) {
                             try {
-                              const searchQuery = `track:${scSong.name} artist:${scSong.artistName}`;
+                              const searchQuery = scSong.isrc
+                                ? `isrc:${scSong.isrc}`
+                                : `track:${scSong.name} artist:${scSong.artistName}`;
                               const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
                               if (results.body.tracks && results.body.tracks.items.length > 0) {
                                 allSearchResults.push(results.body.tracks.items[0]);
