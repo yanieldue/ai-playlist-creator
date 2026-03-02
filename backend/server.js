@@ -838,8 +838,126 @@ async function getSoundChartsSongDetails(songUuid, options = {}) {
   }
 }
 
+// Map Claude genre names → SoundCharts genre slugs
+const SOUNDCHARTS_GENRE_MAP = {
+  'pop': 'pop', 'dance pop': 'pop', 'synth-pop': 'pop', 'electropop': 'pop',
+  'hip hop': 'hip-hop', 'hip-hop': 'hip-hop', 'rap': 'hip-hop', 'trap': 'hip-hop',
+  'drill': 'hip-hop', 'underground hip hop': 'hip-hop',
+  'r&b': 'r-b', 'rnb': 'r-b', 'neo soul': 'r-b', 'soul': 'r-b',
+  'rock': 'rock', 'indie rock': 'rock', 'pop rock': 'rock',
+  'alternative': 'alternative', 'indie': 'indie', 'indie pop': 'indie',
+  'electronic': 'electronic', 'edm': 'electronic', 'house': 'electronic',
+  'techno': 'electronic', 'dance': 'electronic',
+  'country': 'country', 'country pop': 'country',
+  'latin': 'latin', 'reggaeton': 'latin', 'latin pop': 'latin',
+  'jazz': 'jazz', 'funk': 'funk',
+  'metal': 'metal', 'punk': 'punk', 'classical': 'classical',
+  'k-pop': 'k-pop', 'afrobeats': 'afrobeats', 'afro pop': 'afrobeats',
+  'lo-fi': 'lo-fi', 'ambient': 'ambient',
+  'reggae': 'reggae', 'blues': 'blues', 'gospel': 'gospel',
+};
+
+// Map Claude atmosphere/mood labels → SoundCharts mood values
+const SOUNDCHARTS_MOOD_MAP = {
+  'energetic': 'Energetic', 'energy': 'Energetic', 'hype': 'Energetic',
+  'chill': 'Calm', 'relaxed': 'Calm', 'calm': 'Calm', 'peaceful': 'Peaceful',
+  'happy': 'Happy', 'upbeat': 'Happy', 'feel-good': 'Happy', 'joyful': 'Joyful',
+  'sad': 'Sad', 'melancholic': 'Melancholic', 'emotional': 'Melancholic',
+  'romantic': 'Romantic', 'love': 'Romantic', 'sensual': 'Sensual',
+  'dark': 'Dark', 'aggressive': 'Aggressive', 'angry': 'Aggressive',
+  'motivational': 'Empowering', 'motivation': 'Empowering', 'empowering': 'Empowering',
+  'party': 'Euphoric', 'euphoric': 'Euphoric',
+  'melancholy': 'Melancholic', 'nostalgic': 'Nostalgic',
+  'spiritual': 'Spiritual', 'peaceful': 'Peaceful',
+};
+
+// Discover top songs by genre/mood using SoundCharts POST /api/v2/top/songs
+// Used when no seed artists are specified — replaces the old hardcoded artist list
+async function discoverSongsViaSoundChartsTop(criteria, limit = 50) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey) return [];
+
+  const filters = [];
+
+  // Genre filter — map Claude genre name to SoundCharts slug
+  if (criteria.genre) {
+    const genreLower = criteria.genre.toLowerCase().trim();
+    let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
+    // Partial match if no exact match
+    if (!scGenre) {
+      for (const [key, val] of Object.entries(SOUNDCHARTS_GENRE_MAP)) {
+        if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
+      }
+    }
+    if (scGenre) {
+      filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
+    }
+  }
+
+  // Mood filter — map atmosphere labels to SoundCharts mood values
+  if (criteria.targetMoods && criteria.targetMoods.length > 0) {
+    const scMoods = [...new Set(
+      criteria.targetMoods
+        .map(m => SOUNDCHARTS_MOOD_MAP[m.toLowerCase()] || m)
+        .filter(Boolean)
+    )];
+    if (scMoods.length > 0) {
+      filters.push({ type: 'moods', data: { values: scMoods, operator: 'in' } });
+    }
+  }
+
+  // Release year filter
+  if (criteria.releaseYear?.min || criteria.releaseYear?.max) {
+    const dateFilter = { type: 'releaseDate', data: {} };
+    if (criteria.releaseYear.min) dateFilter.data.min = `${criteria.releaseYear.min}-01-01`;
+    if (criteria.releaseYear.max) dateFilter.data.max = `${criteria.releaseYear.max}-12-31`;
+    filters.push(dateFilter);
+  }
+
+  // Sort by monthly Spotify streams (most popular first)
+  const sort = {
+    type: 'metric',
+    platform: 'spotify',
+    metricType: 'streams',
+    sortBy: 'total',
+    period: 'month',
+    order: 'desc'
+  };
+
+  const body = { sort, ...(filters.length > 0 ? { filters } : {}) };
+  console.log(`   SoundCharts top songs: genre=${criteria.genre || 'any'}, moods=${criteria.targetMoods?.join(',') || 'any'}`);
+
+  try {
+    await throttleSoundCharts();
+    const response = await axios.post(
+      'https://customer.api.soundcharts.com/api/v2/top/songs',
+      body,
+      {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+        params: { offset: 0, limit: Math.min(limit, 100) },
+        timeout: 15000
+      }
+    );
+
+    const items = response.data?.items || [];
+    console.log(`   SoundCharts top songs returned ${items.length} results`);
+    return items.map(song => ({
+      uuid: song.uuid,
+      name: song.name,
+      artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
+      releaseDate: song.releaseDate,
+      isrc: song.isrc?.value || song.isrc || null,
+    }));
+  } catch (error) {
+    console.log(`⚠️  SoundCharts top songs error: ${error.response?.status} ${error.message}`);
+    return [];
+  }
+}
+
 // Helper function to discover songs via SoundCharts based on criteria
-// This uses similar artists to find songs, then filters by audio features
+// Strategy 1 (seed artists): similarity tree — seed → similar → similar-of-similar
+// Strategy 2 (no seed artists): top songs filtered by genre/mood, sorted by streams
 async function discoverSongsViaSoundCharts(criteria, limit = 50) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
@@ -1011,92 +1129,11 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
     }
   }
 
-  // Strategy 2: If we have a genre but few songs, search for well-known artists in that genre
-  // This provides a fallback when seed artists aren't found or don't have enough songs
-  // Skip when seed artists are specified (popular artists would pollute a similarity-based playlist)
-  // Skip for underground playlists — mainstream artists would ruin the vibe
-  const isUndergroundMode = criteria.popularity && criteria.popularity.max && criteria.popularity.max <= 50;
-  if (criteria.genre && discoveredSongs.length < limit && !isUndergroundMode && !hasSeedArtists) {
-    console.log(`   Searching for popular ${criteria.genre} artists...`);
-
-    // Map genres to well-known representative artists
-    const genreArtistMap = {
-      'pop': ['Taylor Swift', 'Dua Lipa', 'The Weeknd', 'Harry Styles', 'Ariana Grande', 'Billie Eilish'],
-      'hip-hop': ['Kendrick Lamar', 'J. Cole', 'Drake', 'Travis Scott', '21 Savage', 'Future'],
-      'hip hop': ['Kendrick Lamar', 'J. Cole', 'Drake', 'Travis Scott', '21 Savage', 'Future'],
-      'rap': ['Kendrick Lamar', 'J. Cole', 'Drake', 'Travis Scott', '21 Savage', 'Future'],
-      'r&b': ['SZA', 'Daniel Caesar', 'H.E.R.', 'Brent Faiyaz', 'Summer Walker', 'Frank Ocean'],
-      'rnb': ['SZA', 'Daniel Caesar', 'H.E.R.', 'Brent Faiyaz', 'Summer Walker', 'Frank Ocean'],
-      'rock': ['Foo Fighters', 'Arctic Monkeys', 'The Killers', 'Imagine Dragons', 'Twenty One Pilots'],
-      'alternative': ['Arctic Monkeys', 'The 1975', 'Tame Impala', 'Glass Animals', 'Cage The Elephant'],
-      'indie': ['Phoebe Bridgers', 'Bon Iver', 'Mac DeMarco', 'Tame Impala', 'Beach House'],
-      'electronic': ['Calvin Harris', 'Disclosure', 'Flume', 'ODESZA', 'Kygo'],
-      'edm': ['Calvin Harris', 'Martin Garrix', 'Avicii', 'Tiesto', 'David Guetta'],
-      'country': ['Morgan Wallen', 'Luke Combs', 'Zach Bryan', 'Chris Stapleton', 'Kacey Musgraves'],
-      'jazz': ['Robert Glasper', 'Kamasi Washington', 'Thundercat', 'Esperanza Spalding', 'Christian Scott'],
-      'latin': ['Bad Bunny', 'J Balvin', 'Rosalia', 'Peso Pluma', 'Feid'],
-      'reggaeton': ['Bad Bunny', 'J Balvin', 'Daddy Yankee', 'Ozuna', 'Anuel AA'],
-      'k-pop': ['BTS', 'BLACKPINK', 'Stray Kids', 'NewJeans', 'aespa'],
-      'metal': ['Metallica', 'Slipknot', 'Bring Me The Horizon', 'Avenged Sevenfold', 'Gojira'],
-      'punk': ['Green Day', 'Blink-182', 'My Chemical Romance', 'Fall Out Boy', 'Paramore'],
-      'classical': ['Ludovico Einaudi', 'Max Richter', 'Olafur Arnalds', 'Nils Frahm'],
-      'soul': ['Leon Bridges', 'Anderson .Paak', 'John Legend', 'Lianne La Havas', 'Snoh Aalegra'],
-      'funk': ['Vulfpeck', 'Anderson .Paak', 'Bruno Mars', 'Thundercat', 'Childish Gambino'],
-      'drill': ['Central Cee', 'Pop Smoke', 'Fivio Foreign', 'Kay Flock', 'Digga D'],
-      'trap': ['Future', 'Young Thug', 'Lil Baby', 'Gunna', 'Migos'],
-      'lo-fi': ['Joji', 'Clairo', 'Boy Pablo', 'beabadoobee', 'Gus Dapperton'],
-      'afrobeats': ['Burna Boy', 'Wizkid', 'Rema', 'Tems', 'Ayra Starr']
-    };
-
-    const genreLower = criteria.genre.toLowerCase();
-    let genreArtists = genreArtistMap[genreLower] || [];
-
-    // If we don't have a direct mapping, try partial matches
-    if (genreArtists.length === 0) {
-      for (const [genre, artists] of Object.entries(genreArtistMap)) {
-        if (genreLower.includes(genre) || genre.includes(genreLower)) {
-          genreArtists = artists;
-          break;
-        }
-      }
-    }
-
-    // Search for each genre artist and get their songs
-    for (const artistName of genreArtists.slice(0, 4)) {
-      if (processedArtists.has(artistName.toLowerCase())) continue;
-      processedArtists.add(artistName.toLowerCase());
-
-      const artistInfo = await searchSoundChartsArtist(artistName);
-      if (!artistInfo) continue;
-
-      const songs = await getSoundChartsArtistSongs(artistInfo.uuid, 8);
-      for (const song of songs) {
-        discoveredSongs.push({
-          ...song,
-          artistName: artistInfo.name || artistName,
-          source: 'genre_artist'
-        });
-      }
-
-      // Also get similar artists' songs if we still need more
-      if (discoveredSongs.length < limit) {
-        const similarArtists = await getSoundChartsSimilarArtists(artistInfo.uuid, 3);
-        for (const similar of similarArtists.slice(0, 2)) {
-          if (processedArtists.has(similar.name.toLowerCase())) continue;
-          processedArtists.add(similar.name.toLowerCase());
-
-          const similarSongs = await getSoundChartsArtistSongs(similar.uuid, 5);
-          for (const song of similarSongs) {
-            discoveredSongs.push({
-              ...song,
-              artistName: similar.name,
-              source: 'genre_similar'
-            });
-          }
-        }
-      }
-
-      if (discoveredSongs.length >= limit) break;
+  // Strategy 2: No seed artists — use SoundCharts top songs filtered by genre/mood/streams
+  if (!hasSeedArtists && discoveredSongs.length < limit) {
+    const topSongs = await discoverSongsViaSoundChartsTop(criteria, limit);
+    for (const song of topSongs) {
+      discoveredSongs.push({ ...song, source: 'top_songs' });
     }
   }
 
@@ -4200,9 +4237,13 @@ Respond ONLY with valid JSON:
       }
     }
 
-    if (seedArtists.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
+    if (process.env.SOUNDCHARTS_APP_ID) {
       console.log('🎵 Using SoundCharts for song discovery...');
-      console.log(`   Seed artists: ${seedArtists.join(', ')}`);
+      if (seedArtists.length > 0) {
+        console.log(`   Seed artists: ${seedArtists.join(', ')}`);
+      } else {
+        console.log('   No seed artists — will use genre/mood-based top songs discovery');
+      }
 
       // Map user mood/atmosphere to SoundCharts moods
       const moodMapping = {
@@ -4262,12 +4303,7 @@ Respond ONLY with valid JSON:
         console.log('⚠️  SoundCharts returned 0 songs - will fall back to search queries');
       }
     } else {
-      // Log why SoundCharts isn't being used
-      if (seedArtists.length === 0) {
-        console.log('⚠️  No seed artists available - skipping SoundCharts discovery');
-      } else if (!process.env.SOUNDCHARTS_APP_ID) {
-        console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
-      }
+      console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
     }
 
     // Variables for playlist metadata
@@ -7661,13 +7697,18 @@ DO NOT include any text outside the JSON.`
                     // Strategy 1: Use SoundCharts to discover songs via similar artists
                     // This is the primary discovery method for auto-updates
                     let soundChartsDiscoveredSongs = [];
+                    let soundChartsCriteria = null;
                     const seedArtists = genreData.artistConstraints?.requestedArtists?.length > 0
                       ? genreData.artistConstraints.requestedArtists
                       : genreData.artistConstraints?.suggestedSeedArtists || [];
 
-                    if (seedArtists.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
+                    if (process.env.SOUNDCHARTS_APP_ID) {
                       console.log('[AUTO-UPDATE] 🎵 Using SoundCharts for song discovery...');
-                      console.log(`[AUTO-UPDATE]    Seed artists: ${seedArtists.join(', ')}`);
+                      if (seedArtists.length > 0) {
+                        console.log(`[AUTO-UPDATE]    Seed artists: ${seedArtists.join(', ')}`);
+                      } else {
+                        console.log('[AUTO-UPDATE]    No seed artists — will use genre/mood-based top songs discovery');
+                      }
 
                       // Map user mood/atmosphere to SoundCharts moods
                       const moodMapping = {
@@ -7701,7 +7742,7 @@ DO NOT include any text outside the JSON.`
                         targetThemes = genreData.lyricalContent.themes.map(t => t.charAt(0).toUpperCase() + t.slice(1));
                       }
 
-                      const soundChartsCriteria = {
+                      soundChartsCriteria = {
                         seedArtists: seedArtists,
                         genre: genreData.primaryGenre,
                         targetMoods: targetMoods.length > 0 ? targetMoods : null,
@@ -8185,7 +8226,7 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
 
                     // If we don't have enough tracks, retry SoundCharts with expanded criteria.
                     // No Spotify/Apple keyword searches — SoundCharts is the only source.
-                    if (uniqueTracks.length < desiredCount && seedArtists.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
+                    if (uniqueTracks.length < desiredCount && soundChartsCriteria && process.env.SOUNDCHARTS_APP_ID) {
                       console.log(`[AUTO-UPDATE] Only ${uniqueTracks.length}/${desiredCount} tracks — retrying SoundCharts with expanded criteria...`);
                       try {
                         const expandedCriteria = {
