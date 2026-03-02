@@ -7744,7 +7744,64 @@ DO NOT include any text outside the JSON.`
                       }
                     }
 
-                    // SoundCharts is the only source — no Spotify keyword searches.
+                    // If SoundCharts returned too few songs (or was skipped because there are
+                    // no seed artists), use Claude to generate specific song recommendations.
+                    const targetCount = playlist.trackCount || (playlist.updateMode === 'replace' ? 30 : 10);
+                    if (allSearchResults.length < targetCount) {
+                      console.log(`[AUTO-UPDATE] SoundCharts found ${allSearchResults.length}/${targetCount} — using Claude for recommendations...`);
+                      try {
+                        // Build exclusion list from recent history to avoid repeating songs
+                        const recentHistory = (playlist.songHistory || []).slice(-100);
+                        const historyExclusion = recentHistory.length > 0
+                          ? `\n\nDo NOT suggest any of these recently played songs:\n${recentHistory.map(h => h.replace('|||', ' by ')).join('\n')}`
+                          : '';
+
+                        const claudeRecsResponse = await anthropic.messages.create({
+                          model: 'claude-sonnet-4-20250514',
+                          max_tokens: 2000,
+                          messages: [{
+                            role: 'user',
+                            content: `You are a music curator. Generate ${targetCount * 2} specific songs for this playlist.
+
+Playlist request: "${prompt}"
+
+Genre: ${genreData.primaryGenre || 'not specified'}
+Style: ${genreData.style || 'not specified'}
+Atmosphere: ${(genreData.atmosphere || []).join(', ') || 'not specified'}
+Use case: ${genreData.contextClues?.useCase || 'not specified'}
+Era: ${genreData.era?.decade || (genreData.era?.descriptors || []).join(', ') || 'not specified'}
+Avoid: ${(genreData.contextClues?.avoidances || []).join(', ') || 'nothing'}${historyExclusion}
+
+Return ONLY a JSON array: [{"track": "Song Title", "artist": "Artist Name"}, ...]
+Do NOT include any text outside the JSON.`
+                          }]
+                        });
+
+                        let recsText = claudeRecsResponse.content[0].text.trim()
+                          .replace(/^```json\n?/, '').replace(/\n?```$/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+                        const recommendations = JSON.parse(recsText);
+                        console.log(`[AUTO-UPDATE] Claude recommended ${recommendations.length} songs — searching Spotify...`);
+
+                        for (const rec of recommendations) {
+                          if (allSearchResults.length >= targetCount * 2) break;
+                          try {
+                            const results = await userSpotifyApi.searchTracks(
+                              `track:${rec.track} artist:${rec.artist}`, { limit: 3 }
+                            );
+                            const tracks = results.body.tracks?.items || [];
+                            const artistNorm = (rec.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const match = tracks.find(t => {
+                              const foundNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                              return foundNorm === artistNorm || foundNorm.startsWith(artistNorm) || artistNorm.startsWith(foundNorm);
+                            });
+                            if (match) allSearchResults.push(match);
+                          } catch (searchErr) { /* skip */ }
+                        }
+                        console.log(`[AUTO-UPDATE] After Claude fallback: ${allSearchResults.length} total candidates`);
+                      } catch (claudeErr) {
+                        console.log('[AUTO-UPDATE] Claude fallback failed:', claudeErr.message);
+                      }
+                    }
 
                     // Filter out tracks that don't match the primary genre (if specified)
                     let genreFilteredResults = allSearchResults;
@@ -8143,8 +8200,10 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                           for (const scSong of moreSoundChartsSongs) {
                             if (uniqueTracks.length >= desiredCount) break;
                             try {
-                              const searchQuery = `track:${scSong.name} artist:${scSong.artistName}`;
-                              const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
+                              const expandedQuery = scSong.isrc
+                                ? `isrc:${scSong.isrc}`
+                                : `track:${scSong.name} artist:${scSong.artistName}`;
+                              const results = await userSpotifyApi.searchTracks(expandedQuery, { limit: 1 });
                               if (results.body.tracks && results.body.tracks.items.length > 0) {
                                 const track = results.body.tracks.items[0];
                                 const normalizedName = normalizeTrackName(track.name);
