@@ -972,10 +972,11 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
   const discoveredSongs = [];
   const processedArtists = new Set();
+  const hasSeedArtists = !!(criteria.seedArtists && criteria.seedArtists.length > 0);
 
   // Strategy 1: If we have seed artists, get their songs + similar artists' songs
   // Dynamic approach: balance variety across all artists (seed and similar)
-  if (criteria.seedArtists && criteria.seedArtists.length > 0) {
+  if (hasSeedArtists) {
     const isExclusive = criteria.exclusiveMode === true;
     const numSeedArtists = Math.min(criteria.seedArtists.length, 5);
 
