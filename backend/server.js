@@ -914,49 +914,6 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
       console.log(`   Total: ${allArtists.length} unique artists to pull songs from`);
 
-      // Artist pre-filter: validate level 1/2 artists against seed artists using Claude.
-      // SoundCharts similarity data for niche artists can have false positives (e.g. Islandis
-      // appearing as "similar" to Dante). One fast Haiku call removes bad artists before
-      // we waste time fetching their songs.
-      const nonSeedCandidates = allArtists.filter(a => a.level > 0);
-      if (nonSeedCandidates.length > 0 && criteria.seedArtists.length > 0) {
-        try {
-          const validationResponse = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 300,
-            messages: [{
-              role: 'user',
-              content: `The user wants music in the world of: ${criteria.seedArtists.join(', ')}.
-
-These artists were found by a similarity algorithm. Return ONLY the indices of artists that genuinely belong in the same musical scene — same genre, era, energy, and sound world. Be strict: if you don't know an artist or they clearly don't fit, exclude them.
-
-Artists:
-${nonSeedCandidates.map((a, i) => `${i + 1}. ${a.name}`).join('\n')}
-
-Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
-            }]
-          });
-
-          const validText = validationResponse.content[0].text.trim();
-          const validMatch = validText.match(/\[([\d,\s]*)\]/);
-          if (validMatch) {
-            const keepIndices = new Set(JSON.parse(validMatch[0]).map(i => i - 1));
-            const beforeCount = nonSeedCandidates.length;
-            const validatedNonSeed = nonSeedCandidates.filter((_, i) => keepIndices.has(i));
-            const removedCount = beforeCount - validatedNonSeed.length;
-            if (removedCount > 0) {
-              console.log(`   🎯 Artist pre-filter removed ${removedCount} off-scene artists`);
-            }
-            // Rebuild allArtists with only validated non-seed artists + all seed artists
-            const seedOnly = allArtists.filter(a => a.level === 0);
-            allArtists.length = 0;
-            allArtists.push(...seedOnly, ...validatedNonSeed);
-            console.log(`   Artists after pre-filter: ${allArtists.length}`);
-          }
-        } catch (filterErr) {
-          console.log(`   Artist pre-filter skipped: ${filterErr.message}`);
-        }
-      }
 
       // Get songs from each artist with even distribution
       // In non-exclusive (similar-vibe) mode: prioritize similar/discovery artists over seed artists
@@ -4074,11 +4031,9 @@ DO NOT include any text outside the JSON.`
           // 66-100: mainstream
           if (avgPopularity <= 40) {
             genreData.trackConstraints.popularity.preference = 'underground';
-            genreData.trackConstraints.popularity.max = 50; // Cap at 50 to avoid mainstream
             console.log('🎯 Auto-detected popularity preference: UNDERGROUND (requested artists have low popularity)');
           } else if (avgPopularity >= 66) {
             genreData.trackConstraints.popularity.preference = 'mainstream';
-            genreData.trackConstraints.popularity.min = 60; // Set floor at 60 for mainstream
             console.log('🎯 Auto-detected popularity preference: MAINSTREAM (requested artists have high popularity)');
           } else {
             genreData.trackConstraints.popularity.preference = 'balanced';
@@ -5194,77 +5149,11 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
       if (!genreData.artistConstraints.exclusiveMode) {
         const maxTracksPerArtist = 3; // Allow max 3 tracks per artist
 
-        // First, use Claude to normalize artist name variations (e.g., "Daniel J" vs "Daniel John")
-        const uniqueArtistNames = [...new Set(allTracks.map(t => t.artist))];
-        const artistNameMap = new Map(); // Maps normalized name -> canonical name
-
-        if (uniqueArtistNames.length > 1) {
-          try {
-            // Cap at 80 artists — normalization is for deduplication, not exhaustive cataloging
-            const artistsToNormalize = uniqueArtistNames.slice(0, 80);
-            const artistNormalizationResponse = await anthropic.messages.create({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 4000,
-              messages: [{
-                role: 'user',
-                content: `Given this list of artist names from music metadata, identify which names refer to the same artist despite spelling variations.
-
-Artist names: ${artistsToNormalize.join(', ')}
-
-For each group of names that refer to the same artist, return them as a group. Use the most common/complete name as the canonical name.
-
-Respond ONLY with JSON in this format:
-{
-  "groups": [
-    {
-      "canonical": "Daniel J",
-      "variations": ["Daniel J", "daniel j", "Daniel John"]
-    },
-    {
-      "canonical": "Frank Ocean",
-      "variations": ["Frank Ocean"]
-    }
-  ]
-}
-
-IMPORTANT: Only group names that are clearly the same artist (typos, abbreviations, case differences). Do NOT group different artists.`
-              }]
-            });
-
-            let normalizationText = artistNormalizationResponse.content[0].text.trim();
-            if (normalizationText.startsWith('```json')) {
-              normalizationText = normalizationText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-            } else if (normalizationText.startsWith('```')) {
-              normalizationText = normalizationText.replace(/^```\n?/, '').replace(/\n?```$/, '');
-            }
-            const normalizationData = JSON.parse(normalizationText);
-
-            // Build mapping from any variation -> canonical name
-            normalizationData.groups.forEach(group => {
-              group.variations.forEach(variation => {
-                artistNameMap.set(variation.toLowerCase(), group.canonical);
-              });
-            });
-
-            console.log('🔧 Artist name normalization applied:');
-            normalizationData.groups.forEach(group => {
-              if (group.variations.length > 1) {
-                console.log(`  "${group.variations.join('", "')}" -> "${group.canonical}"`);
-              }
-            });
-          } catch (err) {
-            console.log('⚠️  Artist normalization failed, using exact names:', err.message);
-          }
-        }
-
+        // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
         const artistTrackMap = new Map();
 
-        // Group tracks by normalized artist name
         allTracks.forEach(track => {
-          const originalArtist = track.artist;
-          // First check if Claude mapped this artist, otherwise normalize ourselves
-          const claudeNormalizedArtist = artistNameMap.get(originalArtist.toLowerCase());
-          const finalNormalizedArtist = normalizeArtistForComparison(claudeNormalizedArtist || originalArtist);
+          const finalNormalizedArtist = normalizeArtistForComparison(track.artist);
 
           if (!artistTrackMap.has(finalNormalizedArtist)) {
             artistTrackMap.set(finalNormalizedArtist, []);
@@ -5376,270 +5265,80 @@ IMPORTANT: Only group names that are clearly the same artist (typos, abbreviatio
       }
     }
 
-    // Step 2.5: Filter by audio features if specified
+    // Step 2.5: Apply metadata-based filters (year, duration, version exclusions, language, album diversity)
+    // Note: Spotify's audio features API (BPM/energy/valence) is deprecated — those filters are not applied.
     let tracksForSelection = allTracks;
-    const hasAudioFeatureFilters = genreData.audioFeatures && (
-      genreData.audioFeatures.bpm.target !== null ||
-      genreData.audioFeatures.bpm.min !== null ||
-      genreData.audioFeatures.energy.min !== null ||
-      genreData.audioFeatures.danceability.min !== null ||
-      genreData.audioFeatures.valence.min !== null ||
-      genreData.audioFeatures.acousticness.min !== null
-    );
+    const hasMetadataFilters =
+      (genreData.era.yearRange.min !== null || genreData.era.yearRange.max !== null) ||
+      (genreData.trackConstraints.duration.min !== null || genreData.trackConstraints.duration.max !== null) ||
+      genreData.trackConstraints.excludeVersions.length > 0 ||
+      genreData.artistConstraints.excludeFeatures ||
+      (genreData.culturalContext?.language?.prefer?.length > 0 || genreData.culturalContext?.language?.exclude?.length > 0) ||
+      genreData.trackConstraints.albumDiversity.maxPerAlbum !== null;
 
-    if (hasAudioFeatureFilters && allTracks.length > 0 && platform === 'spotify') {
-      console.log('Audio feature filters detected:', genreData.audioFeatures);
+    if (hasMetadataFilters && allTracks.length > 0) {
+      const albumTrackCount = {};
+      const languageToMarkets = {
+        'english': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE'],
+        'spanish': ['ES', 'MX', 'AR', 'CO', 'CL', 'PE'],
+        'french': ['FR', 'CA', 'BE', 'CH'],
+        'german': ['DE', 'AT', 'CH'],
+        'italian': ['IT'],
+        'portuguese': ['PT', 'BR'],
+        'japanese': ['JP'],
+        'korean': ['KR'],
+        'chinese': ['CN', 'TW', 'HK']
+      };
 
-      try {
-        // Fetch audio features for all tracks (Spotify allows up to 100 tracks per request)
-        const trackIds = allTracks.map(t => t.id);
-        const audioFeaturesData = [];
-
-        // Process in batches of 100
-        for (let i = 0; i < trackIds.length; i += 100) {
-          const batch = trackIds.slice(i, i + 100);
-          const response = await userSpotifyApi.getAudioFeaturesForTracks(batch);
-          audioFeaturesData.push(...response.body.audio_features);
-
-          // Small delay to avoid rate limiting
-          if (i + 100 < trackIds.length) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+      tracksForSelection = allTracks.filter(track => {
+        // Year range
+        if (genreData.era.yearRange.min !== null || genreData.era.yearRange.max !== null) {
+          if (track.album?.release_date) {
+            const releaseYear = parseInt(track.album.release_date.substring(0, 4));
+            if (releaseYear < (genreData.era.yearRange.min || 0) || releaseYear > (genreData.era.yearRange.max || 9999)) return false;
           }
         }
 
-        console.log(`Fetched audio features for ${audioFeaturesData.length} tracks`);
-
-        // Filter tracks based on audio features
-        const filteredTracks = [];
-        const albumTrackCount = {}; // Track how many songs per album
-        for (let i = 0; i < allTracks.length; i++) {
-          const track = allTracks[i];
-          const features = audioFeaturesData[i];
-
-          if (!features) {
-            console.log(`No audio features for "${track.name}", skipping`);
-            continue;
-          }
-
-          let passesFilters = true;
-
-          // BPM (tempo) filtering
-          if (genreData.audioFeatures.bpm.target !== null) {
-            const targetBpm = genreData.audioFeatures.bpm.target;
-            const tolerance = 10; // ±10 BPM tolerance
-            if (features.tempo < targetBpm - tolerance || features.tempo > targetBpm + tolerance) {
-              console.log(`"${track.name}" filtered out: BPM ${features.tempo.toFixed(0)} (target: ${targetBpm}±${tolerance})`);
-              passesFilters = false;
-            }
-          } else if (genreData.audioFeatures.bpm.min !== null || genreData.audioFeatures.bpm.max !== null) {
-            const minBpm = genreData.audioFeatures.bpm.min || 0;
-            const maxBpm = genreData.audioFeatures.bpm.max || 300;
-            if (features.tempo < minBpm || features.tempo > maxBpm) {
-              console.log(`"${track.name}" filtered out: BPM ${features.tempo.toFixed(0)} (range: ${minBpm}-${maxBpm})`);
-              passesFilters = false;
-            }
-          }
-
-          // Energy filtering
-          if (genreData.audioFeatures.energy.min !== null || genreData.audioFeatures.energy.max !== null) {
-            const minEnergy = genreData.audioFeatures.energy.min || 0;
-            const maxEnergy = genreData.audioFeatures.energy.max || 1;
-            if (features.energy < minEnergy || features.energy > maxEnergy) {
-              console.log(`"${track.name}" filtered out: Energy ${features.energy.toFixed(2)} (range: ${minEnergy}-${maxEnergy})`);
-              passesFilters = false;
-            }
-          }
-
-          // Danceability filtering
-          if (genreData.audioFeatures.danceability.min !== null || genreData.audioFeatures.danceability.max !== null) {
-            const minDance = genreData.audioFeatures.danceability.min || 0;
-            const maxDance = genreData.audioFeatures.danceability.max || 1;
-            if (features.danceability < minDance || features.danceability > maxDance) {
-              console.log(`"${track.name}" filtered out: Danceability ${features.danceability.toFixed(2)} (range: ${minDance}-${maxDance})`);
-              passesFilters = false;
-            }
-          }
-
-          // Valence (happiness) filtering
-          if (genreData.audioFeatures.valence.min !== null || genreData.audioFeatures.valence.max !== null) {
-            const minValence = genreData.audioFeatures.valence.min || 0;
-            const maxValence = genreData.audioFeatures.valence.max || 1;
-            if (features.valence < minValence || features.valence > maxValence) {
-              console.log(`"${track.name}" filtered out: Valence ${features.valence.toFixed(2)} (range: ${minValence}-${maxValence})`);
-              passesFilters = false;
-            }
-          }
-
-          // Acousticness filtering
-          if (genreData.audioFeatures.acousticness.min !== null || genreData.audioFeatures.acousticness.max !== null) {
-            const minAcoustic = genreData.audioFeatures.acousticness.min || 0;
-            const maxAcoustic = genreData.audioFeatures.acousticness.max || 1;
-            if (features.acousticness < minAcoustic || features.acousticness > maxAcoustic) {
-              console.log(`"${track.name}" filtered out: Acousticness ${features.acousticness.toFixed(2)} (range: ${minAcoustic}-${maxAcoustic})`);
-              passesFilters = false;
-            }
-          }
-
-          // Year range filtering (for "last 5 years", "from 2020-2024", etc.)
-          if (genreData.era.yearRange.min !== null || genreData.era.yearRange.max !== null) {
-            if (track.album && track.album.release_date) {
-              const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-              const minYear = genreData.era.yearRange.min || 0;
-              const maxYear = genreData.era.yearRange.max || 9999;
-
-              if (releaseYear < minYear || releaseYear > maxYear) {
-                console.log(`"${track.name}" filtered out: Release year ${releaseYear} (range: ${minYear}-${maxYear})`);
-                passesFilters = false;
-              }
-            }
-          }
-
-          // Popularity filtering
-          if (genreData.trackConstraints.popularity.min !== null || genreData.trackConstraints.popularity.max !== null) {
-            const minPop = genreData.trackConstraints.popularity.min || 0;
-            const maxPop = genreData.trackConstraints.popularity.max || 100;
-            if (track.popularity < minPop || track.popularity > maxPop) {
-              console.log(`"${track.name}" filtered out: Popularity ${track.popularity} (range: ${minPop}-${maxPop})`);
-              passesFilters = false;
-            }
-          }
-
-          // Duration filtering (convert milliseconds to seconds)
-          if (genreData.trackConstraints.duration.min !== null || genreData.trackConstraints.duration.max !== null) {
-            const durationSec = track.duration_ms / 1000;
-            const minDur = genreData.trackConstraints.duration.min || 0;
-            const maxDur = genreData.trackConstraints.duration.max || 999999;
-            if (durationSec < minDur || durationSec > maxDur) {
-              console.log(`"${track.name}" filtered out: Duration ${Math.floor(durationSec)}s (range: ${minDur}-${maxDur}s)`);
-              passesFilters = false;
-            }
-          }
-
-          // Version exclusions (live, remix, acoustic, etc.)
-          if (genreData.trackConstraints.excludeVersions.length > 0) {
-            const trackNameLower = track.name.toLowerCase();
-            for (const excludeType of genreData.trackConstraints.excludeVersions) {
-              if (trackNameLower.includes(excludeType.toLowerCase())) {
-                console.log(`"${track.name}" filtered out: Excluded version type "${excludeType}"`);
-                passesFilters = false;
-                break;
-              }
-            }
-          }
-
-          // Artist features filtering (remove songs with "feat.", "ft.", "with", etc.)
-          if (genreData.artistConstraints.excludeFeatures) {
-            const trackNameLower = track.name.toLowerCase();
-            if (trackNameLower.includes('feat.') || trackNameLower.includes('ft.') ||
-                trackNameLower.includes(' with ') || trackNameLower.includes('featuring')) {
-              console.log(`"${track.name}" filtered out: Contains features/collaborations`);
-              passesFilters = false;
-            }
-          }
-
-          // Language filtering (based on market/available_markets)
-          if (passesFilters && genreData.culturalContext && genreData.culturalContext.language) {
-            const languagePrefs = genreData.culturalContext.language;
-
-            // Map language preferences to Spotify market codes
-            const languageToMarkets = {
-              'english': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE'],
-              'spanish': ['ES', 'MX', 'AR', 'CO', 'CL', 'PE'],
-              'french': ['FR', 'CA', 'BE', 'CH'],
-              'german': ['DE', 'AT', 'CH'],
-              'italian': ['IT'],
-              'portuguese': ['PT', 'BR'],
-              'japanese': ['JP'],
-              'korean': ['KR'],
-              'chinese': ['CN', 'TW', 'HK']
-            };
-
-            // Check if preference or restriction is specified
-            if (languagePrefs.prefer && languagePrefs.prefer.length > 0) {
-              // Get all preferred markets
-              let preferredMarkets = [];
-              languagePrefs.prefer.forEach(lang => {
-                const markets = languageToMarkets[lang.toLowerCase()];
-                if (markets) preferredMarkets.push(...markets);
-              });
-
-              // Check if track is available in any preferred market
-              if (preferredMarkets.length > 0 && track.available_markets) {
-                const hasPreferredMarket = preferredMarkets.some(market =>
-                  track.available_markets.includes(market)
-                );
-                if (!hasPreferredMarket) {
-                  console.log(`"${track.name}" filtered out: Not available in preferred language markets`);
-                  passesFilters = false;
-                }
-              }
-            }
-
-            if (languagePrefs.exclude && languagePrefs.exclude.length > 0) {
-              // Get all excluded markets
-              let excludedMarkets = [];
-              languagePrefs.exclude.forEach(lang => {
-                const markets = languageToMarkets[lang.toLowerCase()];
-                if (markets) excludedMarkets.push(...markets);
-              });
-
-              // Check if track is ONLY available in excluded markets
-              if (excludedMarkets.length > 0 && track.available_markets) {
-                const onlyInExcludedMarkets = track.available_markets.every(market =>
-                  excludedMarkets.includes(market)
-                );
-                if (onlyInExcludedMarkets) {
-                  console.log(`"${track.name}" filtered out: Only available in excluded language markets`);
-                  passesFilters = false;
-                }
-              }
-            }
-          }
-
-          // Album diversity filtering (limit songs per album)
-          if (passesFilters && genreData.trackConstraints.albumDiversity.maxPerAlbum !== null) {
-            const albumId = track.album?.id;
-            if (albumId) {
-              const currentCount = albumTrackCount[albumId] || 0;
-              const maxPerAlbum = genreData.trackConstraints.albumDiversity.maxPerAlbum;
-
-              if (currentCount >= maxPerAlbum) {
-                console.log(`"${track.name}" filtered out: Album "${track.album.name}" already has ${currentCount} tracks (max: ${maxPerAlbum})`);
-                passesFilters = false;
-              } else {
-                // Track this album
-                albumTrackCount[albumId] = currentCount + 1;
-              }
-            }
-          }
-
-          if (passesFilters) {
-            // Add audio features to track for debugging
-            filteredTracks.push({
-              ...track,
-              audioFeatures: {
-                bpm: features.tempo.toFixed(0),
-                energy: features.energy.toFixed(2),
-                danceability: features.danceability.toFixed(2),
-                valence: features.valence.toFixed(2),
-                acousticness: features.acousticness.toFixed(2)
-              }
-            });
-          }
+        // Duration
+        if (genreData.trackConstraints.duration.min !== null || genreData.trackConstraints.duration.max !== null) {
+          const durationSec = track.duration_ms / 1000;
+          if (durationSec < (genreData.trackConstraints.duration.min || 0) || durationSec > (genreData.trackConstraints.duration.max || 999999)) return false;
         }
 
-        tracksForSelection = filteredTracks;
-        console.log(`After audio features filtering: ${tracksForSelection.length} tracks remain`);
-
-        if (tracksForSelection.length === 0) {
-          console.warn('Warning: No tracks passed audio feature filters, falling back to all tracks');
-          tracksForSelection = allTracks;
+        // Version exclusions (live, remix, acoustic, etc.)
+        if (genreData.trackConstraints.excludeVersions.length > 0) {
+          const nameLower = track.name.toLowerCase();
+          if (genreData.trackConstraints.excludeVersions.some(v => nameLower.includes(v.toLowerCase()))) return false;
         }
-      } catch (error) {
-        console.error('Error filtering by audio features:', error.message);
-        console.log('Continuing with unfiltered tracks');
-        tracksForSelection = allTracks;
-      }
+
+        // Exclude features/collabs
+        if (genreData.artistConstraints.excludeFeatures) {
+          const nameLower = track.name.toLowerCase();
+          if (nameLower.includes('feat.') || nameLower.includes('ft.') || nameLower.includes(' with ') || nameLower.includes('featuring')) return false;
+        }
+
+        // Language (market-based)
+        const langPrefs = genreData.culturalContext?.language;
+        if (langPrefs?.prefer?.length > 0) {
+          const preferredMarkets = langPrefs.prefer.flatMap(l => languageToMarkets[l.toLowerCase()] || []);
+          if (preferredMarkets.length > 0 && track.available_markets && !preferredMarkets.some(m => track.available_markets.includes(m))) return false;
+        }
+        if (langPrefs?.exclude?.length > 0) {
+          const excludedMarkets = langPrefs.exclude.flatMap(l => languageToMarkets[l.toLowerCase()] || []);
+          if (excludedMarkets.length > 0 && track.available_markets && track.available_markets.every(m => excludedMarkets.includes(m))) return false;
+        }
+
+        // Album diversity
+        if (genreData.trackConstraints.albumDiversity.maxPerAlbum !== null && track.album?.id) {
+          const count = albumTrackCount[track.album.id] || 0;
+          if (count >= genreData.trackConstraints.albumDiversity.maxPerAlbum) return false;
+          albumTrackCount[track.album.id] = count + 1;
+        }
+
+        return true;
+      });
+
+      if (tracksForSelection.length === 0) tracksForSelection = allTracks;
     }
 
     // Step 2.75: Apply strict genre validation if a primary genre is specified
