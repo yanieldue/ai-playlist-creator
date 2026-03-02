@@ -946,9 +946,10 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
   // Strategy 2: If we have a genre but few songs, search for well-known artists in that genre
   // This provides a fallback when seed artists aren't found or don't have enough songs
+  // Skip when seed artists are specified (popular artists would pollute a similarity-based playlist)
   // Skip for underground playlists — mainstream artists would ruin the vibe
   const isUndergroundMode = criteria.popularity && criteria.popularity.max && criteria.popularity.max <= 50;
-  if (criteria.genre && discoveredSongs.length < limit && !isUndergroundMode) {
+  if (criteria.genre && discoveredSongs.length < limit && !isUndergroundMode && !hasSeedArtists) {
     console.log(`   Searching for popular ${criteria.genre} artists...`);
 
     // Map genres to well-known representative artists
@@ -4252,9 +4253,23 @@ Respond ONLY with valid JSON:
           if (match) {
             const artistId = match.artists[0].id;
             const artistData = await userSpotifyApi.getArtist(artistId);
-            const genres = artistData.body.genres || [];
+            let genres = artistData.body.genres || [];
+            // If Spotify has no genres for this artist (common for small artists),
+            // look up related artists to infer the scene for SoundCharts disambiguation
+            if (genres.length === 0) {
+              try {
+                const relatedData = await userSpotifyApi.getArtistRelatedArtists(artistId);
+                const relatedGenres = (relatedData.body.artists || []).flatMap(a => a.genres || []);
+                const genreCounts = {};
+                relatedGenres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+                genres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+                if (genres.length > 0) {
+                  console.log(`   No direct genres — inferred from related artists: ${genres.slice(0, 3).join(', ')}`);
+                }
+              } catch (relErr) { /* skip */ }
+            }
             confirmedArtistGenres[refSong.artist.toLowerCase()] = genres;
-            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.join(', ') || 'none'}]`);
+            console.log(`✓ Confirmed "${match.artists[0].name}" via "${match.name}" — Spotify genres: [${genres.slice(0, 3).join(', ') || 'none'}]`);
           } else {
             console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on Spotify`);
           }
