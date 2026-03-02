@@ -866,6 +866,50 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50) {
 
       console.log(`   Total: ${allArtists.length} unique artists to pull songs from`);
 
+      // Artist pre-filter: validate level 1/2 artists against seed artists using Claude.
+      // SoundCharts similarity data for niche artists can have false positives (e.g. Islandis
+      // appearing as "similar" to Dante). One fast Haiku call removes bad artists before
+      // we waste time fetching their songs.
+      const nonSeedCandidates = allArtists.filter(a => a.level > 0);
+      if (nonSeedCandidates.length > 0 && criteria.seedArtists.length > 0) {
+        try {
+          const validationResponse = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 300,
+            messages: [{
+              role: 'user',
+              content: `The user wants music in the world of: ${criteria.seedArtists.join(', ')}.
+
+These artists were found by a similarity algorithm. Return ONLY the indices of artists that genuinely belong in the same musical scene — same genre, era, energy, and sound world. Be strict: if you don't know an artist or they clearly don't fit, exclude them.
+
+Artists:
+${nonSeedCandidates.map((a, i) => `${i + 1}. ${a.name}`).join('\n')}
+
+Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
+            }]
+          });
+
+          const validText = validationResponse.content[0].text.trim();
+          const validMatch = validText.match(/\[([\d,\s]*)\]/);
+          if (validMatch) {
+            const keepIndices = new Set(JSON.parse(validMatch[0]).map(i => i - 1));
+            const beforeCount = nonSeedCandidates.length;
+            const validatedNonSeed = nonSeedCandidates.filter((_, i) => keepIndices.has(i));
+            const removedCount = beforeCount - validatedNonSeed.length;
+            if (removedCount > 0) {
+              console.log(`   🎯 Artist pre-filter removed ${removedCount} off-scene artists`);
+            }
+            // Rebuild allArtists with only validated non-seed artists + all seed artists
+            const seedOnly = allArtists.filter(a => a.level === 0);
+            allArtists.length = 0;
+            allArtists.push(...seedOnly, ...validatedNonSeed);
+            console.log(`   Artists after pre-filter: ${allArtists.length}`);
+          }
+        } catch (filterErr) {
+          console.log(`   Artist pre-filter skipped: ${filterErr.message}`);
+        }
+      }
+
       // Get songs from each artist with even distribution
       // In non-exclusive (similar-vibe) mode: prioritize similar/discovery artists over seed artists
       // Seed artists appear last so similar artists fill the pool first.
@@ -4626,8 +4670,14 @@ Return ONLY valid JSON:
             ? genreData.artistConstraints.requestedArtists
             : [];
           const seedArtistInstruction = seedArtistNames.length > 0
-            ? `- Reference artists: ${seedArtistNames.join(', ')}. Songs should fit a playlist alongside these artists — same general scene, sound, and energy. REMOVE songs that clearly come from a completely different scene or sound world (e.g., wrong era, unrelated genre, or totally different vibe).`
+            ? `- Reference artists: ${seedArtistNames.join(', ')}. These songs were discovered by a music similarity algorithm that can have false positives. REMOVE any song whose artist clearly does not belong in the same musical scene as ${seedArtistNames.join(' and ')} (different era, unrelated genre, or totally different sound world).`
             : '';
+
+          // When seed artists are provided, be strict — the algorithm can return false positives.
+          // Otherwise be lenient to avoid filtering too aggressively.
+          const leniencyInstruction = seedArtistNames.length > 0
+            ? `Be STRICT about artist fit — the discovery algorithm can produce false positives. If you don't recognize an artist or they clearly don't belong in the same world as ${seedArtistNames.join(', ')}, REMOVE them. A playlist with fewer but correct songs beats one with off-scene songs.`
+            : `Be LENIENT — only remove songs that clearly don't fit. When in doubt, KEEP the song.`;
 
           try {
             const sanityCheckResponse = await anthropic.messages.create({
@@ -4660,7 +4710,7 @@ ${hasAvoidances ? `- Match what the user wants to AVOID` : ''}
 ${wantsUndergroundFilter ? `- Are from mainstream artists with chart hits` : ''}
 ${seedArtistInstruction}
 
-Be LENIENT - only remove songs that clearly don't fit. When in doubt, KEEP the song.
+${leniencyInstruction}
 
 Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }]
