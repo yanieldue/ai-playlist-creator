@@ -941,7 +941,9 @@ Respond with only a JSON array of indices to keep, e.g. [1, 3, 5]`
 
   // Strategy 2: If we have a genre but few songs, search for well-known artists in that genre
   // This provides a fallback when seed artists aren't found or don't have enough songs
-  if (criteria.genre && discoveredSongs.length < limit) {
+  // Skip for underground playlists — mainstream artists would ruin the vibe
+  const isUndergroundMode = criteria.popularity && criteria.popularity.max && criteria.popularity.max <= 50;
+  if (criteria.genre && discoveredSongs.length < limit && !isUndergroundMode) {
     console.log(`   Searching for popular ${criteria.genre} artists...`);
 
     // Map genres to well-known representative artists
@@ -4063,10 +4065,10 @@ DO NOT include any text outside the JSON.`
 GENRE DATA FROM SOUNDCHARTS: ${uniqueGenres.join(', ')}
 
 CRITICAL RULES:
-1. The genre data "${uniqueGenres.join(', ')}" is REAL DATA from SoundCharts - USE IT as your primary guide
+1. The genre data is REAL DATA from SoundCharts - use it as your primary guide
 2. If the genre contains "r&b" or "R&B" or "soul", the primary genre should be "R&B" or "R&B/Soul"
 3. DO NOT invent genres like "Electronic" or "Ambient" unless the data explicitly says so
-4. When in doubt, trust the SoundCharts genre data over guessing from artist names
+4. IMPORTANT - ARTIST DISAMBIGUATION: When multiple artists share the same name, SoundCharts may have matched the wrong one. If the genre data includes language-specific genres (like "spanish hip hop", "rap conciencia", "french rap", "italian hip hop") but the OTHER requested artists are clearly from a different scene (e.g., English-speaking underground), treat the language-specific genres as potentially from the wrong artist match. In that case, use the broader/universal genre (e.g., just "Hip Hop") and set subgenre based on the overall artist group's likely scene — NOT the language-specific variant.
 
 Respond ONLY with valid JSON:
 {
@@ -5148,8 +5150,8 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
 
         if (uniqueArtistNames.length > 1) {
           try {
-            // Cap at 150 artists — normalization is for deduplication, not exhaustive cataloging
-            const artistsToNormalize = uniqueArtistNames.slice(0, 150);
+            // Cap at 80 artists — normalization is for deduplication, not exhaustive cataloging
+            const artistsToNormalize = uniqueArtistNames.slice(0, 80);
             const artistNormalizationResponse = await anthropic.messages.create({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 4000,
