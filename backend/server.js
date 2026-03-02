@@ -4747,28 +4747,6 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
           }
         }
 
-        // In non-exclusive (similar-vibe) mode, cap seed artist songs to prevent domination.
-        // e.g. "Songs similar to Dre Dior" should mostly have similar artists, not Dre Dior songs.
-        if (!isExclusiveArtistMode && hasRequestedArtists) {
-          const maxPerSeedArtist = Math.max(2, Math.ceil(songCount * 0.20)); // max 20% from any seed artist
-          const seedArtistTrackCounts = new Map();
-          selectedTracks = selectedTracks.filter(track => {
-            const artistLower = (track.artist || '').toLowerCase();
-            const isSeedArtist = genreData.artistConstraints.requestedArtists.some(ra => {
-              const raLower = ra.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const aLower = artistLower.replace(/[^a-z0-9]/g, '');
-              return aLower === raLower || aLower.startsWith(raLower) || raLower.startsWith(aLower);
-            });
-            if (!isSeedArtist) return true;
-            const count = seedArtistTrackCounts.get(artistLower) || 0;
-            if (count >= maxPerSeedArtist) {
-              console.log(`[VARIETY-CAP] Limiting seed artist songs: removing "${track.name}" by ${track.artist}`);
-              return false;
-            }
-            seedArtistTrackCounts.set(artistLower, count + 1);
-            return true;
-          });
-        }
 
         // Return the final tracks
         selectedTracks = selectedTracks.slice(0, songCount);
@@ -5179,90 +5157,6 @@ DO NOT include any text outside the JSON. Make the search queries specific and d
         console.log(`\n📊 Artist diversity enforcement: ${beforeCount} -> ${allTracks.length} tracks (max ${maxTracksPerArtist} per artist)\n`);
       }
 
-      // If few/no requested artists were found, check if we should filter for indie vibe
-      // BUT SKIP this filtering if user wants EXCLUSIVE mode (they only want these specific artists)
-      const requestedArtistRatio = foundRequestedArtists.length / requestedArtists.length;
-
-      // Count how many tracks are from requested artists
-      const requestedArtistTrackCount = allTracks.filter(t =>
-        requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist))
-      ).length;
-      const requestedArtistTrackRatio = requestedArtistTrackCount / allTracks.length;
-
-      console.log(`Requested artist coverage: ${foundRequestedArtists.length}/${requestedArtists.length} artists found, ${requestedArtistTrackCount}/${allTracks.length} tracks (${(requestedArtistTrackRatio * 100).toFixed(1)}%)`);
-
-      // Check if requested artists are indie/underground (low popularity)
-      const requestedArtistTracks = allTracks.filter(t =>
-        requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist))
-      );
-      const requestedArtistsAreIndie = requestedArtistTracks.length > 0 &&
-        requestedArtistTracks.every(t => (t.popularity || 50) <= 45);
-
-      if (requestedArtistsAreIndie) {
-        console.log(`🎵 Detected indie/underground requested artists (all popularity <= 45)`);
-      }
-
-      // Filter for indie vibe if:
-      // 1. NOT in exclusive mode (user wants similar vibe artists, not just the requested ones)
-      // 2. EITHER:
-      //    a) None of the requested artists were found, OR
-      //    b) Less than 50% of requested artists found AND they make up <20% of tracks (dominated by other artists), OR
-      //    c) Requested artists are clearly indie (all popularity <= 45) - maintain indie vibe throughout
-      const shouldFilterForIndieVibe =
-        !genreData.artistConstraints.exclusiveMode && (
-          foundRequestedArtists.length === 0 ||
-          (requestedArtistRatio < 0.5 && requestedArtistTrackRatio < 0.2) ||
-          requestedArtistsAreIndie
-        );
-
-      if (shouldFilterForIndieVibe && allTracks.length > 0) {
-        const reason = requestedArtistsAreIndie
-          ? 'requested artists are indie/underground'
-          : 'requested artists underrepresented';
-        console.log(`🎯 Adjusting for indie/underground vibe (${reason})...`);
-
-        // Calculate both average and median popularity
-        const sortedByPopularity = [...allTracks].sort((a, b) => (b.popularity || 50) - (a.popularity || 50));
-        const medianPopularity = sortedByPopularity[Math.floor(sortedByPopularity.length / 2)].popularity || 50;
-        const avgPopularity = allTracks.reduce((sum, t) => sum + (t.popularity || 50), 0) / allTracks.length;
-
-        // Check if top artists are mainstream (top 30% of tracks have high popularity)
-        const top30PercentCount = Math.ceil(allTracks.length * 0.3);
-        const top30PercentAvg = sortedByPopularity.slice(0, top30PercentCount).reduce((sum, t) => sum + (t.popularity || 50), 0) / top30PercentCount;
-
-        console.log(`Track popularity - Avg: ${avgPopularity.toFixed(1)}, Median: ${medianPopularity}, Top 30% avg: ${top30PercentAvg.toFixed(1)}`);
-
-        // Filter if:
-        // 1. Median popularity > 55 (half the tracks are mainstream), OR
-        // 2. Top 30% average > 65 (dominated by popular artists at the top)
-        const hasMainstreamBias = medianPopularity > 55 || top30PercentAvg > 65;
-
-        if (hasMainstreamBias) {
-          // Use very strict threshold (35) when requested artists are underrepresented
-          // This ensures we get truly underground/indie artists that might match the vibe
-          const popularityThreshold = 35;
-          const beforeCount = allTracks.length;
-
-          // Keep tracks from requested artists even if they're popular, but filter everyone else
-          allTracks.splice(0, allTracks.length, ...allTracks.filter(t => {
-            const isRequestedArtist = requestedArtists.some(req => normalizeArtistForComparison(req) === normalizeArtistForComparison(t.artist));
-            return isRequestedArtist || (t.popularity || 50) <= popularityThreshold;
-          }));
-
-          console.log(`Filtered out mainstream artists: ${beforeCount} -> ${allTracks.length} tracks (kept requested artists + popularity <= ${popularityThreshold})`);
-
-          if (allTracks.length < songCount) {
-            console.warn(`⚠️  Only ${allTracks.length} tracks found with indie/underground vibe (needed ${songCount})`);
-            console.log(`💡 Tip: The requested artists (${requestedArtists.join(', ')}) may not be available on this platform, so results include similar lesser-known artists`);
-          }
-        } else {
-          console.log('Track selection already has indie/underground vibe, no filtering needed');
-        }
-      } else if (genreData.artistConstraints.exclusiveMode) {
-        console.log('Skipping indie filtering - exclusive mode enabled (user wants only requested artists)');
-      } else {
-        console.log('Requested artists well-represented in results, no indie filtering needed');
-      }
     }
 
     // Step 2.5: Apply metadata-based filters (year, duration, version exclusions, language, album diversity)
