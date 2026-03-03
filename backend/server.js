@@ -767,7 +767,46 @@ async function searchSoundChartsSong(title, artist) {
       setSCCache(cacheKey, result);
       return result;
     }
-    console.log(`🔍 SoundCharts song search: no match for "${title}" by "${artist}" (API returned ${response.data?.items?.length || 0} results)`);
+
+    // Log what artists were returned to help diagnose misses
+    const returnedArtists = (response.data?.items || []).map(s => s.artists?.[0]?.name || s.creditName || '?').join(', ');
+    console.log(`🔍 SoundCharts song search: no title match for "${title}" by "${artist}". Artists in results: [${returnedArtists}]`);
+
+    // Fallback: search artist candidates by name, then check each one's songs for the reference title
+    // This handles cases where song-title search doesn't credit the right artist (features, compilations, etc.)
+    console.log(`🔍 SoundCharts song search: trying artist-candidate fallback for "${artist}"...`);
+    try {
+      const artistSearchResp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(artist)}`,
+        {
+          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+          params: { offset: 0, limit: 10 },
+          timeout: 10000
+        }
+      );
+      const candidates = (artistSearchResp.data?.items || []).filter(
+        a => a.name.toLowerCase() === artist.toLowerCase()
+      );
+      const titleNorm = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const candidate of candidates) {
+        await throttleSoundCharts();
+        const songs = await getSoundChartsArtistSongs(candidate.uuid, 50);
+        const songMatch = songs.find(s => {
+          const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return sNorm === titleNorm || sNorm.startsWith(titleNorm) || titleNorm.startsWith(sNorm);
+        });
+        if (songMatch) {
+          console.log(`✓ SoundCharts artist-fallback: "${candidate.name}" has "${songMatch.name}" → UUID ${candidate.uuid}`);
+          const result = { songUuid: songMatch.uuid, artistUuid: candidate.uuid, artistName: candidate.name };
+          setSCCache(cacheKey, result);
+          return result;
+        }
+      }
+      console.log(`🔍 SoundCharts song search: artist-fallback found no match among ${candidates.length} "${artist}" candidates`);
+    } catch (fbErr) {
+      console.log(`🔍 SoundCharts song search: artist-fallback error: ${fbErr.message}`);
+    }
+
     setSCCache(cacheKey, null);
     return null;
   } catch (error) {
