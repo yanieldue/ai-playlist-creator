@@ -4736,6 +4736,74 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
 
         // Only take the early return if we have enough tracks — otherwise fall through to fallback
         if (selectedTracks.length >= Math.min(songCount, 15)) {
+          // Supplement with top songs if short of target (e.g. newArtistsOnly filtered too aggressively)
+          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
+            const needed = songCount - selectedTracks.length;
+            console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${songCount}`);
+            try {
+              const supplementCriteria = {
+                seedArtists: [],
+                genre: genreData.primaryGenre,
+                targetMoods: null,
+                targetThemes: null,
+                popularity: null,
+                releaseYear: (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) ? {
+                  min: genreData.era.yearRange.min,
+                  max: genreData.era.yearRange.max
+                } : null,
+                exclusiveMode: false
+              };
+              const supplementSongs = await discoverSongsViaSoundChartsTop(supplementCriteria, needed * 4);
+              console.log(`🔁 Top-songs supplement: ${supplementSongs.length} candidates`);
+              for (const song of supplementSongs) {
+                if (selectedTracks.length >= songCount) break;
+                try {
+                  const searchQuery = song.isrc
+                    ? `isrc:${song.isrc}`
+                    : `track:${song.name} artist:${song.artistName}`;
+                  if (platform === 'spotify') {
+                    const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
+                    const track = result.body.tracks?.items?.[0];
+                    if (track && !seenTrackIds.has(track.id)) {
+                      if (!allowExplicit && track.explicit) continue;
+                      if (newArtistsOnly && knownArtists.size > 0) {
+                        const primaryArtist = (track.artists?.[0]?.name || '').toLowerCase();
+                        if (knownArtists.has(primaryArtist)) continue;
+                      }
+                      seenTrackIds.add(track.id);
+                      selectedTracks.push({
+                        id: track.id, name: track.name,
+                        artist: track.artists?.[0]?.name || 'Unknown',
+                        uri: track.uri, album: track.album?.name,
+                        image: track.album?.images?.[0]?.url,
+                        previewUrl: track.preview_url,
+                        externalUrl: track.external_urls?.spotify,
+                        explicit: track.explicit, genres: []
+                      });
+                    }
+                  } else if (platform === 'apple') {
+                    const platformService = new PlatformService();
+                    const appleResults = await platformService.searchTracks(
+                      platformUserId, `${song.name} ${song.artistName}`, tokens, tokens.storefront || 'us', 1
+                    );
+                    if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
+                      if (!allowExplicit && appleResults[0].explicit) continue;
+                      if (newArtistsOnly && knownArtists.size > 0) {
+                        const primaryArtist = (appleResults[0].artist || '').toLowerCase();
+                        if (knownArtists.has(primaryArtist)) continue;
+                      }
+                      seenTrackIds.add(appleResults[0].id);
+                      selectedTracks.push(appleResults[0]);
+                    }
+                  }
+                } catch (suppErr) { /* skip individual song errors */ }
+              }
+              console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks`);
+            } catch (suppFetchErr) {
+              console.log('Top-songs supplement failed:', suppFetchErr.message);
+            }
+          }
+
           res.json({
             playlistName: claudePlaylistName,
             description: claudePlaylistDescription,
