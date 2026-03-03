@@ -2971,93 +2971,44 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     // Combine with top artists for exclusion
     const allArtistsToExclude = [...new Set([...topArtistNames, ...Array.from(allListenedArtistNames)])];
 
-    console.log(`\n🚫 EXCLUSION LIST:`);
-    console.log(`   - Top 10 artists: ${topArtistNames.join(', ')}`);
-    console.log(`   - Total artists to exclude: ${allArtistsToExclude.length}`);
-    console.log(`   - First 30 excluded artists: ${allArtistsToExclude.slice(0, 30).join(', ')}`);
+    console.log(`Total artists to exclude (already heard): ${allArtistsToExclude.length}`);
 
-    // CRITICAL CHECK: Are JENNIE and TWICE in the exclusion list?
-    const hasJennie = allArtistsToExclude.some(name => name.toLowerCase().includes('jennie'));
-    const hasTwice = allArtistsToExclude.some(name => name.toLowerCase().includes('twice'));
-    console.log(`   - ⚠️ JENNIE in exclusion list: ${hasJennie}`);
-    console.log(`   - ⚠️ TWICE in exclusion list: ${hasTwice}`);
-
-    // Use AI to suggest artists to explore (ask for 30 to account for Spotify search mismatches)
-    // Show more artists to exclude in the prompt to reduce AI errors
-    const topExcludeForPrompt = allArtistsToExclude.slice(0, 30); // Show first 30 for context
-    const aiPrompt = `Based on a user whose TOP 10 favorite artists are: ${topArtistNames.join(', ')}${genres.length > 0 ? ` and enjoys these genres: ${genres.slice(0, 5).join(', ')}` : ''}, suggest 30 NEW artists they should explore.
-
-CRITICAL INSTRUCTION: The user has ALREADY listened to these ${allArtistsToExclude.length} artists. DO NOT suggest ANY of them:
-${topExcludeForPrompt.join(', ')}${allArtistsToExclude.length > 30 ? `, and ${allArtistsToExclude.length - 30} more artists` : ''}.
-
-Focus on artists that are:
-- In similar genres and styles to their favorites
-- Artists with deep catalogs worth exploring
-- Well-regarded artists they may have missed
-- Mix of mainstream and indie artists that fit their taste
-- Artists that would naturally expand their musical horizons
-- IMPORTANT: Artists they have NOT listened to yet
-
-Return ONLY a valid JSON array in this exact format, with no additional text or markdown:
-[
-  {"name": "Artist Name", "genres": ["genre1", "genre2"], "description": "Brief description"},
-  ...
-]`;
-
-    console.log('Sending request to AI...');
-    const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      messages: [{
-        role: 'user',
-        content: aiPrompt
-      }]
-    });
-
-    const aiContent = aiResponse.content[0].text.trim();
-    console.log('AI Response received');
-
-    // Parse AI response
-    let suggestedArtists;
-    try {
-      // Remove markdown code blocks if present
-      const jsonMatch = aiContent.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        suggestedArtists = JSON.parse(jsonMatch[0]);
-      } else {
-        suggestedArtists = JSON.parse(aiContent);
-      }
-    } catch (parseError) {
-      console.error('Failed to parse AI response:', parseError);
-      console.error('AI Content:', aiContent);
-      return res.json({ artists: [] });
-    }
-
-    console.log(`\n🤖 AI SUGGESTED ${suggestedArtists.length} artists:`, suggestedArtists.map(a => a.name));
-
-    // CRITICAL CHECK: Did AI suggest JENNIE or TWICE?
-    const aiSuggestedJennie = suggestedArtists.some(a => a.name.toLowerCase().includes('jennie'));
-    const aiSuggestedTwice = suggestedArtists.some(a => a.name.toLowerCase().includes('twice'));
-    if (aiSuggestedJennie || aiSuggestedTwice) {
-      console.log(`🚨 CRITICAL ERROR: AI IGNORED EXCLUSION INSTRUCTIONS!`);
-      console.log(`   - AI suggested JENNIE: ${aiSuggestedJennie}`);
-      console.log(`   - AI suggested TWICE: ${aiSuggestedTwice}`);
-    }
-
-    // Filter out any artists that user has listened to (top artists + recently played)
+    // Use SoundCharts to find artists similar to the user's top artists
+    // This is more accurate than asking Claude — SoundCharts knows real artist relationships
     const allArtistsToExcludeLower = allArtistsToExclude.map(name => name.toLowerCase().trim());
-    const filteredArtists = suggestedArtists.filter(artist => {
-      const artistNameLower = artist.name.toLowerCase().trim();
-      const isListenedArtist = allArtistsToExcludeLower.includes(artistNameLower);
-      if (isListenedArtist) {
-        console.log(`⊘ FILTERING OUT: "${artist.name}" (already in listening history)`);
-      }
-      return !isListenedArtist;
-    });
+    let filteredArtists = [];
 
-    console.log(`\n✅ After filtering: ${filteredArtists.length} artists remain`);
-    if (suggestedArtists.length - filteredArtists.length > 0) {
-      console.log(`⚠️ Filtered out ${suggestedArtists.length - filteredArtists.length} artists from AI suggestions`);
+    if (process.env.SOUNDCHARTS_APP_ID) {
+      console.log('🎵 Finding similar artists via SoundCharts...');
+      const scCandidates = [];
+      const seenScNames = new Set();
+
+      for (const topArtist of topArtists) {
+        try {
+          const scInfo = await getSoundChartsArtistInfo(topArtist.name);
+          if (scInfo?.similarArtists?.length > 0) {
+            for (const simName of scInfo.similarArtists) {
+              const simLower = simName.toLowerCase().trim();
+              if (!seenScNames.has(simLower)) {
+                seenScNames.add(simLower);
+                scCandidates.push({ name: simName, genres: [], description: `Similar to ${topArtist.name}` });
+              }
+            }
+          }
+        } catch (err) {
+          console.log(`SoundCharts lookup failed for ${topArtist.name}:`, err.message);
+        }
+      }
+      console.log(`📊 SoundCharts found ${scCandidates.length} similar artists across all top artists`);
+
+      filteredArtists = scCandidates.filter(artist => {
+        const isExcluded = allArtistsToExcludeLower.some(ex => ex === artist.name.toLowerCase().trim());
+        if (isExcluded) console.log(`⊘ Excluding: "${artist.name}" (already in listening history)`);
+        return !isExcluded;
+      });
+      console.log(`✅ After filtering: ${filteredArtists.length} new artists to recommend`);
+    } else {
+      console.log('⚠️ SOUNDCHARTS_APP_ID not configured — skipping artist recommendations');
     }
 
     // Try to fetch images and details from Spotify for the suggested artists
@@ -3240,20 +3191,9 @@ Return ONLY a valid JSON array in this exact format, with no additional text or 
       });
     }
 
-    // FINAL CHECK: Are JENNIE or TWICE in the final results?
-    const finalHasJennie = formattedArtists.some(a => a.name.toLowerCase().includes('jennie'));
-    const finalHasTwice = formattedArtists.some(a => a.name.toLowerCase().includes('twice'));
-
     console.log(`\n📤 RETURNING ${formattedArtists.length} artists to frontend:`);
     console.log(`   - Artists: ${formattedArtists.map(a => a.name).join(', ')}`);
     console.log(`   - ${formattedArtists.filter(a => a.image).length} with images`);
-
-    if (finalHasJennie || finalHasTwice) {
-      console.log(`\n🚨🚨🚨 CRITICAL BUG: JENNIE OR TWICE IN FINAL RESULTS! 🚨🚨🚨`);
-      console.log(`   - JENNIE in results: ${finalHasJennie}`);
-      console.log(`   - TWICE in results: ${finalHasTwice}`);
-      console.log(`   - This should NEVER happen - filtering failed!`);
-    }
 
     // Cache the results for 24 hours (expires at next 12 AM UTC)
     if (formattedArtists.length > 0) {
