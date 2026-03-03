@@ -4292,7 +4292,10 @@ Respond ONLY with valid JSON:
         confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
       };
 
-      soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, 60);
+      // Discover more songs when newArtistsOnly is on — known artists get filtered out later,
+      // so we need a larger pool to still reach the target song count.
+      const discoveryLimit = newArtistsOnly ? Math.max(90, songCount * 3) : 60;
+      soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, discoveryLimit);
 
       if (soundChartsDiscoveredSongs.length > 0) {
         console.log(`✓ SoundCharts discovered ${soundChartsDiscoveredSongs.length} songs`);
@@ -4496,6 +4499,15 @@ Return ONLY valid JSON:
                 }
               }
 
+              // Skip known artists when newArtistsOnly mode is active
+              if (newArtistsOnly && knownArtists.size > 0) {
+                const primaryArtist = (track.artists?.[0]?.name || '').toLowerCase();
+                if (knownArtists.has(primaryArtist)) {
+                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists[0].name} (known artist)`);
+                  continue;
+                }
+              }
+
               seenTrackIds.add(track.id);
               seenSongSignatures.set(songSignature, track.name);
               // Normalize track format to have 'artist', 'image', and 'externalUrl' properties for consistency
@@ -4592,6 +4604,15 @@ Return ONLY valid JSON:
               if (seenSongSignatures.has(songSignature)) {
                 if (!isUniqueVariation(track.name)) {
                   console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name} (same as "${seenSongSignatures.get(songSignature)}")`);
+                  continue;
+                }
+              }
+
+              // Skip known artists when newArtistsOnly mode is active
+              if (newArtistsOnly && knownArtists.size > 0) {
+                const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+                if (knownArtists.has(primaryArtist)) {
+                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (known artist)`);
                   continue;
                 }
               }
