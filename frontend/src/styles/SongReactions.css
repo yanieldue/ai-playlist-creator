@@ -148,10 +148,20 @@
   text-overflow: ellipsis;
 }
 
-.reactions-track-icon {
-  font-size: 18px;
+.reactions-track-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  opacity: 1;
+  transition: opacity 0.15s;
 }
+.reactions-track-icon-btn:active { opacity: 0.5; }
+.reactions-track-icon-btn:disabled { cursor: default; }
 
 /* Dark mode */
 :root.dark-mode .reactions-page { background: #1c1c1e; }
