@@ -4855,77 +4855,54 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                 exclusiveMode: false
               };
 
-              // Fetch a pool of top-genre songs to extract unique artists from.
-              // Paginate through multiple pages (0, 100, 200) so that if the top 100 are all
-              // known artists (common for genre power-users), we find mid-tier artists further down.
+              // Single call at offset 50 — skips the top-50 most popular artists
+              // (a genre power-user almost certainly knows them) and lands on mid-tier
+              // artists who are good quality but less widely known.
+              // discoverSongsViaSoundChartsTop already returns song name + ISRC, so we
+              // search Spotify directly — no extra SoundCharts calls per artist.
+              const topSongsPool = await discoverSongsViaSoundChartsTop(supplementCriteria, 100, 50);
+              console.log(`🔁 Top-songs pool (offset=50): ${topSongsPool.length} songs`);
+
               const seenSupplementArtists = new Set();
-              const newArtistPool = [];
-              const pageSizes = [100, 100, 100]; // up to 3 pages of 100
-              let pageOffset = 0;
-              for (const pageSize of pageSizes) {
-                if (newArtistPool.length >= needed * 2) break; // enough candidates
-                const topSongsPool = await discoverSongsViaSoundChartsTop(supplementCriteria, pageSize, pageOffset);
-                console.log(`🔁 Top-songs pool (offset=${pageOffset}): ${topSongsPool.length} songs`);
-                if (topSongsPool.length === 0) break;
-                for (const song of topSongsPool) {
-                  const artistLower = (song.artistName || '').toLowerCase();
-                  if (seenSupplementArtists.has(artistLower)) continue;
-                  seenSupplementArtists.add(artistLower);
-                  if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
-                  newArtistPool.push({ name: song.artistName, isrc: song.isrc, sampleSong: song });
-                }
-                pageOffset += pageSize;
-              }
-              console.log(`🔁 New artists from pool: ${newArtistPool.length} (checked ${pageOffset} songs total)`);
-
-              // For each new artist, get their songs from SoundCharts, then search Spotify/Apple
-              for (const artistEntry of newArtistPool) {
+              for (const song of topSongsPool) {
                 if (selectedTracks.length >= songCount) break;
+                const artistLower = (song.artistName || '').toLowerCase();
+                if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
                 try {
-                  // Resolve SoundCharts UUID for this artist
-                  const artistInfo = await searchSoundChartsArtist(artistEntry.name, genreData.primaryGenre);
-                  if (!artistInfo?.uuid) continue;
-
-                  // Fetch their songs from SoundCharts
-                  const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.ceil(needed / Math.max(newArtistPool.length, 1)) + 2);
-                  for (const song of artistSongs) {
-                    if (selectedTracks.length >= songCount) break;
-                    try {
-                      const searchQuery = song.isrc
-                        ? `isrc:${song.isrc}`
-                        : `track:${song.name} artist:${artistEntry.name}`;
-                      if (platform === 'spotify') {
-                        const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
-                        const track = result.body.tracks?.items?.[0];
-                        if (track && !seenTrackIds.has(track.id)) {
-                          if (!allowExplicit && track.explicit) continue;
-                          seenTrackIds.add(track.id);
-                          selectedTracks.push({
-                            id: track.id, name: track.name,
-                            artist: track.artists?.[0]?.name || 'Unknown',
-                            uri: track.uri, album: track.album?.name,
-                            image: track.album?.images?.[0]?.url,
-                            previewUrl: track.preview_url,
-                            externalUrl: track.external_urls?.spotify,
-                            explicit: track.explicit, genres: []
-                          });
-                        }
-                      } else if (platform === 'apple') {
-                        const platformService = new PlatformService();
-                        const appleResults = await platformService.searchTracks(
-                          platformUserId, `${song.name} ${artistEntry.name}`, tokens, tokens.storefront || 'us', 1
-                        );
-                        if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
-                          if (!allowExplicit && appleResults[0].explicit) continue;
-                          seenTrackIds.add(appleResults[0].id);
-                          selectedTracks.push(appleResults[0]);
-                        }
-                      }
-                    } catch (songErr) { /* skip individual song errors */ }
+                  const searchQuery = song.isrc
+                    ? `isrc:${song.isrc}`
+                    : `track:${song.name} artist:${song.artistName}`;
+                  if (platform === 'spotify') {
+                    const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
+                    const track = result.body.tracks?.items?.[0];
+                    if (track && !seenTrackIds.has(track.id)) {
+                      if (!allowExplicit && track.explicit) continue;
+                      seenTrackIds.add(track.id);
+                      seenSupplementArtists.add(artistLower);
+                      selectedTracks.push({
+                        id: track.id, name: track.name,
+                        artist: track.artists?.[0]?.name || 'Unknown',
+                        uri: track.uri, album: track.album?.name,
+                        image: track.album?.images?.[0]?.url,
+                        previewUrl: track.preview_url,
+                        externalUrl: track.external_urls?.spotify,
+                        explicit: track.explicit, genres: []
+                      });
+                    }
+                  } else if (platform === 'apple') {
+                    const platformService = new PlatformService();
+                    const appleResults = await platformService.searchTracks(
+                      platformUserId, `${song.name} ${song.artistName}`, tokens, tokens.storefront || 'us', 1
+                    );
+                    if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
+                      if (!allowExplicit && appleResults[0].explicit) continue;
+                      seenTrackIds.add(appleResults[0].id);
+                      selectedTracks.push(appleResults[0]);
+                    }
                   }
-                } catch (artistErr) { /* skip individual artist errors */ }
+                } catch (songErr) { /* skip individual song errors */ }
               }
-              console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks`);
+              console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks (${seenSupplementArtists.size} new artists added)`);
             } catch (suppFetchErr) {
               console.log('Top-songs supplement failed:', suppFetchErr.message);
             }
