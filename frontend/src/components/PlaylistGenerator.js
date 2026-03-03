@@ -1067,8 +1067,9 @@ const PlaylistGenerator = () => {
         return;
       }
 
-      // Automatic retry with exponential backoff
-      if (retryCount < maxRetries) {
+      // Only retry on network errors or 502/503/504 (infra blips), not on 4xx/500 server errors
+      const isRetryable = !err.response || [502, 503, 504].includes(err.response?.status);
+      if (isRetryable && retryCount < maxRetries) {
         const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s
         console.log(`Playlist generation failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
 
@@ -1078,7 +1079,7 @@ const PlaylistGenerator = () => {
         return handleGeneratePlaylist(retryCount + 1);
       }
 
-      // All retries exhausted
+      // All retries exhausted (or non-retryable error)
       console.error('Playlist generation error:', err);
       const errorMessage = err.response?.data?.error || err.message || 'Something went wrong while generating your playlist.';
       setGeneratingError(`${errorMessage} Please try again.`);
@@ -1639,12 +1640,12 @@ const PlaylistGenerator = () => {
     } catch (err) {
       console.error('Refinement error:', err);
 
-      // Automatic retry with exponential backoff
-      if (retryCount < maxRetries) {
+      // Only retry on network errors or 502/503/504, not on 4xx/500 server errors
+      const isRetryable = !err.response || [502, 503, 504].includes(err.response?.status);
+      if (isRetryable && retryCount < maxRetries) {
         const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
         console.log(`Refinement failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
 
-        // Show retry notification
         showToast(`Request failed, retrying... (${retryCount + 1}/${maxRetries})`, 'info');
 
         await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -1766,8 +1767,9 @@ const PlaylistGenerator = () => {
     } catch (err) {
       console.error('Add more songs error:', err);
 
-      // Automatic retry with exponential backoff
-      if (retryCount < maxRetries) {
+      // Only retry on network errors or 502/503/504, not on 4xx/500 server errors
+      const isRetryable = !err.response || [502, 503, 504].includes(err.response?.status);
+      if (isRetryable && retryCount < maxRetries) {
         const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s
         console.log(`Add more failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
 
