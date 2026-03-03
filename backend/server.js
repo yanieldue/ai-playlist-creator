@@ -699,15 +699,49 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
 // Returns the matching song's artist UUID directly — no ambiguity from artist name search
 // Helper: get artist info when UUID is already known (skips the name-search step entirely)
 async function getSoundChartsArtistInfoByUuid(uuid, displayName) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+
   const similarArtists = await getSoundChartsSimilarArtists(uuid, 10);
   console.log(`🔍 SoundCharts: Using confirmed UUID for "${displayName}"`);
   if (similarArtists.length > 0) {
     console.log(`   Similar artists: ${similarArtists.slice(0, 5).map(a => a.name).join(', ')}${similarArtists.length > 5 ? '...' : ''}`);
   }
+
+  // Also fetch genres and careerStage by searching by name and matching our confirmed UUID.
+  // This ensures genre inference works correctly even when UUID bypass was used.
+  let genres = [];
+  let careerStage = null;
+  try {
+    const cacheKey = `searchall:${displayName.toLowerCase()}`;
+    let items = getSCCache(cacheKey);
+    if (items === undefined) {
+      await throttleSoundCharts();
+      const resp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(displayName)}`,
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, params: { offset: 0, limit: 10 }, timeout: 10000 }
+      );
+      items = resp.data?.items || [];
+      setSCCache(cacheKey, items);
+    }
+    const match = items.find(a => a.uuid === uuid);
+    if (match) {
+      genres = [...new Set([
+        ...(match.genres?.map(g => g.root) || []),
+        ...(match.genres?.flatMap(g => g.sub || []) || [])
+      ])];
+      careerStage = match.careerStage || null;
+      if (genres.length > 0) console.log(`   Genres: ${genres.join(', ')}`);
+    }
+  } catch (e) {
+    // Non-fatal — genres stay empty, genre inference falls back gracefully
+  }
+
   return {
     name: displayName,
     uuid,
-    genres: [],
+    genres,
+    careerStage,
     similarArtists: similarArtists.map(a => a.name)
   };
 }
