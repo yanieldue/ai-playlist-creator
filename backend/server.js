@@ -4389,11 +4389,10 @@ Respond ONLY with valid JSON:
         confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
       };
 
-      // When newArtistsOnly, pass knownArtists so the discovery skips fetching songs from
-      // known artists (while still traversing them for the similarity tree).
-      const discoveryLimit = newArtistsOnly ? Math.max(90, songCount * 3) : 60;
-      const knownArtistsForDiscovery = (newArtistsOnly && knownArtists.size > 0) ? knownArtists : null;
-      soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, discoveryLimit, knownArtistsForDiscovery);
+      // newArtistsOnly has its own dedicated path after name generation — skip discovery here.
+      if (!newArtistsOnly) {
+        soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(criteria, 60);
+      }
 
       if (soundChartsDiscoveredSongs.length > 0) {
         console.log(`✓ SoundCharts discovered ${soundChartsDiscoveredSongs.length} songs`);
@@ -4453,6 +4452,114 @@ Return ONLY valid JSON:
         : `A curated ${genreData.primaryGenre || 'music'} playlist`;
       console.log('Using fallback playlist name:', claudePlaylistName);
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // NEW ARTISTS ONLY — dedicated simple path
+    // Find up to 12 unknown artists from the similarity tree, get their
+    // songs, search Spotify. No sanity check needed — the tree already
+    // constrains by genre, and we trust it more than false-positive removal.
+    // ─────────────────────────────────────────────────────────────────
+    if (newArtistsOnly && seedArtists.length > 0 && knownArtists.size > 0 && process.env.SOUNDCHARTS_APP_ID) {
+      console.log('🎯 New Artists mode: finding unknown artists from similarity tree...');
+
+      const targetNewArtists = 12;
+      const newArtistList = []; // { name, uuid }
+      const seenNewArtists = new Set();
+
+      // Level 1: similar artists of each seed
+      for (const seedName of seedArtists.slice(0, 3)) {
+        if (newArtistList.length >= targetNewArtists) break;
+        const confirmedUuid = confirmedArtistUuids[seedName.toLowerCase()];
+        const seedInfo = confirmedUuid
+          ? await getSoundChartsArtistInfoByUuid(confirmedUuid, seedName)
+          : await getSoundChartsArtistInfo(seedName, genreData.primaryGenre);
+        if (!seedInfo?.uuid) continue;
+
+        for (const similarName of (seedInfo.similarArtists || [])) {
+          if (newArtistList.length >= targetNewArtists) break;
+          const lowerName = similarName.toLowerCase();
+          if (seenNewArtists.has(lowerName) || knownArtists.has(lowerName)) continue;
+          seenNewArtists.add(lowerName);
+          const artistInfo = await searchSoundChartsArtist(similarName, genreData.primaryGenre);
+          if (!artistInfo?.uuid) continue;
+          newArtistList.push({ name: artistInfo.name || similarName, uuid: artistInfo.uuid });
+        }
+      }
+
+      // Level 2: expand from first 5 found if still short
+      if (newArtistList.length < targetNewArtists) {
+        for (const artist of newArtistList.slice(0, 5)) {
+          if (newArtistList.length >= targetNewArtists) break;
+          const level2 = await getSoundChartsSimilarArtists(artist.uuid, 10);
+          for (const similar of level2) {
+            if (newArtistList.length >= targetNewArtists) break;
+            const lowerName = similar.name.toLowerCase();
+            if (seenNewArtists.has(lowerName) || knownArtists.has(lowerName)) continue;
+            seenNewArtists.add(lowerName);
+            newArtistList.push({ name: similar.name, uuid: similar.uuid });
+          }
+        }
+      }
+
+      console.log(`🎯 Found ${newArtistList.length} new artists`);
+
+      if (newArtistList.length > 0) {
+        const songsPerArtist = Math.ceil(songCount / newArtistList.length) + 3;
+        const newArtistTracks = [];
+        const seenNewIds = new Set();
+
+        for (const artist of newArtistList) {
+          if (newArtistTracks.length >= songCount) break;
+          const songs = await getSoundChartsArtistSongs(artist.uuid, songsPerArtist);
+          for (const song of songs) {
+            if (newArtistTracks.length >= songCount) break;
+            try {
+              const searchQuery = song.isrc ? `isrc:${song.isrc}` : `track:${song.name} artist:${artist.name}`;
+              if (platform === 'spotify') {
+                const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
+                const track = result.body.tracks?.items?.[0];
+                if (track && !seenNewIds.has(track.id)) {
+                  if (!allowExplicit && track.explicit) continue;
+                  seenNewIds.add(track.id);
+                  newArtistTracks.push({
+                    id: track.id, name: track.name,
+                    artist: track.artists?.[0]?.name || 'Unknown',
+                    uri: track.uri, album: track.album?.name,
+                    image: track.album?.images?.[0]?.url,
+                    previewUrl: track.preview_url,
+                    externalUrl: track.external_urls?.spotify,
+                    explicit: track.explicit, genres: []
+                  });
+                }
+              } else if (platform === 'apple') {
+                const platformService = new PlatformService();
+                const appleResults = await platformService.searchTracks(
+                  platformUserId, `${song.name} ${artist.name}`, tokens, tokens.storefront || 'us', 1
+                );
+                if (appleResults?.[0] && !seenNewIds.has(appleResults[0].id)) {
+                  if (!allowExplicit && appleResults[0].explicit) continue;
+                  seenNewIds.add(appleResults[0].id);
+                  newArtistTracks.push(appleResults[0]);
+                }
+              }
+            } catch (err) { /* skip */ }
+          }
+        }
+
+        console.log(`🎯 New Artists path: returning ${newArtistTracks.length}/${songCount} tracks`);
+
+        if (newArtistTracks.length >= Math.min(songCount, 10)) {
+          return res.json({
+            playlistName: claudePlaylistName,
+            description: claudePlaylistDescription,
+            tracks: newArtistTracks,
+            trackCount: newArtistTracks.length
+          });
+        }
+        console.log('⚠️ New Artists path found too few tracks, falling through to standard path');
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────
 
     // Use SoundCharts discovered songs as the ONLY source
     let recommendedTracks = [];
