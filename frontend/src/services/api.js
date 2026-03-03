@@ -221,6 +221,12 @@ export const playlistService = {
     return response.data;
   },
 
+  // Get all liked/disliked songs across all playlists
+  getReactions: async (userId) => {
+    const response = await api.get(`/api/reactions/${userId}`);
+    return response.data;
+  },
+
   // Health check
   healthCheck: async () => {
     const response = await api.get('/api/health');

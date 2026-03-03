@@ -7134,6 +7134,50 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
   }
 });
 
+// Get all liked/disliked songs across all playlists for a user
+app.get('/api/reactions/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    let userPlaylistsArray = userPlaylists.get(userId) || [];
+    if (userPlaylistsArray.length === 0 && usePostgres) {
+      userPlaylistsArray = await db.getUserPlaylists(userId);
+      userPlaylists.set(userId, userPlaylistsArray);
+    }
+
+    const likedSongs = [];
+    const dislikedSongs = [];
+
+    for (const playlist of userPlaylistsArray) {
+      const playlistName = playlist.playlistName || 'Untitled Playlist';
+      const playlistId = playlist.playlistId;
+
+      // Build a quick lookup for album art from the tracks array
+      const trackImageMap = {};
+      (playlist.tracks || []).forEach(t => {
+        if (t.id && t.image) trackImageMap[t.id] = t.image;
+      });
+
+      for (const song of (playlist.likedSongs || [])) {
+        likedSongs.push({ ...song, playlistName, playlistId, image: trackImageMap[song.id] || null });
+      }
+      for (const song of (playlist.dislikedSongs || [])) {
+        dislikedSongs.push({ ...song, playlistName, playlistId, image: trackImageMap[song.id] || null });
+      }
+    }
+
+    // Sort by most recently reacted
+    likedSongs.sort((a, b) => new Date(b.reactedAt) - new Date(a.reactedAt));
+    dislikedSongs.sort((a, b) => new Date(b.reactedAt) - new Date(a.reactedAt));
+
+    res.json({ likedSongs, dislikedSongs });
+  } catch (error) {
+    console.error('Error fetching reactions:', error);
+    res.status(500).json({ error: 'Failed to fetch reactions' });
+  }
+});
+
 // Search for users and playlists
 app.post('/api/search', async (req, res) => {
   try {

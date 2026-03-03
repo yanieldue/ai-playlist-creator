@@ -8,6 +8,7 @@ import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
 import Settings from './Settings';
 import Account from './Account';
+import SongReactions from './SongReactions';
 import FAQ from './FAQ';
 import SignupForm from './SignupForm';
 import PlatformSelection from './PlatformSelection';
@@ -2229,6 +2230,18 @@ const PlaylistGenerator = () => {
                   </button>
                   <button className="dropdown-item" onClick={() => {
                     setShowProfileDropdown(false);
+                    setActiveTab('reactions');
+                  }}>
+                    <span className="dropdown-icon">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                        <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                      </svg>
+                    </span>
+                    Song Reactions
+                  </button>
+                  <button className="dropdown-item" onClick={() => {
+                    setShowProfileDropdown(false);
                     setActiveTab('faq');
                   }}>
                     <span className="dropdown-icon">
@@ -2473,6 +2486,10 @@ const PlaylistGenerator = () => {
 
             {activeTab === 'faq' && (
               <FAQ onBack={() => setActiveTab('home')} />
+            )}
+
+            {activeTab === 'reactions' && (
+              <SongReactions userId={userId} onBack={() => setActiveTab('home')} />
             )}
           </div>
 
