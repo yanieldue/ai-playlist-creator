@@ -7538,17 +7538,18 @@ app.get('/api/health', (req, res) => {
 // Auto-update scheduler - runs every minute to check for playlists that need updating
 const scheduleAutoUpdates = () => {
   cron.schedule('*/1 * * * *', async () => {
-    console.log('[AUTO-UPDATE] Checking for playlists that need updating...');
-
     try {
       const allUsers = Array.from(userPlaylists.entries());
+      const now = new Date();
 
       for (const [userId, playlists] of allUsers) {
-        for (const playlist of playlists) {
-          // Check if playlist has auto-update enabled and if it's time to update
-          if (playlist.updateFrequency && playlist.updateFrequency !== 'never' && playlist.nextUpdate) {
-            const nextUpdateTime = new Date(playlist.nextUpdate);
-            const now = new Date();
+        // Only consider playlists that have auto-update enabled
+        const autoUpdatePlaylists = playlists.filter(p =>
+          p.updateFrequency && p.updateFrequency !== 'never' && p.nextUpdate
+        );
+
+        for (const playlist of autoUpdatePlaylists) {
+          const nextUpdateTime = new Date(playlist.nextUpdate);
 
             // If the scheduled time has passed, trigger the update
             if (now >= nextUpdateTime) {
