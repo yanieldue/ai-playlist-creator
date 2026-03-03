@@ -7103,6 +7103,21 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     await savePlaylist(userId, playlist);
     console.log(`[REACTION] Successfully saved reaction for ${trackName}`);
 
+    // Remove thumbed-down song from the platform playlist
+    if (reaction === 'thumbsDown' && trackUri && playlist.playlistId) {
+      try {
+        const tokens = await db.getTokens(userId);
+        if (tokens) {
+          const platformService = new PlatformService();
+          await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], tokens);
+          console.log(`[REACTION] Removed "${trackName}" from platform playlist`);
+        }
+      } catch (removeErr) {
+        // Non-critical — the in-app removal already happened; log and continue
+        console.log(`[REACTION] Could not remove from platform playlist: ${removeErr.message}`);
+      }
+    }
+
     res.json({
       success: true,
       reaction: reaction,
