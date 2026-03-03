@@ -732,14 +732,32 @@ async function searchSoundChartsSong(title, artist) {
       }
     );
 
-    const items = response.data?.items || [];
     const artistNorm = artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-    // Find a result whose artist name matches
-    const match = items.find(song => {
+    const findArtistMatch = (items) => items.find(song => {
       const creditNorm = (song.creditName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       const artistsNorm = (song.artists || []).map(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
       return creditNorm === artistNorm || artistsNorm.some(n => n === artistNorm || n.startsWith(artistNorm) || artistNorm.startsWith(n));
     });
+
+    let match = findArtistMatch(response.data?.items || []);
+
+    // If no match and title has apostrophes/special chars, retry with normalized title
+    if (!match) {
+      const normalizedTitle = title.replace(/[''`]/g, '').replace(/\s+/g, ' ').trim();
+      if (normalizedTitle !== title) {
+        console.log(`🔍 SoundCharts song search: retrying "${title}" as "${normalizedTitle}"...`);
+        await throttleSoundCharts();
+        const retryResponse = await axios.get(
+          `https://customer.api.soundcharts.com/api/v2/song/search/${encodeURIComponent(normalizedTitle)}`,
+          {
+            headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+            params: { offset: 0, limit: 20 },
+            timeout: 10000
+          }
+        );
+        match = findArtistMatch(retryResponse.data?.items || []);
+      }
+    }
 
     if (match) {
       const artistUuid = match.artists?.[0]?.uuid || null;
@@ -749,6 +767,7 @@ async function searchSoundChartsSong(title, artist) {
       setSCCache(cacheKey, result);
       return result;
     }
+    console.log(`🔍 SoundCharts song search: no match for "${title}" by "${artist}" (API returned ${response.data?.items?.length || 0} results)`);
     setSCCache(cacheKey, null);
     return null;
   } catch (error) {
@@ -3891,6 +3910,28 @@ DO NOT include any text outside the JSON.`
       console.log(`Using provided song count: ${songCount}`);
     }
 
+    // Step 0.3: Look up reference songs FIRST to confirm artist identity before any name-based lookups.
+    // This prevents the wrong-artist disambiguation problem (e.g. Spanish "Dante" vs R&B "Dante").
+    // referenceSongs come from the user prompt: "songs similar to Ain't No One by Dante"
+    const confirmedArtistUuids = {}; // { artistNameLower: uuid }
+    const referenceSongs0 = genreData.referenceSongs || [];
+    if (referenceSongs0.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
+      console.log(`🎯 Looking up ${referenceSongs0.length} reference song(s) on SoundCharts to confirm artist identity...`);
+      for (const refSong of referenceSongs0) {
+        try {
+          const result = await searchSoundChartsSong(refSong.title, refSong.artist);
+          if (result?.artistUuid) {
+            confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
+            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}`);
+          } else {
+            console.log(`⚠ Could not confirm "${refSong.artist}" via song "${refSong.title}" — will fall back to name search`);
+          }
+        } catch (refErr) {
+          console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
+        }
+      }
+    }
+
     // Step 0.5: If no explicit genre was specified but artists were requested, analyze those artists to infer the genre
     if ((!genreData.primaryGenre || genreData.primaryGenre === 'not specified') &&
         genreData.artistConstraints.requestedArtists &&
@@ -3908,7 +3949,12 @@ DO NOT include any text outside the JSON.`
         console.log('🔍 Checking SoundCharts for artist info and similar artists...');
         const artistCareerStages = [];
         for (const artistName of genreData.artistConstraints.requestedArtists) {
-          const soundChartsInfo = await getSoundChartsArtistInfo(artistName);
+          // If we already confirmed this artist's UUID via reference song lookup, use it directly
+          // to avoid name-based disambiguation picking the wrong artist (e.g. Spanish Dante vs R&B Dante)
+          const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
+          const soundChartsInfo = confirmedUuid
+            ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
+            : await getSoundChartsArtistInfo(artistName);
           if (soundChartsInfo) {
             if (soundChartsInfo.genres.length > 0) {
               artistGenres.push(...soundChartsInfo.genres);
@@ -4111,27 +4157,8 @@ Respond ONLY with valid JSON:
       ? genreData.artistConstraints.requestedArtists
       : genreData.artistConstraints.suggestedSeedArtists || [];
 
-    // Step 1.5: If the user mentioned specific reference songs (e.g. "Take It Slow by Dante"),
-    // search SoundCharts directly by song title + artist to get the exact artist UUID.
-    // This avoids the wrong-artist disambiguation problem entirely.
-    const confirmedArtistUuids = {}; // { artistNameLower: uuid }
-    const referenceSongs = genreData.referenceSongs || [];
-    if (referenceSongs.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
-      console.log(`🎯 Looking up ${referenceSongs.length} reference song(s) on SoundCharts to confirm artist identity...`);
-      for (const refSong of referenceSongs) {
-        try {
-          const result = await searchSoundChartsSong(refSong.title, refSong.artist);
-          if (result?.artistUuid) {
-            confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
-            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — SoundCharts UUID: ${result.artistUuid}`);
-          } else {
-            console.log(`⚠ Could not find "${refSong.title}" by "${refSong.artist}" on SoundCharts`);
-          }
-        } catch (refErr) {
-          console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
-        }
-      }
-    }
+    // confirmedArtistUuids already populated in Step 0.3 (before genre inference)
+    // so the correct artist UUID is available for song discovery too.
 
     if (process.env.SOUNDCHARTS_APP_ID) {
       console.log('🎵 Using SoundCharts for song discovery...');
