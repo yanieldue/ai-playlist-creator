@@ -3933,6 +3933,34 @@
   background: #e5e5e5;
 }
 
+/* Dark mode — generating modal */
+:root.dark-mode .generating-chat-modal-content {
+  background: #1a1a1a;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+:root.dark-mode .generating-chat-header {
+  border-bottom-color: #333;
+}
+
+:root.dark-mode .generating-chat-header h2 {
+  color: #f5f5f5;
+}
+
+:root.dark-mode .generating-chat-body .chat-message.assistant .chat-message-content {
+  background: #2a2a2a;
+  color: #e5e5e5;
+}
+
+:root.dark-mode .generating-chat-body .chat-message.user .chat-message-content {
+  background: #ffffff;
+  color: #000000;
+}
+
+:root.dark-mode .typing-indicator .dot {
+  background: #aaa;
+}
+
 /* Mobile responsive */
 @media (max-width: 480px) {
   .generating-chat-modal-content {
