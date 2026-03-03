@@ -7037,7 +7037,7 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
 app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    const { userId, trackId, trackUri, trackName, artistName, reaction } = req.body;
+    const { userId, trackId, trackUri, trackName, artistName, reaction, image } = req.body;
 
     console.log(`[REACTION] Request received: playlistId=${playlistId}, userId=${userId}, trackId=${trackId}, reaction=${reaction}`);
 
@@ -7081,6 +7081,7 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
         uri: trackUri,
         name: trackName,
         artist: artistName,
+        image: image || null,
         reactedAt: new Date().toISOString()
       });
       console.log(`[REACTION] User liked song: ${trackName} by ${artistName}`);
@@ -7090,6 +7091,7 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
         uri: trackUri,
         name: trackName,
         artist: artistName,
+        image: image || null,
         reactedAt: new Date().toISOString()
       });
       console.log(`[REACTION] User disliked song: ${trackName} by ${artistName}`);
@@ -7160,10 +7162,10 @@ app.get('/api/reactions/:userId', async (req, res) => {
       });
 
       for (const song of (playlist.likedSongs || [])) {
-        likedSongs.push({ ...song, playlistName, playlistId, image: trackImageMap[song.id] || null });
+        likedSongs.push({ ...song, playlistName, playlistId, image: song.image || trackImageMap[song.id] || null });
       }
       for (const song of (playlist.dislikedSongs || [])) {
-        dislikedSongs.push({ ...song, playlistName, playlistId, image: trackImageMap[song.id] || null });
+        dislikedSongs.push({ ...song, playlistName, playlistId, image: song.image || trackImageMap[song.id] || null });
       }
     }
 

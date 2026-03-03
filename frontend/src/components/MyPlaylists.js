@@ -328,7 +328,8 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         track.uri,
         track.name,
         track.artist,
-        newReaction
+        newReaction,
+        track.image
       );
 
       // If thumbs down, also remove the track from the playlist

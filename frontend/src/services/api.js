@@ -209,7 +209,7 @@ export const playlistService = {
   },
 
   // React to a song (thumbs up/down for better recommendations)
-  reactToSong: async (playlistId, userId, trackId, trackUri, trackName, artistName, reaction) => {
+  reactToSong: async (playlistId, userId, trackId, trackUri, trackName, artistName, reaction, image) => {
     const response = await api.post(`/api/playlists/${playlistId}/react-to-song`, {
       userId,
       trackId,
@@ -217,6 +217,7 @@ export const playlistService = {
       trackName,
       artistName,
       reaction, // 'thumbsUp', 'thumbsDown', or null to remove
+      image,
     });
     return response.data;
   },
