@@ -5125,6 +5125,7 @@ Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.pr
     // Vibe check typically removes 10-20% of songs that don't fit the atmosphere
     const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre;
     const selectionTarget = hasVibeRequirements ? Math.ceil(songCount * 1.2) : songCount; // Request 20% more if vibe check will run
+    const hasAudioFeatureFilters = false; // Audio feature pre-filtering not currently used
     console.log(`Selection target: ${selectionTarget} songs (${songCount} requested, ${hasVibeRequirements ? 'will run vibe check' : 'no vibe check'})`);
 
     const trackSelectionPrompt = `From the following list of songs, select ${isSingleArtistPlaylist || hasSpecificArtists ? 'UP TO' : 'approximately'} ${selectionTarget} BEST songs that match this playlist theme: "${prompt}"
