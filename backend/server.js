@@ -518,17 +518,40 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
       );
       const candidates = exactMatches.length > 0 ? exactMatches : response.data.items;
 
-      // If only one candidate, return it directly
-      if (candidates.length === 1) {
-        console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (genres: ${(candidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
-        setSCCache(cacheKey, candidates[0]);
-        return candidates[0];
+      // For short search terms with no exact match, filter out candidates whose names are
+      // much longer — e.g. "IVE" should not match "Iveta Bartošová" (len 3 vs 15).
+      // A legitimate match for a short term should have a similarly short name.
+      let viableCandidates = candidates;
+      if (exactMatches.length === 0) {
+        const searchNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (searchNorm.length <= 6) {
+          const maxLen = searchNorm.length * 2 + 3; // e.g. "ive"(3) → max 9 chars
+          const shortCandidates = candidates.filter(a => {
+            const norm = a.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return norm.length <= maxLen;
+          });
+          if (shortCandidates.length > 0) {
+            viableCandidates = shortCandidates;
+          } else {
+            // No candidate is close in length — likely all wrong
+            console.log(`🔍 SoundCharts: "${artistName}" — no close-length match (${candidates.length} candidates all too long) — skipping`);
+            setSCCache(cacheKey, null);
+            return null;
+          }
+        }
+      }
+
+      // If only one viable candidate, return it directly
+      if (viableCandidates.length === 1) {
+        console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" matched (genres: ${(viableCandidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
+        setSCCache(cacheKey, viableCandidates[0]);
+        return viableCandidates[0];
       }
 
       // Multiple candidates with same name — disambiguate by genre if we know the expected genre
       if (expectedGenre) {
         const genreLower = expectedGenre.toLowerCase();
-        const genreRanked = candidates.map(a => {
+        const genreRanked = viableCandidates.map(a => {
           const artistGenres = (a.genres || []).map(g => (g.root || '').toLowerCase());
           const artistSubgenres = (a.genres || []).flatMap(g => (g.sub || []).map(s => s.toLowerCase()));
           const allGenres = [...artistGenres, ...artistSubgenres];
@@ -546,22 +569,22 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
           const searchNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
           const bestNorm = genreRanked[0].artist.name.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (Math.abs(bestNorm.length - searchNorm.length) > 3) {
-            console.log(`🔍 SoundCharts: "${artistName}" — no genre/name match among ${candidates.length} results — skipping`);
+            console.log(`🔍 SoundCharts: "${artistName}" — no genre/name match among ${viableCandidates.length} results — skipping`);
             setSCCache(cacheKey, null);
             return null;
           }
         }
 
         const best = genreRanked[0].artist;
-        console.log(`🔍 SoundCharts: "${best.name}" selected from ${candidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
+        console.log(`🔍 SoundCharts: "${best.name}" selected from ${viableCandidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
         setSCCache(cacheKey, best);
         return best;
       }
 
-      // No genre hint — return first result (SoundCharts sorts by relevance)
-      console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (first of ${candidates.length}; no genre hint)`);
-      setSCCache(cacheKey, candidates[0]);
-      return candidates[0];
+      // No genre hint — return first viable result (SoundCharts sorts by relevance)
+      console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" matched (first of ${viableCandidates.length}; no genre hint)`);
+      setSCCache(cacheKey, viableCandidates[0]);
+      return viableCandidates[0];
     }
     setSCCache(cacheKey, null);
     return null;
@@ -976,7 +999,7 @@ const SOUNDCHARTS_MOOD_MAP = {
 
 // Discover top songs by genre/mood using SoundCharts POST /api/v2/top/songs
 // Used when no seed artists are specified — replaces the old hardcoded artist list
-async function discoverSongsViaSoundChartsTop(criteria, limit = 50) {
+async function discoverSongsViaSoundChartsTop(criteria, limit = 50, offset = 0) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
@@ -1038,7 +1061,7 @@ async function discoverSongsViaSoundChartsTop(criteria, limit = 50) {
       body,
       {
         headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-        params: { offset: 0, limit: Math.min(limit, 100) },
+        params: { offset, limit: Math.min(limit, 100) },
         timeout: 15000
       }
     );
@@ -4833,21 +4856,27 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               };
 
               // Fetch a pool of top-genre songs to extract unique artists from.
-              // Use a larger fetch (needed * 8) so we have enough artists after filtering known ones.
-              const topSongsPool = await discoverSongsViaSoundChartsTop(supplementCriteria, needed * 8);
-              console.log(`🔁 Top-songs pool: ${topSongsPool.length} songs`);
-
-              // Deduplicate to unique artists, filter out known ones
+              // Paginate through multiple pages (0, 100, 200) so that if the top 100 are all
+              // known artists (common for genre power-users), we find mid-tier artists further down.
               const seenSupplementArtists = new Set();
-              const newArtistPool = []; // { name, uuid (from searchSoundChartsArtist) }
-              for (const song of topSongsPool) {
-                const artistLower = (song.artistName || '').toLowerCase();
-                if (seenSupplementArtists.has(artistLower)) continue;
-                seenSupplementArtists.add(artistLower);
-                if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
-                newArtistPool.push({ name: song.artistName, isrc: song.isrc, sampleSong: song });
+              const newArtistPool = [];
+              const pageSizes = [100, 100, 100]; // up to 3 pages of 100
+              let pageOffset = 0;
+              for (const pageSize of pageSizes) {
+                if (newArtistPool.length >= needed * 2) break; // enough candidates
+                const topSongsPool = await discoverSongsViaSoundChartsTop(supplementCriteria, pageSize, pageOffset);
+                console.log(`🔁 Top-songs pool (offset=${pageOffset}): ${topSongsPool.length} songs`);
+                if (topSongsPool.length === 0) break;
+                for (const song of topSongsPool) {
+                  const artistLower = (song.artistName || '').toLowerCase();
+                  if (seenSupplementArtists.has(artistLower)) continue;
+                  seenSupplementArtists.add(artistLower);
+                  if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
+                  newArtistPool.push({ name: song.artistName, isrc: song.isrc, sampleSong: song });
+                }
+                pageOffset += pageSize;
               }
-              console.log(`🔁 New artists from pool: ${newArtistPool.length}`);
+              console.log(`🔁 New artists from pool: ${newArtistPool.length} (checked ${pageOffset} songs total)`);
 
               // For each new artist, get their songs from SoundCharts, then search Spotify/Apple
               for (const artistEntry of newArtistPool) {
