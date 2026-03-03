@@ -1312,6 +1312,16 @@ function loadPlaylistsFromFile() {
 
 // Save playlist to database or file
 async function savePlaylist(userId, playlistData) {
+  // Always keep the in-memory map in sync (used by mutation routes like react-to-song)
+  const userPlaylistsArray = userPlaylists.get(userId) || [];
+  const existingIndex = userPlaylistsArray.findIndex(p => p.playlistId === playlistData.playlistId);
+  if (existingIndex >= 0) {
+    userPlaylistsArray[existingIndex] = playlistData;
+  } else {
+    userPlaylistsArray.push(playlistData);
+  }
+  userPlaylists.set(userId, userPlaylistsArray);
+
   if (usePostgres) {
     try {
       await db.savePlaylist(userId, playlistData.playlistId, playlistData);
@@ -1319,15 +1329,6 @@ async function savePlaylist(userId, playlistData) {
       console.error('Error saving playlist to database:', error);
     }
   } else {
-    // Update in-memory map
-    const userPlaylistsArray = userPlaylists.get(userId) || [];
-    const existingIndex = userPlaylistsArray.findIndex(p => p.playlistId === playlistData.playlistId);
-    if (existingIndex >= 0) {
-      userPlaylistsArray[existingIndex] = playlistData;
-    } else {
-      userPlaylistsArray.push(playlistData);
-    }
-    userPlaylists.set(userId, userPlaylistsArray);
     // Save to file
     savePlaylistsToFile();
   }
@@ -6714,9 +6715,17 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
       return res.status(400).json({ error: 'Invalid reaction value. Must be "thumbsUp", "thumbsDown", or null' });
     }
 
-    // Get user's playlists
-    const userPlaylistsArray = userPlaylists.get(userId) || [];
-    const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    // Get user's playlists — check in-memory first, fall back to DB on cache miss
+    let userPlaylistsArray = userPlaylists.get(userId) || [];
+    let playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    if (!playlist && usePostgres) {
+      // In-memory cache may be stale after server restart — reload from DB
+      const dbPlaylists = await db.getUserPlaylists(userId);
+      userPlaylists.set(userId, dbPlaylists);
+      userPlaylistsArray = dbPlaylists;
+      playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    }
 
     if (!playlist) {
       return res.status(404).json({ error: 'Playlist not found' });
