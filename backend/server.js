@@ -534,12 +534,23 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
           const allGenres = [...artistGenres, ...artistSubgenres];
           const score = allGenres.reduce((acc, g) => {
             if (g.includes(genreLower) || genreLower.includes(g)) return acc + 2;
-            // Partial overlap bonus (e.g. "hip-hop" vs "hip hop")
             if (g.replace(/[-\s]/g, '').includes(genreLower.replace(/[-\s]/g, ''))) return acc + 1;
             return acc;
           }, 0);
           return { artist: a, score };
         }).sort((a, b) => b.score - a.score);
+
+        // If no candidate matched the genre, guard against wrong-name matches
+        // (e.g. searching "Shé" returning "She & Him" because all scores are 0)
+        if (genreRanked[0].score === 0) {
+          const searchNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const bestNorm = genreRanked[0].artist.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (Math.abs(bestNorm.length - searchNorm.length) > 3) {
+            console.log(`🔍 SoundCharts: "${artistName}" — no genre/name match among ${candidates.length} results — skipping`);
+            setSCCache(cacheKey, null);
+            return null;
+          }
+        }
 
         const best = genreRanked[0].artist;
         console.log(`🔍 SoundCharts: "${best.name}" selected from ${candidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
@@ -547,7 +558,7 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
         return best;
       }
 
-      // No genre hint — return first exact match (SoundCharts sorts by relevance)
+      // No genre hint — return first result (SoundCharts sorts by relevance)
       console.log(`🔍 SoundCharts: "${candidates[0].name}" matched (first of ${candidates.length}; no genre hint)`);
       setSCCache(cacheKey, candidates[0]);
       return candidates[0];
@@ -3951,104 +3962,48 @@ DO NOT include any text outside the JSON.`
       try {
         // Search for each artist on the platform to get their actual genre information
         const artistGenres = [];
-        const artistPopularities = [];
-        const allSimilarArtists = []; // Collect similar artists from SoundCharts
+        const allSimilarArtists = [];
 
-        // First, try SoundCharts to get similar artists (this is the most valuable data)
+        // Use SoundCharts to get genres, similar artists, and career stage (for popularity detection)
         console.log('🔍 Checking SoundCharts for artist info and similar artists...');
+        const artistCareerStages = [];
         for (const artistName of genreData.artistConstraints.requestedArtists) {
           const soundChartsInfo = await getSoundChartsArtistInfo(artistName);
           if (soundChartsInfo) {
-            // Add SoundCharts genres
             if (soundChartsInfo.genres.length > 0) {
               artistGenres.push(...soundChartsInfo.genres);
             }
-            // Collect similar artists (valuable for Claude recommendations)
             if (soundChartsInfo.similarArtists.length > 0) {
               allSimilarArtists.push(...soundChartsInfo.similarArtists);
+            }
+            if (soundChartsInfo.careerStage) {
+              artistCareerStages.push(soundChartsInfo.careerStage);
             }
           }
         }
 
         // Store similar artists in genreData for use in playlist search
         if (allSimilarArtists.length > 0) {
-          // Dedupe and limit to top 15 similar artists
           const uniqueSimilarArtists = [...new Set(allSimilarArtists)].slice(0, 15);
           genreData.artistConstraints.similarArtists = uniqueSimilarArtists;
           console.log(`📊 Found ${uniqueSimilarArtists.length} similar artists from SoundCharts: ${uniqueSimilarArtists.slice(0, 5).join(', ')}...`);
         }
 
-        // Use Spotify only for artist popularity detection (0-100 score)
-        // SoundCharts handles genres and similar artists
-        const spotifyToken = await getSpotifyClientToken();
-        const artistsFoundOnSpotify = []; // Track which artists exist on Spotify
-        const artistsNotFoundOnSpotify = []; // Track which artists don't exist
-
-        for (const artistName of genreData.artistConstraints.requestedArtists) {
-          try {
-            // Use Spotify API to get artist popularity
-            const searchResult = await axios.get('https://api.spotify.com/v1/search', {
-              headers: { 'Authorization': `Bearer ${spotifyToken}` },
-              params: { q: artistName, type: 'artist', limit: 1 }
-            });
-
-            if (searchResult.data.artists?.items?.[0]) {
-              const artist = searchResult.data.artists.items[0];
-              // Verify the found artist EXACTLY matches the requested name
-              const requestedNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const foundNorm = artist.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const isExactMatch = foundNorm === requestedNorm;
-
-              if (isExactMatch) {
-                artistsFoundOnSpotify.push(artistName);
-                console.log(`✓ Spotify found "${artist.name}" - popularity: ${artist.popularity}/100`);
-                if (artist.popularity !== null) {
-                  artistPopularities.push(artist.popularity);
-                }
-              } else {
-                console.log(`✗ Spotify found "${artist.name}" but searching for "${artistName}" - not exact match`);
-                artistsNotFoundOnSpotify.push(artistName);
-              }
-            } else {
-              console.log(`✗ Artist "${artistName}" not found on Spotify`);
-              artistsNotFoundOnSpotify.push(artistName);
-            }
-          } catch (err) {
-            console.log(`Failed to search Spotify for ${artistName}:`, err.message);
-          }
-        }
-
-        // Infer popularity preference from requested artists (if not explicitly set by user)
-        // Only infer if user hasn't already specified a popularity preference
-        if (artistPopularities.length > 0 && !genreData.trackConstraints.popularity.preference) {
-          const avgPopularity = artistPopularities.reduce((a, b) => a + b, 0) / artistPopularities.length;
-          console.log(`Average popularity of requested artists: ${avgPopularity.toFixed(1)}/100`);
-
-          // Determine preference based on average popularity
-          // 0-40: underground/indie
-          // 41-65: balanced/mid-tier
-          // 66-100: mainstream
-          if (avgPopularity <= 40) {
+        // Infer popularity preference from SoundCharts career stage (no Spotify needed)
+        if (artistCareerStages.length > 0 && !genreData.trackConstraints.popularity.preference) {
+          const stageScores = { long_tail: 1, developing: 2, mid_level: 3, mainstream: 4, superstar: 5 };
+          const avgScore = artistCareerStages.reduce((a, s) => a + (stageScores[s] || 3), 0) / artistCareerStages.length;
+          const stages = artistCareerStages.join(', ');
+          if (avgScore <= 2) {
             genreData.trackConstraints.popularity.preference = 'underground';
-            console.log('🎯 Auto-detected popularity preference: UNDERGROUND (requested artists have low popularity)');
-          } else if (avgPopularity >= 66) {
+            console.log(`🎯 Auto-detected popularity: UNDERGROUND (SoundCharts stages: ${stages})`);
+          } else if (avgScore >= 4) {
             genreData.trackConstraints.popularity.preference = 'mainstream';
-            console.log('🎯 Auto-detected popularity preference: MAINSTREAM (requested artists have high popularity)');
+            console.log(`🎯 Auto-detected popularity: MAINSTREAM (SoundCharts stages: ${stages})`);
           } else {
             genreData.trackConstraints.popularity.preference = 'balanced';
-            console.log('🎯 Auto-detected popularity preference: BALANCED (requested artists have mid-tier popularity)');
+            console.log(`🎯 Auto-detected popularity: BALANCED (SoundCharts stages: ${stages})`);
           }
-        } else if (artistPopularities.length === 0) {
-          console.log('⚠️  No popularity data available for requested artists, cannot infer popularity preference');
-          console.log('    To get indie/underground artists, add "indie" or "underground" to your prompt');
-        }
-
-        // Store artist availability info for logging
-        genreData.artistConstraints.artistsFoundOnSpotify = artistsFoundOnSpotify;
-        genreData.artistConstraints.artistsNotFoundOnSpotify = artistsNotFoundOnSpotify;
-        console.log(`✓ Artists found on Spotify: ${artistsFoundOnSpotify.join(', ') || 'none'}`);
-        if (artistsNotFoundOnSpotify.length > 0) {
-          console.log(`⚠️  Artists not found on Spotify: ${artistsNotFoundOnSpotify.join(', ')}`);
         }
 
         // If we got genres from the platform, use Claude to analyze them
