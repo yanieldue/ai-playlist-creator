@@ -1392,6 +1392,19 @@ async function savePlaylist(userId, playlistData) {
     } catch (error) {
       console.error('Error saving playlist to database:', error);
     }
+
+    // Record all artists from this playlist so newArtistsOnly has a growing history
+    try {
+      const tracks = playlistData.tracks || [];
+      const artistNames = [...new Set(
+        tracks.map(t => t.artist).filter(Boolean)
+      )];
+      if (artistNames.length > 0) {
+        await db.trackArtists(userId, artistNames);
+      }
+    } catch (error) {
+      // Non-critical — don't fail the save
+    }
   } else {
     // Save to file
     savePlaylistsToFile();

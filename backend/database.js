@@ -132,6 +132,23 @@ function migrateDatabase() {
     console.log('✓ Added subscription_ends_at column');
   }
 
+  // Add artist_history table if it doesn't exist
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='artist_history'").all();
+  if (tables.length === 0) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS artist_history (
+        user_id TEXT NOT NULL,
+        artist_name TEXT NOT NULL,
+        first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+        play_count INTEGER DEFAULT 1,
+        PRIMARY KEY (user_id, artist_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_artist_history_user_id ON artist_history(user_id);
+    `);
+    console.log('✓ Created artist_history table');
+  }
+
   if (hasUserMusicToken && hasStorefront) {
     console.log('✓ Database schema is up to date');
   }
@@ -562,6 +579,29 @@ class DatabaseService {
         platform === 'apple' ? platformUserId : null
       );
     }
+  }
+
+  trackArtists(userId, artistNames) {
+    const stmt = db.prepare(`
+      INSERT INTO artist_history (user_id, artist_name, last_seen, play_count)
+      VALUES (?, ?, datetime('now'), 1)
+      ON CONFLICT (user_id, artist_name)
+      DO UPDATE SET last_seen = datetime('now'), play_count = artist_history.play_count + 1
+    `);
+    const insertMany = db.transaction((names) => {
+      for (const name of names) stmt.run(userId, name);
+    });
+    insertMany(artistNames);
+  }
+
+  getArtistHistory(userId) {
+    return db.prepare(`
+      SELECT artist_name as "artistName", first_seen as "firstSeen",
+             last_seen as "lastSeen", play_count as "playCount"
+      FROM artist_history
+      WHERE user_id = ?
+      ORDER BY last_seen DESC
+    `).all(userId);
   }
 
   // Close database connection
