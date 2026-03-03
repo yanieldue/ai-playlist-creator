@@ -3756,6 +3756,37 @@ app.post('/api/generate-playlist', async (req, res) => {
           console.log('Failed to get recently played tracks:', err.message);
         }
 
+        // 4. Get artists from user's liked/saved songs (up to 200 tracks = 4 pages)
+        // Catches artists the user has heard but who don't appear in top artists
+        try {
+          let savedOffset = 0;
+          const savedLimit = 50;
+          const savedPages = 4; // 200 saved tracks max to keep it fast
+          for (let page = 0; page < savedPages; page++) {
+            const savedData = await userSpotifyApi.getMySavedTracks({ limit: savedLimit, offset: savedOffset });
+            const items = savedData.body.items || [];
+            items.forEach(item => {
+              item.track?.artists?.forEach(artist => {
+                knownArtists.add(artist.name.toLowerCase());
+              });
+            });
+            if (items.length < savedLimit) break; // no more pages
+            savedOffset += savedLimit;
+          }
+        } catch (err) {
+          console.log('Failed to get saved tracks:', err.message);
+        }
+
+        // 5. Get artists the user follows explicitly
+        try {
+          const followedData = await userSpotifyApi.getFollowedArtists({ limit: 50 });
+          (followedData.body.artists?.items || []).forEach(artist => {
+            knownArtists.add(artist.name.toLowerCase());
+          });
+        } catch (err) {
+          console.log('Failed to get followed artists:', err.message);
+        }
+
         console.log(`Found ${knownArtists.size} total known artists to filter out`);
       } catch (error) {
         console.error('Error fetching listening history:', error);
