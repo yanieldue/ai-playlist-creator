@@ -67,13 +67,13 @@ const SongReactions = ({ userId, onBack }) => {
           className={`reactions-segment-btn ${activeSection === 'liked' ? 'active' : ''}`}
           onClick={() => setActiveSection('liked')}
         >
-          <Icons.ThumbsUp size={14} /> Liked ({likedSongs.length})
+          Liked
         </button>
         <button
           className={`reactions-segment-btn ${activeSection === 'disliked' ? 'active' : ''}`}
           onClick={() => setActiveSection('disliked')}
         >
-          <Icons.ThumbsDown size={14} /> Disliked ({dislikedSongs.length})
+          Disliked
         </button>
       </div>
 
