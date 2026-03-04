@@ -342,8 +342,14 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         );
       }
 
-      // Refresh playlists to show updated reaction
-      await fetchPlaylists();
+      // Update local state instead of re-fetching to avoid page refresh
+      setPlaylists(prev => prev.map(p => {
+        if (p.playlistId !== playlistId) return p;
+        const updatedTracks = newReaction === 'thumbsDown'
+          ? p.tracks.filter(t => t.id !== track.id)
+          : p.tracks.map(t => t.id === track.id ? { ...t, reaction: newReaction } : t);
+        return { ...p, tracks: updatedTracks };
+      }));
 
       if (newReaction === 'thumbsUp') {
         showToast(`Great! Future updates will include more songs like "${track.name}"`, 'success');
