@@ -29,7 +29,7 @@
   top: 0;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -38,44 +38,44 @@
 }
 
 .playlist-icon {
-  width: 60px;
-  height: 60px;
+  width: 48px;
+  height: 48px;
   background: #2d3748;
-  border-radius: 15px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  margin-bottom: var(--space-md);
+  font-size: 22px;
+  margin-bottom: var(--space-xs);
   object-fit: cover;
   flex-shrink: 0;
 }
 
 .edit-options-title {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   color: #1a202c;
-  margin: var(--space-md) 0 0 0;
+  margin: var(--space-xs) 0 0 0;
   text-align: center;
 }
 
 .edit-options-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-md);
-  padding: var(--space-lg);
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+  padding: var(--space-md);
 }
 
 /* Modal Sections */
 .modal-section {
-  padding: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   border-top: 1px solid #e2e8f0;
 }
 
 .modal-section:first-of-type {
   border-top: none;
-  padding-top: var(--space-sm);
+  padding-top: var(--space-xs);
 }
 
 .section-title {
@@ -88,7 +88,7 @@
 .section-description {
   font-size: 13px;
   color: #718096;
-  margin: 0 0 var(--space-lg) 0;
+  margin: 0 0 var(--space-sm) 0;
   line-height: 1.4;
 }
 
@@ -107,7 +107,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
   background: none;
   border: none;
   border-radius: 12px;
@@ -239,13 +239,13 @@
   background: white;
   border: none;
   border-radius: 12px;
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-sm) var(--space-md);
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 16px;
+  font-size: 15px;
   color: #1a202c;
   font-weight: 500;
   width: 100%;
@@ -262,14 +262,14 @@
 }
 
 .option-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   background: #f7fafc;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 15px;
   flex-shrink: 0;
 }
 
@@ -284,13 +284,13 @@
 }
 
 .edit-options-cancel {
-  width: calc(100% - calc(2 * var(--space-xl)));
+  width: calc(100% - calc(2 * var(--space-md)));
   background: white;
   border: none;
   border-radius: 12px;
-  padding: var(--space-lg);
-  margin: 0 var(--space-xl) var(--space-xl) var(--space-xl);
-  font-size: 16px;
+  padding: var(--space-sm) var(--space-md);
+  margin: 0 var(--space-md) var(--space-md) var(--space-md);
+  font-size: 15px;
   font-weight: 600;
   color: #e53e3e;
   cursor: pointer;
@@ -308,14 +308,14 @@
 /* Modal Footer with Three Buttons */
 .modal-footer {
   display: flex;
-  gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg) var(--space-lg) var(--space-lg);
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md) var(--space-md);
   border-top: 1px solid #e2e8f0;
 }
 
 .cancel-button {
   flex: 1;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -337,7 +337,7 @@
 
 .save-settings-button {
   flex: 1;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
   background: #000000;
   border: none;
   border-radius: 12px;
@@ -365,7 +365,7 @@
 
 .refresh-confirm-button {
   flex: 1;
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
   background: #000000;
   border: none;
   border-radius: 12px;
