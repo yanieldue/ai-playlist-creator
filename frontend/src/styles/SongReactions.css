@@ -72,6 +72,30 @@
   padding: 12px 16px 24px;
 }
 
+.reactions-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 48px;
+}
+
+.reactions-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #e5e5ea;
+  border-top-color: #8e8e93;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+:root.dark-mode .reactions-loading-spinner {
+  border-color: #3a3a3c;
+  border-top-color: #636366;
+}
+
 .reactions-empty {
   text-align: center;
   color: #8e8e93;

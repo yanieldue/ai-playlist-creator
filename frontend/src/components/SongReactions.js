@@ -79,7 +79,9 @@ const SongReactions = ({ userId, onBack }) => {
 
       <div className="reactions-content">
         {loading ? (
-          <div className="reactions-empty">Loading…</div>
+          <div className="reactions-loading">
+            <div className="reactions-loading-spinner" />
+          </div>
         ) : songs.length === 0 ? (
           <div className="reactions-empty">
             {activeSection === 'liked'
