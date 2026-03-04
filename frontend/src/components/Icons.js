@@ -75,12 +75,12 @@ const Icons = {
     <FiChevronRight size={size} color={color} />
   ),
 
-  ThumbsUp: ({ size = 24, color = 'currentColor', fill = false }) => (
-    <FiThumbsUp size={size} color={color} fill={fill ? color : 'none'} />
+  ThumbsUp: ({ size = 24, color = 'currentColor', fill = false, strokeColor }) => (
+    <FiThumbsUp size={size} color={fill ? (strokeColor || 'white') : color} fill={fill ? color : 'none'} />
   ),
 
-  ThumbsDown: ({ size = 24, color = 'currentColor', fill = false }) => (
-    <FiThumbsDown size={size} color={color} fill={fill ? color : 'none'} />
+  ThumbsDown: ({ size = 24, color = 'currentColor', fill = false, strokeColor }) => (
+    <FiThumbsDown size={size} color={fill ? (strokeColor || 'white') : color} fill={fill ? color : 'none'} />
   ),
 
   Lock: ({ size = 24, color = 'currentColor' }) => (
