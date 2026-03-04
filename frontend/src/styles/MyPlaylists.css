@@ -1206,7 +1206,7 @@
 }
 
 .spotify-playlist-meta {
-  color: #000000;
+  color: #8e8e93;
   font-size: 13px;
   font-weight: 500;
   margin-bottom: var(--space-xs);
@@ -1867,7 +1867,7 @@
 }
 
 :root.dark-mode .spotify-playlist-meta {
-  color: #000000;
+  color: #636366;
 }
 
 :root.dark-mode .spotify-playlist-description {

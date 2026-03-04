@@ -229,12 +229,11 @@ class PlatformService {
         id: playlist.id,
         name: playlist.name,
         description: playlist.description,
-        tracks: {
-          total: playlist.tracks.total
-        },
+        trackCount: playlist.tracks.total,
+        image: playlist.images?.[0]?.url || null,
         platform: 'spotify',
         url: playlist.external_urls.spotify,
-        images: playlist.images
+        owner: playlist.owner.display_name,
       }));
     }
 
