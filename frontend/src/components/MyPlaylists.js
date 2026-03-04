@@ -39,7 +39,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
   const [tempUpdateFrequency, setTempUpdateFrequency] = useState('never');
   const [tempUpdateMode, setTempUpdateMode] = useState('append');
-  const [tempIsPublic, setTempIsPublic] = useState(true);
   const [tempUpdateHour, setTempUpdateHour] = useState('12');
   const [tempUpdateMinute, setTempUpdateMinute] = useState('00');
   const [tempUpdatePeriod, setTempUpdatePeriod] = useState('AM');
@@ -514,7 +513,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     setRefreshNewArtistsOnly(false);
     setTempUpdateFrequency(playlist.updateFrequency || 'never');
     setTempUpdateMode(playlist.updateMode || 'append');
-    setTempIsPublic(playlist.isPublic !== false);
 
     // Initialize refinement instructions
     setRefinementInstructions(playlist.refinementInstructions || []);
@@ -558,7 +556,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         userId,
         tempUpdateFrequency,
         tempUpdateMode,
-        tempIsPublic,
+        editOptionsPlaylist.isPublic !== false,
         updateTime
       );
 
@@ -1492,36 +1490,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       >
                         <div className="option-checkbox">
                           {tempUpdateMode === value && <span className="checkmark"><Icons.Check size={16} /></span>}
-                        </div>
-                        <div className="option-content">
-                          <span className="option-label">{label}</span>
-                          <span className="option-description">{description}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Playlist Settings Section */}
-              <div className="modal-section">
-                <h3 className="section-title">Playlist Settings</h3>
-                <p className="section-description">Configure privacy and visibility</p>
-
-                <div className="form-group">
-                  <label>Privacy</label>
-                  <div className="form-group">
-                    {[
-                      { value: true, label: 'Public', description: 'Visible to everyone' },
-                      { value: false, label: 'Private', description: 'Only visible to you' },
-                    ].map(({ value, label, description }) => (
-                      <div
-                        key={String(value)}
-                        className={`refresh-option-item ${tempIsPublic === value ? 'active' : ''}`}
-                        onClick={() => setTempIsPublic(value)}
-                      >
-                        <div className="option-checkbox">
-                          {tempIsPublic === value && <span className="checkmark"><Icons.Check size={16} /></span>}
                         </div>
                         <div className="option-content">
                           <span className="option-label">{label}</span>
