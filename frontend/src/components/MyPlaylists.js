@@ -1064,7 +1064,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 ×
               </button>
             </div>
-            <p style={{ margin: '12px 20px 16px', fontSize: '14px', color: '#8e8e93' }}>
+            <p style={{ margin: '12px 20px 8px', fontSize: '14px', color: '#8e8e93' }}>
               Only playlists that haven't been imported yet are shown. Playlists already in Fins are hidden from this list.
             </p>
 
