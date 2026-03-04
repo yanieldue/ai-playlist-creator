@@ -705,29 +705,32 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 5px;
+  padding: 4px;
   background: none;
   border: none;
   color: #8e8e93;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: opacity 0.2s ease;
   flex-shrink: 0;
 }
 
 .track-reaction-button:hover {
-  transform: scale(1.1);
+  opacity: 0.75;
 }
 
 .track-reaction-button:active {
-  transform: scale(0.95);
+  opacity: 0.5;
 }
 
-.track-reaction-button.active-thumbs-up {
-  color: #34C759;
-}
-
-.track-reaction-button.active-thumbs-down {
-  color: #ff3b30;
+.track-thumb-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1c1c1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .track-exclude-button {
@@ -1735,15 +1738,11 @@
 }
 
 :root.dark-mode .track-reaction-button {
-  color: #8e8e93;
+  color: #636366;
 }
 
-:root.dark-mode .track-reaction-button.active-thumbs-up {
-  color: #32D74B;
-}
-
-:root.dark-mode .track-reaction-button.active-thumbs-down {
-  color: #ff453a;
+:root.dark-mode .track-thumb-circle {
+  background: #3a3a3c;
 }
 
 :root.dark-mode .track-exclude-button {

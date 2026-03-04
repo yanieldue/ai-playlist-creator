@@ -990,15 +990,14 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           <div className="track-actions">
                             {track.reaction !== 'thumbsDown' && (
                               <button
-                                className={`track-reaction-button ${track.reaction === 'thumbsUp' ? 'active-thumbs-up' : ''}`}
+                                className="track-reaction-button"
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
                                 title="I like this! Add more songs like this"
                               >
                                 {track.reaction === 'thumbsUp' ? (
-                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
-                                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
-                                    <line x1="7" y1="11" x2="7" y2="22" stroke="var(--track-bg-color)" strokeWidth="2"/>
-                                  </svg>
+                                  <span className="track-thumb-circle">
+                                    <Icons.ThumbsUp size={14} color="white" />
+                                  </span>
                                 ) : (
                                   <Icons.ThumbsUp size={16} />
                                 )}
@@ -1006,15 +1005,14 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             )}
                             {track.reaction !== 'thumbsUp' && (
                               <button
-                                className={`track-reaction-button ${track.reaction === 'thumbsDown' ? 'active-thumbs-down' : ''}`}
+                                className="track-reaction-button"
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
                                 title="Not for me. Exclude similar songs"
                               >
                                 {track.reaction === 'thumbsDown' ? (
-                                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
-                                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
-                                    <line x1="17" y1="2" x2="17" y2="13" stroke="var(--track-bg-color)" strokeWidth="2"/>
-                                  </svg>
+                                  <span className="track-thumb-circle">
+                                    <Icons.ThumbsDown size={14} color="white" />
+                                  </span>
                                 ) : (
                                   <Icons.ThumbsDown size={16} />
                                 )}
