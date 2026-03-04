@@ -940,7 +940,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           onMouseLeave={() => setAutoUpdateTooltipId(null)}
                           onClick={(e) => { e.stopPropagation(); setAutoUpdateTooltipId(autoUpdateTooltipId === playlist.playlistId ? null : playlist.playlistId); }}
                         >
-                          <Icons.Loader size={13} />
+                          <span className="auto-update-icon"><Icons.Loader size={13} /></span>
                           {autoUpdateTooltipId === playlist.playlistId && (
                             <div className="auto-update-tooltip">
                               Next update: {formatNextUpdateTime(playlist.updateFrequency)}

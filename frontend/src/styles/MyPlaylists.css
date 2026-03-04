@@ -298,10 +298,14 @@
   display: inline-flex;
   align-items: center;
   margin-left: 6px;
-  opacity: 0.6;
   vertical-align: middle;
   position: relative;
   cursor: default;
+}
+
+.auto-update-icon {
+  opacity: 0.6;
+  display: flex;
 }
 
 .auto-update-tooltip {
