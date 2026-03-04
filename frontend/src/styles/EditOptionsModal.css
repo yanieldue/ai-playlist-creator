@@ -209,17 +209,43 @@
 }
 
 /* Form controls within sections */
-.modal-section select,
-.modal-section input[type="number"],
-.modal-section input[type="checkbox"] {
+.modal-section label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
   margin-bottom: var(--space-xs);
+  display: block;
 }
 
-.modal-section label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  margin-bottom: var(--space-xs);
+/* Override playlist-select inside modal to match card style */
+.modal-section .playlist-select,
+.modal-body .playlist-select {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: var(--space-sm) var(--space-md);
+  padding-right: 36px;
+  font-size: 15px;
+  color: #1c1c1e;
+  width: 100%;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238e8e93' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  transition: border-color 0.15s;
+  margin-bottom: 0;
+}
+
+.modal-section .playlist-select:focus,
+.modal-body .playlist-select:focus {
+  outline: none;
+  border-color: #000000;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.06);
 }
 
 .form-help-text {
@@ -531,12 +557,31 @@
   border-top-color: #424245;
 }
 
+:root.dark-mode .modal-section label {
+  color: #636366;
+}
+
 :root.dark-mode .section-title {
   color: #ffffff;
 }
 
 :root.dark-mode .section-description {
   color: #a0aec0;
+}
+
+:root.dark-mode .modal-section .playlist-select,
+:root.dark-mode .modal-body .playlist-select {
+  background-color: #2c2c2e;
+  border-color: #424245;
+  color: #f5f5f5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23636366' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+}
+
+:root.dark-mode .modal-section .playlist-select:focus,
+:root.dark-mode .modal-body .playlist-select:focus {
+  border-color: #ffffff;
+  background-color: #2c2c2e;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
 }
 
 /* Dark mode - Dropdown */
