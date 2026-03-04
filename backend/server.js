@@ -8573,7 +8573,6 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
             }
           }
         }
-      }
     } catch (error) {
       console.error('[AUTO-UPDATE] Scheduler error:', error);
     }
