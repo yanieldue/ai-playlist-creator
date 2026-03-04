@@ -7155,7 +7155,7 @@ app.get('/api/reactions/:userId', async (req, res) => {
       const playlistName = playlist.playlistName || 'Untitled Playlist';
       const playlistId = playlist.playlistId;
 
-      // Build a quick lookup for album art from the tracks array
+      // Build a quick lookup for album art from the tracks array (populated by auto-update)
       const trackImageMap = {};
       (playlist.tracks || []).forEach(t => {
         if (t.id && t.image) trackImageMap[t.id] = t.image;
@@ -7166,6 +7166,44 @@ app.get('/api/reactions/:userId', async (req, res) => {
       }
       for (const song of (playlist.dislikedSongs || [])) {
         dislikedSongs.push({ ...song, playlistName, playlistId, image: song.image || trackImageMap[song.id] || null });
+      }
+    }
+
+    // Backfill missing images from Spotify (covers old reactions saved before image support)
+    const songsWithoutImages = [...likedSongs, ...dislikedSongs].filter(s => !s.image && s.id);
+    if (songsWithoutImages.length > 0) {
+      try {
+        const platformUserId = isEmailBasedUserId(userId)
+          ? await resolvePlatformUserId(userId, 'spotify')
+          : (userId.startsWith('spotify_') ? userId : null);
+
+        if (platformUserId) {
+          const tokens = await getUserTokens(platformUserId);
+          if (tokens) {
+            const userSpotifyApi = new SpotifyWebApi({
+              clientId: process.env.SPOTIFY_CLIENT_ID,
+              clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            });
+            userSpotifyApi.setAccessToken(tokens.access_token);
+
+            // Spotify getTracks supports up to 50 IDs at once
+            const uniqueIds = [...new Set(songsWithoutImages.map(s => s.id))].slice(0, 50);
+            const tracksRes = await userSpotifyApi.getTracks(uniqueIds);
+
+            const spotifyImageMap = {};
+            (tracksRes.body.tracks || []).forEach(t => {
+              if (t && t.id && t.album?.images?.[0]?.url) {
+                spotifyImageMap[t.id] = t.album.images[0].url;
+              }
+            });
+
+            likedSongs.forEach(s => { if (!s.image && spotifyImageMap[s.id]) s.image = spotifyImageMap[s.id]; });
+            dislikedSongs.forEach(s => { if (!s.image && spotifyImageMap[s.id]) s.image = spotifyImageMap[s.id]; });
+          }
+        }
+      } catch (imageErr) {
+        // Non-critical — return what we have without images
+        console.log('[REACTIONS] Could not backfill images from Spotify:', imageErr.message);
       }
     }
 
