@@ -930,6 +930,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   <div className="playlist-info">
                     <h2>
                       {playlist.playlistName}
+                      {playlist.updateFrequency && playlist.updateFrequency !== 'never' && (
+                        <span className="auto-update-badge" title={`Next update: ${formatNextUpdateTime(playlist.updateFrequency)}`}>
+                          <Icons.Loader size={13} />
+                        </span>
+                      )}
                       {playlist.imported && (
                         <span className="imported-badge">Imported</span>
                       )}
