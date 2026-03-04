@@ -1352,6 +1352,41 @@
   font-size: 14px;
 }
 
+.option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+
+.option-description {
+  font-size: 12px;
+  color: #8e8e93;
+}
+
+/* 2-column grid for compact frequency picker */
+.option-items-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.option-item-compact {
+  padding: 10px 12px;
+}
+
+.option-item-compact .option-label {
+  font-size: 13px;
+}
+
+:root.dark-mode .option-label { color: #f5f5f5; }
+:root.dark-mode .option-description { color: #636366; }
+
 .song-count-input-large {
   width: 100%;
   padding: var(--space-sm) var(--space-md);

@@ -1367,17 +1367,25 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 <div className="form-group">
                   <label htmlFor="update-frequency">Auto-Update Frequency</label>
                   {isPaid() ? (
-                    <select
-                      id="update-frequency"
-                      value={tempUpdateFrequency}
-                      onChange={(e) => setTempUpdateFrequency(e.target.value)}
-                      className="playlist-select"
-                    >
-                      <option value="never">Never</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
+                    <div className="option-items-grid">
+                      {[
+                        { value: 'never', label: 'Never' },
+                        { value: 'daily', label: 'Daily' },
+                        { value: 'weekly', label: 'Weekly' },
+                        { value: 'monthly', label: 'Monthly' },
+                      ].map(({ value, label }) => (
+                        <div
+                          key={value}
+                          className={`refresh-option-item option-item-compact ${tempUpdateFrequency === value ? 'active' : ''}`}
+                          onClick={() => setTempUpdateFrequency(value)}
+                        >
+                          <div className="option-checkbox">
+                            {tempUpdateFrequency === value && <span className="checkmark"><Icons.Check size={12} /></span>}
+                          </div>
+                          <span className="option-label">{label}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <button
                       className="upgrade-locked-row"
@@ -1461,19 +1469,27 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 )}
 
                 <div className="form-group">
-                  <label htmlFor="update-mode">Update Mode</label>
-                  <select
-                    id="update-mode"
-                    value={tempUpdateMode}
-                    onChange={(e) => setTempUpdateMode(e.target.value)}
-                    className="playlist-select"
-                  >
-                    <option value="append">Append - Add new songs to existing ones</option>
-                    <option value="replace">Replace - Remove old songs and add new ones</option>
-                  </select>
-                  <p className="form-help-text">
-                    How should auto-updates modify your playlist?
-                  </p>
+                  <label>Update Mode</label>
+                  <div className="form-group">
+                    {[
+                      { value: 'append', label: 'Append', description: 'Add new songs to your existing ones' },
+                      { value: 'replace', label: 'Replace', description: 'Remove old songs and add new ones' },
+                    ].map(({ value, label, description }) => (
+                      <div
+                        key={value}
+                        className={`refresh-option-item ${tempUpdateMode === value ? 'active' : ''}`}
+                        onClick={() => setTempUpdateMode(value)}
+                      >
+                        <div className="option-checkbox">
+                          {tempUpdateMode === value && <span className="checkmark"><Icons.Check size={16} /></span>}
+                        </div>
+                        <div className="option-content">
+                          <span className="option-label">{label}</span>
+                          <span className="option-description">{description}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -1483,19 +1499,27 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 <p className="section-description">Configure privacy and visibility</p>
 
                 <div className="form-group">
-                  <label htmlFor="is-public">Privacy</label>
-                  <select
-                    id="is-public"
-                    value={tempIsPublic}
-                    onChange={(e) => setTempIsPublic(e.target.value === 'true')}
-                    className="playlist-select"
-                  >
-                    <option value="true">Public - Visible to everyone</option>
-                    <option value="false">Private - Only visible to you</option>
-                  </select>
-                  <p className="form-help-text">
-                    Control who can see this playlist
-                  </p>
+                  <label>Privacy</label>
+                  <div className="form-group">
+                    {[
+                      { value: true, label: 'Public', description: 'Visible to everyone' },
+                      { value: false, label: 'Private', description: 'Only visible to you' },
+                    ].map(({ value, label, description }) => (
+                      <div
+                        key={String(value)}
+                        className={`refresh-option-item ${tempIsPublic === value ? 'active' : ''}`}
+                        onClick={() => setTempIsPublic(value)}
+                      >
+                        <div className="option-checkbox">
+                          {tempIsPublic === value && <span className="checkmark"><Icons.Check size={16} /></span>}
+                        </div>
+                        <div className="option-content">
+                          <span className="option-label">{label}</span>
+                          <span className="option-description">{description}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
