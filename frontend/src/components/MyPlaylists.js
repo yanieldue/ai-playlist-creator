@@ -71,6 +71,9 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   // Dropdown menu state
   const [openMenuId, setOpenMenuId] = useState(null);
 
+  // Auto-update tooltip state
+  const [autoUpdateTooltipId, setAutoUpdateTooltipId] = useState(null);
+
   // Refinement instructions
   const [refinementInstructions, setRefinementInstructions] = useState([]);
   const [refinementInput, setRefinementInput] = useState('');
@@ -931,8 +934,18 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     <h2>
                       {playlist.playlistName}
                       {playlist.updateFrequency && playlist.updateFrequency !== 'never' && (
-                        <span className="auto-update-badge" title={`Next update: ${formatNextUpdateTime(playlist.updateFrequency)}`}>
+                        <span
+                          className="auto-update-badge"
+                          onMouseEnter={() => setAutoUpdateTooltipId(playlist.playlistId)}
+                          onMouseLeave={() => setAutoUpdateTooltipId(null)}
+                          onClick={(e) => { e.stopPropagation(); setAutoUpdateTooltipId(autoUpdateTooltipId === playlist.playlistId ? null : playlist.playlistId); }}
+                        >
                           <Icons.Loader size={13} />
+                          {autoUpdateTooltipId === playlist.playlistId && (
+                            <div className="auto-update-tooltip">
+                              Next update: {formatNextUpdateTime(playlist.updateFrequency)}
+                            </div>
+                          )}
                         </span>
                       )}
                       {playlist.imported && (

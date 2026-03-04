@@ -247,7 +247,7 @@
   align-items: center;
   gap: var(--space-sm);
   flex-wrap: wrap;
-  overflow: hidden; /* Prevent text overflow */
+  overflow: visible;
 }
 
 .imported-badge {
@@ -300,6 +300,30 @@
   margin-left: 6px;
   opacity: 0.6;
   vertical-align: middle;
+  position: relative;
+  cursor: default;
+}
+
+.auto-update-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c1c1e;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+:root.dark-mode .auto-update-tooltip {
+  background: #3a3a3c;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
 .error-badge {
