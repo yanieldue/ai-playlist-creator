@@ -30,59 +30,24 @@
   animation: spin 0.8s linear infinite;
 }
 
-/* Skeleton loading */
-.skeleton-card {
-  pointer-events: none;
+.playlists-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 48px;
 }
 
-.skeleton-cover {
-  width: 100%;
-  aspect-ratio: 1;
-  background: linear-gradient(90deg, #f2f2f7 25%, #e5e5ea 50%, #f2f2f7 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 12px;
-  margin-bottom: 12px;
+.playlists-loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #e5e5ea;
+  border-top-color: #8e8e93;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
-.skeleton-content {
-  padding: 0 4px;
-}
-
-.skeleton-title {
-  height: 20px;
-  background: linear-gradient(90deg, #f2f2f7 25%, #e5e5ea 50%, #f2f2f7 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
-  margin-bottom: 8px;
-  width: 80%;
-}
-
-.skeleton-meta {
-  height: 14px;
-  background: linear-gradient(90deg, #f2f2f7 25%, #e5e5ea 50%, #f2f2f7 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 4px;
-  width: 60%;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-:root.dark-mode .skeleton-cover,
-:root.dark-mode .skeleton-title,
-:root.dark-mode .skeleton-meta {
-  background: linear-gradient(90deg, #2c2c2e 25%, #3a3a3c 50%, #2c2c2e 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+:root.dark-mode .playlists-loading-spinner {
+  border-color: #3a3a3c;
+  border-top-color: #636366;
 }
 
 .playlists-header {
