@@ -909,17 +909,6 @@
   gap: var(--space-sm);
 }
 
-.auto-update-badge {
-  display: inline-block;
-  background: #ffffff;
-  color: #000000;
-  padding: var(--space-xs) var(--space-sm);
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
 
 .edit-settings-button {
   background: #ffffff;
@@ -1910,9 +1899,6 @@
   color: #ffffff;
 }
 
-:root.dark-mode .auto-update-badge {
-  background: #ffffff;
-}
 
 :root.dark-mode .edit-settings-button {
   background: #ffffff;
