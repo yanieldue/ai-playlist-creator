@@ -351,7 +351,7 @@
 }
 
 :root.dark-mode .account-list-value {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .platform-options {
@@ -430,7 +430,7 @@
 }
 
 :root.dark-mode .platform-card-status {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .platform-toggle-btn {

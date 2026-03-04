@@ -142,7 +142,7 @@
 }
 
 :root.dark-mode .auth-password-toggle {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .auth-password-toggle:hover {
@@ -247,7 +247,7 @@
 }
 
 :root.dark-mode .auth-subtitle {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .auth-input {
@@ -262,7 +262,7 @@
 }
 
 :root.dark-mode .auth-input::placeholder {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .auth-cta {
@@ -275,7 +275,7 @@
 }
 
 :root.dark-mode .auth-link-btn {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .auth-link-btn:hover {
@@ -283,7 +283,7 @@
 }
 
 :root.dark-mode .auth-toggle {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .auth-toggle:hover {

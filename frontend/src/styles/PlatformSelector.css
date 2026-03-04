@@ -76,7 +76,7 @@
 
 :root.dark-mode .platform-button:hover {
   background: #48484a;
-  border-color: #636366;
+  border-color: #8e8e93;
 }
 
 :root.dark-mode .platform-button.active {

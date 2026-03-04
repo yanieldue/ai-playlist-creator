@@ -1197,7 +1197,7 @@ body {
 }
 
 :root.dark-mode .search-bar-apple svg {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .search-results-dropdown {
@@ -1214,7 +1214,7 @@ body {
 }
 
 :root.dark-mode .search-result-meta {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .section-title {
@@ -1236,7 +1236,7 @@ body {
 }
 
 :root.dark-mode .chat-input-wrapper input::placeholder {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .chat-send-button {
@@ -1305,7 +1305,7 @@ body {
 }
 
 :root.dark-mode .tab-item {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .tab-item.active {
@@ -1338,7 +1338,7 @@ body {
 }
 
 :root.dark-mode .playlist-modal-description {
-  color: #8e8e93;
+  color: #aeaeb2;
   border-bottom-color: #424245;
 }
 
@@ -1397,7 +1397,7 @@ body {
 }
 
 :root.dark-mode .track-artist-modal {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .modal-button-primary {
@@ -1446,7 +1446,7 @@ body {
 }
 
 :root.dark-mode .account-list-value {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .account-input {
@@ -1483,7 +1483,7 @@ body {
 }
 
 :root.dark-mode .draft-widget-meta {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .resume-button {
@@ -1537,7 +1537,7 @@ body {
 }
 
 :root.dark-mode .dropdown-user-email {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .dropdown-divider {
@@ -1557,11 +1557,11 @@ body {
 }
 
 :root.dark-mode .section-subtitle {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .section-arrow {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .horizontal-scroll-section {
@@ -1573,7 +1573,7 @@ body {
 }
 
 :root.dark-mode .playlist-card-subtitle {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .artist-card-apple {
@@ -1585,7 +1585,7 @@ body {
 }
 
 :root.dark-mode .artist-card-meta {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .draft-card-image {
@@ -1593,7 +1593,7 @@ body {
 }
 
 :root.dark-mode .draft-card-placeholder {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .draft-card-name {
@@ -1601,7 +1601,7 @@ body {
 }
 
 :root.dark-mode .draft-card-meta {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .draft-card-delete {
@@ -1619,7 +1619,7 @@ body {
 }
 
 :root.dark-mode .empty-state-icon {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .empty-state-title {
@@ -1627,7 +1627,7 @@ body {
 }
 
 :root.dark-mode .empty-state-description {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .track-item-apple {
@@ -1678,7 +1678,7 @@ body {
 }
 
 :root.dark-mode .nav-tab-item {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .nav-tab-item:hover {

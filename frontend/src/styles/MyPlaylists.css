@@ -1385,7 +1385,7 @@
 }
 
 :root.dark-mode .option-label { color: #f5f5f5; }
-:root.dark-mode .option-description { color: #636366; }
+:root.dark-mode .option-description { color: #aeaeb2; }
 
 .song-count-input-large {
   width: 100%;
@@ -1539,7 +1539,7 @@
 }
 
 :root.dark-mode .loading-container {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .loading-container .spinner {
@@ -1556,7 +1556,7 @@
 }
 
 :root.dark-mode .playlists-count {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .back-button {
@@ -1629,7 +1629,7 @@
 }
 
 :root.dark-mode .empty-state p {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .create-first-button {
@@ -1655,7 +1655,7 @@
 }
 
 :root.dark-mode .playlist-meta {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .playlist-cover-image {
@@ -1667,7 +1667,7 @@
 }
 
 :root.dark-mode .playlist-description {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .open-spotify-button {
@@ -1680,7 +1680,7 @@
 }
 
 :root.dark-mode .expand-icon {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .playlist-details {
@@ -1742,7 +1742,7 @@
 }
 
 :root.dark-mode .search-results-label {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .search-result-item {
@@ -1773,7 +1773,7 @@
 }
 
 :root.dark-mode .track-reaction-button {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .track-thumb-circle {
@@ -1797,7 +1797,7 @@
 }
 
 :root.dark-mode .no-tracks {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .spinner {
@@ -1820,7 +1820,7 @@
 }
 
 :root.dark-mode .close-modal-button {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .close-modal-button:hover {
@@ -1829,7 +1829,7 @@
 }
 
 :root.dark-mode .back-button {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .back-button:hover {
@@ -1839,7 +1839,7 @@
 
 :root.dark-mode .modal-loading,
 :root.dark-mode .modal-empty {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .modal-loading .spinner {
@@ -1847,7 +1847,7 @@
 }
 
 :root.dark-mode .modal-empty p {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .spotify-playlists-list {
@@ -1867,11 +1867,11 @@
 }
 
 :root.dark-mode .spotify-playlist-meta {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .spotify-playlist-description {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .import-playlist-button {
@@ -1893,7 +1893,7 @@
 }
 
 :root.dark-mode .setting-label {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .setting-value {
@@ -1946,7 +1946,7 @@
 
 :root.dark-mode .refresh-option-item:hover {
   background: #424245;
-  border-color: #636366;
+  border-color: #8e8e93;
 }
 
 :root.dark-mode .refresh-option-item.active {
@@ -1998,7 +1998,7 @@
 }
 
 :root.dark-mode .form-help-text {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .imported-badge {

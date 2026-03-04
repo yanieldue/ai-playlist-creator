@@ -185,9 +185,9 @@
 :root.dark-mode .reactions-header h1 { color: #f5f5f5; }
 :root.dark-mode .reactions-back-btn { color: #0a84ff; }
 :root.dark-mode .reactions-segment { background: #2c2c2e; }
-:root.dark-mode .reactions-segment-btn { color: #636366; }
+:root.dark-mode .reactions-segment-btn { color: #aeaeb2; }
 :root.dark-mode .reactions-segment-btn.active { background: #3a3a3c; color: #f5f5f5; }
 :root.dark-mode .reactions-track { border-bottom-color: #2c2c2e; }
 :root.dark-mode .reactions-track-name { color: #f5f5f5; }
 :root.dark-mode .reactions-track-art-placeholder { background: #2c2c2e; }
-:root.dark-mode .reactions-empty { color: #636366; }
+:root.dark-mode .reactions-empty { color: #aeaeb2; }

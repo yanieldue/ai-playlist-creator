@@ -528,7 +528,7 @@
 
 :root.dark-mode .option-icon {
   background: #3a3a3c;
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .option-text {
@@ -536,7 +536,7 @@
 }
 
 :root.dark-mode .option-arrow {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .edit-options-cancel {
@@ -558,7 +558,7 @@
 }
 
 :root.dark-mode .modal-section label {
-  color: #636366;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .section-title {
@@ -602,7 +602,7 @@
 }
 
 :root.dark-mode .dropdown-arrow {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .dropdown-content {

@@ -44,8 +44,8 @@
 }
 
 :root.dark-mode .explicit-badge {
-  color: #636366;
-  border-color: #636366;
+  color: #aeaeb2;
+  border-color: #8e8e93;
 }
 
 .track-artist {
@@ -87,5 +87,5 @@
 }
 
 :root.dark-mode .track-number {
-  color: #8e8e93;
+  color: #aeaeb2;
 }

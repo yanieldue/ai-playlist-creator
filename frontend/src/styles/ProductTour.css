@@ -230,7 +230,7 @@
 }
 
 :root.dark-mode .tour-close-button {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .tour-close-button:hover {
@@ -275,7 +275,7 @@
 }
 
 :root.dark-mode .tour-demo-playlist-card .playlist-meta {
-  color: #8e8e93 !important;
+  color: #aeaeb2 !important;
 }
 
 :root.dark-mode .tour-demo-playlist-card .track-name {
@@ -283,7 +283,7 @@
 }
 
 :root.dark-mode .tour-demo-playlist-card .track-artist {
-  color: #8e8e93 !important;
+  color: #aeaeb2 !important;
 }
 
 :root.dark-mode .tour-demo-edit-button {
@@ -302,7 +302,7 @@
 }
 
 :root.dark-mode .tour-demo-edit-modal p {
-  color: #8e8e93 !important;
+  color: #aeaeb2 !important;
 }
 
 :root.dark-mode .modal-section.tour-refine-section {

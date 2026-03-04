@@ -2078,7 +2078,7 @@
 }
 
 :root.dark-mode .description-more {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .description-more:hover {
@@ -2598,7 +2598,7 @@
 }
 
 :root.dark-mode .chat-input::placeholder {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 .chat-send-button {
@@ -3141,7 +3141,7 @@
 }
 
 :root.dark-mode .playlist-modal-description {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .playlist-modal-body {
@@ -3233,7 +3233,7 @@
 }
 
 :root.dark-mode .option-description {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 .option-icon {
@@ -3612,7 +3612,7 @@
 }
 
 :root.dark-mode .chat-modal-input::placeholder {
-  color: #8e8e93;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .chat-message {
