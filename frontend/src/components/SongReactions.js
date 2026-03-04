@@ -108,19 +108,13 @@ const SongReactions = ({ userId, onBack }) => {
                   disabled={removing === song.id}
                   title={activeSection === 'liked' ? 'Remove like' : 'Remove dislike'}
                 >
-                  {activeSection === 'liked' ? (
-                    <Icons.ThumbsUp
-                      size={20}
-                      color={removing === song.id ? '#c7c7cc' : '#34c759'}
-                      fill={removing !== song.id}
-                    />
-                  ) : (
-                    <Icons.ThumbsDown
-                      size={20}
-                      color={removing === song.id ? '#c7c7cc' : '#ff3b30'}
-                      fill={removing !== song.id}
-                    />
-                  )}
+                  <span className={`reactions-thumb-circle${removing === song.id ? ' reactions-thumb-circle--loading' : ''}`}>
+                    {activeSection === 'liked' ? (
+                      <Icons.ThumbsUp size={16} color="white" />
+                    ) : (
+                      <Icons.ThumbsDown size={16} color="white" />
+                    )}
+                  </span>
                 </button>
               </li>
             ))}

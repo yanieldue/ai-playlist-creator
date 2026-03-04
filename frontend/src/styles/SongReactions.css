@@ -152,16 +152,35 @@
   background: none;
   border: none;
   cursor: pointer;
-  padding: 6px;
+  padding: 4px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  border-radius: 6px;
-  opacity: 1;
   transition: opacity 0.15s;
 }
-.reactions-track-icon-btn:active { opacity: 0.5; }
+.reactions-track-icon-btn:active { opacity: 0.6; }
 .reactions-track-icon-btn:disabled { cursor: default; }
+
+.reactions-thumb-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #1c1c1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.reactions-thumb-circle--loading {
+  background: #c7c7cc;
+}
+:root.dark-mode .reactions-thumb-circle {
+  background: #3a3a3c;
+}
+:root.dark-mode .reactions-thumb-circle--loading {
+  background: #48484a;
+}
 
 /* Dark mode */
 :root.dark-mode .reactions-page { background: #1c1c1e; }
