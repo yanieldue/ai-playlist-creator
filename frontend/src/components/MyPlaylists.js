@@ -996,7 +996,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               >
                                 {track.reaction === 'thumbsUp' ? (
                                   <span className="track-thumb-circle">
-                                    <Icons.ThumbsUp size={14} color="white" />
+                                    <Icons.ThumbsUp size={16} color="white" />
                                   </span>
                                 ) : (
                                   <Icons.ThumbsUp size={16} />
@@ -1011,7 +1011,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               >
                                 {track.reaction === 'thumbsDown' ? (
                                   <span className="track-thumb-circle">
-                                    <Icons.ThumbsDown size={14} color="white" />
+                                    <Icons.ThumbsDown size={16} color="white" />
                                   </span>
                                 ) : (
                                   <Icons.ThumbsDown size={16} />
