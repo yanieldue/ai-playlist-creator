@@ -16,6 +16,19 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   // Force re-render when refs are attached
   const [, forceRender] = useState(0);
 
+  // Step indices reference:
+  //  0 - Welcome (center, home)
+  //  1 - Generate Playlists (home, chat input)
+  //  2 - Discover Artists (center, home) ← NEW
+  //  3 - My Playlists tab (playlists, nav tab)
+  //  4 - Import Playlists (playlists, import button) ← NEW
+  //  5 - Edit Playlist (playlists, demo edit button)
+  //  6 - Like/Dislike Songs (playlists, demo track actions)
+  //  7 - Refine Playlists (playlists, demo modal refine)
+  //  8 - Auto-Refresh (playlists, demo modal auto-refresh)
+  //  9 - Song Reactions & Profile (home, profile button) ← NEW
+  // 10 - You're All Set! (center, home)
+
   const steps = [
     {
       title: "Welcome to Playlist Creator!",
@@ -32,6 +45,13 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       position: "top"
     },
     {
+      title: "Discover Artists",
+      description: "Explore music beyond the chat! Your Top Artists shows your most-played artists from the last 3 months. Artists You Should Explore surfaces artists you haven't listened to yet. Tap any artist tile to instantly generate a playlist around them.",
+      target: null,
+      targetRef: null,
+      position: "center"
+    },
+    {
       title: "My Playlists",
       description: "View all your created playlists here. Click on any playlist to see its tracks, edit settings, or refine it further.",
       target: ".nav-tab-item:nth-child(2)",
@@ -39,8 +59,15 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       position: "bottom"
     },
     {
+      title: "Import Your Playlists",
+      description: "Already have playlists on Spotify or Apple Music? Tap Import to bring them into Playlist Creator and manage them with AI-powered refinements and auto-updates.",
+      target: ".import-button",
+      targetRef: null,
+      position: "bottom"
+    },
+    {
       title: "Edit Your Playlists",
-      description: "Click the Edit Playlist button to access settings, refine your playlist, and manage auto-refresh options.",
+      description: "Click the Edit Playlist button to access settings, add refinement instructions, manually refresh with new songs, and manage auto-update scheduling.",
       target: null,
       targetRef: editButtonRef,
       position: "bottom"
@@ -60,15 +87,22 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       position: "left"
     },
     {
-      title: "Auto-Refresh Feature",
-      description: "Enable automatic playlist refreshes to keep your playlists fresh with new songs. Choose from daily, weekly, or monthly updates.",
+      title: "Auto-Refresh & Manual Refresh",
+      description: "Keep playlists fresh automatically — choose daily, weekly, or monthly updates. Or use Manual Refresh to add new songs right now. Both modes let you append to the playlist or fully replace the songs.",
       target: null,
       targetRef: autoRefreshRef,
       position: "left"
     },
     {
+      title: "Song Reactions & More",
+      description: "Tap your profile icon to access Song Reactions (a dedicated view of all your liked and disliked tracks), Account settings, FAQ, and more.",
+      target: ".profile-button-apple",
+      targetRef: null,
+      position: "bottom"
+    },
+    {
       title: "You're All Set!",
-      description: "Connect your Spotify or Apple Music account from the profile menu to sync your playlists. Explore settings and FAQ for more options. Start creating amazing playlists!",
+      description: "Connect your Spotify or Apple Music account from the profile menu to sync your playlists. Explore the artist discovery sections, import your existing playlists, and start creating amazing music!",
       target: null,
       targetRef: null,
       position: "center"
@@ -94,26 +128,27 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   useEffect(() => {
     if (!isOpen) return;
 
-    // Steps 3-8 need playlists page
-    if (currentStep >= 2 && currentStep <= 6) {
+    // Steps 3-8 need the playlists page
+    if (currentStep >= 3 && currentStep <= 8) {
       if (onNavigateToPlaylists) {
         onNavigateToPlaylists();
       }
 
-      // Steps 3-7 need demo playlist
-      if (currentStep >= 2 && currentStep <= 6) {
+      // Steps 5-8 need demo playlist
+      if (currentStep >= 5 && currentStep <= 8) {
         setShowDemoPlaylist(true);
-        // Step 3: collapsed, Steps 4-7: expanded
-        setIsDemoExpanded(currentStep >= 3);
-        // Steps 6-7 need demo modal (Refine and Auto-Refresh)
-        setShowDemoModal(currentStep >= 5 && currentStep <= 6);
+        // Step 5: collapsed; Steps 6-8: expanded
+        setIsDemoExpanded(currentStep >= 6);
+        // Steps 7-8 need demo modal (Refine and Auto-Refresh)
+        setShowDemoModal(currentStep >= 7 && currentStep <= 8);
       } else {
+        // Steps 3-4: playlists page but no demo overlay
         setShowDemoPlaylist(false);
         setIsDemoExpanded(false);
         setShowDemoModal(false);
       }
     } else {
-      // Steps 1-2 need home page
+      // Steps 0-2 and 9-10: home page
       if (onNavigateHome) {
         onNavigateHome();
       }
@@ -126,9 +161,9 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   // Track if layout is ready - triggers re-render after demo content loads
   useEffect(() => {
     // For steps with highlights, trigger re-render after layout settles
-    if (currentStep >= 1 && currentStep <= 5) {
-      // Extra delay for step 4 to ensure Edit button is positioned
-      if (currentStep === 3) {
+    if (currentStep >= 1 && currentStep <= 7) {
+      // Extra delay for step 5 (edit button) to ensure it is positioned
+      if (currentStep === 5) {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -264,8 +299,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
     const rect = targetElement.getBoundingClientRect();
 
-    // Use smaller padding for steps 2, 4, and 5 to fit tighter around compact UI elements
-    const padding = currentStep === 1 ? 6 : (currentStep === 3 || currentStep === 4) ? 6 : 12;
+    // Use smaller padding for steps 1, 4, and 6 to fit tighter around compact UI elements
+    const padding = currentStep === 1 ? 6 : (currentStep === 5 || currentStep === 6) ? 6 : 12;
 
     // Calculate intended position with padding
     const intendedTop = rect.top - padding;
@@ -307,8 +342,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   return (
     <>
       <div className="product-tour-overlay">
-        {/* Highlight target element - skip for steps 5 and 6 (they have inline styled borders) */}
-        {highlightPos && currentStep !== 5 && currentStep !== 6 && (
+        {/* Highlight target element - skip for steps 7 and 8 (they use inline styled borders) */}
+        {highlightPos && currentStep !== 7 && currentStep !== 8 && (
           <div
             className="product-tour-highlight"
             style={{
@@ -322,10 +357,10 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
         {/* Tooltip */}
         <div
-          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${currentStep === 1 ? 'tour-step-2-mobile' : ''} ${(currentStep === 5 || currentStep === 6) ? 'tour-modal-steps-mobile' : ''}`}
+          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${currentStep === 1 ? 'tour-step-2-mobile' : ''} ${(currentStep === 7 || currentStep === 8) ? 'tour-modal-steps-mobile' : ''}`}
           style={
             isCenterStep ? {} :
-            (currentStep >= 1 && currentStep <= 6) ? {
+            (currentStep >= 1 && currentStep <= 9) ? {
               position: 'fixed',
               bottom: '20px',
               right: '20px',
@@ -420,7 +455,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                           <div className="track-name">Anti-Hero</div>
                           <div className="track-artist">Taylor Swift</div>
                         </div>
-                        <div className={`track-actions ${currentStep === 4 ? 'tour-highlight-reactions' : ''}`} ref={trackActionsRef}>
+                        <div className={`track-actions ${currentStep === 6 ? 'tour-highlight-reactions' : ''}`} ref={trackActionsRef}>
                           <button className="track-reaction-button" title="I like this! Add more songs like this">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
@@ -541,10 +576,10 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             </div>
 
             <div className="edit-options-list">
-              <div ref={refineInputRef} className={`modal-section ${currentStep === 5 ? 'tour-refine-section' : ''}`} style={currentStep === 5 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
+              <div ref={refineInputRef} className={`modal-section ${currentStep === 7 ? 'tour-refine-section' : ''}`} style={currentStep === 7 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Refine Playlist</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Add instructions to customize future auto-updates</p>
-                <div className="chat-input-container tour-demo-chat-input" style={{ display: currentStep === 5 ? 'flex' : 'none', position: 'relative' }}>
+                <div className="chat-input-container tour-demo-chat-input" style={{ display: currentStep === 7 ? 'flex' : 'none', position: 'relative' }}>
                   <input type="text" placeholder="Refine your playlist!" className="chat-input" readOnly style={{ cursor: 'default', flex: 1, border: 'none', background: 'transparent' }}/>
                   <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93', flexShrink: 0 }}>
                     <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
@@ -552,10 +587,10 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                 </div>
               </div>
 
-              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 6 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 6 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
+              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 8 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 8 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Auto-Update Settings</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Automatically refresh your playlist on schedule</p>
-                <div className="form-group" style={{ display: currentStep === 6 ? 'block' : 'none' }}>
+                <div className="form-group" style={{ display: currentStep === 8 ? 'block' : 'none' }}>
                   <label htmlFor="update-frequency" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#1a202c' }}>Auto-Update Frequency</label>
                   <select id="update-frequency" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
                     <option>Never</option>
@@ -564,11 +599,6 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                     <option>Monthly</option>
                   </select>
                 </div>
-              </div>
-
-              <div className="modal-section">
-                <h3 className="section-title">Playlist Settings</h3>
-                <p className="section-description">Configure privacy and visibility</p>
               </div>
             </div>
 
