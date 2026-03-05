@@ -221,6 +221,28 @@
 }
 
 /* Dark Mode */
+:root.dark-mode .product-tour-highlight {
+  border-color: #ffffff;
+}
+
+:root.dark-mode .tour-dot.active {
+  background: #ffffff;
+}
+
+:root.dark-mode .tour-button.primary {
+  background: #ffffff;
+  color: #000000;
+}
+
+:root.dark-mode .tour-button.primary:hover {
+  background: #e5e5ea;
+}
+
+:root.dark-mode .modal-section.tour-refine-section,
+:root.dark-mode .tour-auto-refresh-section {
+  border-color: #ffffff !important;
+}
+
 :root.dark-mode .product-tour-tooltip {
   background: #2c2c2e;
 }
@@ -305,16 +327,8 @@
   color: #aeaeb2 !important;
 }
 
-:root.dark-mode .modal-section.tour-refine-section {
-  border: 2px solid #000000 !important;
-}
-
 :root.dark-mode .modal-section:not(.tour-refine-section):not(.tour-auto-refresh-section) {
   background: transparent !important;
-}
-
-:root.dark-mode .tour-auto-refresh-section {
-  border: 2px solid #000000 !important;
 }
 
 :root.dark-mode .tour-demo-select {
