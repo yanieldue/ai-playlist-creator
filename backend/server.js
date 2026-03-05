@@ -7603,8 +7603,6 @@ const scheduleAutoUpdates = () => {
 
                   // Calculate next update time and save it
                   playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                  const updatedPlaylists = userPlaylists.get(userId);
-                  userPlaylists.set(userId, updatedPlaylists);
                   await savePlaylist(userId, playlist);
 
                   continue; // Skip this playlist and move to the next one
@@ -7747,6 +7745,7 @@ DO NOT include any text outside the JSON.`
                     }
 
                     const appleTokens = await getUserTokens(platformUserId);
+                    const searchQueries = []; // Apple Music search queries not yet implemented via SoundCharts
                     if (appleTokens && searchQueries.length > 0) {
                       const appleMusicDevToken = generateAppleMusicToken();
                       if (appleMusicDevToken) {
@@ -7789,6 +7788,7 @@ DO NOT include any text outside the JSON.`
                             // Apple Music API doesn't support removing tracks — always append new songs
                             await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlist.playlistId, newAppleTrackIds);
                             console.log(`[AUTO-UPDATE] Added ${newAppleTrackIds.length} tracks to Apple Music playlist ${playlist.playlistName}`);
+                            tracksWereAdded = true;
 
                             // Update song history
                             if (!playlist.songHistory) playlist.songHistory = [];
@@ -8466,6 +8466,7 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                 }
 
                 // Get user tokens (use platformUserId resolved earlier) — Spotify only
+                let tracksWereAdded = false;
                 if (playlistPlatform !== 'apple') {
                 const tokens = await getUserTokens(platformUserId);
                 if (tokens && newTrackUris.length > 0) {
@@ -8527,6 +8528,7 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                       await userSpotifyApi.addTracksToPlaylist(playlist.playlistId, newTrackUris);
                       console.log(`[AUTO-UPDATE] Successfully appended ${newTrackUris.length} tracks to ${playlist.playlistName}`);
                     }
+                    tracksWereAdded = true;
 
                     // Sync playlist.tracks in the DB record so Fins reflects the real Spotify state
                     const newTracksForRecord = uniqueTracks.slice(0, songCount).map(track => ({
@@ -8599,10 +8601,15 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                 }
                 } // end if (playlistPlatform !== 'apple')
 
-                // Update the nextUpdate timestamp, lastUpdated, and updatedAt
+                // Update the nextUpdate timestamp; only set lastUpdated if tracks were actually added
+                // (prevents a false 24-hour cooldown when no songs were found)
                 const now = new Date().toISOString();
-                playlist.lastUpdated = now;
-                playlist.updatedAt = now;
+                if (tracksWereAdded) {
+                  playlist.lastUpdated = now;
+                  playlist.updatedAt = now;
+                } else {
+                  console.log(`[AUTO-UPDATE] No tracks added to ${playlist.playlistName} — skipping lastUpdated to avoid false cooldown`);
+                }
                 playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
                 await savePlaylist(userId, playlist);
 
