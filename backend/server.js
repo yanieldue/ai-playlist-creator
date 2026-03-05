@@ -7673,6 +7673,18 @@ const scheduleAutoUpdates = () => {
                   prompt = `${prompt}. Reference tracks: ${topTracks}`;
                 }
 
+                // For imported playlists (no original prompt), also extract artists from tracks
+                // to give the genre-extraction and SoundCharts discovery meaningful context
+                if (!playlist.originalPrompt && playlist.tracks && playlist.tracks.length > 0) {
+                  const trackArtists = [...new Set(
+                    playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean)
+                  )].slice(0, 8);
+                  if (trackArtists.length > 0) {
+                    prompt += `. Key artists in this playlist: ${trackArtists.join(', ')}`;
+                    console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${trackArtists.join(', ')}`);
+                  }
+                }
+
                 // Add user feedback context to prompt
                 if (userFeedbackContext) {
                   prompt += userFeedbackContext;
@@ -7878,6 +7890,18 @@ DO NOT include any text outside the JSON.`
                     const seedArtists = genreData.artistConstraints?.requestedArtists?.length > 0
                       ? genreData.artistConstraints.requestedArtists
                       : genreData.artistConstraints?.suggestedSeedArtists || [];
+
+                    // For imported playlists, fall back to artists from existing tracks as seed artists.
+                    // This ensures SoundCharts can find similar artists instead of going genre-only.
+                    if (seedArtists.length === 0 && !playlist.originalPrompt && playlist.tracks && playlist.tracks.length > 0) {
+                      const trackArtists = [...new Set(
+                        playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean)
+                      )].slice(0, 5);
+                      if (trackArtists.length > 0) {
+                        seedArtists.push(...trackArtists);
+                        console.log(`[AUTO-UPDATE] Imported playlist — using track artists as SoundCharts seeds: ${trackArtists.join(', ')}`);
+                      }
+                    }
 
                     if (process.env.SOUNDCHARTS_APP_ID) {
                       console.log('[AUTO-UPDATE] 🎵 Using SoundCharts for song discovery...');
