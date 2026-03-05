@@ -7961,7 +7961,9 @@ DO NOT include any text outside the JSON.`
                     }
 
                     // If SoundCharts returned too few songs, expand with top songs by genre/mood
-                    const targetCount = playlist.trackCount || (playlist.updateMode === 'replace' ? 30 : 10);
+                    // For replace mode: aim for the configured total track count
+                    // For append mode: always aim for a fixed 10 new songs (trackCount is the total size, not the per-update count)
+                    const targetCount = playlist.updateMode === 'replace' ? (playlist.trackCount || 30) : 10;
                     if (allSearchResults.length < targetCount && process.env.SOUNDCHARTS_APP_ID) {
                       console.log(`[AUTO-UPDATE] Only ${allSearchResults.length}/${targetCount} songs — expanding with SoundCharts top songs...`);
                       try {
@@ -8363,9 +8365,9 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                       const isDuplicateUri = seenUris.has(track.uri);
                       const isDuplicateKey = seenNormalizedNames.has(trackKey);
 
-                      if (!isDuplicateUri && !isDuplicateKey && track.explicit === false) {
+                      if (!isDuplicateUri && !isDuplicateKey) {
                         seenUris.add(track.uri);
-                        seenNormalizedNames.add(trackKey); // Store artist+title combo
+                        seenNormalizedNames.add(trackKey);
                         uniqueTracks.push(track);
                       } else if (isDuplicateKey) {
                         console.log(`[AUTO-UPDATE] Skipping duplicate in new batch: "${track.name}" by ${artistName}`);
@@ -8373,7 +8375,9 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                     });
 
                     // Get the desired number of tracks from playlist settings
-                    const desiredCount = playlist.trackCount || (playlist.updateMode === 'replace' ? 30 : 10);
+                    // For replace mode: use the configured total track count
+                    // For append mode: always add a fixed 10 new songs per update (trackCount is the growing total)
+                    const desiredCount = playlist.updateMode === 'replace' ? (playlist.trackCount || 30) : 10;
 
                     // If we don't have enough tracks, retry SoundCharts with expanded criteria.
                     // No Spotify/Apple keyword searches — SoundCharts is the only source.
