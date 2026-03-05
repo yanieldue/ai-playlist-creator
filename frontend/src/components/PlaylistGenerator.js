@@ -2408,10 +2408,18 @@ const PlaylistGenerator = () => {
                             >
                               <div className="artist-card-image">
                                 {artist.image ? (
-                                  <img src={artist.image} alt={artist.name} />
-                                ) : (
-                                  <span><Icons.Microphone size={32} /></span>
-                                )}
+                                  <img
+                                    src={artist.image}
+                                    alt={artist.name}
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                ) : null}
+                                <span style={{ display: artist.image ? 'none' : 'flex' }}>
+                                  <Icons.Microphone size={32} />
+                                </span>
                               </div>
                               <div className="artist-card-name">{artist.name}</div>
                             </div>
@@ -2452,10 +2460,18 @@ const PlaylistGenerator = () => {
                             >
                               <div className="artist-card-image">
                                 {artist.image ? (
-                                  <img src={artist.image} alt={artist.name} />
-                                ) : (
-                                  <span><Icons.Microphone size={32} /></span>
-                                )}
+                                  <img
+                                    src={artist.image}
+                                    alt={artist.name}
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                ) : null}
+                                <span style={{ display: artist.image ? 'none' : 'flex' }}>
+                                  <Icons.Microphone size={32} />
+                                </span>
                               </div>
                               <div className="artist-card-name">{artist.name}</div>
                             </div>
