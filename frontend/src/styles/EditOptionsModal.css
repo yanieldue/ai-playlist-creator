@@ -341,7 +341,7 @@
 
 .cancel-button {
   flex: 1;
-  padding: var(--space-sm) var(--space-md);
+  padding: 12px 20px;
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -363,7 +363,7 @@
 
 .save-settings-button {
   flex: 1;
-  padding: var(--space-sm) var(--space-md);
+  padding: 12px 20px;
   background: #000000;
   border: none;
   border-radius: 12px;
@@ -391,7 +391,7 @@
 
 .refresh-confirm-button {
   flex: 1;
-  padding: var(--space-sm) var(--space-md);
+  padding: 12px 20px;
   background: #000000;
   border: none;
   border-radius: 12px;
@@ -490,7 +490,7 @@
   .save-settings-button,
   .refresh-confirm-button {
     flex: 1;
-    padding: var(--space-md) var(--space-lg);
+    padding: 12px 16px;
     font-size: 15px;
   }
 }
