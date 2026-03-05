@@ -93,7 +93,7 @@
   background: #1c1c1e;
   color: #ffffff;
   border: none;
-  padding: var(--space-md) 24px;
+  padding: 10px 20px;
   border-radius: 10px;
   cursor: pointer;
   font-size: 15px;
@@ -511,10 +511,10 @@
   background: #ffffff;
   color: #000000;
   border: none;
-  padding: var(--space-sm) var(--space-xl);
-  border-radius: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   transition: all 0.2s ease;
 }
