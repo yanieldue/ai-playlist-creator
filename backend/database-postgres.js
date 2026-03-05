@@ -490,7 +490,9 @@ class DatabaseService {
       playlistId: row.playlist_id,
       ...row.playlist_data,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      // Use playlist_data.updatedAt (only set when tracks are actually added),
+      // not row.updated_at which changes on every internal save (e.g. nextUpdate advancement)
+      updatedAt: row.playlist_data.updatedAt || null
     }));
   }
 
@@ -507,7 +509,7 @@ class DatabaseService {
       playlistId,
       ...result.rows[0].playlist_data,
       createdAt: result.rows[0].created_at,
-      updatedAt: result.rows[0].updated_at
+      updatedAt: result.rows[0].playlist_data.updatedAt || null
     };
   }
 
@@ -543,7 +545,7 @@ class DatabaseService {
         playlistId: row.playlist_id,
         ...row.playlist_data,
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.playlist_data.updatedAt || null
       });
     });
 

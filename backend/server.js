@@ -1577,7 +1577,9 @@ function calculateNextUpdate(frequency, playlistId = null, updateTime = null) {
     const offsetMs = utcTime - tzTime;
 
     // Apply offset to get correct UTC time
-    next = new Date(tempDate.getTime() - offsetMs);
+    // offsetMs = utcTime - tzTime (positive for west of UTC e.g. PST = +8h, negative for east e.g. Tokyo = -9h)
+    // Adding it converts the "naive local midnight" (parsed as UTC) to the actual UTC equivalent
+    next = new Date(tempDate.getTime() + offsetMs);
 
   } else if (playlistId) {
     // Fall back to hash-based time slot if no updateTime specified
