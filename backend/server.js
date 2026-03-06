@@ -8683,6 +8683,24 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
   });
 };
 
+// Debug endpoint: check auto-update status for a user's playlists
+app.get('/api/debug/auto-update/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const userPlaylistsArray = userPlaylists.get(userId) || [];
+  const now = new Date();
+  const summary = userPlaylistsArray.map(p => ({
+    name: p.playlistName,
+    playlistId: p.playlistId,
+    updateFrequency: p.updateFrequency || 'never',
+    updateMode: p.updateMode || 'append',
+    nextUpdate: p.nextUpdate || null,
+    nextUpdateIn: p.nextUpdate ? `${Math.round((new Date(p.nextUpdate) - now) / 60000)} min` : 'N/A',
+    lastUpdated: p.lastUpdated || null,
+    isDue: p.nextUpdate ? now >= new Date(p.nextUpdate) : false,
+  }));
+  res.json({ now: now.toISOString(), userId, playlists: summary });
+});
+
 // Error logging endpoint
 app.post('/api/log-error', async (req, res) => {
   try {
