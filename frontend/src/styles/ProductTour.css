@@ -38,6 +38,13 @@
 
 /* Arrow — rotated square, half inside the card, guarantees zero gap */
 .product-tour-tooltip::before {
+  content: none;
+}
+
+.product-tour-tooltip.arrow-up::before,
+.product-tour-tooltip.arrow-down::before,
+.product-tour-tooltip.arrow-left::before,
+.product-tour-tooltip.arrow-right::before {
   content: '';
   position: absolute;
   width: 14px;
