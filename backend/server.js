@@ -8009,6 +8009,8 @@ DO NOT include any text outside the JSON.`
                             }
                           }
                           console.log(`[AUTO-UPDATE] Found ${allSearchResults.length} SoundCharts songs on Spotify`);
+                        } else {
+                          console.log(`[AUTO-UPDATE] ⚠️ SoundCharts discovered 0 songs for ${playlist.playlistName} (genre: ${genreData.primaryGenre}, seedArtists: ${soundChartsCriteria.seedArtists?.join(', ') || 'none'})`);
                         }
                       } catch (scError) {
                         console.log('[AUTO-UPDATE] SoundCharts discovery failed:', scError.message);
@@ -8697,6 +8699,8 @@ app.get('/api/debug/auto-update/:userId', async (req, res) => {
     nextUpdateIn: p.nextUpdate ? `${Math.round((new Date(p.nextUpdate) - now) / 60000)} min` : 'N/A',
     lastUpdated: p.lastUpdated || null,
     isDue: p.nextUpdate ? now >= new Date(p.nextUpdate) : false,
+    songHistoryCount: (p.songHistory || []).length,
+    genreData: p.genreData ? { primaryGenre: p.genreData.primaryGenre, seedArtists: p.genreData.artistConstraints?.suggestedSeedArtists } : null,
   }));
   res.json({ now: now.toISOString(), userId, playlists: summary });
 });
