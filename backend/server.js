@@ -3704,36 +3704,38 @@ app.post('/api/search-spotify', async (req, res) => {
 // Generate playlist using AI
 app.post('/api/generate-playlist', async (req, res) => {
   try {
-    let { prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null } = req.body;
+    let { prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null, internalCall = false } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
-    // Weekly generation limit for free users
-    const requestEmail = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
-    if (requestEmail) {
-      const userRecord = await db.getUser(requestEmail);
-      if (userRecord && userRecord.plan !== 'paid') {
-        const now = new Date();
-        const resetAt = userRecord.weeklyResetAt ? new Date(userRecord.weeklyResetAt) : null;
-        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    // Weekly generation limit for free users (skip for internal auto-update calls)
+    if (!internalCall) {
+      const requestEmail = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+      if (requestEmail) {
+        const userRecord = await db.getUser(requestEmail);
+        if (userRecord && userRecord.plan !== 'paid') {
+          const now = new Date();
+          const resetAt = userRecord.weeklyResetAt ? new Date(userRecord.weeklyResetAt) : null;
+          const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
 
-        if (resetAt && (now - resetAt) < sevenDaysMs) {
-          // Same week - check limit
-          if (userRecord.weeklyGenerations >= 1) {
-            const nextReset = new Date(resetAt.getTime() + sevenDaysMs);
-            return res.status(429).json({
-              error: 'You have reached your weekly playlist limit. Upgrade to generate more playlists.',
-              code: 'WEEKLY_LIMIT_REACHED',
-              resetsAt: nextReset.toISOString()
-            });
+          if (resetAt && (now - resetAt) < sevenDaysMs) {
+            // Same week - check limit
+            if (userRecord.weeklyGenerations >= 1) {
+              const nextReset = new Date(resetAt.getTime() + sevenDaysMs);
+              return res.status(429).json({
+                error: 'You have reached your weekly playlist limit. Upgrade to generate more playlists.',
+                code: 'WEEKLY_LIMIT_REACHED',
+                resetsAt: nextReset.toISOString()
+              });
+            } else {
+              await db.incrementWeeklyGenerations(requestEmail);
+            }
           } else {
-            await db.incrementWeeklyGenerations(requestEmail);
+            // New week or first generation - reset counter (sets to 1) and allow
+            await db.resetWeeklyGenerations(requestEmail);
           }
-        } else {
-          // New week or first generation - reset counter (sets to 1) and allow
-          await db.resetWeeklyGenerations(requestEmail);
         }
       }
     }
@@ -7726,804 +7728,44 @@ const scheduleAutoUpdates = () => {
                   prompt += userFeedbackContext;
                 }
 
-                // Generate new tracks using the same AI-based generation logic as the main endpoint
+                // Generate new tracks using the same code path as manual refresh
                 let newTrackUris = [];
-                let tracksForHistory = []; // Store tracks to add to history after successful Spotify update
+                let tracksForHistory = []; // { name, artist } — for history dedup
+                let returnedTracksData = []; // full track objects from endpoint, for DB sync
                 const playlistPlatform = playlist.platform || 'spotify';
                 let platformUserId = userId;
 
                 try {
-                  // Use stored genreData from the original playlist — this is more accurate than
-                  // re-extracting genre from the combined prompt (which can be polluted by
-                  // refinement phrasing like "add chill songs" drifting the genre to lofi).
-                  // Fall back to AI extraction only for older playlists without stored genreData.
-                  let genreData = { primaryGenre: null, secondaryGenres: [], keyCharacteristics: [], style: '' };
-                  if (playlist.genreData && playlist.genreData.primaryGenre) {
-                    genreData = playlist.genreData;
-                    console.log(`[AUTO-UPDATE] Using stored genre data: ${genreData.primaryGenre}`);
-                  } else {
-                    console.log('[AUTO-UPDATE] No stored genre data — extracting from prompt');
-                    const genreExtractionResponse = await anthropic.messages.create({
-                      model: 'claude-sonnet-4-20250514',
-                      max_tokens: 500,
-                      messages: [{
-                        role: 'user',
-                        content: `Extract the primary genre and key musical characteristics from this playlist prompt.
-
-Prompt: "${prompt}"
-
-Respond ONLY with valid JSON in this format:
-{
-  "primaryGenre": "the main genre (e.g., R&B, hip-hop, pop, rock, etc.) or null if not specified",
-  "secondaryGenres": ["related genres"],
-  "keyCharacteristics": ["soulful", "upbeat", "melancholic", etc.],
-  "style": "The overall vibe/style (e.g., contemporary, vintage, indie, mainstream, etc.)"
-}
-
-DO NOT include any text outside the JSON.`
-                      }]
-                    });
-
-                    try {
-                      let genreText = genreExtractionResponse.content[0].text.trim();
-                      // Remove markdown code blocks if present
-                      if (genreText.startsWith('```json')) {
-                        genreText = genreText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-                      } else if (genreText.startsWith('```')) {
-                        genreText = genreText.replace(/^```\n?/, '').replace(/\n?```$/, '');
-                      }
-                      genreData = JSON.parse(genreText);
-                    } catch (parseError) {
-                      console.log('Could not parse genre extraction in auto-update:', parseError.message);
-                    }
-                  }
-
-                  // No Spotify/Apple search queries — SoundCharts is the only song source.
-                  // All discovery goes through SoundCharts seed-artist similarity.
-
-                  // Determine platform and resolve platformUserId
-                  if (playlistPlatform === 'apple') {
-                    // ── Apple Music auto-update ──────────────────────────────
-                    if (isEmailBasedUserId(userId)) {
-                      platformUserId = await resolvePlatformUserId(userId, 'apple');
-                      if (!platformUserId) {
-                        console.log(`[AUTO-UPDATE] No Apple Music connection for user ${userId}, skipping playlist ${playlist.playlistName}`);
-                        playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                        await savePlaylist(userId, playlist);
-                        continue;
-                      }
-                    }
-
-                    const appleTokens = await getUserTokens(platformUserId);
-                    const searchQueries = []; // Apple Music search queries not yet implemented via SoundCharts
-                    if (appleTokens && searchQueries.length > 0) {
-                      const appleMusicDevToken = generateAppleMusicToken();
-                      if (appleMusicDevToken) {
-                        const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
-                        const platformServiceInstance = new PlatformService();
-                        const storefront = appleTokens.storefront || 'us';
-                        const desiredCount = playlist.requestedSongCount || 30;
-
-                        // Build history set for deduplication
-                        const historicalTrackKeys = new Set(playlist.songHistory || []);
-                        const seenIds = new Set();
-                        const seenNormalizedAppleNames = new Set();
-                        const uniqueAppleTracks = [];
-
-                        for (const query of searchQueries) {
-                          if (uniqueAppleTracks.length >= desiredCount) break;
-                          try {
-                            const results = await platformServiceInstance.searchTracks(platformUserId, query, appleTokens, storefront, 15);
-                            for (const track of results) {
-                              if (uniqueAppleTracks.length >= desiredCount) break;
-                              if (seenIds.has(track.id)) continue;
-                              const normalizedName = (track.name || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-                              const trackKey = `${normalizedName}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
-                              if (seenNormalizedAppleNames.has(trackKey)) continue;
-                              if (historicalTrackKeys.has(trackKey)) continue;
-                              seenIds.add(track.id);
-                              seenNormalizedAppleNames.add(trackKey);
-                              uniqueAppleTracks.push(track);
-                            }
-                          } catch (appleSearchErr) {
-                            console.log(`[AUTO-UPDATE] Apple Music search failed for "${query}":`, appleSearchErr.message);
-                          }
-                        }
-
-                        console.log(`[AUTO-UPDATE] Found ${uniqueAppleTracks.length} Apple Music tracks for ${playlist.playlistName}`);
-
-                        if (uniqueAppleTracks.length > 0) {
-                          const newAppleTrackIds = uniqueAppleTracks.map(t => t.id);
-                          try {
-                            // Apple Music API doesn't support removing tracks — always append new songs
-                            await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlist.playlistId, newAppleTrackIds);
-                            console.log(`[AUTO-UPDATE] Added ${newAppleTrackIds.length} tracks to Apple Music playlist ${playlist.playlistName}`);
-                            tracksWereAdded = true;
-
-                            // Update song history
-                            if (!playlist.songHistory) playlist.songHistory = [];
-                            const newAppleHistoryEntries = uniqueAppleTracks.map(track => {
-                              const normalizedName = (track.name || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-                              return `${normalizedName}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
-                            });
-                            playlist.songHistory = [...playlist.songHistory, ...newAppleHistoryEntries].slice(-200);
-                            console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} — ${playlist.songHistory.length} tracks`);
-                          } catch (appleUpdateError) {
-                            console.error(`[AUTO-UPDATE] Failed to update Apple Music playlist ${playlist.playlistName}:`, appleUpdateError.message);
-                          }
-                        } else {
-                          console.log(`[AUTO-UPDATE] No new Apple Music tracks found for ${playlist.playlistName}`);
-                        }
-                      } else {
-                        console.error('[AUTO-UPDATE] Failed to generate Apple Music developer token');
-                      }
-                    }
-                  } else {
-                  // ── Spotify auto-update ───────────────────────────────────
-                  const allSearchResults = [];
-
-                  // If userId is email-based, resolve to Spotify platform userId
+                  // Resolve platformUserId for the Spotify add/replace step below
                   if (isEmailBasedUserId(userId)) {
-                    platformUserId = await resolvePlatformUserId(userId, 'spotify');
+                    platformUserId = await resolvePlatformUserId(userId, playlistPlatform);
                     if (!platformUserId) {
-                      console.log(`[AUTO-UPDATE] No Spotify connection for user ${userId}, skipping playlist ${playlist.playlistName}`);
-                      // Advance nextUpdate so the scheduler doesn't retry every minute
+                      console.log(`[AUTO-UPDATE] No ${playlistPlatform} connection for user ${userId}, skipping ${playlist.playlistName}`);
                       playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
                       await savePlaylist(userId, playlist);
-                      continue; // Skip to next playlist
+                      continue;
                     }
                   }
 
-                  const tokens = await getUserTokens(platformUserId);
-
-                  if (tokens) {
-                    const userSpotifyApi = new SpotifyWebApi({
-                      clientId: process.env.SPOTIFY_CLIENT_ID,
-                      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-                      redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-                    });
-                    userSpotifyApi.setAccessToken(tokens.access_token);
-                    userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-                    // Refresh token before making API calls - CRITICAL for auto-update
-                    // Use retry logic with exponential backoff to handle transient failures
-                    let tokenRefreshSuccess = false;
-                    const maxRetries = 3;
-                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                      try {
-                        console.log(`[AUTO-UPDATE] Refreshing Spotify access token for user ${userId} (attempt ${attempt}/${maxRetries})...`);
-                        const refreshData = await userSpotifyApi.refreshAccessToken();
-                        const newAccessToken = refreshData.body.access_token;
-                        userSpotifyApi.setAccessToken(newAccessToken);
-                        tokens.access_token = newAccessToken;
-                        userTokens.set(platformUserId, tokens);
-                        saveTokens();
-                        console.log('[AUTO-UPDATE] Token refresh successful');
-                        tokenRefreshSuccess = true;
-                        break; // Success - exit retry loop
-                      } catch (refreshError) {
-                        console.error(`[AUTO-UPDATE] Token refresh attempt ${attempt}/${maxRetries} failed:`, refreshError.message);
-
-                        if (attempt < maxRetries) {
-                          // Wait before retrying (exponential backoff: 2s, 4s)
-                          const waitTime = Math.pow(2, attempt) * 1000;
-                          console.log(`[AUTO-UPDATE] Waiting ${waitTime}ms before retry...`);
-                          await new Promise(resolve => setTimeout(resolve, waitTime));
-                        }
-                      }
-                    }
-
-                    if (!tokenRefreshSuccess) {
-                      console.error('[AUTO-UPDATE] CRITICAL: All token refresh attempts failed');
-                      console.error('[AUTO-UPDATE] Skipping playlist update - cannot proceed without valid token');
-                      throw new Error('Token refresh failed after 3 attempts');
-                    }
-
-                    // Strategy 1: Use SoundCharts to discover songs via similar artists
-                    // This is the primary discovery method for auto-updates
-                    let soundChartsDiscoveredSongs = [];
-                    let soundChartsCriteria = null;
-                    const seedArtists = genreData.artistConstraints?.requestedArtists?.length > 0
-                      ? genreData.artistConstraints.requestedArtists
-                      : genreData.artistConstraints?.suggestedSeedArtists || [];
-
-                    // Fall back to artists from existing tracks as seed artists when genreData has none.
-                    // This applies to both imported playlists and playlists with missing/old genreData.
-                    if (seedArtists.length === 0 && playlist.tracks && playlist.tracks.length > 0) {
-                      const trackArtists = [...new Set(
-                        playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean)
-                      )].slice(0, 5);
-                      if (trackArtists.length > 0) {
-                        seedArtists.push(...trackArtists);
-                        console.log(`[AUTO-UPDATE] No seed artists from genreData — using track artists as SoundCharts seeds: ${trackArtists.join(', ')}`);
-                      }
-                    }
-
-                    if (process.env.SOUNDCHARTS_APP_ID) {
-                      console.log('[AUTO-UPDATE] 🎵 Using SoundCharts for song discovery...');
-                      if (seedArtists.length > 0) {
-                        console.log(`[AUTO-UPDATE]    Seed artists: ${seedArtists.join(', ')}`);
-                      } else {
-                        console.log('[AUTO-UPDATE]    No seed artists — will use genre/mood-based top songs discovery');
-                      }
-
-                      // Map user mood/atmosphere to SoundCharts moods
-                      const moodMapping = {
-                        'sad': ['Melancholic', 'Sad', 'Somber'],
-                        'happy': ['Joyful', 'Euphoric', 'Uplifting'],
-                        'chill': ['Calm', 'Relaxed', 'Peaceful'],
-                        'energetic': ['Energetic', 'Euphoric', 'Powerful'],
-                        'romantic': ['Romantic', 'Sensual', 'Intimate'],
-                        'party': ['Joyful', 'Euphoric', 'Playful'],
-                        'melancholic': ['Melancholic', 'Sad', 'Wistful'],
-                        'in my feels': ['Melancholic', 'Emotional', 'Introspective']
-                      };
-
-                      // Map atmosphere to target moods
-                      let targetMoods = [];
-                      if (genreData.atmosphere && genreData.atmosphere.length > 0) {
-                        for (const atmos of genreData.atmosphere) {
-                          const atmosLower = atmos.toLowerCase();
-                          for (const [key, moods] of Object.entries(moodMapping)) {
-                            if (atmosLower.includes(key)) {
-                              targetMoods.push(...moods);
-                            }
-                          }
-                        }
-                        targetMoods = [...new Set(targetMoods)]; // Dedupe
-                      }
-
-                      // Map lyrical themes
-                      let targetThemes = [];
-                      if (genreData.lyricalContent?.themes?.length > 0) {
-                        targetThemes = genreData.lyricalContent.themes.map(t => t.charAt(0).toUpperCase() + t.slice(1));
-                      }
-
-                      soundChartsCriteria = {
-                        seedArtists: seedArtists,
-                        genre: genreData.primaryGenre,
-                        targetMoods: targetMoods.length > 0 ? targetMoods : null,
-                        targetThemes: targetThemes.length > 0 ? targetThemes : null,
-                        popularity: genreData.trackConstraints?.popularity?.min || genreData.trackConstraints?.popularity?.max ? {
-                          min: genreData.trackConstraints.popularity.min,
-                          max: genreData.trackConstraints.popularity.max
-                        } : null,
-                        releaseYear: genreData.era?.yearRange?.min || genreData.era?.yearRange?.max ? {
-                          min: genreData.era.yearRange.min,
-                          max: genreData.era.yearRange.max
-                        } : null,
-                        // Pass exclusive mode for proper artist discovery balance
-                        exclusiveMode: genreData.artistConstraints?.exclusiveMode === true || genreData.artistConstraints?.exclusiveMode === 'true'
-                      };
-
-                      try {
-                        soundChartsDiscoveredSongs = await discoverSongsViaSoundCharts(soundChartsCriteria, 60);
-                        if (soundChartsDiscoveredSongs.length > 0) {
-                          console.log(`[AUTO-UPDATE] ✓ SoundCharts discovered ${soundChartsDiscoveredSongs.length} songs`);
-
-                          // Convert SoundCharts songs to Spotify tracks by searching for them
-                          for (const scSong of soundChartsDiscoveredSongs.slice(0, 30)) {
-                            try {
-                              const searchQuery = scSong.isrc
-                                ? `isrc:${scSong.isrc}`
-                                : `track:${scSong.name} artist:${scSong.artistName}`;
-                              const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
-                              if (results.body.tracks && results.body.tracks.items.length > 0) {
-                                allSearchResults.push(results.body.tracks.items[0]);
-                              }
-                            } catch (searchError) {
-                              // Silently skip songs that can't be found on Spotify
-                            }
-                          }
-                          console.log(`[AUTO-UPDATE] Found ${allSearchResults.length} SoundCharts songs on Spotify`);
-                        } else {
-                          console.log(`[AUTO-UPDATE] ⚠️ SoundCharts discovered 0 songs for ${playlist.playlistName} (genre: ${genreData.primaryGenre}, seedArtists: ${soundChartsCriteria.seedArtists?.join(', ') || 'none'})`);
-                        }
-                      } catch (scError) {
-                        console.log('[AUTO-UPDATE] SoundCharts discovery failed:', scError.message);
-                      }
-                    }
-
-                    // If SoundCharts returned too few songs, expand with top songs by genre/mood
-                    // For replace mode: aim for the configured total track count
-                    // For append mode: always aim for a fixed 10 new songs (trackCount is the total size, not the per-update count)
-                    const targetCount = playlist.updateMode === 'replace' ? (playlist.trackCount || 30) : 10;
-                    if (allSearchResults.length < targetCount && process.env.SOUNDCHARTS_APP_ID) {
-                      console.log(`[AUTO-UPDATE] Only ${allSearchResults.length}/${targetCount} songs — expanding with SoundCharts top songs...`);
-                      try {
-                        const expandCriteria = {
-                          seedArtists: [],
-                          genre: genreData.primaryGenre,
-                          targetMoods: soundChartsCriteria?.targetMoods || null,
-                          targetThemes: null,
-                          popularity: null,
-                          releaseYear: soundChartsCriteria?.releaseYear || null,
-                          exclusiveMode: false
-                        };
-                        const topSongs = await discoverSongsViaSoundChartsTop(expandCriteria, targetCount * 2);
-                        console.log(`[AUTO-UPDATE] SoundCharts top songs: ${topSongs.length} candidates`);
-                        for (const song of topSongs) {
-                          if (allSearchResults.length >= targetCount * 2) break;
-                          try {
-                            const searchQuery = song.isrc
-                              ? `isrc:${song.isrc}`
-                              : `track:${song.name} artist:${song.artistName}`;
-                            const results = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
-                            if (results.body.tracks?.items?.[0]) {
-                              allSearchResults.push(results.body.tracks.items[0]);
-                            }
-                          } catch (searchErr) { /* skip */ }
-                        }
-                        console.log(`[AUTO-UPDATE] After top songs expansion: ${allSearchResults.length} total`);
-                      } catch (expandErr) {
-                        console.log('[AUTO-UPDATE] Top songs expansion failed:', expandErr.message);
-                      }
-                    }
-
-
-                    // Filter out tracks that don't match the primary genre (if specified)
-                    let genreFilteredResults = allSearchResults;
-                    if (genreData.primaryGenre && genreData.primaryGenre !== 'not specified') {
-                      try {
-                        // Use Claude to validate genre matching - validate ALL tracks, not just first 50
-                        // Include artist genre information when available, but also leverage Claude's built-in music knowledge
-                        // This approach is platform-agnostic and works for Spotify, Apple Music, Amazon Music, etc.
-                        const trackListForValidation = allSearchResults.map(t => {
-                          const artistGenres = t.genres && t.genres.length > 0 ? ` [API genres: ${t.genres.join(', ')}]` : '';
-                          return `${t.name} by ${t.artists[0]?.name || 'Unknown'}${artistGenres}`;
-                        }).join('\n');
-
-                        const genreValidationResponse = await anthropic.messages.create({
-                          model: 'claude-sonnet-4-20250514',
-                          max_tokens: 4000,
-                          messages: [{
-                            role: 'user',
-                            content: `You are a music genre expert. Filter out tracks that clearly do not belong in a "${genreData.primaryGenre}" playlist. When in doubt, keep the track.
-
-CRITICAL: The user's playlist description is: "${prompt}"
-
-IMPORTANT DISTINCTION:
-- The playlist DESCRIPTION (like "focus while working" or "chill vibes") is about the MOOD/USE CASE
-- The GENRE requirement ("${genreData.primaryGenre}") is about the MUSICAL STYLE
-- DO NOT reject songs based on title keywords that match the description!
-- Example: For an R&B playlist with description "music to focus while working", only reject "Focus" by Ariana Grande if it is clearly not R&B
-
-YOUR KNOWLEDGE BASE:
-- Use your comprehensive training data about artists, genres, musical styles, and song classifications
-- API genre tags (when provided) are hints, but NOT definitive - use your own knowledge as primary source
-- Consider the artist's full discography, typical style, and the specific song's characteristics
-- Account for artists who cross genres - evaluate each SONG individually, not just the artist
-
-Below is a list of tracks with API genre tags when available. Reject only obvious genre mismatches — it is worse to have too few tracks than to include a borderline case.
-
-RULES FOR "${genreData.primaryGenre}" PLAYLISTS:
-- If the genre is Pop: ACCEPT dance-pop, indie pop, electropop, pop-R&B, synth-pop, and mainstream crossover artists. Only REJECT tracks that are clearly classical, jazz, heavy metal, or pure hip-hop with no pop elements.
-- If the genre is R&B: ACCEPT R&B-pop, neo-soul, and soul. REJECT only pure jazz, smooth jazz, and classical.
-- If the genre is Hip-Hop: ACCEPT rap-pop and hip-hop-R&B crossovers. REJECT classical, jazz, and rock with no hip-hop elements.
-- If the genre is Rock: ACCEPT pop-rock, indie rock, and alternative rock. REJECT classical, jazz, and pure pop with no rock elements.
-- REJECT study music, ambient focus instrumentals, and background music ONLY if the requested genre is not ambient/instrumental.
-- DO NOT over-reject — keep borderline tracks; the AI selection step will refine further.
-
-Examples of REJECTIONS for R&B playlists (only truly off-genre):
-- "Soulful" by Cal Harris Jr. (this is JAZZ, not R&B)
-- Any track that is clearly classical or smooth jazz with no R&B elements
-- "Pieces of Me" by Smooth Jazz All Stars (this is SMOOTH JAZZ, not R&B)
-
-Tracks to evaluate:
-${trackListForValidation}
-
-Respond with valid JSON:
-{
-  "validTracks": ["track 1 by artist 1", "track 2 by artist 2", ...],
-  "rejectedCount": <number of tracks rejected>
-}
-
-Only reject tracks that are genuinely off-genre. When uncertain, include the track. DO NOT include any text outside the JSON.`
-                          }]
-                        });
-
-                        try {
-                          let validationText = genreValidationResponse.content[0].text.trim();
-                          if (validationText.startsWith('```json')) {
-                            validationText = validationText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-                          } else if (validationText.startsWith('```')) {
-                            validationText = validationText.replace(/^```\n?/, '').replace(/\n?```$/, '');
-                          }
-                          const validationData = JSON.parse(validationText);
-                          const validTrackNames = new Set(validationData.validTracks || []);
-
-                          // Filter search results based on validation
-                          genreFilteredResults = allSearchResults.filter(track => {
-                            const trackString = `${track.name} by ${track.artists[0]?.name || 'Unknown'}`;
-                            return validTrackNames.has(trackString);
-                          });
-
-                          console.log(`[AUTO-UPDATE] Genre validation: ${allSearchResults.length} tracks -> ${genreFilteredResults.length} valid ${genreData.primaryGenre} tracks`);
-                        } catch (parseError) {
-                          console.log('Could not parse genre validation:', parseError.message);
-                          genreFilteredResults = allSearchResults; // Fall back to all results
-                        }
-                      } catch (validationError) {
-                        console.log('Genre validation failed:', validationError.message);
-                        genreFilteredResults = allSearchResults; // Fall back to all results
-                      }
-                    }
-
-                    // Parse BOTH original prompt AND refinement instructions to extract constraints
-                    let minYear = null;
-                    let maxYear = null;
-                    let excludedArtists = [];
-                    const currentYear = new Date().getFullYear();
-
-                    // Add explicitly excluded artists from user feedback
-                    if (playlist.excludedArtists && playlist.excludedArtists.length > 0) {
-                      excludedArtists = [...playlist.excludedArtists.map(a => a.toLowerCase())];
-                      console.log(`[AUTO-UPDATE] User has excluded ${excludedArtists.length} artists via feedback: ${excludedArtists.join(', ')}`);
-                    }
-
-                    // Helper function to parse constraints from text
-                    const parseConstraints = (text, source) => {
-                      const lowerText = text.toLowerCase();
-
-                      // Check for "last X years" or "past X years" pattern
-                      const yearsMatch = lowerText.match(/(?:last|past|recent)\s+(\d+)\s+years?/);
-                      if (yearsMatch) {
-                        const years = parseInt(yearsMatch[1]);
-                        const yearConstraint = currentYear - years;
-                        if (minYear === null || yearConstraint > minYear) {
-                          minYear = yearConstraint;
-                          maxYear = currentYear; // Also set max year to current year
-                          console.log(`[AUTO-UPDATE] Year filter from ${source}: only songs from ${minYear}-${maxYear} (last ${years} years)`);
-                        }
-                      }
-
-                      // Check for specific year range "from YYYY to YYYY" or "YYYY-YYYY"
-                      const rangeMatch = lowerText.match(/(?:from\s+)?(\d{4})(?:\s*(?:to|-)\s*(\d{4}))/);
-                      if (rangeMatch) {
-                        const startYear = parseInt(rangeMatch[1]);
-                        const endYear = parseInt(rangeMatch[2]);
-                        minYear = Math.min(startYear, endYear);
-                        maxYear = Math.max(startYear, endYear);
-                        console.log(`[AUTO-UPDATE] Year range from ${source}: ${minYear}-${maxYear}`);
-                      }
-
-                      // Check for decade patterns "90s", "2000s", "2010s"
-                      const decadeMatch = lowerText.match(/\b(\d{2,4})s\b/);
-                      if (decadeMatch) {
-                        let decade = parseInt(decadeMatch[1]);
-                        // Handle both "90s" (90) and "1990s" (1990)
-                        if (decade < 100) {
-                          decade = decade >= 20 ? 1900 + decade : 2000 + decade;
-                        }
-                        minYear = Math.floor(decade / 10) * 10;
-                        maxYear = minYear + 9;
-                        console.log(`[AUTO-UPDATE] Decade filter from ${source}: ${minYear}-${maxYear}`);
-                      }
-
-                      // Check for "only songs from YYYY" pattern
-                      const singleYearMatch = lowerText.match(/(?:only|just)\s+(?:songs?|tracks?|music)\s+from\s+(\d{4})/);
-                      if (singleYearMatch) {
-                        const year = parseInt(singleYearMatch[1]);
-                        minYear = year;
-                        maxYear = year;
-                        console.log(`[AUTO-UPDATE] Single year filter from ${source}: ${year}`);
-                      }
-
-                      // Popularity patterns
-                      if (lowerText.match(/\b(mainstream|popular|well[- ]known|hits?|chart toppers?)\b/)) {
-                        console.log(`[AUTO-UPDATE] Popularity preference from ${source}: mainstream`);
-                      } else if (lowerText.match(/\b(underground|obscure|hidden gems?|lesser[- ]known|deep cuts?|indie)\b/)) {
-                        console.log(`[AUTO-UPDATE] Popularity preference from ${source}: underground`);
-                      }
-
-                      // Duration patterns
-                      const durationMatch = lowerText.match(/(?:songs?|tracks?)\s+(?:under|less than|shorter than|below)\s+(\d+)\s+(?:min(?:ute)?s?|seconds?)/);
-                      if (durationMatch) {
-                        const duration = parseInt(durationMatch[1]);
-                        console.log(`[AUTO-UPDATE] Duration filter from ${source}: under ${duration} minutes`);
-                      }
-
-                      // Version exclusion patterns
-                      if (lowerText.match(/\b(no|avoid|exclude|skip)\s+(live|acoustic|remix(?:es)?|cover|instrumental|edit)\s+(?:version|recording|track)?s?\b/)) {
-                        console.log(`[AUTO-UPDATE] Version exclusion from ${source}: detected`);
-                      }
-
-                      // Vocal/gender patterns
-                      if (lowerText.match(/\b(female|woman|women)\s+(?:vocal|singer|artist)s?\b/)) {
-                        console.log(`[AUTO-UPDATE] Vocal preference from ${source}: female`);
-                      } else if (lowerText.match(/\b(male|man|men)\s+(?:vocal|singer|artist)s?\b/)) {
-                        console.log(`[AUTO-UPDATE] Vocal preference from ${source}: male`);
-                      }
-
-                      // Collaboration/feature patterns
-                      if (lowerText.match(/\b(no|avoid|exclude)\s+(?:feature|feat|collaboration|collab)s?\b/)) {
-                        console.log(`[AUTO-UPDATE] Feature exclusion from ${source}: detected`);
-                      }
-
-                      // Production style patterns
-                      if (lowerText.match(/\b(acoustic|unplugged|stripped[- ]down|raw)\b/)) {
-                        console.log(`[AUTO-UPDATE] Production preference from ${source}: acoustic`);
-                      } else if (lowerText.match(/\b(electronic|synth|edm|produced)\b/)) {
-                        console.log(`[AUTO-UPDATE] Production preference from ${source}: electronic`);
-                      } else if (lowerText.match(/\b(live|concert|performance)\s+(?:recording|version)s?\b/)) {
-                        console.log(`[AUTO-UPDATE] Production preference from ${source}: live`);
-                      }
-
-                      // Auto-tune patterns
-                      if (lowerText.match(/\b(no|avoid|exclude|without)\s+auto[- ]?tune\b/)) {
-                        console.log(`[AUTO-UPDATE] Auto-tune avoidance from ${source}: detected`);
-                      }
-
-                      // Lyrical content patterns
-                      if (lowerText.match(/\b(?:about|themed?|focus(?:ed)? on)\s+([^,\.;]+)/)) {
-                        console.log(`[AUTO-UPDATE] Lyrical theme from ${source}: detected`);
-                      }
-                      if (lowerText.match(/\b(?:no|avoid|exclude|skip)\s+(?:songs? about|lyrics about|themes? of)\s+([^,\.;]+)/)) {
-                        console.log(`[AUTO-UPDATE] Lyrical avoidance from ${source}: detected`);
-                      }
-
-                      // Discovery balance patterns
-                      if (lowerText.match(/\b(?:familiar|favorites?|classics?|well[- ]known|songs? I know)\b/)) {
-                        console.log(`[AUTO-UPDATE] Discovery preference from ${source}: familiar`);
-                      } else if (lowerText.match(/\b(?:discover(?:y)?|new|explore|hidden gems?|lesser[- ]known|artists? I don't know)\b/)) {
-                        console.log(`[AUTO-UPDATE] Discovery preference from ${source}: discovery`);
-                      }
-
-                      // Language patterns
-                      const languageMatch = lowerText.match(/\b(english|spanish|french|german|italian|portuguese|japanese|korean|chinese)\s+(?:songs?|music|language)\b/);
-                      if (languageMatch) {
-                        console.log(`[AUTO-UPDATE] Language preference from ${source}: ${languageMatch[1]}`);
-                      }
-
-                      // Album diversity patterns
-                      const albumDiversityMatch = lowerText.match(/(?:no more than|max(?:imum)?|at most)\s+(\d+)\s+(?:songs?|tracks?)\s+(?:per|from each)\s+album/);
-                      if (albumDiversityMatch) {
-                        console.log(`[AUTO-UPDATE] Album diversity from ${source}: max ${albumDiversityMatch[1]} per album`);
-                      }
-                      if (lowerText.match(/\b(?:deep cuts?|album tracks?|b[- ]sides?)\b/)) {
-                        console.log(`[AUTO-UPDATE] Album preference from ${source}: deep cuts`);
-                      } else if (lowerText.match(/\b(?:singles?|hits?|chart)\b/)) {
-                        console.log(`[AUTO-UPDATE] Album preference from ${source}: singles`);
-                      }
-
-                      // Check for "exclude [artist]" or "exclude [artist] songs" pattern
-                      const excludeMatches = lowerText.matchAll(/exclude\s+([^,\.;]+?)(?:\s+(?:songs?|tracks?|music))?(?:[,\.;]|$)/gi);
-                      for (const match of excludeMatches) {
-                        const artist = match[1].trim().toLowerCase();
-                        if (artist && !excludedArtists.includes(artist)) {
-                          excludedArtists.push(artist);
-                          console.log(`[AUTO-UPDATE] Excluding artist from ${source}: ${artist}`);
-                        }
-                      }
-                    };
-
-                    // Parse original prompt for constraints
-                    if (playlist.originalPrompt) {
-                      parseConstraints(playlist.originalPrompt, 'original prompt');
-                    }
-
-                    // Parse refinement instructions for additional constraints
-                    if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
-                      playlist.refinementInstructions.forEach(instruction => {
-                        parseConstraints(instruction, 'refinement');
-                      });
-                    }
-
-                    // Filter tracks based on year, artist exclusions, song exclusions, and disliked songs
-                    const excludedSongIds = new Set((playlist.excludedSongs || []).map(s => s.id || s));
-                    const dislikedSongIds = new Set((playlist.dislikedSongs || []).map(s => s.id));
-
-                    if (minYear !== null || maxYear !== null || excludedArtists.length > 0 || excludedSongIds.size > 0 || dislikedSongIds.size > 0) {
-                      const beforeFilter = genreFilteredResults.length;
-                      genreFilteredResults = genreFilteredResults.filter(track => {
-                        // Check if this specific song was excluded
-                        if (excludedSongIds.has(track.id)) {
-                          console.log(`[AUTO-UPDATE] Filtered out excluded song: ${track.name}`);
-                          return false;
-                        }
-
-                        // Check if this specific song was disliked by user
-                        if (dislikedSongIds.has(track.id)) {
-                          console.log(`[AUTO-UPDATE] Filtered out disliked song: ${track.name}`);
-                          return false;
-                        }
-
-                        // Check year constraint (both min and max)
-                        if ((minYear !== null || maxYear !== null) && track.album && track.album.release_date) {
-                          const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                          if (minYear !== null && releaseYear < minYear) {
-                            return false;
-                          }
-                          if (maxYear !== null && releaseYear > maxYear) {
-                            return false;
-                          }
-                        }
-
-                        // Check artist exclusions
-                        if (excludedArtists.length > 0) {
-                          const trackArtists = track.artists.map(a => a.name.toLowerCase());
-                          for (const excludedArtist of excludedArtists) {
-                            if (trackArtists.some(a => a.includes(excludedArtist) || excludedArtist.includes(a))) {
-                              return false;
-                            }
-                          }
-                        }
-
-                        return true;
-                      });
-                      const yearRangeLog = minYear !== null || maxYear !== null ? ` year range: ${minYear || 'any'}-${maxYear || 'current'},` : '';
-                      console.log(`[AUTO-UPDATE] Applied filters: ${beforeFilter} tracks -> ${genreFilteredResults.length} tracks (${yearRangeLog} excluded ${excludedSongIds.size} songs, ${dislikedSongIds.size} disliked songs, ${excludedArtists.length} artists)`);
-                    }
-
-                    // Remove duplicates by both URI and normalized track name
-                    const existingUris = new Set(playlist.tracks.map(t => t.uri));
-                    const existingTrackIds = new Set(playlist.tracks.map(t => t.id).filter(Boolean));
-
-                    // Also create a set of normalized names from existing tracks to avoid duplicates
-                    const normalizeTrackName = (name) => {
-                      let normalized = name.toLowerCase();
-                      normalized = normalized
-                        .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
-                        .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
-                        .replace(/\s*[\(\[].*?[\)\]]/g, '')
-                        .replace(/[^\w\s]/g, '')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-                      return normalized;
-                    };
-
-                    const existingNormalizedNames = new Set(
-                      playlist.tracks
-                        .filter(t => t.name)
-                        .map(t => normalizeTrackName(t.name))
-                    );
-
-                    // Initialize song history if it doesn't exist
-                    if (!playlist.songHistory) {
-                      playlist.songHistory = [];
-                    }
-
-                    // Create a Set of historical track keys (artist|||title) for fast lookup
-                    const historicalTrackKeys = new Set(playlist.songHistory);
-
-                    const uniqueTracks = [];
-                    const seenUris = new Set();
-                    const seenNormalizedNames = new Set();
-
-                    // Deduplicate and filter
-                    genreFilteredResults.forEach(track => {
-                      const normalizedName = normalizeTrackName(track.name);
-                      const artistName = track.artists[0]?.name || 'Unknown';
-                      const trackKey = `${normalizedName}|||${artistName.toLowerCase()}`; // Artist+title combination
-                      const isAppendMode = playlist.updateMode !== 'replace';
-
-                      // Check if track already exists in playlist (by URI or ID)
-                      const isExistingTrack = existingUris.has(track.uri) || existingTrackIds.has(track.id);
-
-                      // Check if normalized name already exists in playlist
-                      const isExistingName = existingNormalizedNames.has(normalizedName);
-
-                      // Check if track exists in song history (previously used in ANY past version)
-                      const isInHistory = historicalTrackKeys.has(trackKey);
-
-                      // For replace mode: skip tracks from the CURRENT playlist to avoid immediate duplication
-                      // For append mode: skip tracks already in the playlist
-                      if (isExistingTrack || isExistingName) {
-                        if (isAppendMode) {
-                          // In append mode, definitely skip existing tracks
-                          return;
-                        } else {
-                          // In replace mode, still check - this prevents us from adding the SAME track that's currently in playlist
-                          console.log(`[AUTO-UPDATE] Skipping "${track.name}" by ${artistName} (currently in playlist)`);
-                          return;
-                        }
-                      }
-
-                      // Skip tracks that were in previous versions of the playlist
-                      if (isInHistory) {
-                        console.log(`[AUTO-UPDATE] Skipping "${track.name}" by ${artistName} (previously in playlist history)`);
-                        return;
-                      }
-
-                      // Check for duplicates within the new batch using artist+title combo
-                      const isDuplicateUri = seenUris.has(track.uri);
-                      const isDuplicateKey = seenNormalizedNames.has(trackKey);
-
-                      if (!isDuplicateUri && !isDuplicateKey) {
-                        seenUris.add(track.uri);
-                        seenNormalizedNames.add(trackKey);
-                        uniqueTracks.push(track);
-                      } else if (isDuplicateKey) {
-                        console.log(`[AUTO-UPDATE] Skipping duplicate in new batch: "${track.name}" by ${artistName}`);
-                      }
-                    });
-
-                    // Get the desired number of tracks from playlist settings
-                    // For replace mode: use the configured total track count
-                    // For append mode: always add a fixed 10 new songs per update (trackCount is the growing total)
-                    const desiredCount = playlist.updateMode === 'replace' ? (playlist.trackCount || 30) : 10;
-
-                    // If we don't have enough tracks, retry SoundCharts with expanded criteria.
-                    // No Spotify/Apple keyword searches — SoundCharts is the only source.
-                    if (uniqueTracks.length < desiredCount && soundChartsCriteria && process.env.SOUNDCHARTS_APP_ID) {
-                      console.log(`[AUTO-UPDATE] Only ${uniqueTracks.length}/${desiredCount} tracks — retrying SoundCharts with expanded criteria...`);
-                      try {
-                        const expandedCriteria = {
-                          ...soundChartsCriteria,
-                          // Relax popularity/audio constraints to cast a wider net
-                          popularity: null,
-                          audioFeatures: null,
-                        };
-                        const moreSoundChartsSongs = await discoverSongsViaSoundCharts(expandedCriteria, 80);
-                        if (moreSoundChartsSongs.length > 0) {
-                          console.log(`[AUTO-UPDATE] SoundCharts expansion found ${moreSoundChartsSongs.length} additional songs`);
-                          for (const scSong of moreSoundChartsSongs) {
-                            if (uniqueTracks.length >= desiredCount) break;
-                            try {
-                              const expandedQuery = scSong.isrc
-                                ? `isrc:${scSong.isrc}`
-                                : `track:${scSong.name} artist:${scSong.artistName}`;
-                              const results = await userSpotifyApi.searchTracks(expandedQuery, { limit: 1 });
-                              if (results.body.tracks && results.body.tracks.items.length > 0) {
-                                const track = results.body.tracks.items[0];
-                                const normalizedName = normalizeTrackName(track.name);
-                                const artistName = track.artists[0]?.name || 'Unknown';
-                                const trackKey = `${normalizedName}|||${artistName.toLowerCase()}`;
-                                if (!seenUris.has(track.uri) && !seenNormalizedNames.has(trackKey) &&
-                                    !historicalTrackKeys.has(trackKey) && !existingUris.has(track.uri) &&
-                                    !existingNormalizedNames.has(normalizedName) && track.explicit === false) {
-                                  seenUris.add(track.uri);
-                                  seenNormalizedNames.add(trackKey);
-                                  uniqueTracks.push(track);
-                                }
-                              }
-                            } catch (searchError) { /* skip */ }
-                          }
-                          console.log(`[AUTO-UPDATE] After SoundCharts expansion: ${uniqueTracks.length} total tracks`);
-                        }
-                      } catch (scError) {
-                        console.log('[AUTO-UPDATE] SoundCharts expansion failed:', scError.message);
-                      }
-                    }
-
-                    const songCount = Math.min(desiredCount, uniqueTracks.length);
-                    newTrackUris = uniqueTracks.slice(0, songCount).map(track => track.uri);
-
-                    // Store track info for history tracking (will be used after Spotify update succeeds)
-                    tracksForHistory = uniqueTracks.slice(0, songCount).map(track => ({
-                      name: track.name,
-                      artist: track.artists[0]?.name || 'Unknown'
-                    }));
-
-                    console.log(`[AUTO-UPDATE] Generated ${newTrackUris.length} new track URIs for ${playlist.playlistName} (requested: ${desiredCount})${songCount < desiredCount ? ' - Warning: Not enough valid tracks found after filtering and additional searches' : ''}`);
-
-                    // Validate track URIs before attempting to add them to Spotify
-                    // Spotify track URIs must be in format: spotify:track:<base62_id>
-                    // Base62 IDs are 22 characters long and use [0-9a-zA-Z]
-                    const validUriRegex = /^spotify:track:[0-9a-zA-Z]{22}$/;
-                    const invalidUris = [];
-                    const validatedUris = newTrackUris.filter(uri => {
-                      const isValid = validUriRegex.test(uri);
-                      if (!isValid) {
-                        invalidUris.push(uri);
-                      }
-                      return isValid;
-                    });
-
-                    if (invalidUris.length > 0) {
-                      console.error(`[AUTO-UPDATE] WARNING: Filtered out ${invalidUris.length} invalid track URIs:`);
-                      invalidUris.forEach((uri, idx) => {
-                        console.error(`[AUTO-UPDATE]   ${idx + 1}. "${uri}"`);
-                      });
-                    }
-
-                    // Update the track URIs and history to only include valid tracks
-                    newTrackUris = validatedUris;
-                    tracksForHistory = tracksForHistory.slice(0, validatedUris.length);
-
-                    console.log(`[AUTO-UPDATE] Validated URIs: ${newTrackUris.length} valid out of original ${validatedUris.length + invalidUris.length}`);
-                  }
-                  } // end Spotify else branch
+                  // Call the main generate-playlist endpoint — same code path as manual refresh
+                  console.log(`[AUTO-UPDATE] Calling generate-playlist for ${playlist.playlistName}...`);
+                  const PORT = process.env.PORT || 3001;
+                  const genResult = await axios.post(`http://localhost:${PORT}/api/generate-playlist`, {
+                    prompt,
+                    userId,
+                    platform: playlistPlatform,
+                    allowExplicit: true,
+                    newArtistsOnly: false,
+                    songCount: playlist.requestedSongCount || playlist.trackCount || 30,
+                    excludeTrackUris: (playlist.trackUris || (playlist.tracks || []).map(t => t.uri)).filter(Boolean),
+                    playlistId: playlist.playlistId,
+                    internalCall: true,
+                  }, { timeout: 180000 });
+
+                  returnedTracksData = genResult.data.tracks || [];
+                  newTrackUris = returnedTracksData.map(t => t.uri).filter(Boolean);
+                  tracksForHistory = returnedTracksData.map(t => ({ name: t.name, artist: t.artist }));
+                  console.log(`[AUTO-UPDATE] Generated ${newTrackUris.length} tracks for ${playlist.playlistName}`);
                 } catch (generationError) {
                   console.error(`[AUTO-UPDATE] Track generation failed for ${playlist.playlistName}:`, generationError.message);
                   newTrackUris = [];
@@ -8595,15 +7837,15 @@ Only reject tracks that are genuinely off-genre. When uncertain, include the tra
                     tracksWereAdded = true;
 
                     // Sync playlist.tracks in the DB record so Fins reflects the real Spotify state
-                    const newTracksForRecord = uniqueTracks.slice(0, songCount).map(track => ({
-                      id: track.id,
-                      name: track.name,
-                      artist: track.artists[0]?.name || 'Unknown',
-                      uri: track.uri,
-                      album: track.album?.name || '',
-                      image: track.album?.images[0]?.url || null,
-                      externalUrl: track.external_urls?.spotify || null,
-                      explicit: track.explicit || false
+                    const newTracksForRecord = returnedTracksData.map(t => ({
+                      id: t.id || null,
+                      name: t.name,
+                      artist: t.artist || 'Unknown',
+                      uri: t.uri,
+                      album: t.album || '',
+                      image: t.image || null,
+                      externalUrl: t.externalUrl || null,
+                      explicit: t.explicit || false
                     }));
 
                     if (playlist.updateMode === 'replace') {
