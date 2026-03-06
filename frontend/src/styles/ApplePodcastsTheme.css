@@ -1689,3 +1689,23 @@ body {
 :root.dark-mode .nav-tab-item.active {
   color: #ffffff;
 }
+
+.connect-platform-btn {
+  background: #1c1c1e;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+.connect-platform-btn:hover { background: #3a3a3c; }
+
+:root.dark-mode .connect-platform-btn {
+  background: #ffffff;
+  color: #1c1c1e;
+}
+:root.dark-mode .connect-platform-btn:hover { background: #e5e5ea; }
