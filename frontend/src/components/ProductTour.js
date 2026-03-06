@@ -8,10 +8,12 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
   const [isDemoExpanded, setIsDemoExpanded] = useState(false);
 
   // Refs for demo elements
+  const importButtonRef = useRef(null);
   const editButtonRef = useRef(null);
   const trackActionsRef = useRef(null);
   const refineInputRef = useRef(null);
   const autoRefreshRef = useRef(null);
+  const tooltipRef = useRef(null);
 
   // Force re-render when refs are attached
   const [, forceRender] = useState(0);
@@ -46,7 +48,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     },
     {
       title: "Discover Artists",
-      description: "Explore music beyond the chat! Your Top Artists shows your most-played artists from the last 3 months. Artists You Should Explore surfaces artists you haven't listened to yet. Tap any artist tile to instantly generate a playlist around them.",
+      description: "Explore music beyond the chat! Your Top Artists shows your most-played artists from the last 4 weeks. Artists You Should Explore surfaces artists you haven't listened to yet and artists you haven't listened to in a while. Tap any artist tile to instantly generate a playlist around them.",
       target: null,
       targetRef: null,
       position: "center"
@@ -61,8 +63,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     {
       title: "Import Your Playlists",
       description: "Already have playlists on Spotify or Apple Music? Tap Import to bring them into Playlist Creator and manage them with AI-powered refinements and auto-updates.",
-      target: ".import-button",
-      targetRef: null,
+      target: null,
+      targetRef: importButtonRef,
       position: "bottom"
     },
     {
@@ -77,27 +79,20 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       description: "Use the thumbs up to add more songs like this, or thumbs down to remove it and avoid similar tracks in future updates.",
       target: null,
       targetRef: trackActionsRef,
-      position: "left"
+      position: "top"
     },
     {
       title: "Refine Your Playlists",
       description: "Refine your playlist by adding instructions. Add or remove genres, change the tempo, adjust the mood, and more!",
       target: null,
       targetRef: refineInputRef,
-      position: "left"
+      position: "bottom"
     },
     {
       title: "Auto-Refresh & Manual Refresh",
       description: "Keep playlists fresh automatically — choose daily, weekly, or monthly updates. Or use Manual Refresh to add new songs right now. Both modes let you append to the playlist or fully replace the songs.",
       target: null,
       targetRef: autoRefreshRef,
-      position: "left"
-    },
-    {
-      title: "Song Reactions & More",
-      description: "Tap your profile icon to access Song Reactions (a dedicated view of all your liked and disliked tracks), Account settings, FAQ, and more.",
-      target: ".profile-button-apple",
-      targetRef: null,
       position: "bottom"
     },
     {
@@ -134,19 +129,12 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         onNavigateToPlaylists();
       }
 
-      // Steps 5-8 need demo playlist
-      if (currentStep >= 5 && currentStep <= 8) {
-        setShowDemoPlaylist(true);
-        // Step 5: collapsed; Steps 6-8: expanded
-        setIsDemoExpanded(currentStep >= 6);
-        // Steps 7-8 need demo modal (Refine and Auto-Refresh)
-        setShowDemoModal(currentStep >= 7 && currentStep <= 8);
-      } else {
-        // Steps 3-4: playlists page but no demo overlay
-        setShowDemoPlaylist(false);
-        setIsDemoExpanded(false);
-        setShowDemoModal(false);
-      }
+      // Steps 3-8 need demo playlist
+      setShowDemoPlaylist(true);
+      // Steps 5-8: expanded; Steps 3-4: collapsed
+      setIsDemoExpanded(currentStep >= 5);
+      // Steps 7-8 need demo modal (Refine and Auto-Refresh)
+      setShowDemoModal(currentStep >= 7 && currentStep <= 8);
     } else {
       // Steps 0-2 and 9-10: home page
       if (onNavigateHome) {
@@ -247,40 +235,43 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     }
 
     const rect = targetElement.getBoundingClientRect();
-    const tooltipWidth = 400;
-    const tooltipHeight = 320;
-    const padding = 20;
+    const tooltipWidth = tooltipRef.current ? tooltipRef.current.offsetWidth : 400;
+    const tooltipHeight = tooltipRef.current ? tooltipRef.current.offsetHeight : 320;
+    const gap = 7; // half of 14px rotated-square arrow, so arrow tip exactly meets target
 
-    let top, left;
+    let top, left, right;
 
     switch (step.position) {
       case 'top':
-        top = rect.top - tooltipHeight - padding;
+        top = rect.top - tooltipHeight - gap;
         left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
         break;
       case 'bottom':
-        top = rect.bottom + padding;
+        top = rect.bottom + gap;
         left = rect.left + (rect.width / 2) - (tooltipWidth / 2);
         break;
       case 'left':
         top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
-        left = rect.left - tooltipWidth - padding;
+        // Use `right` CSS property so tooltip's right edge is anchored exactly to rect.left
+        right = window.innerWidth - rect.left;
         break;
       case 'right':
         top = rect.top + (rect.height / 2) - (tooltipHeight / 2);
-        left = rect.right + padding;
+        left = rect.right + gap;
         break;
       default:
         return null;
     }
 
     // Keep tooltip within viewport
-    const maxLeft = window.innerWidth - tooltipWidth - 20;
     const maxTop = window.innerHeight - tooltipHeight - 20;
-    left = Math.max(20, Math.min(left, maxLeft));
     top = Math.max(20, Math.min(top, maxTop));
+    if (left !== undefined) {
+      const maxLeft = window.innerWidth - tooltipWidth - 20;
+      left = Math.max(20, Math.min(left, maxLeft));
+    }
 
-    return { top, left };
+    return right !== undefined ? { top, right } : { top, left };
   };
 
   const getHighlightPosition = () => {
@@ -336,38 +327,103 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
   const step = steps[currentStep];
   const tooltipPos = getTooltipPosition();
-  const highlightPos = getHighlightPosition();
   const isCenterStep = step.position === 'center';
+  const isMobile = window.innerWidth <= 768;
+
+  const arrowDirectionMap = { bottom: 'up', top: 'down', left: 'right', right: 'left' };
+
+  // For mobile: position tooltip on opposite side of target, arrow points toward target
+  const getMobileTooltipConfig = () => {
+    if (isCenterStep) return { style: {}, arrowClass: '' };
+    const baseStyle = {
+      position: 'fixed',
+      left: '50%',
+      right: 'auto',
+      transform: 'translateX(-50%)',
+      width: 'calc(100% - 32px)',
+      maxWidth: '100%',
+    };
+
+    const targetEl = step.targetRef?.current || (step.target ? document.querySelector(step.target) : null);
+    if (!targetEl) {
+      return { style: { ...baseStyle, bottom: '20px', top: 'auto' }, arrowClass: '' };
+    }
+
+    const rect = targetEl.getBoundingClientRect();
+    // If element is outside the viewport (clipped by overflow:hidden), fall back to bottom
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) {
+      return { style: { ...baseStyle, bottom: '20px', top: 'auto' }, arrowClass: '' };
+    }
+
+    const targetCenterX = rect.left + rect.width / 2;
+    const targetCenterY = rect.top + rect.height / 2;
+    const arrowX = Math.max(16, Math.min(targetCenterX - 16, window.innerWidth - 48));
+    const gap = 12;
+
+    if (targetCenterY < window.innerHeight * 0.55) {
+      // Target in top half: place tooltip just below the target, arrow points up
+      const top = Math.min(rect.bottom + gap, window.innerHeight - 320);
+      return {
+        style: { ...baseStyle, top: `${top}px`, bottom: 'auto', '--arrow-x': `${arrowX}px` },
+        arrowClass: 'arrow-up',
+      };
+    } else {
+      // Target in bottom half: place tooltip just above the target, arrow points down
+      const bottom = Math.min(window.innerHeight - rect.top + gap, window.innerHeight - 80);
+      return {
+        style: { ...baseStyle, bottom: `${bottom}px`, top: 'auto', '--arrow-x': `${arrowX}px` },
+        arrowClass: 'arrow-down',
+      };
+    }
+  };
+
+  const mobileConfig = isMobile ? getMobileTooltipConfig() : null;
+
+  const arrowClass = (!isCenterStep && !isMobile && tooltipPos && step.position) ? `arrow-${arrowDirectionMap[step.position] || ''}` : '';
+
+  // Compute arrow offset so it points at the target's center
+  const getArrowOffsetStyle = () => {
+    if (!tooltipPos || isCenterStep || isMobile) return {};
+    const targetEl = step.targetRef?.current || (step.target ? document.querySelector(step.target) : null);
+    if (!targetEl) return {};
+    const rect = targetEl.getBoundingClientRect();
+    if (step.position === 'bottom' || step.position === 'top') {
+      const tooltipW = tooltipRef.current ? tooltipRef.current.offsetWidth : 400;
+      const offset = Math.max(16, Math.min((rect.left + rect.width / 2) - tooltipPos.left, tooltipW - 16));
+      return { '--arrow-x': `${offset}px` };
+    } else {
+      // Min 26px so arrow clears the 16px border-radius — avoids visual gap between card edge and arrow
+      const offset = Math.max(26, Math.min((rect.top + rect.height / 2) - tooltipPos.top, 200));
+      return { '--arrow-y': `${offset}px` };
+    }
+  };
 
   return (
     <>
       <div className="product-tour-overlay">
-        {/* Highlight target element - skip for steps 7 and 8 (they use inline styled borders) */}
-        {highlightPos && currentStep !== 7 && currentStep !== 8 && (
-          <div
-            className="product-tour-highlight"
-            style={{
-              top: `${highlightPos.top}px`,
-              left: `${highlightPos.left}px`,
-              width: `${highlightPos.width}px`,
-              height: `${highlightPos.height}px`
-            }}
-          />
-        )}
-
         {/* Tooltip */}
         <div
-          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${currentStep === 1 ? 'tour-step-2-mobile' : ''} ${(currentStep === 7 || currentStep === 8) ? 'tour-modal-steps-mobile' : ''}`}
+          ref={tooltipRef}
+          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${isMobile ? (mobileConfig?.arrowClass || '') : arrowClass}`}
           style={
             isCenterStep ? {} :
-            (currentStep >= 1 && currentStep <= 9) ? {
+            isMobile ? mobileConfig?.style :
+            tooltipPos ? {
+              position: 'fixed',
+              top: `${tooltipPos.top}px`,
+              ...(tooltipPos.right !== undefined
+                ? { right: `${tooltipPos.right}px`, left: 'auto' }
+                : { left: `${tooltipPos.left}px` }),
+              transform: 'none',
+              ...getArrowOffsetStyle()
+            } : {
               position: 'fixed',
               bottom: '20px',
               right: '20px',
               top: 'auto',
               left: 'auto',
               transform: 'none'
-            } : {}
+            }
           }
         >
           <div className="product-tour-header">
@@ -416,7 +472,13 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
       {/* Demo Playlist - Rendered in React */}
       {showDemoPlaylist && currentTab === 'playlists' && (
         <div className="tour-demo-playlist-container" style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px' }}>
-          <div style={{ paddingTop: '80px', maxWidth: '100%', margin: '0 auto' }}>
+          <div style={{ padding: '0 16px', maxWidth: '100%', margin: '0 auto' }}>
+            {/* Demo playlists header (replicates real page header) */}
+            <div className="playlists-header" style={{ pointerEvents: 'none' }}>
+              <h1>My Playlists</h1>
+              <p className="playlists-count">1 playlist created</p>
+              <button ref={importButtonRef} className="import-button" style={{ pointerEvents: 'none' }}>Import</button>
+            </div>
             <div className={`playlist-card tour-demo-playlist-card ${isDemoExpanded ? 'expanded' : ''}`} style={{ pointerEvents: 'none', marginBottom: '16px' }}>
               <div className="playlist-card-header">
                 <div className="playlist-header-actions">
@@ -455,8 +517,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                           <div className="track-name">Anti-Hero</div>
                           <div className="track-artist">Taylor Swift</div>
                         </div>
-                        <div className={`track-actions ${currentStep === 6 ? 'tour-highlight-reactions' : ''}`} ref={trackActionsRef}>
-                          <button className="track-reaction-button" title="I like this! Add more songs like this">
+                        <div className={`track-actions ${currentStep === 6 ? 'tour-highlight-reactions' : ''}`}>
+                          <button ref={trackActionsRef} className="track-reaction-button" title="I like this! Add more songs like this">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
                             </svg>
@@ -576,7 +638,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             </div>
 
             <div className="edit-options-list">
-              <div ref={refineInputRef} className={`modal-section ${currentStep === 7 ? 'tour-refine-section' : ''}`} style={currentStep === 7 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : { background: 'transparent', border: 'none' }}>
+              <div ref={refineInputRef} className="modal-section" style={{ background: 'transparent', border: 'none' }}>
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Refine Playlist</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Add instructions to customize future auto-updates</p>
                 <div className="chat-input-container tour-demo-chat-input" style={{ display: currentStep === 7 ? 'flex' : 'none', position: 'relative' }}>
@@ -587,14 +649,14 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                 </div>
               </div>
 
-              <div ref={autoRefreshRef} className={`modal-section ${currentStep === 8 ? 'tour-auto-refresh-section' : ''}`} style={currentStep === 8 ? { borderRadius: '8px', border: '2px solid #fbbf24', padding: '16px' } : {}}>
+              <div ref={autoRefreshRef} className="modal-section">
                 <h3 className="section-title" style={{ margin: '0 0 8px 0' }}>Auto-Update Settings</h3>
                 <p className="section-description" style={{ margin: '0 0 12px 0' }}>Automatically refresh your playlist on schedule</p>
                 <div className="form-group" style={{ display: currentStep === 8 ? 'block' : 'none' }}>
                   <label htmlFor="update-frequency" style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: '#1a202c' }}>Auto-Update Frequency</label>
-                  <select id="update-frequency" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
+                  <select id="update-frequency" defaultValue="Daily" className="playlist-select tour-demo-select" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '15px', background: 'white' }}>
                     <option>Never</option>
-                    <option selected>Daily</option>
+                    <option>Daily</option>
                     <option>Weekly</option>
                     <option>Monthly</option>
                   </select>

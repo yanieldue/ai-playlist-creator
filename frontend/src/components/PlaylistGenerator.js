@@ -10,6 +10,7 @@ import Settings from './Settings';
 import Account from './Account';
 import SongReactions from './SongReactions';
 import FAQ from './FAQ';
+import Feedback from './Feedback';
 import SignupForm from './SignupForm';
 import PlatformSelection from './PlatformSelection';
 import Pricing from './Pricing';
@@ -2255,6 +2256,17 @@ const PlaylistGenerator = () => {
                   </button>
                   <button className="dropdown-item" onClick={() => {
                     setShowProfileDropdown(false);
+                    setActiveTab('feedback');
+                  }}>
+                    <span className="dropdown-icon">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                      </svg>
+                    </span>
+                    Feedback
+                  </button>
+                  <button className="dropdown-item" onClick={() => {
+                    setShowProfileDropdown(false);
                     setShowProductTour(true);
                   }}>
                     <span className="dropdown-icon">
@@ -2382,7 +2394,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your last 3 months listening history</p>
+                            <p className="section-subtitle">Create a new playlist based on your last 4 weeks listening history</p>
                           </div>
                         </div>
                         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -2395,7 +2407,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your last 3 months listening history</p>
+                            <p className="section-subtitle">Create a new playlist based on your last 4 weeks listening history</p>
                           </div>
                         </div>
                         <div className="horizontal-scroll-container" ref={topArtistsScrollRef}>
@@ -2502,6 +2514,10 @@ const PlaylistGenerator = () => {
 
             {activeTab === 'faq' && (
               <FAQ onBack={() => setActiveTab('home')} />
+            )}
+
+            {activeTab === 'feedback' && (
+              <Feedback onBack={() => setActiveTab('home')} userId={userId} />
             )}
 
             {activeTab === 'reactions' && (

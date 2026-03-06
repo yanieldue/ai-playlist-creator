@@ -11,30 +11,8 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.product-tour-highlight {
-  position: fixed;
-  background: transparent;
-  border: 3px solid #000000;
-  border-radius: 8px;
-  z-index: 10001;
-  pointer-events: none;
-}
-
-.product-tour-spotlight {
-  position: fixed;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
-  border-radius: 8px;
-  z-index: 10002;
-  pointer-events: none;
-  mix-blend-mode: screen;
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .product-tour-tooltip {
@@ -44,9 +22,9 @@
   padding: 24px;
   max-width: 400px;
   width: 90%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
   z-index: 10010;
-  animation: slideIn 0.3s ease;
+  animation: slideIn 0.25s ease;
   pointer-events: auto;
 }
 
@@ -55,32 +33,58 @@
   left: 50%;
   transform: translate(-50%, -50%);
   max-width: 500px;
+  animation: scaleIn 0.25s ease;
+}
+
+/* Arrow — rotated square, half inside the card, guarantees zero gap */
+.product-tour-tooltip::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+}
+
+/* Tooltip is below target — arrow points up */
+.product-tour-tooltip.arrow-up::before {
+  top: -7px;
+  left: var(--arrow-x, 28px);
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px 0 0 0;
+}
+
+/* Tooltip is above target — arrow points down */
+.product-tour-tooltip.arrow-down::before {
+  bottom: -7px;
+  left: var(--arrow-x, 28px);
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 0 0 2px 0;
+}
+
+/* Tooltip is to the left of target — arrow points right */
+.product-tour-tooltip.arrow-right::before {
+  top: var(--arrow-y, 24px);
+  right: -7px;
+  transform: translateY(-50%) rotate(45deg);
+  border-radius: 0 2px 0 0;
+}
+
+/* Tooltip is to the right of target — arrow points left */
+.product-tour-tooltip.arrow-left::before {
+  top: var(--arrow-y, 24px);
+  left: -7px;
+  transform: translateY(-50%) rotate(45deg);
+  border-radius: 0 0 0 2px;
 }
 
 @keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.product-tour-tooltip.center {
-  animation: scaleIn 0.3s ease;
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 .product-tour-header {
@@ -221,29 +225,14 @@
 }
 
 /* Dark Mode */
-:root.dark-mode .product-tour-highlight {
-  border-color: #ffffff;
-}
-
-:root.dark-mode .tour-dot.active {
-  background: #ffffff;
-}
-
-:root.dark-mode .tour-button.primary {
-  background: #ffffff;
-  color: #000000;
-}
-
-:root.dark-mode .tour-button.primary:hover {
-  background: #e5e5ea;
-}
-
-:root.dark-mode .modal-section.tour-refine-section,
-:root.dark-mode .tour-auto-refresh-section {
-  border-color: #ffffff !important;
-}
-
 :root.dark-mode .product-tour-tooltip {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .product-tour-tooltip.arrow-up::before,
+:root.dark-mode .product-tour-tooltip.arrow-down::before,
+:root.dark-mode .product-tour-tooltip.arrow-right::before,
+:root.dark-mode .product-tour-tooltip.arrow-left::before {
   background: #2c2c2e;
 }
 
@@ -262,6 +251,19 @@
 
 :root.dark-mode .product-tour-body p {
   color: #e5e5ea;
+}
+
+:root.dark-mode .tour-dot.active {
+  background: #ffffff;
+}
+
+:root.dark-mode .tour-button.primary {
+  background: #ffffff;
+  color: #000000;
+}
+
+:root.dark-mode .tour-button.primary:hover {
+  background: #e5e5ea;
 }
 
 :root.dark-mode .tour-button.secondary {
@@ -327,13 +329,13 @@
   color: #aeaeb2 !important;
 }
 
-:root.dark-mode .modal-section:not(.tour-refine-section):not(.tour-auto-refresh-section) {
+:root.dark-mode .modal-section {
   background: transparent !important;
 }
 
 :root.dark-mode .tour-demo-select {
   background-color: #3a3a3c !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fbbf24' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23aeaeb2' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
   background-repeat: no-repeat !important;
   background-position: right 14px center !important;
   border-color: #424245 !important;
@@ -357,13 +359,6 @@
   border: none !important;
 }
 
-:root.dark-mode .tour-refine-section label,
-:root.dark-mode .tour-auto-refresh-section label {
-  color: #ffffff !important;
-}
-
-/* Highlight track reaction buttons during tour */
-
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .product-tour-tooltip {
@@ -372,35 +367,11 @@
   }
 
   .product-tour-tooltip.center {
-    max-width: calc(100% - 32px);
-  }
-
-  /* Step 2 - Position at top to avoid blocking chat input */
-  .product-tour-tooltip.tour-step-2-mobile {
-    top: 80px !important;
+    top: 50% !important;
     bottom: auto !important;
-  }
-
-  /* Steps 6-7 (modal steps) - Position at bottom on mobile to avoid blocking modal content */
-  .product-tour-tooltip.tour-modal-steps-mobile {
-    top: auto !important;
-    bottom: 20px !important;
-    z-index: 10011 !important; /* Above demo modal (9999) */
-  }
-
-  /* Reduce tooltip width on small screens for better margins */
-  .product-tour-tooltip:not(.center) {
-    max-width: calc(100% - 40px);
-  }
-
-  /* Increase touch target size for track reaction buttons */
-  .track-reaction-button {
-    padding: 12px !important;
-    min-width: 44px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    max-width: calc(100% - 32px);
   }
 
   .product-tour-header h3 {
@@ -429,5 +400,15 @@
 
   .tour-progress-dots {
     width: 100%;
+  }
+
+  /* Increase touch target size for track reaction buttons */
+  .track-reaction-button {
+    padding: 12px !important;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 }

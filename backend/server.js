@@ -45,6 +45,8 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
+      'https://tryfins.com',
+      'https://www.tryfins.com',
       'https://ai-playlist-creator-7cgm.vercel.app',
       'http://localhost:3000',
       'http://127.0.0.1:3000'
@@ -1852,6 +1854,33 @@ app.get('/api/verify-reset-token/:token', async (req, res) => {
       error: 'Failed to verify reset token',
       details: error.message
     });
+  }
+});
+
+// User feedback
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { userId, email, rating, message } = req.body;
+    if (!message && !rating) {
+      return res.status(400).json({ error: 'Message or rating required' });
+    }
+    const stars = rating ? '★'.repeat(rating) + '☆'.repeat(5 - rating) : 'No rating';
+    const html = `
+      <h2>New Feedback from Fins</h2>
+      <p><strong>User:</strong> ${email || userId || 'Anonymous'}</p>
+      <p><strong>Rating:</strong> ${stars} (${rating || 0}/5)</p>
+      <p><strong>Message:</strong></p>
+      <blockquote style="border-left:3px solid #ccc;padding-left:12px;color:#333">${(message || '').replace(/\n/g, '<br/>')}</blockquote>
+    `;
+    await sendEmail({
+      to: 'support@tryfins.com',
+      subject: `Fins Feedback${rating ? ` — ${rating}/5 stars` : ''}`,
+      html,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Feedback error:', error);
+    res.status(500).json({ error: 'Failed to send feedback' });
   }
 });
 
