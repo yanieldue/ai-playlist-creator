@@ -1078,7 +1078,11 @@ async function discoverSongsViaSoundChartsTop(criteria, limit = 50, offset = 0) 
       isrc: song.isrc?.value || song.isrc || null,
     }));
   } catch (error) {
-    console.log(`⚠️  SoundCharts top songs error: ${error.response?.status} ${error.message}`);
+    if (error.response?.status === 403) {
+      console.log(`⚠️  SoundCharts top songs: endpoint not available on current plan (403), skipping`);
+    } else {
+      console.log(`⚠️  SoundCharts top songs error: ${error.response?.status} ${error.message}`);
+    }
     return [];
   }
 }
@@ -4898,10 +4902,10 @@ Return ONLY valid JSON:
             ? `- Reference artists: ${seedArtistNames.join(', ')}. These songs were discovered by a music similarity algorithm that can have false positives. REMOVE any song whose artist clearly does not belong in the same musical scene as ${seedArtistNames.join(' and ')} (different era, unrelated genre, or totally different sound world).`
             : '';
 
-          // When seed artists are provided, be strict — the algorithm can return false positives.
+          // When seed artists are provided, be moderately strict about obvious genre mismatches only.
           // Otherwise be lenient to avoid filtering too aggressively.
           const leniencyInstruction = seedArtistNames.length > 0
-            ? `Be STRICT about artist fit — the discovery algorithm can produce false positives. If you don't recognize an artist or they clearly don't belong in the same world as ${seedArtistNames.join(', ')}, REMOVE them. A playlist with fewer but correct songs beats one with off-scene songs.`
+            ? `Be MODERATELY strict — only remove songs that clearly don't fit the genre/scene. Artists who are adjacent or similar in style should be KEPT even if less famous. Do NOT remove songs just because you're unfamiliar with the artist. When uncertain, KEEP the song. Aim to keep at least 70% of tracks.`
             : `Be LENIENT — only remove songs that clearly don't fit. When in doubt, KEEP the song.`;
 
           try {
@@ -4952,12 +4956,15 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                 .map(idx => selectedTracks[idx - 1])
                 .filter(t => t !== undefined);
 
-              if (filteredTracks.length >= 5) {
-                const removed = selectedTracks.length - filteredTracks.length;
+              // Never remove more than 30% of tracks — prevents over-filtering
+              const minKeep = Math.ceil(selectedTracks.length * 0.7);
+              const finalTracks = filteredTracks.length >= minKeep ? filteredTracks : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
+              if (finalTracks.length >= 5) {
+                const removed = selectedTracks.length - finalTracks.length;
                 if (removed > 0) {
                   console.log(`✂️ Sanity check removed ${removed} mismatched tracks`);
                 }
-                selectedTracks = filteredTracks;
+                selectedTracks = finalTracks;
               }
             }
           } catch (error) {
