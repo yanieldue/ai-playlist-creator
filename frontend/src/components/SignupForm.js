@@ -182,7 +182,7 @@ const SignupForm = ({ onSignupComplete }) => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-logo">
-          <img src="/Fins_logo.png" alt="Fins" className="auth-logo-img" />
+          <img src="/fins_logo.png" alt="Fins" className="auth-logo-img" />
         </div>
 
         <h1 className="auth-title">

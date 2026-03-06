@@ -55,7 +55,7 @@ body {
   height: 32px;
   object-fit: cover;
   display: block;
-  border-radius: 50%;
+  border-radius: 8px;
 }
 
 .nav-center {
