@@ -3,9 +3,10 @@ import '../styles/ProductTour.css';
 
 const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateToPlaylists, currentTab }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [showDemoPlaylist, setShowDemoPlaylist] = useState(false);
-  const [showDemoModal, setShowDemoModal] = useState(false);
-  const [isDemoExpanded, setIsDemoExpanded] = useState(false);
+  // Demo visibility is derived from currentStep — no state needed, always pre-rendered
+  const demoPlaylistVisible = currentStep >= 3 && currentStep <= 8;
+  const demoExpanded = currentStep >= 5 && currentStep <= 8;
+  const demoModalVisible = currentStep >= 7 && currentStep <= 8;
 
   // Refs for demo elements
   const importButtonRef = useRef(null);
@@ -17,6 +18,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
 
   // Force re-render when refs are attached
   const [, forceRender] = useState(0);
+  // Track whether tooltip position has settled (prevents flash on mobile)
+  const [positionReady, setPositionReady] = useState(false);
 
   // Step indices reference:
   //  0 - Welcome (center, home)
@@ -119,35 +122,19 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     };
   }, [isOpen, onNavigateHome]);
 
-  // Handle navigation and demo content
+  // Handle navigation between home and playlists tab
   useEffect(() => {
     if (!isOpen) return;
-
-    // Steps 3-8 need the playlists page
     if (currentStep >= 3 && currentStep <= 8) {
-      if (onNavigateToPlaylists) {
-        onNavigateToPlaylists();
-      }
-
-      // Steps 3-8 need demo playlist
-      setShowDemoPlaylist(true);
-      // Steps 5-8: expanded; Steps 3-4: collapsed
-      setIsDemoExpanded(currentStep >= 5);
-      // Steps 7-8 need demo modal (Refine and Auto-Refresh)
-      setShowDemoModal(currentStep >= 7 && currentStep <= 8);
+      if (onNavigateToPlaylists) onNavigateToPlaylists();
     } else {
-      // Steps 0-2 and 9-10: home page
-      if (onNavigateHome) {
-        onNavigateHome();
-      }
-      setShowDemoPlaylist(false);
-      setIsDemoExpanded(false);
-      setShowDemoModal(false);
+      if (onNavigateHome) onNavigateHome();
     }
   }, [isOpen, currentStep, onNavigateToPlaylists, onNavigateHome]);
 
   // Track if layout is ready - triggers re-render after demo content loads
   useEffect(() => {
+    setPositionReady(false);
     // For steps with highlights, trigger re-render after layout settles
     if (currentStep >= 1 && currentStep <= 7) {
       // Extra delay for step 5 (edit button) to ensure it is positioned
@@ -157,6 +144,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             requestAnimationFrame(() => {
               setTimeout(() => {
                 forceRender(prev => prev + 1);
+                setPositionReady(true);
               }, 100);
             });
           });
@@ -165,11 +153,15 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             forceRender(prev => prev + 1);
+            setPositionReady(true);
           });
         });
       }
+    } else {
+      // Center steps: position is always ready (CSS handles centering)
+      setPositionReady(true);
     }
-  }, [currentStep, showDemoPlaylist, showDemoModal, isDemoExpanded]);
+  }, [currentStep]);
 
   // Lock scroll position during tour
   useEffect(() => {
@@ -199,23 +191,14 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
     localStorage.setItem('productTourCompleted', 'true');
     onClose();
     setCurrentStep(0);
-    setShowDemoPlaylist(false);
-    setShowDemoModal(false);
   };
 
   const handleComplete = () => {
     localStorage.setItem('productTourCompleted', 'true');
-    if (onComplete) {
-      onComplete();
-    }
-    // Navigate back to home page
-    if (onNavigateHome) {
-      onNavigateHome();
-    }
+    if (onComplete) onComplete();
+    if (onNavigateHome) onNavigateHome();
     onClose();
     setCurrentStep(0);
-    setShowDemoPlaylist(false);
-    setShowDemoModal(false);
   };
 
   const getTooltipPosition = () => {
@@ -404,10 +387,10 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         {/* Tooltip */}
         <div
           ref={tooltipRef}
-          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${isMobile ? (mobileConfig?.arrowClass || '') : arrowClass}`}
+          className={`product-tour-tooltip ${isCenterStep ? 'center' : ''} ${isMobile && !isCenterStep ? 'mobile-positioned' : ''} ${isMobile ? (mobileConfig?.arrowClass || '') : arrowClass}`}
           style={
             isCenterStep ? {} :
-            isMobile ? mobileConfig?.style :
+            isMobile ? { ...mobileConfig?.style, visibility: positionReady ? 'visible' : 'hidden' } :
             tooltipPos ? {
               position: 'fixed',
               top: `${tooltipPos.top}px`,
@@ -469,9 +452,8 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
         </div>
       </div>
 
-      {/* Demo Playlist - Rendered in React */}
-      {showDemoPlaylist && currentTab === 'playlists' && (
-        <div className="tour-demo-playlist-container" style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px' }}>
+      {/* Demo Playlist - always in DOM, visibility toggled to avoid mount animations */}
+      <div className="tour-demo-playlist-container" style={{ position: 'fixed', top: '60px', left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 9999, overflow: 'hidden', padding: '0 2px', visibility: demoPlaylistVisible ? 'visible' : 'hidden' }}>
           <div style={{ padding: '0 16px', maxWidth: '100%', margin: '0 auto' }}>
             {/* Demo playlists header (replicates real page header) */}
             <div className="playlists-header" style={{ pointerEvents: 'none' }}>
@@ -479,7 +461,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
               <p className="playlists-count">1 playlist created</p>
               <button ref={importButtonRef} className="import-button" style={{ pointerEvents: 'none' }}>Import</button>
             </div>
-            <div className={`playlist-card tour-demo-playlist-card ${isDemoExpanded ? 'expanded' : ''}`} style={{ pointerEvents: 'none', marginBottom: '16px' }}>
+            <div className={`playlist-card tour-demo-playlist-card ${demoExpanded ? 'expanded' : ''}`} style={{ pointerEvents: 'none', marginBottom: '16px' }}>
               <div className="playlist-card-header">
                 <div className="playlist-header-actions">
                   <div className="playlist-menu-container">
@@ -487,7 +469,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                       ⋮
                     </button>
                   </div>
-                  <span className="expand-icon">{isDemoExpanded ? '▼' : '▶'}</span>
+                  <span className="expand-icon">{demoExpanded ? '▼' : '▶'}</span>
                 </div>
                 <div className="playlist-header-content">
                   <div className="playlist-cover-image" style={{
@@ -502,8 +484,7 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                 </div>
               </div>
 
-              {isDemoExpanded && (
-                <div className="playlist-details">
+              <div className="playlist-details" style={{ display: demoExpanded ? 'block' : 'none' }}>
                   <div className="playlist-controls">
                     <button ref={editButtonRef} className="edit-button tour-demo-edit-button" style={{ width: 'auto', minWidth: 'fit-content' }}>
                       Edit Playlist
@@ -617,15 +598,12 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
                     </div>
                   </div>
                 </div>
-              )}
             </div>
           </div>
         </div>
-      )}
 
-      {/* Demo Modal - Rendered in React */}
-      {showDemoModal && currentTab === 'playlists' && (
-        <div className="modal-overlay tour-demo-modal" style={{ zIndex: 9999, pointerEvents: 'none', background: 'transparent' }}>
+      {/* Demo Modal - always in DOM, visibility toggled to avoid mount animations */}
+      <div className="modal-overlay tour-demo-modal" style={{ zIndex: 9999, pointerEvents: 'none', background: 'transparent', visibility: demoModalVisible ? 'visible' : 'hidden' }}>
           <div className="edit-options-modal tour-demo-edit-modal" style={{ pointerEvents: 'none', minHeight: '500px' }}>
             <div className="edit-options-header">
               <div className="playlist-icon" style={{
@@ -670,7 +648,6 @@ const ProductTour = ({ isOpen, onClose, onComplete, onNavigateHome, onNavigateTo
             </div>
           </div>
         </div>
-      )}
     </>
   );
 };
