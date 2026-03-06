@@ -2368,8 +2368,8 @@ const PlaylistGenerator = () => {
                       <button
                         onClick={() => setActiveTab('account')}
                         style={{
-                          background: '#fbbf24',
-                          color: '#78350f',
+                          background: '#1c1c1e',
+                          color: '#ffffff',
                           border: 'none',
                           borderRadius: '12px',
                           padding: '12px 24px',
@@ -2378,8 +2378,8 @@ const PlaylistGenerator = () => {
                           cursor: 'pointer',
                           transition: 'all 0.2s ease'
                         }}
-                        onMouseOver={(e) => e.target.style.background = '#f59e0b'}
-                        onMouseOut={(e) => e.target.style.background = '#fbbf24'}
+                        onMouseOver={(e) => e.target.style.background = '#3a3a3c'}
+                        onMouseOut={(e) => e.target.style.background = '#1c1c1e'}
                       >
                         Connect a Platform
                       </button>
