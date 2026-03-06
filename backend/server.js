@@ -7927,15 +7927,15 @@ DO NOT include any text outside the JSON.`
                       ? genreData.artistConstraints.requestedArtists
                       : genreData.artistConstraints?.suggestedSeedArtists || [];
 
-                    // For imported playlists, fall back to artists from existing tracks as seed artists.
-                    // This ensures SoundCharts can find similar artists instead of going genre-only.
-                    if (seedArtists.length === 0 && !playlist.originalPrompt && playlist.tracks && playlist.tracks.length > 0) {
+                    // Fall back to artists from existing tracks as seed artists when genreData has none.
+                    // This applies to both imported playlists and playlists with missing/old genreData.
+                    if (seedArtists.length === 0 && playlist.tracks && playlist.tracks.length > 0) {
                       const trackArtists = [...new Set(
                         playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean)
                       )].slice(0, 5);
                       if (trackArtists.length > 0) {
                         seedArtists.push(...trackArtists);
-                        console.log(`[AUTO-UPDATE] Imported playlist — using track artists as SoundCharts seeds: ${trackArtists.join(', ')}`);
+                        console.log(`[AUTO-UPDATE] No seed artists from genreData — using track artists as SoundCharts seeds: ${trackArtists.join(', ')}`);
                       }
                     }
 
