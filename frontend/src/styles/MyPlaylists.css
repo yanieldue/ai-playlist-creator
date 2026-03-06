@@ -1342,6 +1342,10 @@
   color: white;
   font-weight: bold;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .option-content {
