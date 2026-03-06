@@ -1478,7 +1478,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
                 <div className="form-group">
                   <label>Update Mode</label>
-                  <div className="form-group">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
                       { value: 'append', label: 'Append', description: 'Add new songs to your existing ones' },
                       { value: 'replace', label: 'Replace', description: 'Remove old songs and add new ones' },
