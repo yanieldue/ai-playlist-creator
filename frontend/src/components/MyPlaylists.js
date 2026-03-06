@@ -1388,7 +1388,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           onClick={() => setTempUpdateFrequency(value)}
                         >
                           <div className="option-checkbox">
-                            {tempUpdateFrequency === value && <span className="checkmark"><Icons.Check size={12} /></span>}
+                            {tempUpdateFrequency === value && <span className="checkmark"><Icons.Check size={16} /></span>}
                           </div>
                           <span className="option-label">{label}</span>
                         </div>
