@@ -138,12 +138,13 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   };
 
   // Helper function to format the next update time
-  const formatNextUpdateTime = (frequency) => {
+  const formatNextUpdateTime = (frequency, nextUpdateIso) => {
     if (frequency === 'never') {
       return 'No auto-updates scheduled';
     }
 
-    const nextUpdate = getNextUpdateTime(frequency);
+    // Use the actual nextUpdate timestamp from the server if available
+    const nextUpdate = nextUpdateIso ? new Date(nextUpdateIso) : getNextUpdateTime(frequency);
     if (!nextUpdate) return '';
 
     const today = new Date();
@@ -159,7 +160,18 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       nextUpdate.getMonth() === tomorrow.getMonth() &&
       nextUpdate.getFullYear() === tomorrow.getFullYear()
     ) {
-      return `Tomorrow at 12:00 AM${tzLabel}`;
+      const timeStr = nextUpdate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `Tomorrow at ${timeStr}${tzLabel}`;
+    }
+
+    // Check if next update is today
+    if (
+      nextUpdate.getDate() === today.getDate() &&
+      nextUpdate.getMonth() === today.getMonth() &&
+      nextUpdate.getFullYear() === today.getFullYear()
+    ) {
+      const timeStr = nextUpdate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `Today at ${timeStr}${tzLabel}`;
     }
 
     // Format: "Wednesday, January 15 at 12:00 AM PST"
@@ -933,7 +945,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           <span className="auto-update-icon"><Icons.Loader size={13} /></span>
                           {autoUpdateTooltipId === playlist.playlistId && (
                             <div className="auto-update-tooltip">
-                              Next update: {formatNextUpdateTime(playlist.updateFrequency)}
+                              Next update: {formatNextUpdateTime(playlist.updateFrequency, playlist.nextUpdate)}
                             </div>
                           )}
                         </span>

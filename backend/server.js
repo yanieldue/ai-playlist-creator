@@ -1557,35 +1557,54 @@ function calculateNextUpdate(frequency, playlistId = null, updateTime = null) {
     } else if (period === 'AM' && hour24 === 12) {
       hour24 = 0;
     }
+    const min = parseInt(minute);
 
-    // Create a date string in the user's timezone using ISO 8601 format
-    // Get current date components in the user's timezone
-    const nowInTz = new Date().toLocaleString('en-US', {
+    // Get current date components in the user's timezone using formatToParts
+    // (avoids locale string parsing bugs that can double-apply UTC offsets)
+    const nowParts = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+      year: 'numeric', month: 'numeric', day: 'numeric'
+    }).formatToParts(now);
 
-    const [month, day, year] = nowInTz.split('/');
-    // Build ISO string: YYYY-MM-DDTHH:MM:SS
-    const isoString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`;
+    let tzYear = 0, tzMonth = 0, tzDay = 0;
+    for (const p of nowParts) {
+      if (p.type === 'year') tzYear = parseInt(p.value);
+      if (p.type === 'month') tzMonth = parseInt(p.value);
+      if (p.type === 'day') tzDay = parseInt(p.value);
+    }
 
-    // Parse this as a local time, then get UTC equivalent
-    // We need to account for the timezone offset
-    const tempDate = new Date(isoString);
-    const utcString = tempDate.toLocaleString('en-US', { timeZone: 'UTC' });
-    const tzString = tempDate.toLocaleString('en-US', { timeZone: timezone });
+    // Build a "naive" UTC moment: today's date in user's timezone + their selected time,
+    // treated as if the components are UTC (not yet corrected for offset)
+    const naiveUtc = new Date(Date.UTC(tzYear, tzMonth - 1, tzDay, hour24, min, 0));
 
-    // Calculate the offset in milliseconds
-    const utcTime = new Date(utcString).getTime();
-    const tzTime = new Date(tzString).getTime();
-    const offsetMs = utcTime - tzTime;
+    // Get what the clock reads in the target timezone for that naive UTC moment
+    const clockParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric',
+      hour12: false
+    }).formatToParts(naiveUtc);
 
-    // Apply offset to get correct UTC time
-    // offsetMs = utcTime - tzTime (positive for west of UTC e.g. PST = +8h, negative for east e.g. Tokyo = -9h)
-    // Adding it converts the "naive local midnight" (parsed as UTC) to the actual UTC equivalent
-    next = new Date(tempDate.getTime() + offsetMs);
+    let clockYear = 0, clockMonth = 0, clockDay = 0, clockH = 0, clockMin = 0, clockSec = 0;
+    for (const p of clockParts) {
+      if (p.type === 'year') clockYear = parseInt(p.value);
+      if (p.type === 'month') clockMonth = parseInt(p.value);
+      if (p.type === 'day') clockDay = parseInt(p.value);
+      if (p.type === 'hour') clockH = parseInt(p.value);
+      if (p.type === 'minute') clockMin = parseInt(p.value);
+      if (p.type === 'second') clockSec = parseInt(p.value);
+    }
+    if (clockH === 24) clockH = 0; // some Intl implementations use 24 for midnight
+
+    // Compute correction: shift naiveUtc so the clock reads hour24:min in the target timezone
+    // clockAsUtc: what the clock shows expressed as a UTC ms value (for arithmetic only)
+    // targetAsUtc: what we WANT the clock to show, expressed the same way
+    const clockAsUtc = Date.UTC(clockYear, clockMonth - 1, clockDay, clockH, clockMin, clockSec);
+    const targetAsUtc = Date.UTC(tzYear, tzMonth - 1, tzDay, hour24, min, 0);
+    const correctionMs = targetAsUtc - clockAsUtc;
+
+    // correctionMs is the UTC offset (e.g. +8h for PST, -9h for JST)
+    next = new Date(naiveUtc.getTime() + correctionMs);
 
   } else if (playlistId) {
     // Fall back to hash-based time slot if no updateTime specified
@@ -1626,6 +1645,11 @@ function calculateNextUpdate(frequency, playlistId = null, updateTime = null) {
       break;
     default:
       return null;
+  }
+  if (updateTime) {
+    const { timezone } = updateTime;
+    const localStr = next.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' });
+    console.log(`[SCHEDULE] Next update: ${next.toISOString()} UTC = ${localStr} (${timezone})`);
   }
   return next.toISOString();
 }
@@ -1876,14 +1900,23 @@ app.post('/api/feedback', async (req, res) => {
       <p><strong>Message:</strong></p>
       <blockquote style="border-left:3px solid #ccc;padding-left:12px;color:#333">${(message || '').replace(/\n/g, '<br/>')}</blockquote>
     `;
-    await sendEmail({
-      to: 'support@tryfins.com',
-      subject: `Fins Feedback${rating ? ` — ${rating}/5 stars` : ''}`,
-      html,
-    });
+    const hasEmailProvider = process.env.SENDGRID_API_KEY || (process.env.GMAIL_ACCOUNT && process.env.GMAIL_APP_PASSWORD);
+    if (hasEmailProvider) {
+      await sendEmail({
+        to: 'support@tryfins.com',
+        subject: `Fins Feedback${rating ? ` — ${rating}/5 stars` : ''}`,
+        html,
+      });
+    } else {
+      // No email provider in local dev — just log the feedback
+      console.log(`[FEEDBACK] ${email || userId || 'Anonymous'} (${rating}/5): ${message}`);
+    }
     res.json({ success: true });
   } catch (error) {
     console.error('Feedback error:', error);
+    if (error.response?.body?.errors) {
+      console.error('SendGrid error details:', JSON.stringify(error.response.body.errors));
+    }
     res.status(500).json({ error: 'Failed to send feedback' });
   }
 });
@@ -6483,13 +6516,26 @@ app.post('/api/import-playlist', async (req, res) => {
 
       // Get playlist details from Spotify
       const playlistDetails = await userSpotifyApi.getPlaylist(playlistId);
-      const trackUris = playlistDetails.body.tracks.items.map(item => item.track.uri);
+      const importedTracks = playlistDetails.body.tracks.items
+        .filter(item => item.track && item.track.id)
+        .map(item => ({
+          id: item.track.id,
+          name: item.track.name,
+          artist: item.track.artists[0]?.name || 'Unknown',
+          uri: item.track.uri,
+          album: item.track.album?.name || '',
+          image: item.track.album?.images?.[0]?.url || null,
+          externalUrl: item.track.external_urls?.spotify || null,
+          explicit: item.track.explicit || false
+        }));
+      const trackUris = importedTracks.map(t => t.uri);
 
       playlistRecord = {
         playlistId: playlistId,
         playlistName: playlistDetails.body.name,
         description: playlistDetails.body.description || '',
         image: playlistDetails.body.images?.length > 0 ? playlistDetails.body.images[0].url : null,
+        tracks: importedTracks,
         trackUris: trackUris,
         trackCount: trackUris.length,
         createdAt: new Date().toISOString(),
@@ -6522,6 +6568,7 @@ app.post('/api/import-playlist', async (req, res) => {
         playlistName: playlistDetails.name,
         description: playlistDetails.description || '',
         image: playlistDetails.image || null,
+        tracks: tracks,
         trackUris: trackUris,
         trackCount: trackUris.length,
         createdAt: new Date().toISOString(),
@@ -7615,323 +7662,290 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Auto-update scheduler - runs every minute to check for playlists that need updating
+// ── Auto-update queue ─────────────────────────────────────────────────────────
+// Playlists due for update are enqueued here and processed MAX_CONCURRENT at a time,
+// so a burst of 500 simultaneous schedules doesn't hammer APIs all at once.
+const autoUpdateQueue = []; // { userId, playlist }
+const MAX_CONCURRENT_UPDATES = 5;
+let activeUpdateCount = 0;
+
+async function processPlaylistUpdate(userId, playlist) {
+  console.log(`[AUTO-UPDATE] Updating playlist: ${playlist.playlistName} (${playlist.playlistId})`);
+  try {
+    // Build prompt
+    let prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
+    if (playlist.description) {
+      prompt += `. Description: ${playlist.description}`;
+    }
+
+    const allRefinements = [];
+    if (playlist.chatMessages && playlist.chatMessages.length > 0) {
+      allRefinements.push(...playlist.chatMessages.filter(msg => msg.role === 'user').map(msg => msg.content));
+    }
+    if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
+      allRefinements.push(...playlist.refinementInstructions);
+    }
+    if (allRefinements.length > 0) {
+      prompt += `. Refinements: ${allRefinements.join('. ')}`;
+      console.log(`[AUTO-UPDATE] Applied ${allRefinements.length} total refinement(s)`);
+    }
+
+    if (!playlist.tracks) playlist.tracks = [];
+
+    // Liked/disliked context
+    const likedSongs = playlist.likedSongs || [];
+    const dislikedSongs = playlist.dislikedSongs || [];
+    let userFeedbackContext = '';
+    if (likedSongs.length > 0) {
+      userFeedbackContext += ` User liked: ${likedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ')}.`;
+      console.log(`[AUTO-UPDATE] Incorporating ${likedSongs.length} liked song(s) into prompt`);
+    }
+    if (dislikedSongs.length > 0) {
+      userFeedbackContext += ` User disliked: ${dislikedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ')}.`;
+      console.log(`[AUTO-UPDATE] Avoiding songs similar to ${dislikedSongs.length} disliked song(s)`);
+    }
+
+    if (playlist.tracks.length > 0) {
+      prompt = `${prompt}. Reference tracks: ${playlist.tracks.slice(0, 5).map(t => t.name).join(', ')}`;
+    }
+
+    if (!playlist.originalPrompt && playlist.tracks.length > 0) {
+      const trackArtists = [...new Set(playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean))].slice(0, 8);
+      if (trackArtists.length > 0) {
+        prompt += `. Key artists in this playlist: ${trackArtists.join(', ')}`;
+        console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${trackArtists.join(', ')}`);
+      }
+    }
+
+    if (userFeedbackContext) prompt += userFeedbackContext;
+
+    // Resolve platform user ID
+    const playlistPlatform = playlist.platform || 'spotify';
+    let platformUserId = userId;
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, playlistPlatform);
+      if (!platformUserId) {
+        console.log(`[AUTO-UPDATE] No ${playlistPlatform} connection for user ${userId}, skipping ${playlist.playlistName}`);
+        return;
+      }
+    }
+
+    // Generate tracks
+    let newTrackUris = [];
+    let tracksForHistory = [];
+    let returnedTracksData = [];
+    try {
+      console.log(`[AUTO-UPDATE] Calling generate-playlist for ${playlist.playlistName}...`);
+      const PORT = process.env.PORT || 3001;
+      const genResult = await axios.post(`http://localhost:${PORT}/api/generate-playlist`, {
+        prompt,
+        userId,
+        platform: playlistPlatform,
+        allowExplicit: true,
+        newArtistsOnly: false,
+        songCount: playlist.requestedSongCount || playlist.trackCount || 30,
+        excludeTrackUris: (playlist.trackUris || playlist.tracks.map(t => t.uri)).filter(Boolean),
+        playlistId: playlist.playlistId,
+        internalCall: true,
+      }, { timeout: 180000 });
+
+      returnedTracksData = genResult.data.tracks || [];
+      newTrackUris = returnedTracksData.map(t => t.uri).filter(Boolean);
+      tracksForHistory = returnedTracksData.map(t => ({ name: t.name, artist: t.artist }));
+      console.log(`[AUTO-UPDATE] Generated ${newTrackUris.length} tracks for ${playlist.playlistName}`);
+    } catch (generationError) {
+      console.error(`[AUTO-UPDATE] Track generation failed for ${playlist.playlistName}:`, generationError.message);
+    }
+
+    // Push tracks to Spotify
+    let tracksWereAdded = false;
+    if (playlistPlatform !== 'apple') {
+      const tokens = await getUserTokens(platformUserId);
+      if (tokens && newTrackUris.length > 0) {
+        const userSpotifyApi = new SpotifyWebApi({
+          clientId: process.env.SPOTIFY_CLIENT_ID,
+          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+        });
+        userSpotifyApi.setAccessToken(tokens.access_token);
+        userSpotifyApi.setRefreshToken(tokens.refresh_token);
+
+        try {
+          if (playlist.updateMode === 'replace') {
+            console.log(`[AUTO-UPDATE] Replace mode: Getting current tracks for ${playlist.playlistName}`);
+            const currentPlaylistData = await userSpotifyApi.getPlaylist(playlist.playlistId);
+            const validUriRegex = /^spotify:track:[0-9a-zA-Z]{22}$/;
+            const allTrackItems = currentPlaylistData.body.tracks.items;
+            const invalidTracks = allTrackItems.filter(item => !item.track || !item.track.uri || !validUriRegex.test(item.track.uri));
+            if (invalidTracks.length > 0) {
+              console.log(`[AUTO-UPDATE] Warning: Found ${invalidTracks.length} invalid/null tracks in playlist, skipping them`);
+              invalidTracks.forEach((item, idx) => {
+                console.log(`[AUTO-UPDATE]   ${idx + 1}. "${item.track?.name || 'Unknown'}" - URI: ${item.track?.uri || 'null'}`);
+              });
+            }
+            const currentTrackUris = allTrackItems
+              .filter(item => item.track && item.track.uri && validUriRegex.test(item.track.uri))
+              .map(item => item.track.uri);
+            console.log(`[AUTO-UPDATE] Removing ${currentTrackUris.length} valid tracks from ${playlist.playlistName}`);
+            if (currentTrackUris.length > 0) {
+              try {
+                await userSpotifyApi.removeTracksFromPlaylist(playlist.playlistId, currentTrackUris.map(uri => ({ uri })));
+              } catch (removeError) {
+                console.error(`[AUTO-UPDATE] Error removing tracks:`, removeError.message);
+                throw removeError;
+              }
+            }
+            await userSpotifyApi.addTracksToPlaylist(playlist.playlistId, newTrackUris);
+            console.log(`[AUTO-UPDATE] Successfully replaced all tracks in ${playlist.playlistName} with ${newTrackUris.length} new tracks`);
+          } else {
+            await userSpotifyApi.addTracksToPlaylist(playlist.playlistId, newTrackUris);
+            console.log(`[AUTO-UPDATE] Successfully appended ${newTrackUris.length} tracks to ${playlist.playlistName}`);
+          }
+          tracksWereAdded = true;
+
+          // Sync DB record
+          const newTracksForRecord = returnedTracksData.map(t => ({
+            id: t.id || null,
+            name: t.name,
+            artist: t.artist || 'Unknown',
+            uri: t.uri,
+            album: t.album || '',
+            image: t.image || null,
+            externalUrl: t.externalUrl || null,
+            explicit: t.explicit || false
+          }));
+
+          if (playlist.updateMode === 'replace') {
+            playlist.tracks = newTracksForRecord;
+            playlist.trackUris = newTrackUris;
+            playlist.trackCount = newTrackUris.length;
+          } else {
+            if (!playlist.tracks) playlist.tracks = [];
+            if (!playlist.trackUris) playlist.trackUris = [];
+            playlist.tracks = [...playlist.tracks, ...newTracksForRecord];
+            playlist.trackUris = [...playlist.trackUris, ...newTrackUris];
+            playlist.trackCount = playlist.trackUris.length;
+          }
+          console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
+
+          // Update song history
+          if (tracksForHistory.length > 0) {
+            const normalizeTrackName = (name) => name.toLowerCase()
+              .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
+              .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
+              .replace(/\s*[\(\[].*?[\)\]]/g, '')
+              .replace(/[^\w\s]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+
+            if (!playlist.songHistory) playlist.songHistory = [];
+            playlist.songHistory = [
+              ...playlist.songHistory,
+              ...tracksForHistory.map(t => `${normalizeTrackName(t.name)}|||${t.artist.toLowerCase()}`)
+            ];
+            if (playlist.songHistory.length > 200) {
+              playlist.songHistory = playlist.songHistory.slice(-200);
+            }
+            console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
+          }
+        } catch (updateError) {
+          console.error(`[AUTO-UPDATE] Failed to update ${playlist.playlistName}:`, updateError.message);
+        }
+      }
+    } // end if (playlistPlatform !== 'apple')
+
+    const nowIso = new Date().toISOString();
+    if (tracksWereAdded) {
+      playlist.lastUpdated = nowIso;
+      playlist.updatedAt = nowIso;
+    } else {
+      console.log(`[AUTO-UPDATE] No tracks added to ${playlist.playlistName} — skipping lastUpdated to avoid false cooldown`);
+    }
+    await savePlaylist(userId, playlist);
+  } catch (err) {
+    console.error(`[AUTO-UPDATE] Error updating playlist ${playlist.playlistName}:`, err.message);
+    await savePlaylist(userId, playlist);
+  }
+}
+
+function enqueuePlaylistUpdate(userId, playlist) {
+  // Avoid duplicate entries for the same playlist
+  if (autoUpdateQueue.some(item => item.playlist.playlistId === playlist.playlistId)) {
+    console.log(`[QUEUE] "${playlist.playlistName}" already queued, skipping`);
+    return;
+  }
+  autoUpdateQueue.push({ userId, playlist });
+  console.log(`[QUEUE] Enqueued "${playlist.playlistName}" (queue depth: ${autoUpdateQueue.length})`);
+}
+
+function drainUpdateQueue() {
+  while (autoUpdateQueue.length > 0 && activeUpdateCount < MAX_CONCURRENT_UPDATES) {
+    const item = autoUpdateQueue.shift();
+    activeUpdateCount++;
+    console.log(`[QUEUE] Starting "${item.playlist.playlistName}" (active: ${activeUpdateCount}/${MAX_CONCURRENT_UPDATES}, remaining: ${autoUpdateQueue.length})`);
+    processPlaylistUpdate(item.userId, item.playlist)
+      .catch(err => console.error(`[QUEUE] Unhandled error for "${item.playlist.playlistName}":`, err.message))
+      .finally(() => {
+        activeUpdateCount--;
+        drainUpdateQueue(); // pick up the next item as soon as a slot opens
+      });
+  }
+}
+
+// Auto-update scheduler - checks every minute for playlists that need updating.
+// Uses setInterval instead of node-cron to avoid spurious "missed execution" warnings
+// on shared Railway infrastructure.
 const scheduleAutoUpdates = () => {
-  cron.schedule('*/1 * * * *', async () => {
+  // Drain the queue every 10 seconds (picks up items when all slots were busy)
+  setInterval(drainUpdateQueue, 10000);
+
+  const checkDuePlaylists = () => {
     try {
       const allUsers = Array.from(userPlaylists.entries());
       const now = new Date();
+      const savePromises = [];
 
       for (const [userId, playlists] of allUsers) {
-        // Only consider playlists that have auto-update enabled
         const autoUpdatePlaylists = playlists.filter(p =>
           p.updateFrequency && p.updateFrequency !== 'never' && p.nextUpdate
         );
 
         for (const playlist of autoUpdatePlaylists) {
-          const nextUpdateTime = new Date(playlist.nextUpdate);
+          if (now < new Date(playlist.nextUpdate)) continue;
 
-            // If the scheduled time has passed, trigger the update
-            if (now >= nextUpdateTime) {
-              // Check 24-hour cooldown - skip if manually refreshed within last 24 hours
-              if (playlist.lastUpdated) {
-                const lastUpdatedTime = new Date(playlist.lastUpdated);
-                const hoursSinceLastUpdate = (now - lastUpdatedTime) / (1000 * 60 * 60);
-
-                if (hoursSinceLastUpdate < 24) {
-                  console.log(`[AUTO-UPDATE] Skipping ${playlist.playlistName} - manual refresh ${hoursSinceLastUpdate.toFixed(1)} hours ago (24hr cooldown)`);
-
-                  // Calculate next update time and save it
-                  playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                  await savePlaylist(userId, playlist);
-
-                  continue; // Skip this playlist and move to the next one
-                }
-              }
-
-              console.log(`[AUTO-UPDATE] Updating playlist: ${playlist.playlistName} (${playlist.playlistId})`);
-
-              try {
-                // Get the playlist's original prompt or use the name as fallback
-                let prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
-
-                // Add description to maintain playlist vibe
-                if (playlist.description) {
-                  prompt += `. Description: ${playlist.description}`;
-                }
-
-                // Combine all refinements from both chat history and refinement instructions
-                const allRefinements = [];
-
-                // Add cumulative refinements from chat history (from initial generation modal)
-                if (playlist.chatMessages && playlist.chatMessages.length > 0) {
-                  const chatRefinements = playlist.chatMessages
-                    .filter(msg => msg.role === 'user')
-                    .map(msg => msg.content);
-                  allRefinements.push(...chatRefinements);
-                }
-
-                // Add refinements from Edit Playlist modal
-                if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
-                  allRefinements.push(...playlist.refinementInstructions);
-                }
-
-                // Add all refinements to prompt
-                if (allRefinements.length > 0) {
-                  prompt += `. Refinements: ${allRefinements.join('. ')}`;
-                  console.log(`[AUTO-UPDATE] Applied ${allRefinements.length} total refinement(s)`);
-                }
-
-                // Ensure tracks array exists
-                if (!playlist.tracks) {
-                  playlist.tracks = [];
-                }
-
-                // Build context from liked/disliked songs for auto-update
-                let userFeedbackContext = '';
-                const likedSongs = playlist.likedSongs || [];
-                const dislikedSongs = playlist.dislikedSongs || [];
-
-                if (likedSongs.length > 0 || dislikedSongs.length > 0) {
-                  if (likedSongs.length > 0) {
-                    const likedTrackNames = likedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ');
-                    userFeedbackContext += ` User liked: ${likedTrackNames}.`;
-                    console.log(`[AUTO-UPDATE] Incorporating ${likedSongs.length} liked song(s) into prompt`);
-                  }
-                  if (dislikedSongs.length > 0) {
-                    const dislikedTrackNames = dislikedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ');
-                    userFeedbackContext += ` User disliked: ${dislikedTrackNames}.`;
-                    console.log(`[AUTO-UPDATE] Avoiding songs similar to ${dislikedSongs.length} disliked song(s)`);
-                  }
-                }
-
-                // If we have current tracks, enhance the prompt to make sure new songs are similar
-                if (playlist.tracks.length > 0) {
-                  const topTracks = playlist.tracks.slice(0, 5).map(t => t.name).join(', ');
-                  prompt = `${prompt}. Reference tracks: ${topTracks}`;
-                }
-
-                // For imported playlists (no original prompt), also extract artists from tracks
-                // to give the genre-extraction and SoundCharts discovery meaningful context
-                if (!playlist.originalPrompt && playlist.tracks && playlist.tracks.length > 0) {
-                  const trackArtists = [...new Set(
-                    playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean)
-                  )].slice(0, 8);
-                  if (trackArtists.length > 0) {
-                    prompt += `. Key artists in this playlist: ${trackArtists.join(', ')}`;
-                    console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${trackArtists.join(', ')}`);
-                  }
-                }
-
-                // Add user feedback context to prompt
-                if (userFeedbackContext) {
-                  prompt += userFeedbackContext;
-                }
-
-                // Generate new tracks using the same code path as manual refresh
-                let newTrackUris = [];
-                let tracksForHistory = []; // { name, artist } — for history dedup
-                let returnedTracksData = []; // full track objects from endpoint, for DB sync
-                const playlistPlatform = playlist.platform || 'spotify';
-                let platformUserId = userId;
-
-                try {
-                  // Resolve platformUserId for the Spotify add/replace step below
-                  if (isEmailBasedUserId(userId)) {
-                    platformUserId = await resolvePlatformUserId(userId, playlistPlatform);
-                    if (!platformUserId) {
-                      console.log(`[AUTO-UPDATE] No ${playlistPlatform} connection for user ${userId}, skipping ${playlist.playlistName}`);
-                      playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                      await savePlaylist(userId, playlist);
-                      continue;
-                    }
-                  }
-
-                  // Call the main generate-playlist endpoint — same code path as manual refresh
-                  console.log(`[AUTO-UPDATE] Calling generate-playlist for ${playlist.playlistName}...`);
-                  const PORT = process.env.PORT || 3001;
-                  const genResult = await axios.post(`http://localhost:${PORT}/api/generate-playlist`, {
-                    prompt,
-                    userId,
-                    platform: playlistPlatform,
-                    allowExplicit: true,
-                    newArtistsOnly: false,
-                    songCount: playlist.requestedSongCount || playlist.trackCount || 30,
-                    excludeTrackUris: (playlist.trackUris || (playlist.tracks || []).map(t => t.uri)).filter(Boolean),
-                    playlistId: playlist.playlistId,
-                    internalCall: true,
-                  }, { timeout: 180000 });
-
-                  returnedTracksData = genResult.data.tracks || [];
-                  newTrackUris = returnedTracksData.map(t => t.uri).filter(Boolean);
-                  tracksForHistory = returnedTracksData.map(t => ({ name: t.name, artist: t.artist }));
-                  console.log(`[AUTO-UPDATE] Generated ${newTrackUris.length} tracks for ${playlist.playlistName}`);
-                } catch (generationError) {
-                  console.error(`[AUTO-UPDATE] Track generation failed for ${playlist.playlistName}:`, generationError.message);
-                  newTrackUris = [];
-                }
-
-                // Get user tokens (use platformUserId resolved earlier) — Spotify only
-                let tracksWereAdded = false;
-                if (playlistPlatform !== 'apple') {
-                const tokens = await getUserTokens(platformUserId);
-                if (tokens && newTrackUris.length > 0) {
-                  const userSpotifyApi = new SpotifyWebApi({
-                    clientId: process.env.SPOTIFY_CLIENT_ID,
-                    clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-                    redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-                  });
-                  userSpotifyApi.setAccessToken(tokens.access_token);
-                  userSpotifyApi.setRefreshToken(tokens.refresh_token);
-
-                  // Token was already refreshed earlier in the flow, so we can use it directly
-
-                  // Update playlist based on mode
-                  try {
-                    if (playlist.updateMode === 'replace') {
-                      // First, get current tracks in the playlist to remove them
-                      console.log(`[AUTO-UPDATE] Replace mode: Getting current tracks for ${playlist.playlistName}`);
-                      const currentPlaylistData = await userSpotifyApi.getPlaylist(playlist.playlistId);
-
-                      // Filter out null/invalid tracks and validate URIs
-                      const validUriRegex = /^spotify:track:[0-9a-zA-Z]{22}$/;
-                      const allTrackItems = currentPlaylistData.body.tracks.items;
-                      const invalidTracks = allTrackItems.filter(item => !item.track || !item.track.uri || !validUriRegex.test(item.track.uri));
-
-                      if (invalidTracks.length > 0) {
-                        console.log(`[AUTO-UPDATE] Warning: Found ${invalidTracks.length} invalid/null tracks in playlist, skipping them`);
-                        invalidTracks.forEach((item, idx) => {
-                          const uri = item.track?.uri || 'null';
-                          const name = item.track?.name || 'Unknown';
-                          console.log(`[AUTO-UPDATE]   ${idx + 1}. "${name}" - URI: ${uri}`);
-                        });
-                      }
-
-                      const currentTrackUris = allTrackItems
-                        .filter(item => item.track && item.track.uri && validUriRegex.test(item.track.uri))
-                        .map(item => item.track.uri);
-
-                      console.log(`[AUTO-UPDATE] Removing ${currentTrackUris.length} valid tracks from ${playlist.playlistName} (out of ${allTrackItems.length} total)`);
-
-                      // Remove all current tracks first
-                      if (currentTrackUris.length > 0) {
-                        // Spotify API requires tracks in specific format for removal: array of objects with 'uri' property
-                        const tracksToRemove = currentTrackUris.map(uri => ({ uri }));
-                        try {
-                          await userSpotifyApi.removeTracksFromPlaylist(playlist.playlistId, tracksToRemove);
-                        } catch (removeError) {
-                          console.error(`[AUTO-UPDATE] Error removing tracks:`, removeError.message);
-                          console.error(`[AUTO-UPDATE] Failed URIs sample:`, currentTrackUris.slice(0, 3));
-                          throw removeError;
-                        }
-                      }
-
-                      // Then add the new tracks
-                      await userSpotifyApi.addTracksToPlaylist(playlist.playlistId, newTrackUris);
-                      console.log(`[AUTO-UPDATE] Successfully replaced all tracks in ${playlist.playlistName} with ${newTrackUris.length} new tracks`);
-                    } else {
-                      // Append mode - just add new tracks
-                      await userSpotifyApi.addTracksToPlaylist(playlist.playlistId, newTrackUris);
-                      console.log(`[AUTO-UPDATE] Successfully appended ${newTrackUris.length} tracks to ${playlist.playlistName}`);
-                    }
-                    tracksWereAdded = true;
-
-                    // Sync playlist.tracks in the DB record so Fins reflects the real Spotify state
-                    const newTracksForRecord = returnedTracksData.map(t => ({
-                      id: t.id || null,
-                      name: t.name,
-                      artist: t.artist || 'Unknown',
-                      uri: t.uri,
-                      album: t.album || '',
-                      image: t.image || null,
-                      externalUrl: t.externalUrl || null,
-                      explicit: t.explicit || false
-                    }));
-
-                    if (playlist.updateMode === 'replace') {
-                      playlist.tracks = newTracksForRecord;
-                      playlist.trackUris = newTrackUris;
-                      playlist.trackCount = newTrackUris.length;
-                    } else {
-                      if (!playlist.tracks) playlist.tracks = [];
-                      if (!playlist.trackUris) playlist.trackUris = [];
-                      playlist.tracks = [...playlist.tracks, ...newTracksForRecord];
-                      playlist.trackUris = [...playlist.trackUris, ...newTrackUris];
-                      playlist.trackCount = playlist.trackUris.length;
-                    }
-                    console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
-
-                    // Update song history to prevent repeats
-                    // Accumulate tracks over multiple updates to keep playlists fresh
-                    if (tracksForHistory.length > 0) {
-                      // Define normalizeTrackName function for history tracking
-                      const normalizeTrackName = (name) => {
-                        let normalized = name.toLowerCase();
-                        normalized = normalized
-                          .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
-                          .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
-                          .replace(/\s*[\(\[].*?[\)\]]/g, '')
-                          .replace(/[^\w\s]/g, '')
-                          .replace(/\s+/g, ' ')
-                          .trim();
-                        return normalized;
-                      };
-
-                      // Initialize history if it doesn't exist
-                      if (!playlist.songHistory) {
-                        playlist.songHistory = [];
-                      }
-
-                      // Add new tracks to history
-                      const newHistoryEntries = tracksForHistory.map(track => {
-                        const normalizedName = normalizeTrackName(track.name);
-                        return `${normalizedName}|||${track.artist.toLowerCase()}`;
-                      });
-
-                      // Append to existing history
-                      playlist.songHistory = [...playlist.songHistory, ...newHistoryEntries];
-
-                      // Keep last 200 tracks in history (prevents history from growing indefinitely)
-                      // For a 30-song playlist updated daily, this represents ~6-7 updates worth of history
-                      // For weekly updates, this is ~6 months of history
-                      const MAX_HISTORY_SIZE = 200;
-                      if (playlist.songHistory.length > MAX_HISTORY_SIZE) {
-                        playlist.songHistory = playlist.songHistory.slice(-MAX_HISTORY_SIZE);
-                      }
-
-                      console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
-                    }
-                  } catch (updateError) {
-                    console.error(`[AUTO-UPDATE] Failed to update ${playlist.playlistName}:`, updateError.message);
-                  }
-                }
-                } // end if (playlistPlatform !== 'apple')
-
-                // Update the nextUpdate timestamp; only set lastUpdated if tracks were actually added
-                // (prevents a false 24-hour cooldown when no songs were found)
-                const now = new Date().toISOString();
-                if (tracksWereAdded) {
-                  playlist.lastUpdated = now;
-                  playlist.updatedAt = now;
-                } else {
-                  console.log(`[AUTO-UPDATE] No tracks added to ${playlist.playlistName} — skipping lastUpdated to avoid false cooldown`);
-                }
-                playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                await savePlaylist(userId, playlist);
-
-              } catch (updateError) {
-                console.error(`[AUTO-UPDATE] Error updating playlist ${playlist.playlistName}:`, updateError.message);
-                // Advance nextUpdate so the scheduler doesn't retry every minute on failure
-                playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-                await savePlaylist(userId, playlist);
-              }
+          // 24-hour cooldown — skip if manually refreshed recently
+          if (playlist.lastUpdated) {
+            const hoursSinceLastUpdate = (now - new Date(playlist.lastUpdated)) / (1000 * 60 * 60);
+            if (hoursSinceLastUpdate < 24) {
+              console.log(`[AUTO-UPDATE] Skipping ${playlist.playlistName} - manual refresh ${hoursSinceLastUpdate.toFixed(1)} hours ago (24hr cooldown)`);
+              playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+              savePromises.push(savePlaylist(userId, playlist));
+              continue;
             }
           }
+
+          // Advance nextUpdate immediately so the next tick doesn't re-enqueue this playlist
+          playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+          savePromises.push(savePlaylist(userId, playlist));
+
+          enqueuePlaylistUpdate(userId, playlist);
         }
+      }
+
+      if (savePromises.length > 0) {
+        Promise.all(savePromises).catch(err => console.error('[AUTO-UPDATE] Save error:', err.message));
+      }
+
+      if (autoUpdateQueue.length > 0) {
+        console.log(`[QUEUE] ${autoUpdateQueue.length} playlist(s) queued, ${activeUpdateCount}/${MAX_CONCURRENT_UPDATES} slots active`);
+        drainUpdateQueue();
+      }
     } catch (error) {
       console.error('[AUTO-UPDATE] Scheduler error:', error);
     }
-  });
+  };
+
+  setInterval(checkDuePlaylists, 60000); // check every minute
 };
 
 // Debug endpoint: check auto-update status for a user's playlists
