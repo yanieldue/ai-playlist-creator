@@ -567,7 +567,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
         editOptionsPlaylist.playlistId,
         userId,
         tempUpdateFrequency,
-        tempUpdateMode,
+        'replace',
         editOptionsPlaylist.isPublic !== false,
         updateTime
       );
@@ -1488,29 +1488,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label>Update Mode</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[
-                      { value: 'append', label: 'Append', description: 'Add new songs to your existing ones' },
-                      { value: 'replace', label: 'Replace', description: 'Remove old songs and add new ones' },
-                    ].map(({ value, label, description }) => (
-                      <div
-                        key={value}
-                        className={`refresh-option-item ${tempUpdateMode === value ? 'active' : ''}`}
-                        onClick={() => setTempUpdateMode(value)}
-                      >
-                        <div className="option-checkbox">
-                          {tempUpdateMode === value && <span className="checkmark"><Icons.Check size={16} /></span>}
-                        </div>
-                        <div className="option-content">
-                          <span className="option-label">{label}</span>
-                          <span className="option-description">{description}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               {/* Refinement Instructions Section */}
