@@ -7511,6 +7511,30 @@ app.delete('/api/playlists/:playlistId/save', async (req, res) => {
   }
 });
 
+// Get artist images using client credentials (no user auth needed — for product tour)
+app.get('/api/artist-images', async (req, res) => {
+  const { names } = req.query; // comma-separated artist names
+  if (!names) return res.json({ images: {} });
+  const artistNames = names.split(',').map(n => n.trim()).filter(Boolean);
+  try {
+    const token = await getSpotifyClientToken();
+    const images = {};
+    await Promise.all(artistNames.map(async (name) => {
+      try {
+        const resp = await axios.get('https://api.spotify.com/v1/search', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { q: name, type: 'artist', limit: 1 }
+        });
+        const artist = resp.data.artists?.items?.[0];
+        images[name] = artist?.images?.[0]?.url || null;
+      } catch { images[name] = null; }
+    }));
+    res.json({ images });
+  } catch (err) {
+    res.json({ images: {} });
+  }
+});
+
 // Get trending playlists
 app.get('/api/trending', async (req, res) => {
   try {
@@ -7892,17 +7916,6 @@ const scheduleAutoUpdates = () => {
 
         for (const playlist of autoUpdatePlaylists) {
           if (now < new Date(playlist.nextUpdate)) continue;
-
-          // 24-hour cooldown — skip if manually refreshed recently
-          if (playlist.lastUpdated) {
-            const hoursSinceLastUpdate = (now - new Date(playlist.lastUpdated)) / (1000 * 60 * 60);
-            if (hoursSinceLastUpdate < 24) {
-              console.log(`[AUTO-UPDATE] Skipping ${playlist.playlistName} - manual refresh ${hoursSinceLastUpdate.toFixed(1)} hours ago (24hr cooldown)`);
-              playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
-              savePromises.push(savePlaylist(userId, playlist));
-              continue;
-            }
-          }
 
           // Advance nextUpdate immediately so the next tick doesn't re-enqueue this playlist
           playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
