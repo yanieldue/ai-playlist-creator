@@ -39,10 +39,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
   const [tempUpdateFrequency, setTempUpdateFrequency] = useState('never');
   const [tempUpdateMode, setTempUpdateMode] = useState('append');
-  const [tempUpdateHour, setTempUpdateHour] = useState('12');
-  const [tempUpdateMinute, setTempUpdateMinute] = useState('00');
-  const [tempUpdatePeriod, setTempUpdatePeriod] = useState('AM');
-  const [tempUpdateTimezone, setTempUpdateTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
   // Edit options modal (unified modal with refresh and settings)
   const [showEditOptionsModal, setShowEditOptionsModal] = useState(false);
@@ -530,20 +526,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     setRefinementInstructions(playlist.refinementInstructions || []);
     setRefinementInput('');
 
-    // Initialize time settings from playlist or use defaults
-    if (playlist.updateTime) {
-      const { hour, minute, period, timezone } = playlist.updateTime;
-      setTempUpdateHour(hour || '12');
-      setTempUpdateMinute(minute || '00');
-      setTempUpdatePeriod(period || 'AM');
-      setTempUpdateTimezone(timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
-    } else {
-      setTempUpdateHour('12');
-      setTempUpdateMinute('00');
-      setTempUpdatePeriod('AM');
-      setTempUpdateTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    }
-
     setShowEditOptionsModal(true);
   };
 
@@ -556,20 +538,13 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     if (!editOptionsPlaylist) return;
 
     try {
-      const updateTime = tempUpdateFrequency !== 'never' ? {
-        hour: tempUpdateHour,
-        minute: tempUpdateMinute,
-        period: tempUpdatePeriod,
-        timezone: tempUpdateTimezone
-      } : null;
-
       await playlistService.updatePlaylistSettings(
         editOptionsPlaylist.playlistId,
         userId,
         tempUpdateFrequency,
         'replace',
         editOptionsPlaylist.isPublic !== false,
-        updateTime
+        null
       );
 
       showToast('Settings updated successfully!', 'success');
@@ -1417,75 +1392,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   )}
                 </div>
 
-                {isPaid() && tempUpdateFrequency !== 'never' && (
-                  <div className="form-group">
-                    <label>Update Time</label>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      <select
-                        value={tempUpdateHour}
-                        onChange={(e) => setTempUpdateHour(e.target.value)}
-                        className="playlist-select"
-                        style={{ flex: '0 0 80px' }}
-                      >
-                        {Array.from({ length: 12 }, (_, i) => {
-                          const hour = String(i + 1).padStart(2, '0');
-                          return <option key={hour} value={hour}>{hour}</option>;
-                        })}
-                      </select>
-                      <span>:</span>
-                      <select
-                        value={tempUpdateMinute}
-                        onChange={(e) => setTempUpdateMinute(e.target.value)}
-                        className="playlist-select"
-                        style={{ flex: '0 0 80px' }}
-                      >
-                        <option value="00">00</option>
-                        <option value="15">15</option>
-                        <option value="30">30</option>
-                        <option value="45">45</option>
-                      </select>
-                      <select
-                        value={tempUpdatePeriod}
-                        onChange={(e) => setTempUpdatePeriod(e.target.value)}
-                        className="playlist-select"
-                        style={{ flex: '0 0 80px' }}
-                      >
-                        <option value="AM">AM</option>
-                        <option value="PM">PM</option>
-                      </select>
-                    </div>
-                    <p className="form-help-text">
-                      Choose what time to update this playlist
-                    </p>
-                  </div>
-                )}
-
-                {isPaid() && tempUpdateFrequency !== 'never' && (
-                  <div className="form-group">
-                    <label htmlFor="update-timezone">Timezone</label>
-                    <select
-                      id="update-timezone"
-                      value={tempUpdateTimezone}
-                      onChange={(e) => setTempUpdateTimezone(e.target.value)}
-                      className="playlist-select"
-                    >
-                      <option value="America/Los_Angeles">Pacific Time (PST/PDT)</option>
-                      <option value="America/Denver">Mountain Time (MST/MDT)</option>
-                      <option value="America/Chicago">Central Time (CST/CDT)</option>
-                      <option value="America/New_York">Eastern Time (EST/EDT)</option>
-                      <option value="America/Phoenix">Arizona (MST)</option>
-                      <option value="America/Anchorage">Alaska (AKST/AKDT)</option>
-                      <option value="Pacific/Honolulu">Hawaii (HST)</option>
-                      <option value="Europe/London">London (GMT/BST)</option>
-                      <option value="Europe/Paris">Paris (CET/CEST)</option>
-                      <option value="Asia/Tokyo">Tokyo (JST)</option>
-                      <option value="Asia/Shanghai">Shanghai (CST)</option>
-                      <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
-                    </select>
-                    <p className="form-help-text">
-                      Select your timezone for accurate update scheduling
-                    </p>
-                  </div>
+                {tempUpdateFrequency !== 'never' && (
+                  <p className="form-help-text" style={{ marginTop: 4 }}>
+                    Playlist will auto-update at 5:00 AM in your local timezone.
+                  </p>
                 )}
 
               </div>

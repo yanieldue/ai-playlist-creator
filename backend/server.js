@@ -8,6 +8,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const geoip = require('geoip-lite');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
 const nodemailer = require('nodemailer');
@@ -1540,118 +1541,92 @@ function saveSavedPlaylists() {
   }
 }
 
-// Calculate next update date based on frequency
-// Converts user's selected time and timezone to UTC for scheduling
+// Returns the UTC moment for the next 5 AM occurrence in the given timezone.
+// Uses Intl.DateTimeFormat.formatToParts throughout — no locale string parsing.
+function getNext5AM(timezone, now = new Date()) {
+  const tz = timezone || 'America/Los_Angeles';
+
+  // Get current date components in the target timezone
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', hour12: false
+  }).formatToParts(now);
+
+  let tzYear = 0, tzMonth = 0, tzDay = 0, tzHour = 0, tzMinute = 0;
+  for (const p of parts) {
+    if (p.type === 'year') tzYear = parseInt(p.value);
+    if (p.type === 'month') tzMonth = parseInt(p.value);
+    if (p.type === 'day') tzDay = parseInt(p.value);
+    if (p.type === 'hour') tzHour = parseInt(p.value);
+    if (p.type === 'minute') tzMinute = parseInt(p.value);
+  }
+
+  // If it's already past 5 AM in the target timezone, schedule for tomorrow
+  const targetDay = (tzHour > 5 || (tzHour === 5 && tzMinute > 0)) ? tzDay + 1 : tzDay;
+
+  // Build naive UTC for "targetDay at 05:00 in tz"
+  const naiveUtc = new Date(Date.UTC(tzYear, tzMonth - 1, targetDay, 5, 0, 0));
+
+  // Get what the clock reads in the target timezone for that naive moment
+  const clockParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false
+  }).formatToParts(naiveUtc);
+
+  let cYear = 0, cMonth = 0, cDay = 0, cH = 0, cMin = 0, cSec = 0;
+  for (const p of clockParts) {
+    if (p.type === 'year') cYear = parseInt(p.value);
+    if (p.type === 'month') cMonth = parseInt(p.value);
+    if (p.type === 'day') cDay = parseInt(p.value);
+    if (p.type === 'hour') cH = parseInt(p.value);
+    if (p.type === 'minute') cMin = parseInt(p.value);
+    if (p.type === 'second') cSec = parseInt(p.value);
+  }
+  if (cH === 24) cH = 0;
+
+  const clockAsUtc = Date.UTC(cYear, cMonth - 1, cDay, cH, cMin, cSec);
+  const targetAsUtc = Date.UTC(tzYear, tzMonth - 1, targetDay, 5, 0, 0);
+  const correctionMs = targetAsUtc - clockAsUtc;
+
+  return new Date(naiveUtc.getTime() + correctionMs);
+}
+
+// Calculate next update date based on frequency and user's timezone.
+// Always schedules at 5 AM in the user's local timezone (detected from IP).
 function calculateNextUpdate(frequency, playlistId = null, updateTime = null) {
   const now = new Date();
-  let next = new Date();
+  const timezone = updateTime?.timezone || 'America/Los_Angeles';
 
-  // If updateTime is provided, use it to calculate the exact time
-  if (updateTime) {
-    const { hour, minute, period, timezone } = updateTime;
-
-    // Convert 12-hour format to 24-hour
-    let hour24 = parseInt(hour);
-    if (period === 'PM' && hour24 !== 12) {
-      hour24 += 12;
-    } else if (period === 'AM' && hour24 === 12) {
-      hour24 = 0;
-    }
-    const min = parseInt(minute);
-
-    // Get current date components in the user's timezone using formatToParts
-    // (avoids locale string parsing bugs that can double-apply UTC offsets)
-    const nowParts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric', month: 'numeric', day: 'numeric'
-    }).formatToParts(now);
-
-    let tzYear = 0, tzMonth = 0, tzDay = 0;
-    for (const p of nowParts) {
-      if (p.type === 'year') tzYear = parseInt(p.value);
-      if (p.type === 'month') tzMonth = parseInt(p.value);
-      if (p.type === 'day') tzDay = parseInt(p.value);
-    }
-
-    // Build a "naive" UTC moment: today's date in user's timezone + their selected time,
-    // treated as if the components are UTC (not yet corrected for offset)
-    const naiveUtc = new Date(Date.UTC(tzYear, tzMonth - 1, tzDay, hour24, min, 0));
-
-    // Get what the clock reads in the target timezone for that naive UTC moment
-    const clockParts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric', month: 'numeric', day: 'numeric',
-      hour: 'numeric', minute: 'numeric', second: 'numeric',
-      hour12: false
-    }).formatToParts(naiveUtc);
-
-    let clockYear = 0, clockMonth = 0, clockDay = 0, clockH = 0, clockMin = 0, clockSec = 0;
-    for (const p of clockParts) {
-      if (p.type === 'year') clockYear = parseInt(p.value);
-      if (p.type === 'month') clockMonth = parseInt(p.value);
-      if (p.type === 'day') clockDay = parseInt(p.value);
-      if (p.type === 'hour') clockH = parseInt(p.value);
-      if (p.type === 'minute') clockMin = parseInt(p.value);
-      if (p.type === 'second') clockSec = parseInt(p.value);
-    }
-    if (clockH === 24) clockH = 0; // some Intl implementations use 24 for midnight
-
-    // Compute correction: shift naiveUtc so the clock reads hour24:min in the target timezone
-    // clockAsUtc: what the clock shows expressed as a UTC ms value (for arithmetic only)
-    // targetAsUtc: what we WANT the clock to show, expressed the same way
-    const clockAsUtc = Date.UTC(clockYear, clockMonth - 1, clockDay, clockH, clockMin, clockSec);
-    const targetAsUtc = Date.UTC(tzYear, tzMonth - 1, tzDay, hour24, min, 0);
-    const correctionMs = targetAsUtc - clockAsUtc;
-
-    // correctionMs is the UTC offset (e.g. +8h for PST, -9h for JST)
-    next = new Date(naiveUtc.getTime() + correctionMs);
-
-  } else if (playlistId) {
-    // Fall back to hash-based time slot if no updateTime specified
-    let hash = 0;
-    for (let i = 0; i < playlistId.length; i++) {
-      hash = ((hash << 5) - hash) + playlistId.charCodeAt(i);
-      hash = hash & hash;
-    }
-    const hourOffset = Math.abs(hash) % 24;
-    next.setUTCHours(hourOffset, 0, 0, 0);
-  } else {
-    // Default to midnight UTC
-    next.setUTCHours(0, 0, 0, 0);
-  }
+  let next = getNext5AM(timezone, now);
 
   // Adjust based on frequency
   switch (frequency) {
     case 'daily':
-      // If we've already passed this time today, schedule for tomorrow
-      // Use < instead of <= to allow updates scheduled for the current minute
-      if (next < now) {
-        next.setDate(next.getDate() + 1);
-      }
+      // getNext5AM already returns the next 5 AM — nothing extra needed
       break;
     case 'weekly':
-      // Schedule for next week
       next.setDate(next.getDate() + 7);
-      if (next <= now) {
-        next.setDate(next.getDate() + 7);
-      }
       break;
     case 'monthly':
-      // Schedule for next month
       next.setMonth(next.getMonth() + 1);
-      if (next <= now) {
-        next.setMonth(next.getMonth() + 1);
-      }
       break;
     default:
       return null;
   }
-  if (updateTime) {
-    const { timezone } = updateTime;
-    const localStr = next.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' });
-    console.log(`[SCHEDULE] Next update: ${next.toISOString()} UTC = ${localStr} (${timezone})`);
-  }
+
+  const localStr = next.toLocaleString('en-US', { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' });
+  console.log(`[SCHEDULE] Next update: ${next.toISOString()} UTC = ${localStr} (${timezone})`);
   return next.toISOString();
+}
+
+// Detect timezone from request IP using geoip-lite
+function getTimezoneFromRequest(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  const ip = forwarded ? forwarded.split(',')[0].trim() : req.ip;
+  // Strip IPv6 prefix if present (e.g. ::ffff:1.2.3.4)
+  const cleanIp = ip?.replace(/^::ffff:/, '');
+  const geo = geoip.lookup(cleanIp);
+  return geo?.timezone || 'America/Los_Angeles';
 }
 
 // Database-backed token storage
@@ -6895,18 +6870,23 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
       }
     }
 
+    // Detect user's timezone from their IP for scheduling
+    const detectedTimezone = getTimezoneFromRequest(req);
+    console.log(`[SCHEDULE] Detected timezone from IP: ${detectedTimezone}`);
+
     // Update the playlist settings
     userPlaylistHistory[playlistIndex].updateFrequency = updateFrequency || 'never';
-    userPlaylistHistory[playlistIndex].updateMode = updateMode || 'append';
+    userPlaylistHistory[playlistIndex].updateMode = 'replace';
     if (isPublic !== undefined) {
       userPlaylistHistory[playlistIndex].isPublic = isPublic;
     }
-    if (updateTime) {
-      userPlaylistHistory[playlistIndex].updateTime = updateTime;
-    }
+    // Store detected timezone so scheduler can use it for future recalculations
+    userPlaylistHistory[playlistIndex].updateTime = updateFrequency && updateFrequency !== 'never'
+      ? { timezone: detectedTimezone }
+      : null;
     userPlaylistHistory[playlistIndex].lastUpdated = null;
     userPlaylistHistory[playlistIndex].nextUpdate = updateFrequency && updateFrequency !== 'never'
-      ? calculateNextUpdate(updateFrequency, playlistId, updateTime)
+      ? calculateNextUpdate(updateFrequency, playlistId, { timezone: detectedTimezone })
       : null;
 
     // Save updated playlists
