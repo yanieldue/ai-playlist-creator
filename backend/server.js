@@ -3213,41 +3213,6 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       console.log('⚠️ SOUNDCHARTS_APP_ID not configured — skipping artist recommendations');
     }
 
-    // Fallback: if SoundCharts found nothing, use Spotify's related artists API
-    if (filteredArtists.length === 0) {
-      console.log('🎵 SoundCharts returned 0 results — falling back to Spotify related artists...');
-      const seenNames = new Set();
-      const spotifyFallbackCandidates = [];
-
-      await Promise.all(topArtists.map(async (topArtist) => {
-        try {
-          const related = await userSpotifyApi.getArtistRelatedArtists(topArtist.id);
-          for (const artist of (related.body.artists || [])) {
-            const nameLower = artist.name.toLowerCase().trim();
-            if (!seenNames.has(nameLower)) {
-              seenNames.add(nameLower);
-              spotifyFallbackCandidates.push({
-                id: artist.id,
-                name: artist.name,
-                image: artist.images?.[0]?.url || null,
-                genres: artist.genres || [],
-                popularity: artist.popularity,
-                uri: artist.uri,
-                description: `Similar to ${topArtist.name}`
-              });
-            }
-          }
-        } catch (err) {
-          console.log(`Spotify related artists failed for ${topArtist.name}:`, err.message);
-        }
-      }));
-
-      filteredArtists = spotifyFallbackCandidates.filter(artist => {
-        return !allArtistsToExcludeLower.some(ex => ex === artist.name.toLowerCase().trim());
-      });
-      console.log(`✅ Spotify fallback: ${filteredArtists.length} related artists after filtering`);
-    }
-
     // Try to fetch images and details from Spotify for the suggested artists
     // (tokens already fetched above for recently played)
     const formattedArtists = [];
