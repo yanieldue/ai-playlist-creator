@@ -12,6 +12,8 @@ const ResetPassword = () => {
   const [email, setEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
@@ -129,27 +131,49 @@ const ResetPassword = () => {
         {error && <div className="auth-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="New password"
-            className="auth-input"
-            required
-            disabled={verifying}
-            minLength={6}
-            autoFocus
-          />
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
-            className="auth-input"
-            required
-            disabled={verifying}
-            minLength={6}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showNew ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password"
+              className="auth-input"
+              style={{ paddingRight: 44 }}
+              required
+              disabled={verifying}
+              minLength={6}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(v => !v)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#8e8e93', padding: 0, display: 'flex', alignItems: 'center' }}
+              tabIndex={-1}
+            >
+              {showNew ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+            </button>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={showConfirm ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="auth-input"
+              style={{ paddingRight: 44 }}
+              required
+              disabled={verifying}
+              minLength={6}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm(v => !v)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#8e8e93', padding: 0, display: 'flex', alignItems: 'center' }}
+              tabIndex={-1}
+            >
+              {showConfirm ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+            </button>
+          </div>
           <button type="submit" className="auth-cta" disabled={verifying}>
             {verifying ? 'Resetting...' : 'Reset password'}
           </button>

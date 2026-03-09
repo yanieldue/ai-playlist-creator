@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader } from 'react-icons/fi';
+import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader, FiEye, FiEyeOff } from 'react-icons/fi';
 
 // Icon components - using Feather Icons from react-icons
 const Icons = {
@@ -117,6 +117,14 @@ const Icons = {
 
   Loader: ({ size = 24, color = 'currentColor' }) => (
     <FiLoader size={size} color={color} />
+  ),
+
+  Eye: ({ size = 24, color = 'currentColor' }) => (
+    <FiEye size={size} color={color} />
+  ),
+
+  EyeOff: ({ size = 24, color = 'currentColor' }) => (
+    <FiEyeOff size={size} color={color} />
   ),
 
 };

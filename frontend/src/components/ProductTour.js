@@ -30,15 +30,15 @@ const ChatInputDiagram = () => (
 const DIAGRAM_ARTIST_NAMES = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
-const ArtistsDiagram = ({ images = {} }) => (
+const ArtistsDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px', overflowX: 'hidden' }}>
       <div className="tour-diag-highlight" style={{ borderRadius: 12, display: 'flex', gap: 10, padding: '8px' }}>
         {DIAGRAM_ARTIST_NAMES.map(name => (
           <div key={name} className="artist-card-apple" style={{ width: 70, minWidth: 70, cursor: 'default' }}>
             <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {images[name]
-                ? <img src={images[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              {artistImages[name]
+                ? <img src={artistImages[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 : <Icons.Microphone size={22} color="#636366" />
               }
             </div>
@@ -50,18 +50,26 @@ const ArtistsDiagram = ({ images = {} }) => (
   </div>
 );
 
-const NavTabsDiagram = () => (
+const PLAYLIST_COVER_ARTISTS = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
+
+const PlaylistCover = ({ img, size = 36 }) => (
+  <div style={{ width: size, height: size, borderRadius: 6, background: '#d1d1d6', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    {img && <img src={img} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+  </div>
+);
+
+const NavTabsDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px 12px 8px' }}>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
         <button className="nav-tab-item" style={{ pointerEvents: 'none', fontSize: 13 }}>Home</button>
         <button className="nav-tab-item active tour-diag-highlight" style={{ pointerEvents: 'none', fontSize: 13, borderRadius: 8, padding: '4px 12px' }}>My Playlists</button>
       </div>
-      {[1, 2].map(i => (
+      {[['Kendrick Lamar', 'Summer Vibes'], ['SZA', 'Late Night Mix']].map(([artist, name], i) => (
         <div key={i} className="playlist-card" style={{ marginBottom: 8, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 6, background: '#d1d1d6', flexShrink: 0 }} />
+          <PlaylistCover img={artistImages[artist]} />
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>My Playlist {i}</div>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>{name}</div>
             <div style={{ fontSize: 11, color: '#8e8e93' }}>20 songs</div>
           </div>
         </div>
@@ -70,7 +78,7 @@ const NavTabsDiagram = () => (
   </div>
 );
 
-const ImportDiagram = () => (
+const ImportDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -80,9 +88,9 @@ const ImportDiagram = () => (
         </button>
       </div>
       <div className="playlist-card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 6, background: '#d1d1d6', flexShrink: 0 }} />
+        <PlaylistCover img={artistImages['Drake']} />
         <div>
-          <div style={{ fontSize: 12, fontWeight: 600 }}>My Playlist</div>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>Rap Favorites</div>
           <div style={{ fontSize: 11, color: '#8e8e93' }}>24 songs</div>
         </div>
       </div>
@@ -90,12 +98,12 @@ const ImportDiagram = () => (
   </div>
 );
 
-const EditDiagram = () => (
+const EditDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px' }}>
       <div className="playlist-card" style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 6, background: '#d1d1d6', flexShrink: 0 }} />
+          <PlaylistCover img={artistImages['Rihanna']} size={40} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Summer Vibes</div>
             <div style={{ fontSize: 11, color: '#8e8e93' }}>30 songs</div>
@@ -112,25 +120,32 @@ const EditDiagram = () => (
   </div>
 );
 
-const LikeDislikeDiagram = () => (
+const DIAGRAM_TRACKS = [
+  { name: 'Blinding Lights', artist: 'The Weeknd', highlight: false },
+  { name: 'Levitating', artist: 'Dua Lipa', highlight: true },
+];
+
+const LikeDislikeDiagram = ({ trackImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {[
-        { name: 'Blinding Lights', artist: 'The Weeknd', highlight: false },
-        { name: 'Levitating', artist: 'Dua Lipa', highlight: true },
-      ].map(track => (
-        <div key={track.name} className="track-item" style={{ background: 'var(--bg-secondary, #f2f2f7)', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 4, background: '#d1d1d6', flexShrink: 0 }} />
-          <div className="track-info" style={{ flex: 1, minWidth: 0 }}>
-            <div className="track-name" style={{ fontSize: 12 }}>{track.name}</div>
-            <div className="track-artist" style={{ fontSize: 11 }}>{track.artist}</div>
+      {DIAGRAM_TRACKS.map(track => {
+        const key = `${track.name}|${track.artist}`;
+        return (
+          <div key={track.name} className="track-item" style={{ background: 'var(--bg-secondary, #f2f2f7)', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 4, background: '#d1d1d6', flexShrink: 0, overflow: 'hidden' }}>
+              {trackImages[key] && <img src={trackImages[key]} alt={track.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+            </div>
+            <div className="track-info" style={{ flex: 1, minWidth: 0 }}>
+              <div className="track-name" style={{ fontSize: 12 }}>{track.name}</div>
+              <div className="track-artist" style={{ fontSize: 11 }}>{track.artist}</div>
+            </div>
+            <div className={track.highlight ? 'tour-diag-highlight' : ''} style={{ display: 'flex', gap: 6, borderRadius: 8, padding: '2px 4px' }}>
+              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsUp size={14} /></button>
+              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsDown size={14} /></button>
+            </div>
           </div>
-          <div className={track.highlight ? 'tour-diag-highlight' : ''} style={{ display: 'flex', gap: 6, borderRadius: 8, padding: '2px 4px' }}>
-            <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsUp size={14} /></button>
-            <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsDown size={14} /></button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   </div>
 );
@@ -207,25 +222,29 @@ const STEPS = [
     emoji: null,
     title: 'My Playlists',
     description: 'View all your created playlists in one place. Tap the My Playlists tab to see your full collection, edit settings, or refine further.',
-    diagram: <NavTabsDiagram />,
+    diagram: null,
+    diagramComponent: NavTabsDiagram,
   },
   {
     emoji: null,
     title: 'Import Your Playlists',
     description: 'Already have playlists on Spotify or Apple Music? Tap Import to bring them into Fins and manage them with personalized refinements and auto-updates.',
-    diagram: <ImportDiagram />,
+    diagram: null,
+    diagramComponent: ImportDiagram,
   },
   {
     emoji: null,
     title: 'Like or Dislike Songs',
     description: 'Thumbs up gets you more songs like that one. Thumbs down removes it and avoids similar tracks in future updates.',
-    diagram: <LikeDislikeDiagram />,
+    diagram: null,
+    diagramComponent: LikeDislikeDiagram,
   },
   {
     emoji: null,
     title: 'Edit Your Playlists',
     description: 'Click Edit Playlist to access settings, add refinement instructions, manually refresh with new songs, and manage auto-update scheduling.',
-    diagram: <EditDiagram />,
+    diagram: null,
+    diagramComponent: EditDiagram,
   },
   {
     emoji: null,
@@ -249,17 +268,25 @@ const STEPS = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+const DIAGRAM_TRACK_KEYS = DIAGRAM_TRACKS.map(t => `${t.name}|${t.artist}`);
+
 const ProductTour = ({ isOpen, onClose, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [artistImages, setArtistImages] = useState({});
+  const [trackImages, setTrackImages] = useState({});
 
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(0);
       document.body.style.overflow = 'hidden';
-      fetch(`${API_BASE}/api/artist-images?names=${DIAGRAM_ARTIST_NAMES.join(',')}`)
+      const allArtists = [...DIAGRAM_ARTIST_NAMES, ...PLAYLIST_COVER_ARTISTS].filter((v, i, a) => a.indexOf(v) === i);
+      fetch(`${API_BASE}/api/artist-images?names=${encodeURIComponent(allArtists.join(','))}`)
         .then(r => r.json())
         .then(data => setArtistImages(data.images || {}))
+        .catch(() => {});
+      fetch(`${API_BASE}/api/track-images?tracks=${encodeURIComponent(DIAGRAM_TRACK_KEYS.join(','))}`)
+        .then(r => r.json())
+        .then(data => setTrackImages(data.images || {}))
         .catch(() => {});
     } else {
       document.body.style.overflow = 'unset';
@@ -295,7 +322,7 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
           {step.emoji && (
             <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 16 }}>{step.emoji}</div>
           )}
-          {step.diagramComponent ? <step.diagramComponent images={artistImages} /> : step.diagram}
+          {step.diagramComponent ? <step.diagramComponent artistImages={artistImages} trackImages={trackImages} /> : step.diagram}
           <p style={{ marginTop: (step.diagram || step.diagramComponent) ? 12 : 0 }}>{step.description}</p>
         </div>
 

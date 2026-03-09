@@ -7535,6 +7535,31 @@ app.get('/api/artist-images', async (req, res) => {
   }
 });
 
+// Get track album art using client credentials (no user auth needed — for product tour)
+app.get('/api/track-images', async (req, res) => {
+  const { tracks } = req.query; // "TrackName|Artist,TrackName2|Artist2"
+  if (!tracks) return res.json({ images: {} });
+  const trackList = tracks.split(',').map(t => t.trim()).filter(Boolean);
+  try {
+    const token = await getSpotifyClientToken();
+    const images = {};
+    await Promise.all(trackList.map(async (entry) => {
+      const [name, artist] = entry.split('|');
+      try {
+        const resp = await axios.get('https://api.spotify.com/v1/search', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { q: `track:${name} artist:${artist}`, type: 'track', limit: 1 }
+        });
+        const track = resp.data.tracks?.items?.[0];
+        images[entry] = track?.album?.images?.[0]?.url || null;
+      } catch { images[entry] = null; }
+    }));
+    res.json({ images });
+  } catch {
+    res.json({ images: {} });
+  }
+});
+
 // Get trending playlists
 app.get('/api/trending', async (req, res) => {
   try {
