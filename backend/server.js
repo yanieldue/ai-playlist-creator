@@ -3672,24 +3672,43 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
         console.log(`[trending] Using playlist "${playlist.name}" (owner: ${playlist.owner?.id}) for ${categoryId}`);
         const tracksData = await spotifyCC2.getPlaylistTracks(playlist.id, { limit: 50, fields: 'items(track(artists,album(images)))' });
-        const seenArtistIds = new Set();
-        const artists = [];
 
+        // Collect unique artist IDs + their album image from the playlist
+        const seenArtistIds = new Set();
+        const candidateArtists = []; // { id, name, image }
         for (const item of (tracksData.body?.items || [])) {
-          if (artists.length >= 12) break;
           const track = item?.track;
           if (!track?.artists?.length) continue;
           const artist = track.artists[0];
           if (seenArtistIds.has(artist.id)) continue;
           seenArtistIds.add(artist.id);
-
           const image = track.album?.images?.[0]?.url || null;
-          artists.push({ id: artist.id, name: artist.name, image, uri: `spotify:artist:${artist.id}` });
+          candidateArtists.push({ id: artist.id, name: artist.name, image });
+        }
+
+        // Verify artist genres via Spotify — filter to only those matching this category
+        const artistIds = candidateArtists.map(a => a.id).slice(0, 50);
+        const artistsData = await spotifyCC2.getArtists(artistIds);
+        const artistGenreMap = {};
+        for (const a of (artistsData.body?.artists || [])) {
+          if (a) artistGenreMap[a.id] = a.genres || [];
+        }
+
+        const artists = [];
+        for (const candidate of candidateArtists) {
+          if (artists.length >= 12) break;
+          const genres = artistGenreMap[candidate.id] || [];
+          const matchesCategory = genres.some(g => getGenreCategory(g) === categoryId);
+          if (!matchesCategory) {
+            console.log(`[trending] Skipping "${candidate.name}" — genres [${genres.slice(0, 3).join(', ')}] don't match ${categoryId}`);
+            continue;
+          }
+          artists.push({ id: candidate.id, name: candidate.name, image: candidate.image, uri: `spotify:artist:${candidate.id}` });
         }
 
         if (artists.length > 0) {
           sections.push({ categoryId, displayGenre, artists });
-          console.log(`[trending] Section "${displayGenre}": ${artists.length} artists`);
+          console.log(`[trending] Section "${displayGenre}": ${artists.length} verified artists`);
         }
       } catch (err) {
         console.log(`[trending] Failed for category ${categoryId}:`, err.message);
