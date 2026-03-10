@@ -239,7 +239,7 @@ body {
   font-size: 34px;
   font-weight: 700;
   color: #1c1c1e;
-  padding: 20px 20px 10px 20px;
+  padding: 20px 0 10px 16px;
   letter-spacing: -0.5px;
   margin: 0;
   display: block;
@@ -251,7 +251,7 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 12px 0 6px 0;
+  padding: 12px 16px 6px 0;
 }
 
 .section-header > div {
@@ -285,7 +285,7 @@ body {
 
 /* Horizontal Scroll Section */
 .horizontal-scroll-section {
-  padding: 0 20px;
+  padding: 0 0 0 16px;
   margin-bottom: 32px;
   width: 100%;
   box-sizing: border-box;
@@ -1005,7 +1005,7 @@ body {
 @media (max-width: 768px) {
   .page-title {
     font-size: 28px;
-    padding: 16px 16px 8px 16px;
+    padding: 16px 0 8px 16px;
   }
 
   .section-title {
@@ -1040,7 +1040,7 @@ body {
   }
 
   .horizontal-scroll-section {
-    padding: 0 16px;
+    padding: 0 0 0 16px;
   }
 
   .chat-input-wrapper {
