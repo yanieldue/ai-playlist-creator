@@ -213,8 +213,6 @@
   font-size: 13px;
   font-weight: 600;
   color: #8e8e93;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
   margin-bottom: var(--space-xs);
   display: block;
 }
