@@ -2290,7 +2290,7 @@ const PlaylistGenerator = () => {
           {/* Main Content Area */}
           <div className="main-content">
             {activeTab === 'home' && (
-              <>
+              <div className="home-content">
                 {/* Page Title */}
                 <h1 className="page-title">Home</h1>
 
@@ -2481,7 +2481,7 @@ const PlaylistGenerator = () => {
                     ) : null}
                   </>
                 )}
-              </>
+              </div>
             )}
 
             {activeTab === 'playlists' && (
