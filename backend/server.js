@@ -3456,44 +3456,42 @@ app.delete('/api/new-artists/cache/:userId', async (req, res) => {
 });
 
 // Maps Spotify artist genre strings to Spotify Browse category IDs
-const GENRE_TO_CATEGORY = {
-  // K-Pop
-  'k-pop': 'kpop', 'korean pop': 'kpop', 'k pop': 'kpop', 'korean r&b': 'kpop',
-  'girl group': 'kpop', 'k-pop boy group': 'kpop', 'k-pop girl group': 'kpop',
+// Substring-based genre → category mapping (order matters — more specific checks first)
+function getGenreCategory(genre) {
+  const g = genre.toLowerCase();
+  // K-Pop (check before general pop)
+  if (g.includes('k-pop') || g.includes('kpop') || g.includes('korean pop') || g.includes('k pop') || g.includes('girl group') || g.includes('boy group')) return 'kpop';
+  if (g.includes('korean')) return 'kpop';
+  // R&B / Soul (check before trap which bleeds into hiphop)
+  if (g.includes('r&b') || g.includes('rnb') || g.includes('rhythm and blues') || g.includes('neo soul') || g.includes('trap soul') || g.includes('contemporary soul')) return 'rnb';
   // Hip-Hop / Rap
-  'hip hop': 'hiphop', 'hip-hop': 'hiphop', 'rap': 'hiphop', 'trap': 'hiphop',
-  'southern hip hop': 'hiphop', 'east coast hip hop': 'hiphop', 'west coast rap': 'hiphop',
-  'conscious hip hop': 'hiphop', 'gangsta rap': 'hiphop',
-  // R&B
-  'r&b': 'rnb', 'rnb': 'rnb', 'contemporary r&b': 'rnb', 'soul': 'rnb',
-  'neo soul': 'rnb', 'rhythm and blues': 'rnb', 'alternative r&b': 'rnb',
-  // Pop
-  'pop': 'pop', 'dance pop': 'pop', 'electropop': 'pop', 'indie pop': 'pop',
-  'art pop': 'pop', 'baroque pop': 'pop', 'bubblegum pop': 'pop', 'teen pop': 'pop',
+  if (g.includes('hip hop') || g.includes('hip-hop') || g.includes(' rap') || g === 'rap' || g.includes('trap') || g.includes('drill') || g.includes('grime') || g.includes('cloud rap') || g.includes('plugg')) return 'hiphop';
   // Latin
-  'latin': 'latin', 'reggaeton': 'latin', 'latin pop': 'latin', 'latin trap': 'latin',
-  'bachata': 'latin', 'salsa': 'latin', 'cumbia': 'latin',
-  // Rock
-  'rock': 'rock', 'alternative rock': 'rock', 'indie rock': 'rock', 'classic rock': 'rock',
-  'hard rock': 'rock', 'punk rock': 'rock', 'soft rock': 'rock',
-  // Electronic / Dance
-  'electronic': 'edm_dance', 'edm': 'edm_dance', 'dance': 'edm_dance',
-  'house': 'edm_dance', 'techno': 'edm_dance', 'trance': 'edm_dance',
-  // Country
-  'country': 'country', 'country pop': 'country', 'country rock': 'country',
-  // Indie / Alternative
-  'indie': 'indie_alt', 'alternative': 'indie_alt', 'indie folk': 'indie_alt',
+  if (g.includes('latin') || g.includes('reggaeton') || g.includes('bachata') || g.includes('salsa') || g.includes('cumbia') || g.includes('dembow') || g.includes('corrido')) return 'latin';
   // Afrobeats
-  'afrobeats': 'afro', 'afropop': 'afro', 'afro pop': 'afro',
+  if (g.includes('afrobeat') || g.includes('afropop') || g.includes('afro pop') || g.includes('afro swing') || g.includes('amapiano')) return 'afro';
   // Metal
-  'metal': 'metal', 'heavy metal': 'metal', 'death metal': 'metal',
-  // Jazz
-  'jazz': 'jazz', 'smooth jazz': 'jazz',
+  if (g.includes('metal') || g.includes('hardcore') || g.includes('screamo') || g.includes('deathcore')) return 'metal';
+  // Country
+  if (g.includes('country') || g.includes('bluegrass') || g.includes('americana')) return 'country';
+  // Electronic / Dance
+  if (g.includes('electronic') || g.includes('edm') || g.includes('house') || g.includes('techno') || g.includes('trance') || g.includes('dubstep') || g.includes('drum and bass') || g.includes('dnb') || g.includes('bass music')) return 'edm_dance';
+  // Rock / Punk
+  if (g.includes('rock') || g.includes('punk') || g.includes('grunge') || g.includes('emo') || g.includes('shoegaze') || g.includes('post-punk')) return 'rock';
+  // Indie / Alternative / Singer-Songwriter
+  if (g.includes('indie') || g.includes('alternative') || g.includes('lo-fi') || g.includes('lofi') || g.includes('singer-songwriter') || g.includes('folk') || g.includes('bedroom')) return 'indie_alt';
+  // Jazz / Blues
+  if (g.includes('jazz') || g.includes('blues') || g.includes('swing') || g.includes('bossa nova')) return 'jazz';
   // Classical
-  'classical': 'classical',
+  if (g.includes('classical') || g.includes('orchestra') || g.includes('opera') || g.includes('symphony') || g.includes('chamber')) return 'classical';
   // Gospel / Christian
-  'gospel': 'christian', 'christian': 'christian', 'contemporary christian': 'christian',
-};
+  if (g.includes('gospel') || g.includes('christian') || g.includes('worship') || g.includes('ccm')) return 'christian';
+  // Soul catch-all (before pop so "soulful pop" goes to rnb)
+  if (g.includes('soul')) return 'rnb';
+  // Pop broad catch-all — last so specific genres above take priority
+  if (g.includes('pop') || g.includes('dance')) return 'pop';
+  return null;
+}
 
 // Returns next Sunday at 3:00 AM UTC
 function getNextSunday3AM() {
@@ -3607,10 +3605,11 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
     const seenCategories = new Set();
     const categoryGenreMap = {}; // categoryId → raw genre name
     for (const genre of topGenres) {
-      const categoryId = GENRE_TO_CATEGORY[genre.toLowerCase()];
+      const categoryId = getGenreCategory(genre);
       if (categoryId && !seenCategories.has(categoryId)) {
         seenCategories.add(categoryId);
         categoryGenreMap[categoryId] = genre;
+        console.log(`[trending] Genre "${genre}" → category "${categoryId}"`);
         if (seenCategories.size >= 3) break;
       }
     }
