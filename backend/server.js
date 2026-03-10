@@ -3675,7 +3675,7 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
         }
 
         console.log(`[trending] Using playlist "${playlist.name}" (owner: ${playlist.owner?.id}) for ${categoryId}`);
-        const tracksData = await spotifyCC2.getPlaylistTracks(playlist.id, { limit: 50, fields: 'items(track(artists,album(images)))' });
+        const tracksData = await spotifyCC2.getPlaylistTracks(playlist.id, { limit: 100, fields: 'items(track(artists,album(images)))' });
 
         // Collect unique artist IDs + their album image from the playlist
         const seenArtistIds = new Set();
@@ -3700,7 +3700,7 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
         const artists = [];
         for (const candidate of candidateArtists) {
-          if (artists.length >= 12) break;
+          if (artists.length >= 10) break;
           const genres = artistGenreMap[candidate.id] || [];
           const matchesCategory = genres.some(g => getGenreCategory(g) === categoryId);
           if (!matchesCategory) {
