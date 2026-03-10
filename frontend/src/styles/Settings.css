@@ -279,6 +279,10 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .settings-header h1 {
+    font-size: 28px;
+  }
+
   .settings-content {
     padding: 16px;
   }

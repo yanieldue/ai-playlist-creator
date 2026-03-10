@@ -139,6 +139,10 @@
 
 /* Mobile responsive */
 @media (max-width: 768px) {
+  .faq-header h1 {
+    font-size: 28px;
+  }
+
   .faq-content {
     padding: 16px;
   }

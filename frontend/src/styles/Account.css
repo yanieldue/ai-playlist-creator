@@ -488,6 +488,10 @@
 
 /* Mobile responsive */
 @media (max-width: 768px) {
+  .account-header h1 {
+    font-size: 28px;
+  }
+
   .account-list {
     margin-left: 0;
     margin-right: 0;
