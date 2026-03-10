@@ -1394,7 +1394,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
                 {tempUpdateFrequency !== 'never' && (
                   <p className="form-help-text" style={{ marginTop: 4 }}>
-                    Playlist will auto-update at 5:00 AM in your local timezone.
+                    Playlist will auto-update at 5:00 AM.
                   </p>
                 )}
 
