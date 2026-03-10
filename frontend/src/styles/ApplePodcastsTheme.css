@@ -223,7 +223,9 @@ body {
 /* Main Content Area */
 .main-content {
   padding-top: 50px !important;
+  padding-right: 0 !important;
   padding-bottom: 40px !important;
+  padding-left: 0 !important;
   background: #ffffff !important;
   min-height: 100vh !important;
   display: block !important;
