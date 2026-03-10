@@ -3397,18 +3397,25 @@ app.get('/api/new-artists/:userId', async (req, res) => {
     console.log(`   - Artists: ${formattedArtists.map(a => a.name).join(', ')}`);
     console.log(`   - ${formattedArtists.filter(a => a.image).length} with images`);
 
-    // Cache the results for 24 hours (expires at next 12 AM UTC)
     if (formattedArtists.length > 0) {
       try {
         await db.setCachedArtists(platformUserId, formattedArtists);
         console.log('✓ Cached artist recommendations for user');
       } catch (cacheError) {
         console.error('Failed to cache artists:', cacheError.message);
-        // Don't fail the request if caching fails
       }
+      return res.json({ artists: formattedArtists, cached: false });
     }
 
-    res.json({ artists: formattedArtists, cached: false });
+    // Fresh fetch returned 0 — fall back to stale cache so the section doesn't disappear
+    // (SoundCharts quota may be temporarily exhausted)
+    const staleArtists = await db.getStaleCachedArtists(platformUserId);
+    if (staleArtists && Array.isArray(staleArtists) && staleArtists.length > 0) {
+      console.log(`⚠️ Fresh fetch returned 0 artists — serving ${staleArtists.length} stale cached artists`);
+      return res.json({ artists: staleArtists, cached: true, stale: true });
+    }
+
+    res.json({ artists: [], cached: false });
   } catch (error) {
     console.error('Error fetching new artists:', error);
     console.error('Error status code:', error.statusCode);

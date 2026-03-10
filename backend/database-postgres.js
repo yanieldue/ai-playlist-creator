@@ -607,12 +607,27 @@ class DatabaseService {
     }
   }
 
+  async getStaleCachedArtists(userId) {
+    try {
+      const result = await pool.query(`
+        SELECT artists_json
+        FROM artist_recommendations_cache
+        WHERE user_id = $1
+      `, [userId]);
+
+      if (result.rows.length === 0) return null;
+
+      return result.rows[0].artists_json;
+    } catch (error) {
+      console.error('Error getting stale cached artists:', error);
+      return null;
+    }
+  }
+
   async setCachedArtists(userId, artists) {
     try {
-      // Calculate next 12 AM UTC
-      const now = new Date();
-      const nextMidnight = new Date(now);
-      nextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight UTC
+      // Cache for 7 days to survive SoundCharts quota resets
+      const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       await pool.query(`
         INSERT INTO artist_recommendations_cache (user_id, artists_json, cached_at, expires_at)
@@ -621,9 +636,9 @@ class DatabaseService {
           artists_json = EXCLUDED.artists_json,
           cached_at = EXCLUDED.cached_at,
           expires_at = EXCLUDED.expires_at
-      `, [userId, JSON.stringify(artists), nextMidnight]);
+      `, [userId, JSON.stringify(artists), expires]);
 
-      console.log(`Cached artists for ${userId}, expires at ${nextMidnight.toISOString()}`);
+      console.log(`Cached artists for ${userId}, expires at ${expires.toISOString()}`);
     } catch (error) {
       console.error('Error setting cached artists:', error);
       throw error;

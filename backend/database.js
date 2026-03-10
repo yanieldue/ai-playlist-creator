@@ -288,8 +288,11 @@ const resetTokenOps = {
 
 // Artist recommendations cache operations
 const artistCacheOps = {
-  // Get cached artists
+  // Get cached artists (not expired)
   get: db.prepare(`SELECT * FROM artist_recommendations_cache WHERE user_id = ? AND expires_at > ?`),
+
+  // Get cached artists regardless of expiry (stale fallback)
+  getStale: db.prepare(`SELECT * FROM artist_recommendations_cache WHERE user_id = ?`),
 
   // Set cached artists
   set: db.prepare(`
@@ -529,14 +532,24 @@ class DatabaseService {
     }
   }
 
+  getStaleCachedArtists(userId) {
+    const cached = artistCacheOps.getStale.get(userId);
+    if (!cached) return null;
+
+    try {
+      return JSON.parse(cached.artists_json);
+    } catch (error) {
+      console.error('Error parsing stale cached artists:', error);
+      return null;
+    }
+  }
+
   setCachedArtists(userId, artists) {
     const now = new Date();
     const cachedAt = now.toISOString();
 
-    // Calculate next 12 AM UTC
-    const nextMidnight = new Date(now);
-    nextMidnight.setUTCHours(24, 0, 0, 0); // Next midnight UTC
-    const expiresAt = nextMidnight.toISOString();
+    // Cache for 7 days to survive SoundCharts quota resets
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const artistsJson = JSON.stringify(artists);
     artistCacheOps.set.run(userId, artistsJson, cachedAt, expiresAt);
