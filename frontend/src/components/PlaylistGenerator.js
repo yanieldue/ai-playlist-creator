@@ -2331,10 +2331,9 @@ const PlaylistGenerator = () => {
                       key={label}
                       className="quick-generate-chip"
                       onClick={() => {
-                        setInputValue(prompt);
-                        setActiveTab('home');
+                        setPrompt(prompt);
                         setTimeout(() => {
-                          const input = document.querySelector('.chat-input-field');
+                          const input = document.querySelector('.chat-input-container-apple input');
                           if (input) input.focus();
                         }, 100);
                       }}
