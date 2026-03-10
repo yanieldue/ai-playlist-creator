@@ -3576,8 +3576,7 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
       const appleMusicDevToken = generateAppleMusicToken();
       const appleMusicApi = new AppleMusicService(appleMusicDevToken);
-      const storefront = tokens.storefront || 'us';
-      const topArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token, storefront, 15);
+      const topArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token, 15);
 
       if (topArtists.length === 0) return res.json({ sections: [] });
 
