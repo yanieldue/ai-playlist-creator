@@ -3603,9 +3603,9 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       console.log(`[trending] Apple Music top genres (via Spotify CC): ${topGenres.slice(0, 5).join(', ')}`);
     }
 
-    // Map genres to Spotify category IDs (max 3 unique categories)
+    // Map genres to category buckets (max 3 unique), keeping the best display genre per bucket
     const seenCategories = new Set();
-    const categoryGenreMap = {}; // categoryId → display genre name
+    const categoryGenreMap = {}; // categoryId → raw genre name
     for (const genre of topGenres) {
       const categoryId = GENRE_TO_CATEGORY[genre.toLowerCase()];
       if (categoryId && !seenCategories.has(categoryId)) {
@@ -3622,27 +3622,52 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
     console.log(`[trending] Mapped categories: ${[...seenCategories].join(', ')}`);
 
-    // Spotify client credentials for category playlists
-    const spotifyCC = new SpotifyWebApi({
+    // Spotify client credentials for playlist search
+    const spotifyCC2 = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     });
-    const ccData = await spotifyCC.clientCredentialsGrant();
-    spotifyCC.setAccessToken(ccData.body.access_token);
+    const ccData2 = await spotifyCC2.clientCredentialsGrant();
+    spotifyCC2.setAccessToken(ccData2.body.access_token);
 
-    // For each category, get top editorial playlist and extract artists
+    // Friendly search queries per category bucket
+    const CATEGORY_SEARCH = {
+      kpop: 'K-Pop hits',
+      hiphop: 'hip-hop hits',
+      rnb: 'R&B hits',
+      pop: 'pop hits',
+      latin: 'latin hits',
+      rock: 'rock hits',
+      edm_dance: 'dance hits',
+      country: 'country hits',
+      indie_alt: 'indie hits',
+      afro: 'afrobeats hits',
+      metal: 'metal hits',
+      jazz: 'jazz hits',
+      classical: 'classical hits',
+      christian: 'christian hits',
+    };
+
+    // For each category, search for a Spotify editorial playlist and extract artists
     const sections = [];
     for (const categoryId of seenCategories) {
       try {
-        const playlistsData = await spotifyCC.getPlaylistsForCategory(categoryId, { limit: 1, country: 'US' });
-        const playlist = playlistsData.body?.playlists?.items?.[0];
+        const rawGenre = categoryGenreMap[categoryId];
+        const displayGenre = rawGenre.split(/[\s-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const searchQuery = CATEGORY_SEARCH[categoryId] || `${displayGenre} hits`;
+
+        const searchData = await spotifyCC2.search(searchQuery, ['playlist'], { limit: 10, market: 'US' });
+        const playlists = searchData.body?.playlists?.items || [];
+
+        // Prefer Spotify-owned editorial playlists, fall back to any result
+        const playlist = playlists.find(p => p?.owner?.id === 'spotify') || playlists[0];
         if (!playlist) {
-          console.log(`[trending] No playlist found for category ${categoryId}`);
+          console.log(`[trending] No playlist found for category ${categoryId} query "${searchQuery}"`);
           continue;
         }
 
-        console.log(`[trending] Using playlist "${playlist.name}" for ${categoryId}`);
-        const tracksData = await spotifyCC.getPlaylistTracks(playlist.id, { limit: 50, fields: 'items(track(artists,album(images)))' });
+        console.log(`[trending] Using playlist "${playlist.name}" (owner: ${playlist.owner?.id}) for ${categoryId}`);
+        const tracksData = await spotifyCC2.getPlaylistTracks(playlist.id, { limit: 50, fields: 'items(track(artists,album(images)))' });
         const seenArtistIds = new Set();
         const artists = [];
 
@@ -3654,15 +3679,11 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
           if (seenArtistIds.has(artist.id)) continue;
           seenArtistIds.add(artist.id);
 
-          // Get artist image from album art as fallback
           const image = track.album?.images?.[0]?.url || null;
           artists.push({ id: artist.id, name: artist.name, image, uri: `spotify:artist:${artist.id}` });
         }
 
         if (artists.length > 0) {
-          // Format genre name for display e.g. "k-pop" → "K-Pop"
-          const rawGenre = categoryGenreMap[categoryId];
-          const displayGenre = rawGenre.split(/[\s-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
           sections.push({ categoryId, displayGenre, artists });
           console.log(`[trending] Section "${displayGenre}": ${artists.length} artists`);
         }
