@@ -158,6 +158,12 @@ export const playlistService = {
     return response.data;
   },
 
+  // Get trending artists by genre
+  getTrendingArtists: async (userId) => {
+    const response = await api.get(`/api/trending-artists/${userId}`);
+    return response.data;
+  },
+
   // Create playlist on Spotify
   createPlaylist: async (userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs) => {
     const response = await api.post('/api/create-playlist', {

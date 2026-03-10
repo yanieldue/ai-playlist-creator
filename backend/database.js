@@ -1,6 +1,17 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
+// Returns next Sunday at 3:00 AM UTC
+function getNextSunday3AM() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const daysUntilSunday = day === 0 ? 7 : 7 - day;
+  const next = new Date(now);
+  next.setUTCDate(now.getUTCDate() + daysUntilSunday);
+  next.setUTCHours(3, 0, 0, 0);
+  return next;
+}
+
 // Initialize database
 const db = new Database(path.join(__dirname, 'playlist-creator.db'));
 
@@ -50,6 +61,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS artist_recommendations_cache (
     user_id TEXT PRIMARY KEY,
     artists_json TEXT NOT NULL,
+    cached_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS trending_artists_cache (
+    user_id TEXT PRIMARY KEY,
+    genres_data TEXT NOT NULL,
     cached_at TEXT NOT NULL,
     expires_at TEXT NOT NULL
   );
@@ -311,6 +329,20 @@ const artistCacheOps = {
   delete: db.prepare(`DELETE FROM artist_recommendations_cache WHERE user_id = ?`)
 };
 
+// Trending artists cache operations
+const trendingCacheOps = {
+  get: db.prepare(`SELECT * FROM trending_artists_cache WHERE user_id = ? AND expires_at > ?`),
+  set: db.prepare(`
+    INSERT INTO trending_artists_cache (user_id, genres_data, cached_at, expires_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      genres_data = excluded.genres_data,
+      cached_at = excluded.cached_at,
+      expires_at = excluded.expires_at
+  `),
+  delete: db.prepare(`DELETE FROM trending_artists_cache WHERE user_id = ?`)
+};
+
 // High-level API
 class DatabaseService {
   // Users
@@ -564,6 +596,28 @@ class DatabaseService {
   cleanExpiredArtistCache() {
     const now = new Date().toISOString();
     artistCacheOps.deleteExpired.run(now);
+  }
+
+  getCachedTrendingArtists(userId) {
+    const now = new Date().toISOString();
+    const cached = trendingCacheOps.get.get(userId, now);
+    if (!cached) return null;
+    try {
+      return JSON.parse(cached.genres_data);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  setCachedTrendingArtists(userId, genresData) {
+    const cachedAt = new Date().toISOString();
+    const expiresAt = getNextSunday3AM().toISOString();
+    trendingCacheOps.set.run(userId, JSON.stringify(genresData), cachedAt, expiresAt);
+    console.log(`Cached trending artists for ${userId}, expires at ${expiresAt}`);
+  }
+
+  deleteCachedTrendingArtists(userId) {
+    trendingCacheOps.delete.run(userId);
   }
 
   // Platform User IDs

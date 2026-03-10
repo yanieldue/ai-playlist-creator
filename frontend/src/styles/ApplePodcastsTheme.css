@@ -253,6 +253,46 @@ body {
   padding: 20px 0 10px 16px;
 }
 
+/* Quick Generate chips */
+.quick-generate-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 16px 16px;
+}
+
+.quick-generate-chip {
+  background: #f2f2f7;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1c1c1e;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.quick-generate-chip:hover {
+  background: #e5e5ea;
+  transform: scale(1.03);
+}
+
+.quick-generate-chip:active {
+  transform: scale(0.97);
+}
+
+:root.dark-mode .quick-generate-chip {
+  background: #2c2c2e;
+  color: #ffffff;
+}
+
+:root.dark-mode .quick-generate-chip:hover {
+  background: #3a3a3c;
+}
+
 .home-content .horizontal-scroll-section {
   padding: 0 0 0 16px;
 }

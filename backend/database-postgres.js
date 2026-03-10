@@ -1,5 +1,16 @@
 const { Pool } = require('pg');
 
+// Returns next Sunday at 3:00 AM UTC
+function getNextSunday3AM() {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0 = Sunday
+  const daysUntilSunday = day === 0 ? 7 : 7 - day;
+  const next = new Date(now);
+  next.setUTCDate(now.getUTCDate() + daysUntilSunday);
+  next.setUTCHours(3, 0, 0, 0);
+  return next;
+}
+
 // Database connection pool
 let pool;
 
@@ -90,6 +101,13 @@ async function initializeTables() {
       CREATE TABLE IF NOT EXISTS artist_recommendations_cache (
         user_id TEXT PRIMARY KEY,
         artists_json JSONB NOT NULL,
+        cached_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMP NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS trending_artists_cache (
+        user_id TEXT PRIMARY KEY,
+        genres_data JSONB NOT NULL,
         cached_at TIMESTAMP NOT NULL DEFAULT NOW(),
         expires_at TIMESTAMP NOT NULL
       );
@@ -667,6 +685,47 @@ class DatabaseService {
     } catch (error) {
       console.error('Error cleaning expired artist cache:', error);
       throw error;
+    }
+  }
+
+  async getCachedTrendingArtists(userId) {
+    try {
+      const result = await pool.query(`
+        SELECT genres_data
+        FROM trending_artists_cache
+        WHERE user_id = $1 AND expires_at > NOW()
+      `, [userId]);
+      if (result.rows.length === 0) return null;
+      return result.rows[0].genres_data;
+    } catch (error) {
+      console.error('Error getting cached trending artists:', error);
+      return null;
+    }
+  }
+
+  async setCachedTrendingArtists(userId, genresData) {
+    try {
+      const expires = getNextSunday3AM();
+      await pool.query(`
+        INSERT INTO trending_artists_cache (user_id, genres_data, cached_at, expires_at)
+        VALUES ($1, $2, NOW(), $3)
+        ON CONFLICT (user_id) DO UPDATE SET
+          genres_data = EXCLUDED.genres_data,
+          cached_at = EXCLUDED.cached_at,
+          expires_at = EXCLUDED.expires_at
+      `, [userId, JSON.stringify(genresData), expires]);
+      console.log(`Cached trending artists for ${userId}, expires at ${expires.toISOString()}`);
+    } catch (error) {
+      console.error('Error setting cached trending artists:', error);
+      throw error;
+    }
+  }
+
+  async deleteCachedTrendingArtists(userId) {
+    try {
+      await pool.query(`DELETE FROM trending_artists_cache WHERE user_id = $1`, [userId]);
+    } catch (error) {
+      console.error('Error deleting cached trending artists:', error);
     }
   }
 

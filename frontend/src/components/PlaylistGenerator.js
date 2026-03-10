@@ -91,12 +91,16 @@ const PlaylistGenerator = () => {
   const [loadingTopArtists, setLoadingTopArtists] = useState(false);
   const topArtistsScrollRef = useRef(null);
 
-  // New artists
+  // New artists (Artists You Should Explore - keeping state for backwards compat)
   const [newArtists, setNewArtists] = useState([]);
   const [loadingNewArtists, setLoadingNewArtists] = useState(false);
   const [newArtistsFetched, setNewArtistsFetched] = useState(false);
   const newArtistsScrollRef = useRef(null);
   const newArtistsDebounceRef = useRef(null);
+
+  // Trending artists by genre
+  const [trendingArtistsSections, setTrendingArtistsSections] = useState([]);
+  const [loadingTrendingArtists, setLoadingTrendingArtists] = useState(false);
 
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
@@ -497,6 +501,7 @@ const PlaylistGenerator = () => {
         fetchTopArtists();
         fetchUserProfile();
         fetchNewArtists();
+        fetchTrendingArtists();
       } else {
         // No platform connected — clear artists so the section hides
         setNewArtists([]);
@@ -1350,6 +1355,24 @@ const PlaylistGenerator = () => {
         setLoadingNewArtists(false);
       }
     }, 200);
+  };
+
+  const fetchTrendingArtists = async () => {
+    if (!userId || (!spotifyUserId && !appleMusicUserId)) return;
+    const platformUserId = activePlatform === 'spotify' && spotifyUserId ? spotifyUserId
+      : activePlatform === 'apple' && appleMusicUserId ? appleMusicUserId
+      : spotifyUserId || appleMusicUserId;
+    setLoadingTrendingArtists(true);
+    try {
+      const data = await playlistService.getTrendingArtists(platformUserId);
+      if (data.sections && data.sections.length > 0) {
+        setTrendingArtistsSections(data.sections);
+      }
+    } catch (err) {
+      console.log('Failed to fetch trending artists (non-critical):', err.message);
+    } finally {
+      setLoadingTrendingArtists(false);
+    }
   };
 
   const handleChatSubmit = async (retryCount = 0) => {
@@ -2294,6 +2317,33 @@ const PlaylistGenerator = () => {
                 {/* Page Title */}
                 <h1 className="page-title">Home</h1>
 
+                {/* Quick Generate */}
+                <div className="quick-generate-section">
+                  {[
+                    { label: '🏋️ Workout', prompt: 'High energy workout pump up mix' },
+                    { label: '🌙 Late Night', prompt: 'Late night drive chill vibes' },
+                    { label: '🎉 Party', prompt: 'Party starter hits everyone knows' },
+                    { label: '📚 Focus', prompt: 'Focus and study instrumental mix' },
+                    { label: '☀️ Good Morning', prompt: 'Good morning positive energy' },
+                    { label: '😌 Chill', prompt: 'Chill Sunday afternoon at home' },
+                  ].map(({ label, prompt }) => (
+                    <button
+                      key={label}
+                      className="quick-generate-chip"
+                      onClick={() => {
+                        setInputValue(prompt);
+                        setActiveTab('home');
+                        setTimeout(() => {
+                          const input = document.querySelector('.chat-input-field');
+                          if (input) input.focus();
+                        }, 100);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Draft Playlists Section - paid only */}
                 {isPaid() && draftPlaylists.length > 0 && (
                   <div className="unfinished-playlists-section">
@@ -2428,13 +2478,12 @@ const PlaylistGenerator = () => {
                       </div>
                     ) : null}
 
-                    {/* Artists You Should Explore */}
-                    {loadingNewArtists ? (
+                    {/* Trending Artists by Genre */}
+                    {loadingTrendingArtists ? (
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
-                            <h2 className="section-title">Artists You Should Explore</h2>
-                            <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
+                            <h2 className="section-title">Trending Artists This Week</h2>
                           </div>
                         </div>
                         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -2442,16 +2491,15 @@ const PlaylistGenerator = () => {
                           <p style={{ color: '#8e8e93', marginTop: '12px' }}>Loading...</p>
                         </div>
                       </div>
-                    ) : newArtists.length > 0 ? (
-                      <div className="horizontal-scroll-section">
+                    ) : trendingArtistsSections.map((section) => (
+                      <div key={section.categoryId} className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
-                            <h2 className="section-title">Artists You Should Explore</h2>
-                            <p className="section-subtitle">Discover new artists, and rediscover old artists</p>
+                            <h2 className="section-title">Trending Artists in {section.displayGenre} This Week</h2>
                           </div>
                         </div>
-                        <div className="horizontal-scroll-container" ref={newArtistsScrollRef}>
-                          {newArtists.map((artist) => (
+                        <div className="horizontal-scroll-container">
+                          {section.artists.map((artist) => (
                             <div
                               key={artist.id}
                               className="artist-card-apple"
@@ -2478,7 +2526,7 @@ const PlaylistGenerator = () => {
                           ))}
                         </div>
                       </div>
-                    ) : null}
+                    ))}
                   </>
                 )}
               </div>

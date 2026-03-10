@@ -3455,6 +3455,234 @@ app.delete('/api/new-artists/cache/:userId', async (req, res) => {
   }
 });
 
+// Maps Spotify artist genre strings to Spotify Browse category IDs
+const GENRE_TO_CATEGORY = {
+  // K-Pop
+  'k-pop': 'kpop', 'korean pop': 'kpop', 'k pop': 'kpop', 'korean r&b': 'kpop',
+  'girl group': 'kpop', 'k-pop boy group': 'kpop', 'k-pop girl group': 'kpop',
+  // Hip-Hop / Rap
+  'hip hop': 'hiphop', 'hip-hop': 'hiphop', 'rap': 'hiphop', 'trap': 'hiphop',
+  'southern hip hop': 'hiphop', 'east coast hip hop': 'hiphop', 'west coast rap': 'hiphop',
+  'conscious hip hop': 'hiphop', 'gangsta rap': 'hiphop',
+  // R&B
+  'r&b': 'rnb', 'rnb': 'rnb', 'contemporary r&b': 'rnb', 'soul': 'rnb',
+  'neo soul': 'rnb', 'rhythm and blues': 'rnb', 'alternative r&b': 'rnb',
+  // Pop
+  'pop': 'pop', 'dance pop': 'pop', 'electropop': 'pop', 'indie pop': 'pop',
+  'art pop': 'pop', 'baroque pop': 'pop', 'bubblegum pop': 'pop', 'teen pop': 'pop',
+  // Latin
+  'latin': 'latin', 'reggaeton': 'latin', 'latin pop': 'latin', 'latin trap': 'latin',
+  'bachata': 'latin', 'salsa': 'latin', 'cumbia': 'latin',
+  // Rock
+  'rock': 'rock', 'alternative rock': 'rock', 'indie rock': 'rock', 'classic rock': 'rock',
+  'hard rock': 'rock', 'punk rock': 'rock', 'soft rock': 'rock',
+  // Electronic / Dance
+  'electronic': 'edm_dance', 'edm': 'edm_dance', 'dance': 'edm_dance',
+  'house': 'edm_dance', 'techno': 'edm_dance', 'trance': 'edm_dance',
+  // Country
+  'country': 'country', 'country pop': 'country', 'country rock': 'country',
+  // Indie / Alternative
+  'indie': 'indie_alt', 'alternative': 'indie_alt', 'indie folk': 'indie_alt',
+  // Afrobeats
+  'afrobeats': 'afro', 'afropop': 'afro', 'afro pop': 'afro',
+  // Metal
+  'metal': 'metal', 'heavy metal': 'metal', 'death metal': 'metal',
+  // Jazz
+  'jazz': 'jazz', 'smooth jazz': 'jazz',
+  // Classical
+  'classical': 'classical',
+  // Gospel / Christian
+  'gospel': 'christian', 'christian': 'christian', 'contemporary christian': 'christian',
+};
+
+// Returns next Sunday at 3:00 AM UTC
+function getNextSunday3AM() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const daysUntilSunday = day === 0 ? 7 : 7 - day;
+  const next = new Date(now);
+  next.setUTCDate(now.getUTCDate() + daysUntilSunday);
+  next.setUTCHours(3, 0, 0, 0);
+  return next;
+}
+
+// Get trending artists by genre for the home page
+app.get('/api/trending-artists/:userId', async (req, res) => {
+  console.log('=== TRENDING ARTISTS ENDPOINT CALLED ===');
+  try {
+    let { userId } = req.params;
+    let platformUserId = userId;
+    let platform = null;
+
+    // Resolve platform
+    if (isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      if (platformUserId) {
+        platform = 'spotify';
+      } else {
+        platformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (platformUserId) platform = 'apple';
+        else return res.json({ sections: [] });
+      }
+    } else if (userId.startsWith('spotify_')) {
+      platform = 'spotify';
+    } else if (userId.startsWith('apple_music_')) {
+      platform = 'apple';
+    }
+
+    // Check cache
+    const cached = await db.getCachedTrendingArtists(platformUserId);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      console.log(`✓ Returning cached trending artists for ${platformUserId}`);
+      return res.json({ sections: cached });
+    }
+
+    // Get user's top artist genres
+    let topGenres = [];
+
+    if (platform === 'spotify') {
+      // Spotify: genres come directly from top artists response
+      const tokens = await getUserTokens(platformUserId);
+      if (!tokens) return res.json({ sections: [] });
+
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+      try {
+        const refreshData = await userSpotifyApi.refreshAccessToken();
+        userSpotifyApi.setAccessToken(refreshData.body.access_token);
+      } catch (e) {}
+
+      const topArtistsData = await userSpotifyApi.getMyTopArtists({ limit: 20, time_range: 'medium_term' });
+      const genreCounts = {};
+      for (const artist of topArtistsData.body.items) {
+        for (const genre of (artist.genres || [])) {
+          genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+        }
+      }
+      topGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+      console.log(`[trending] Spotify top genres: ${topGenres.slice(0, 5).join(', ')}`);
+
+    } else {
+      // Apple Music: look up genres via Spotify client credentials
+      const tokens = await getUserTokens(platformUserId);
+      if (!tokens) return res.json({ sections: [] });
+
+      const appleMusicDevToken = generateAppleMusicToken();
+      const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+      const storefront = tokens.storefront || 'us';
+      const topArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token, storefront, 15);
+
+      if (topArtists.length === 0) return res.json({ sections: [] });
+
+      // Fetch genres for each artist via Spotify client credentials
+      const spotifyCC = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+      });
+      const ccData = await spotifyCC.clientCredentialsGrant();
+      spotifyCC.setAccessToken(ccData.body.access_token);
+
+      const genreCounts = {};
+      await Promise.all(topArtists.slice(0, 10).map(async (artist) => {
+        try {
+          const result = await spotifyCC.searchArtists(artist.name, { limit: 1 });
+          const match = result.body.artists?.items?.[0];
+          if (match && match.name.toLowerCase() === artist.name.toLowerCase()) {
+            for (const genre of (match.genres || [])) {
+              genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+            }
+          }
+        } catch (e) {}
+      }));
+      topGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+      console.log(`[trending] Apple Music top genres (via Spotify CC): ${topGenres.slice(0, 5).join(', ')}`);
+    }
+
+    // Map genres to Spotify category IDs (max 3 unique categories)
+    const seenCategories = new Set();
+    const categoryGenreMap = {}; // categoryId → display genre name
+    for (const genre of topGenres) {
+      const categoryId = GENRE_TO_CATEGORY[genre.toLowerCase()];
+      if (categoryId && !seenCategories.has(categoryId)) {
+        seenCategories.add(categoryId);
+        categoryGenreMap[categoryId] = genre;
+        if (seenCategories.size >= 3) break;
+      }
+    }
+
+    if (seenCategories.size === 0) {
+      console.log('[trending] No mappable genres found');
+      return res.json({ sections: [] });
+    }
+
+    console.log(`[trending] Mapped categories: ${[...seenCategories].join(', ')}`);
+
+    // Spotify client credentials for category playlists
+    const spotifyCC = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    });
+    const ccData = await spotifyCC.clientCredentialsGrant();
+    spotifyCC.setAccessToken(ccData.body.access_token);
+
+    // For each category, get top editorial playlist and extract artists
+    const sections = [];
+    for (const categoryId of seenCategories) {
+      try {
+        const playlistsData = await spotifyCC.getPlaylistsForCategory(categoryId, { limit: 1, country: 'US' });
+        const playlist = playlistsData.body?.playlists?.items?.[0];
+        if (!playlist) {
+          console.log(`[trending] No playlist found for category ${categoryId}`);
+          continue;
+        }
+
+        console.log(`[trending] Using playlist "${playlist.name}" for ${categoryId}`);
+        const tracksData = await spotifyCC.getPlaylistTracks(playlist.id, { limit: 50, fields: 'items(track(artists,album(images)))' });
+        const seenArtistIds = new Set();
+        const artists = [];
+
+        for (const item of (tracksData.body?.items || [])) {
+          if (artists.length >= 12) break;
+          const track = item?.track;
+          if (!track?.artists?.length) continue;
+          const artist = track.artists[0];
+          if (seenArtistIds.has(artist.id)) continue;
+          seenArtistIds.add(artist.id);
+
+          // Get artist image from album art as fallback
+          const image = track.album?.images?.[0]?.url || null;
+          artists.push({ id: artist.id, name: artist.name, image, uri: `spotify:artist:${artist.id}` });
+        }
+
+        if (artists.length > 0) {
+          // Format genre name for display e.g. "k-pop" → "K-Pop"
+          const rawGenre = categoryGenreMap[categoryId];
+          const displayGenre = rawGenre.split(/[\s-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          sections.push({ categoryId, displayGenre, artists });
+          console.log(`[trending] Section "${displayGenre}": ${artists.length} artists`);
+        }
+      } catch (err) {
+        console.log(`[trending] Failed for category ${categoryId}:`, err.message);
+      }
+    }
+
+    // Cache until next Sunday 3 AM UTC
+    if (sections.length > 0) {
+      await db.setCachedTrendingArtists(platformUserId, sections);
+    }
+
+    res.json({ sections });
+  } catch (error) {
+    console.error('Error fetching trending artists:', error);
+    res.status(500).json({ error: 'Failed to fetch trending artists' });
+  }
+});
+
 // Get user profile
 app.get('/api/user-profile/:userId', async (req, res) => {
   try {
