@@ -3656,8 +3656,13 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
     const sections = [];
     for (const categoryId of seenCategories) {
       try {
-        const rawGenre = categoryGenreMap[categoryId];
-        const displayGenre = rawGenre.split(/[\s-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const CATEGORY_DISPLAY = {
+          kpop: 'K-Pop', hiphop: 'Hip-Hop', rnb: 'R&B', pop: 'Pop',
+          latin: 'Latin', rock: 'Rock', edm_dance: 'Dance', country: 'Country',
+          indie_alt: 'Indie', afro: 'Afrobeats', metal: 'Metal',
+          jazz: 'Jazz', classical: 'Classical', christian: 'Christian',
+        };
+        const displayGenre = CATEGORY_DISPLAY[categoryId] || categoryGenreMap[categoryId];
         const searchQuery = CATEGORY_SEARCH[categoryId] || `${displayGenre} hits`;
 
         const searchData = await spotifyCC2.search(searchQuery, ['playlist'], { limit: 10, market: 'US' });
