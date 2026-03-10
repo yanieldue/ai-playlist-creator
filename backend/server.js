@@ -5792,6 +5792,9 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
         const artistNames = [...new Set(selectedTracks.map(t => t.artist))];
         await db.trackArtists(platformUserId, artistNames);
         console.log(`✓ Tracked ${artistNames.length} artists from generated playlist to database`);
+        // Invalidate artist recommendations cache so newly-heard artists are excluded on next load
+        await db.deleteCachedArtists(platformUserId);
+        console.log('✓ Invalidated artist recommendations cache after playlist generation');
       } catch (trackError) {
         console.log('Could not track artists to database:', trackError.message);
         // Don't block playlist generation if tracking fails
