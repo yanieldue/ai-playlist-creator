@@ -3530,7 +3530,11 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
     // Check cache
     const cached = await db.getCachedTrendingArtists(platformUserId);
-    if (cached && Array.isArray(cached) && cached.length > 0) {
+    const forceRefresh = req.query.refresh === 'true';
+    if (forceRefresh) {
+      await db.deleteCachedTrendingArtists(platformUserId);
+      console.log(`[trending] Cache cleared for ${platformUserId} (forced refresh)`);
+    } else if (cached && Array.isArray(cached) && cached.length > 0) {
       console.log(`✓ Returning cached trending artists for ${platformUserId}`);
       return res.json({ sections: cached });
     }
@@ -3629,22 +3633,23 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
     const ccData2 = await spotifyCC2.clientCredentialsGrant();
     spotifyCC2.setAccessToken(ccData2.body.access_token);
 
-    // Friendly search queries per category bucket
+    // Use actual Spotify editorial playlist names — searching by exact name reliably returns
+    // the Spotify-owned playlist as the top result, avoiding random user playlists
     const CATEGORY_SEARCH = {
-      kpop: 'K-Pop hits',
-      hiphop: 'hip-hop hits',
-      rnb: 'R&B hits',
-      pop: 'pop hits',
-      latin: 'latin hits',
-      rock: 'rock hits',
-      edm_dance: 'dance hits',
-      country: 'country hits',
-      indie_alt: 'indie hits',
-      afro: 'afrobeats hits',
-      metal: 'metal hits',
-      jazz: 'jazz hits',
-      classical: 'classical hits',
-      christian: 'christian hits',
+      kpop: 'K-Pop Daebak',
+      hiphop: 'RapCaviar',
+      rnb: 'Are & Be',
+      pop: "Today's Top Hits",
+      latin: 'Viva Latino',
+      rock: 'Rock This',
+      edm_dance: 'Dance Hits',
+      country: 'Hot Country',
+      indie_alt: 'Indie Pop',
+      afro: 'Afro Hub',
+      metal: 'Metal Essentials',
+      jazz: 'Jazz Classics',
+      classical: 'Classical New Releases',
+      christian: 'Top Christian',
     };
 
     // For each category, search for a Spotify editorial playlist and extract artists
