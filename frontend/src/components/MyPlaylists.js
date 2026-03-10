@@ -1357,7 +1357,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
               {/* Auto-Update Settings Section */}
               <div className="modal-section">
                 <h3 className="section-title">Auto-Update Settings {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
-                <p className="section-description">Automatically refresh your playlist on schedule (won't run within 24 hours of a manual refresh)</p>
+                <p className="section-description">Automatically refresh your playlist on a set schedule</p>
 
                 <div className="form-group">
                   <label htmlFor="update-frequency">Auto-Update Frequency</label>
