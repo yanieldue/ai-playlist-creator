@@ -102,6 +102,9 @@ const PlaylistGenerator = () => {
   const [trendingArtistsSections, setTrendingArtistsSections] = useState([]);
   const [loadingTrendingArtists, setLoadingTrendingArtists] = useState(false);
 
+  // Single gate for the entire home content — prevents sections popping in one by one
+  const [loadingHomeContent, setLoadingHomeContent] = useState(false);
+
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
   const [spotifyUserId, setSpotifyUserId] = useState(null);
@@ -497,11 +500,11 @@ const PlaylistGenerator = () => {
       // Only fetch if we have a platform connected
       if (spotifyUserId || appleMusicUserId) {
         console.log('[useEffect] Fetching artists for platform:', activePlatform);
-        // Always fetch artists when platform changes
-        fetchTopArtists();
         fetchUserProfile();
         fetchNewArtists();
-        fetchTrendingArtists();
+        setLoadingHomeContent(true);
+        Promise.all([fetchTopArtists(), fetchTrendingArtists()])
+          .finally(() => setLoadingHomeContent(false));
       } else {
         // No platform connected — clear artists so the section hides
         setNewArtists([]);
@@ -556,8 +559,10 @@ const PlaylistGenerator = () => {
               console.log('PlaylistGenerator: Platform connected, fetching artists. Current userId:', userId);
               const currentUserId = userId || localStorage.getItem('userId');
               if (currentUserId) {
-                fetchTopArtists();
                 fetchNewArtists();
+                setLoadingHomeContent(true);
+                Promise.all([fetchTopArtists(), fetchTrendingArtists()])
+                  .finally(() => setLoadingHomeContent(false));
               } else {
                 console.log('PlaylistGenerator: No userId available, cannot fetch artists yet');
               }
@@ -2425,21 +2430,15 @@ const PlaylistGenerator = () => {
                 ) : (
                   // User is connected - show content
                   <>
-                    {/* Show Top Artists section */}
-                    {loadingTopArtists ? (
-                      <div className="horizontal-scroll-section">
-                        <div className="section-header">
-                          <div>
-                            <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your last 4 weeks listening history</p>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center', padding: '40px' }}>
-                          <div className="loading-spinner-apple"></div>
-                          <p style={{ color: '#8e8e93', marginTop: '12px' }}>Loading...</p>
-                        </div>
+                    {loadingHomeContent ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '12px' }}>
+                        <div className="loading-spinner-apple"></div>
+                        <p style={{ color: '#8e8e93', fontSize: '14px' }}>Loading...</p>
                       </div>
-                    ) : topArtists.length > 0 ? (
+                    ) : <>
+
+                    {/* Show Top Artists section */}
+                    {topArtists.length > 0 ? (
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
@@ -2478,19 +2477,7 @@ const PlaylistGenerator = () => {
                     ) : null}
 
                     {/* Trending Artists by Genre */}
-                    {loadingTrendingArtists ? (
-                      <div className="horizontal-scroll-section">
-                        <div className="section-header">
-                          <div>
-                            <h2 className="section-title">Trending Artists This Week</h2>
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center', padding: '40px' }}>
-                          <div className="loading-spinner-apple"></div>
-                          <p style={{ color: '#8e8e93', marginTop: '12px' }}>Loading...</p>
-                        </div>
-                      </div>
-                    ) : trendingArtistsSections.map((section) => (
+                    {trendingArtistsSections.map((section) => (
                       <div key={section.categoryId} className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
@@ -2526,6 +2513,7 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     ))}
+                    </> /* end loadingHomeContent else */}
                   </>
                 )}
               </div>
