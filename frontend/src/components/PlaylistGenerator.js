@@ -503,11 +503,13 @@ const PlaylistGenerator = () => {
         fetchUserProfile();
         fetchNewArtists();
         setLoadingHomeContent(true);
-        Promise.all([fetchTopArtists(), fetchTrendingArtists()])
+        Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
           .finally(() => setLoadingHomeContent(false));
       } else {
-        // No platform connected — clear artists so the section hides
+        // No platform connected — still load drafts but skip artist fetches
         setNewArtists([]);
+        setLoadingHomeContent(true);
+        fetchDrafts().finally(() => setLoadingHomeContent(false));
       }
 
       // Check if user has completed the tour (only on initial load)
@@ -523,24 +525,16 @@ const PlaylistGenerator = () => {
     }
   }, [isAuthenticated, userId, spotifyUserId, appleMusicUserId, activePlatform]);
 
-  // Load draft playlists when user is authenticated
-  useEffect(() => {
-    const loadDrafts = async () => {
-      if (isAuthenticated && userId) {
-        try {
-          const response = await playlistService.getDrafts(userId);
-          if (response.drafts && response.drafts.length > 0) {
-            // Set the drafts array so they appear in the "Unfinished Playlists" section
-            setDraftPlaylists(response.drafts);
-            console.log('Loaded drafts:', response.drafts.length);
-          }
-        } catch (error) {
-          console.error('Failed to load drafts:', error);
-        }
+  const fetchDrafts = async () => {
+    try {
+      const response = await playlistService.getDrafts(userId);
+      if (response.drafts && response.drafts.length > 0) {
+        setDraftPlaylists(response.drafts);
       }
-    };
-    loadDrafts();
-  }, [isAuthenticated, userId]);
+    } catch (error) {
+      console.error('Failed to load drafts:', error);
+    }
+  };
 
   // Watch for connected platforms changes (when user connects/disconnects from Account page)
   useEffect(() => {
@@ -561,7 +555,7 @@ const PlaylistGenerator = () => {
               if (currentUserId) {
                 fetchNewArtists();
                 setLoadingHomeContent(true);
-                Promise.all([fetchTopArtists(), fetchTrendingArtists()])
+                Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
                   .finally(() => setLoadingHomeContent(false));
               } else {
                 console.log('PlaylistGenerator: No userId available, cannot fetch artists yet');
