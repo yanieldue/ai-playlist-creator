@@ -813,6 +813,7 @@ body {
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
   touch-action: auto;
   overscroll-behavior: contain;
+  transition: transform 0.25s ease;
 }
 :root.dark-mode .chat-compose-sheet--full {
   background: #1c1c1e;

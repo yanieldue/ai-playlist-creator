@@ -639,10 +639,32 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll when compose modal is open
+  // Lock background scroll + lift sheet above keyboard on iOS
   useEffect(() => {
     document.body.style.overflow = showComposeModal ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    if (!showComposeModal) return;
+
+    // When the keyboard opens on iOS, translate the sheet UP by the keyboard height
+    // so the input stays visible above the keyboard instead of behind it.
+    const adjustForKeyboard = () => {
+      if (!window.visualViewport) return;
+      const vv = window.visualViewport;
+      const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      const sheet = document.querySelector('.chat-compose-sheet--full');
+      if (sheet) {
+        sheet.style.transform = keyboardHeight > 0 ? `translateY(-${keyboardHeight}px)` : '';
+      }
+    };
+
+    window.visualViewport?.addEventListener('resize', adjustForKeyboard);
+    adjustForKeyboard();
+
+    return () => {
+      document.body.style.overflow = '';
+      window.visualViewport?.removeEventListener('resize', adjustForKeyboard);
+      const sheet = document.querySelector('.chat-compose-sheet--full');
+      if (sheet) sheet.style.transform = '';
+    };
   }, [showComposeModal]);
 
   const fetchUserProfile = async () => {
