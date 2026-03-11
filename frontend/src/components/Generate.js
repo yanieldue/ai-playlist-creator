@@ -96,23 +96,6 @@ export default function Generate() {
     if (!userId) navigate('/', { replace: true });
   }, []);
 
-  // Track visual viewport so the page shrinks when keyboard opens (iOS Safari)
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      if (!pageRef.current) return;
-      pageRef.current.style.height = vv.height + 'px';
-      pageRef.current.style.top = vv.offsetTop + 'px';
-    };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-    };
-  }, []);
-
   const handleGenerate = async (retryCount = 0) => {
     if (!prompt.trim()) return;
 
@@ -303,7 +286,7 @@ export default function Generate() {
   };
 
   return (
-    <div className="generate-page" ref={pageRef}>
+    <div className="generate-page">
       {/* Header */}
       <div className="generate-header">
         <button className="generate-back-btn" onClick={goBack}>
