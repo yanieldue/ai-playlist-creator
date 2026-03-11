@@ -813,7 +813,6 @@ body {
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
   touch-action: auto;
   overscroll-behavior: contain;
-  transition: transform 0.25s ease;
 }
 :root.dark-mode .chat-compose-sheet--full {
   background: #1c1c1e;
@@ -924,9 +923,13 @@ body {
 .compose-suggestion-card:hover { background: #d8d8dc; }
 .compose-suggestion-icon { color: #636366; flex-shrink: 0; margin-top: 1px; }
 .compose-input-area {
+  position: sticky;
+  bottom: 0;
   padding: 16px 20px 32px;
   border-top: 0.5px solid rgba(0,0,0,0.08);
+  background: #f2f2f7;
 }
+:root.dark-mode .compose-input-area { background: #1c1c1e; }
 .compose-input-row {
   display: flex;
   align-items: center;

@@ -639,32 +639,10 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll + lift sheet above keyboard on iOS
+  // Lock background scroll when compose modal is open
   useEffect(() => {
     document.body.style.overflow = showComposeModal ? 'hidden' : '';
-    if (!showComposeModal) return;
-
-    // When the keyboard opens on iOS, translate the sheet UP by the keyboard height
-    // so the input stays visible above the keyboard instead of behind it.
-    const adjustForKeyboard = () => {
-      if (!window.visualViewport) return;
-      const vv = window.visualViewport;
-      const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      if (sheet) {
-        sheet.style.transform = keyboardHeight > 0 ? `translateY(-${keyboardHeight}px)` : '';
-      }
-    };
-
-    window.visualViewport?.addEventListener('resize', adjustForKeyboard);
-    adjustForKeyboard();
-
-    return () => {
-      document.body.style.overflow = '';
-      window.visualViewport?.removeEventListener('resize', adjustForKeyboard);
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      if (sheet) sheet.style.transform = '';
-    };
+    return () => { document.body.style.overflow = ''; };
   }, [showComposeModal]);
 
   const fetchUserProfile = async () => {
@@ -2744,7 +2722,8 @@ const PlaylistGenerator = () => {
                       <button className="gen-screen-close" onClick={() => { setShowComposeModal(false); setComposePhase('input'); }}>✕</button>
                     </div>
 
-                    {/* Unified scrollable content above input */}
+                    {/* Single scrollable body — input is sticky at bottom so iOS
+                        naturally scrolls this container when keyboard opens */}
                     <div className="compose-scroll-body">
                       {/* Title area */}
                       <div className="compose-intro">
@@ -2779,10 +2758,9 @@ const PlaylistGenerator = () => {
                           </button>
                         ))}
                       </div>
-                    </div>
 
-                    {/* Bottom input */}
-                    <div className="compose-input-area">
+                      {/* Input sticky at bottom of scroll area */}
+                      <div className="compose-input-area">
                       <div className="compose-input-row">
                         <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
                         <input
@@ -2828,6 +2806,7 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     </div>
+                    </div> {/* end compose-scroll-body */}
                   </>
                 )}
 
