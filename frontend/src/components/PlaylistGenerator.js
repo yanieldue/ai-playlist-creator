@@ -2718,19 +2718,21 @@ const PlaylistGenerator = () => {
               >
                 {composePhase === 'input' && (
                   <>
-                    {/* Header — sticky at top of scrollable sheet */}
-                    <div className="gen-screen-header compose-header-sticky">
+                    {/* Header — outside scroll body, always visible */}
+                    <div className="gen-screen-header">
                       <button className="gen-screen-close" onClick={() => { setShowComposeModal(false); setComposePhase('input'); }}>✕</button>
                     </div>
 
-                    {/* Title area */}
-                    <div className="compose-intro">
-                      <h2 className="compose-intro-title">What's the vibe today?</h2>
-                      <p className="compose-intro-sub">Let's make a playlist together.</p>
-                    </div>
+                    {/* Single scroll body — header above stays fixed, input below is sticky */}
+                    <div className="compose-scroll-body">
+                      {/* Title area */}
+                      <div className="compose-intro">
+                        <h2 className="compose-intro-title">What's the vibe today?</h2>
+                        <p className="compose-intro-sub">Let's make a playlist together.</p>
+                      </div>
 
-                    {/* Try asking cards */}
-                    <div className="compose-suggestions">
+                      {/* Try asking cards */}
+                      <div className="compose-suggestions">
                         {/* Tips card */}
                         <div className="compose-tips-card">
                           <div className="compose-tips-title">Tips for great playlists</div>
@@ -2757,8 +2759,8 @@ const PlaylistGenerator = () => {
                         ))}
                       </div>
 
-                    {/* Input — sticky at bottom of scrollable sheet */}
-                    <div className="compose-input-area">
+                      {/* Input sticky at bottom of scroll body */}
+                      <div className="compose-input-area">
                       <div className="compose-input-row">
                         <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
                         <input
@@ -2804,6 +2806,7 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     </div>
+                    </div> {/* end compose-scroll-body */}
                   </>
                 )}
 
