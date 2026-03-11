@@ -794,6 +794,8 @@ body {
   display: flex;
   align-items: flex-end;
   overscroll-behavior: contain;
+  /* Block touch events from reaching the page behind the modal */
+  touch-action: none;
 }
 .chat-compose-overlay--dark {
   background: rgba(0, 0, 0, 0.6);
@@ -818,7 +820,7 @@ body {
   max-height: 100dvh;
   color: #1c1c1e;
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
-  touch-action: auto;
+  touch-action: pan-y;
   overscroll-behavior: contain;
 }
 :root.dark-mode .chat-compose-sheet--full {
@@ -899,6 +901,8 @@ body {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* Re-enable touch scrolling inside this container */
+  touch-action: pan-y;
 }
 .compose-suggestions {
   padding: 0 24px 24px;
