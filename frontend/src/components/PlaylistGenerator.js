@@ -639,44 +639,10 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll when compose modal is open.
-  // On iOS, position:fixed on body prevents the layout viewport from scrolling
-  // when the keyboard opens (which would otherwise push fixed elements off-screen).
-  // We then add padding-bottom to the overlay equal to the keyboard height so the
-  // sheet sits above the keyboard.
+  // Lock background scroll when compose modal is open
   useEffect(() => {
-    if (!showComposeModal) return;
-
-    const scrollY = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = '100%';
-
-    const handleKeyboard = () => {
-      if (!window.visualViewport) return;
-      const vv = window.visualViewport;
-      const keyboardHeight = Math.max(0, window.innerHeight - vv.height);
-      const overlay = document.querySelector('.chat-compose-overlay');
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      // Push sheet above keyboard
-      if (overlay) overlay.style.paddingBottom = keyboardHeight ? `${keyboardHeight}px` : '';
-      // Cap sheet height to visible area so header stays on screen
-      if (sheet) sheet.style.height = keyboardHeight ? `${vv.height}px` : '';
-    };
-
-    window.visualViewport?.addEventListener('resize', handleKeyboard);
-
-    return () => {
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      window.scrollTo(0, scrollY);
-      window.visualViewport?.removeEventListener('resize', handleKeyboard);
-      const overlay = document.querySelector('.chat-compose-overlay');
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      if (overlay) overlay.style.paddingBottom = '';
-      if (sheet) sheet.style.height = '';
-    };
+    document.body.style.overflow = showComposeModal ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [showComposeModal]);
 
   const fetchUserProfile = async () => {

@@ -783,7 +783,12 @@ body {
 /* Chat Compose Bottom Sheet */
 .chat-compose-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* dvh shrinks when keyboard opens — keeps overlay above keyboard */
+  height: 100vh;
+  height: 100dvh;
   background: rgba(0, 0, 0, 0.4);
   z-index: 1100;
   display: flex;
@@ -809,6 +814,8 @@ body {
   display: flex;
   flex-direction: column;
   height: 88vh;
+  height: 88dvh;
+  max-height: 100dvh;
   color: #1c1c1e;
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
   touch-action: auto;
