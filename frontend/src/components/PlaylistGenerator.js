@@ -654,9 +654,14 @@ const PlaylistGenerator = () => {
 
     const handleKeyboard = () => {
       if (!window.visualViewport) return;
-      const keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height);
+      const vv = window.visualViewport;
+      const keyboardHeight = Math.max(0, window.innerHeight - vv.height);
       const overlay = document.querySelector('.chat-compose-overlay');
+      const sheet = document.querySelector('.chat-compose-sheet--full');
+      // Push sheet above keyboard
       if (overlay) overlay.style.paddingBottom = keyboardHeight ? `${keyboardHeight}px` : '';
+      // Cap sheet height to visible area so header stays on screen
+      if (sheet) sheet.style.height = keyboardHeight ? `${vv.height}px` : '';
     };
 
     window.visualViewport?.addEventListener('resize', handleKeyboard);
@@ -668,7 +673,9 @@ const PlaylistGenerator = () => {
       window.scrollTo(0, scrollY);
       window.visualViewport?.removeEventListener('resize', handleKeyboard);
       const overlay = document.querySelector('.chat-compose-overlay');
+      const sheet = document.querySelector('.chat-compose-sheet--full');
       if (overlay) overlay.style.paddingBottom = '';
+      if (sheet) sheet.style.height = '';
     };
   }, [showComposeModal]);
 
