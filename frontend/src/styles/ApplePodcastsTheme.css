@@ -808,21 +808,28 @@ body {
   padding: 12px 20px 32px;
   box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
 }
-/* Expanded sheet for all compose phases — stays as bottom sheet */
+/* Expanded sheet — single scroll container, header+input are sticky */
 .chat-compose-sheet--full {
   background: #f2f2f7;
   border-radius: 16px 16px 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
   height: 88vh;
   height: 88dvh;
   max-height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   color: #1c1c1e;
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
-  touch-action: pan-y;
-  overscroll-behavior: contain;
 }
+.compose-header-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f2f2f7;
+}
+:root.dark-mode .compose-header-sticky { background: #1c1c1e; }
 :root.dark-mode .chat-compose-sheet--full {
   background: #1c1c1e;
   color: #ffffff;
@@ -895,15 +902,8 @@ body {
   color: #636366;
   margin: 0;
 }
-/* Single scrollable area for all content above the input */
-.compose-scroll-body {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  /* Re-enable touch scrolling inside this container */
-  touch-action: pan-y;
-}
+/* compose-scroll-body no longer needed — sheet is the scroll container */
+.compose-scroll-body { display: contents; }
 .compose-suggestions {
   padding: 0 24px 24px;
   display: flex;

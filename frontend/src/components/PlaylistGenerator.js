@@ -639,11 +639,12 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll when compose modal is open
+  // Lock background scroll when any modal is open
   useEffect(() => {
-    document.body.style.overflow = showComposeModal ? 'hidden' : '';
+    const anyModal = showComposeModal || showPlaylistModal || showChatModal || showGeneratingChatModal;
+    document.body.style.overflow = anyModal ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [showComposeModal]);
+  }, [showComposeModal, showPlaylistModal, showChatModal, showGeneratingChatModal]);
 
   const fetchUserProfile = async () => {
     // Determine which platform userId to use based on activePlatform
@@ -2717,22 +2718,19 @@ const PlaylistGenerator = () => {
               >
                 {composePhase === 'input' && (
                   <>
-                    {/* Header */}
-                    <div className="gen-screen-header">
+                    {/* Header — sticky at top of scrollable sheet */}
+                    <div className="gen-screen-header compose-header-sticky">
                       <button className="gen-screen-close" onClick={() => { setShowComposeModal(false); setComposePhase('input'); }}>✕</button>
                     </div>
 
-                    {/* Single scrollable body — input is sticky at bottom so iOS
-                        naturally scrolls this container when keyboard opens */}
-                    <div className="compose-scroll-body">
-                      {/* Title area */}
-                      <div className="compose-intro">
-                        <h2 className="compose-intro-title">What's the vibe today?</h2>
-                        <p className="compose-intro-sub">Let's make a playlist together.</p>
-                      </div>
+                    {/* Title area */}
+                    <div className="compose-intro">
+                      <h2 className="compose-intro-title">What's the vibe today?</h2>
+                      <p className="compose-intro-sub">Let's make a playlist together.</p>
+                    </div>
 
-                      {/* Try asking cards */}
-                      <div className="compose-suggestions">
+                    {/* Try asking cards */}
+                    <div className="compose-suggestions">
                         {/* Tips card */}
                         <div className="compose-tips-card">
                           <div className="compose-tips-title">Tips for great playlists</div>
@@ -2759,8 +2757,8 @@ const PlaylistGenerator = () => {
                         ))}
                       </div>
 
-                      {/* Input sticky at bottom of scroll area */}
-                      <div className="compose-input-area">
+                    {/* Input — sticky at bottom of scrollable sheet */}
+                    <div className="compose-input-area">
                       <div className="compose-input-row">
                         <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
                         <input
@@ -2806,7 +2804,6 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     </div>
-                    </div> {/* end compose-scroll-body */}
                   </>
                 )}
 
