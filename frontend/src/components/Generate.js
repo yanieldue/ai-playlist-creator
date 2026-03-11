@@ -96,13 +96,26 @@ export default function Generate() {
     if (!userId) navigate('/', { replace: true });
   }, []);
 
-  // Shrink page to visual viewport only while keyboard is open (iOS Safari).
-  // Tracking focus prevents resizing during URL-bar hide/show on scroll.
+  // Prevent iOS Safari from scrolling the document when an input is focused.
+  // Without this, iOS scrolls window.scrollY upward to bring the input into
+  // view, which pushes the fixed page container off-screen (header disappears).
+  // Also shrink page height to visual viewport so keyboard doesn't overlap input.
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let keyboardOpen = false;
+    // Lock body scroll for this full-screen route
+    const prevOverflow = document.body.style.overflow;
+    const prevPosition = document.body.style.position;
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
 
+    const vv = window.visualViewport;
+    if (!vv) return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.width = '';
+    };
+
+    let keyboardOpen = false;
     const resize = () => {
       if (!pageRef.current || !keyboardOpen) return;
       pageRef.current.style.height = vv.height + 'px';
@@ -120,6 +133,9 @@ export default function Generate() {
     document.addEventListener('focusin', onFocus);
     document.addEventListener('focusout', onBlur);
     return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.position = prevPosition;
+      document.body.style.width = '';
       vv.removeEventListener('resize', resize);
       document.removeEventListener('focusin', onFocus);
       document.removeEventListener('focusout', onBlur);
