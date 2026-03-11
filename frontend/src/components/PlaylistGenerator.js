@@ -2759,8 +2759,8 @@ const PlaylistGenerator = () => {
                         ))}
                       </div>
 
-                      {/* Input sticky at bottom of scroll body */}
-                      <div className="compose-input-area">
+                    </div> {/* end compose-scroll-body */}
+                    <div className="compose-input-area">
                       <div className="compose-input-row">
                         <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
                         <input
@@ -2806,7 +2806,6 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     </div>
-                    </div> {/* end compose-scroll-body */}
                   </>
                 )}
 

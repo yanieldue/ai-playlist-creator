@@ -937,8 +937,7 @@ body {
 .compose-suggestion-card:hover { background: #d8d8dc; }
 .compose-suggestion-icon { color: #636366; flex-shrink: 0; margin-top: 1px; }
 .compose-input-area {
-  position: sticky;
-  bottom: 0;
+  flex-shrink: 0;
   padding: 16px 20px 32px;
   border-top: 0.5px solid rgba(0,0,0,0.08);
   background: #f2f2f7;
