@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import mp from '../utils/mixpanel';
@@ -151,6 +152,10 @@ const PlaylistGenerator = () => {
   const [showTrackListMenu, setShowTrackListMenu] = useState(false);
   const trackListMenuRef = useRef(null);
 
+  // Router hooks
+  const navigate = useNavigate();
+  const location = useLocation();
+
   // Example prompts for inspiration
   const examplePrompts = [
     "Early 2000's pop music",
@@ -171,6 +176,24 @@ const PlaylistGenerator = () => {
     // Fallback to the general userId (backwards compatibility)
     return userId;
   };
+
+  // Handle playlist returned from /generate page
+  useEffect(() => {
+    if (location.state?.returnTab) {
+      setActiveTab(location.state.returnTab);
+    }
+    if (location.state?.pendingPlaylist) {
+      const { pendingPlaylist, pendingChatMessages } = location.state;
+      setGeneratedPlaylist(pendingPlaylist);
+      setEditedPlaylistName(pendingPlaylist.playlistName || '');
+      setEditedDescription(pendingPlaylist.description || '');
+      setChatMessages(pendingChatMessages || []);
+      setShowPlaylistModal(true);
+      setModalStep(1);
+    }
+    // Clear the state so a back/forward doesn't re-trigger
+    if (location.state) window.history.replaceState({}, '', window.location.pathname);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Load platform-specific userIds from localStorage
@@ -1172,6 +1195,7 @@ const PlaylistGenerator = () => {
     };
 
     setGeneratedPlaylist(updatedPlaylist);
+    showToast('Track removed', 'success');
 
     // Auto-save updated draft to database
     try {
@@ -1181,8 +1205,6 @@ const PlaylistGenerator = () => {
       console.error('Failed to auto-save draft after removing track:', draftError);
       // Don't block the user if draft save fails
     }
-
-    showToast('Track removed', 'success');
   };
 
   // Returns the user-facing error message for the creation result modal.
@@ -2026,26 +2048,26 @@ const PlaylistGenerator = () => {
 
   const openRefineScreen = () => {
     setShowPlaylistModal(false);
-    setShowGeneratingChatModal(false);
-    setShowComposeModal(true);
-    setComposePhase('refine');
+    navigate('/generate', {
+      state: {
+        refineMode: true,
+        initialPlaylist: generatedPlaylist,
+        initialChatMessages: chatMessages,
+      },
+    });
   };
 
   const handleResumeDraft = (draftId) => {
     const draft = draftPlaylists.find(d => (d.playlistId || d.id) === draftId);
     if (!draft) return;
 
-    // Restore playlist state from draft
-    setGeneratedPlaylist(draft);
-    setChatMessages(draft.chatMessages || []);
-    setEditedPlaylistName(draft.playlistName);
-    setEditedDescription(draft.description);
-    setCurrentDraftId(draftId);
-    setIsDescriptionExpanded(false);
-
-    // Open in compose modal tracks phase
-    setComposePhase('tracks');
-    setShowComposeModal(true);
+    navigate('/generate', {
+      state: {
+        initialPlaylist: draft,
+        initialChatMessages: draft.chatMessages || [],
+        returnTab: 'home',
+      },
+    });
   };
 
   const handleDiscardDraft = async (draftId) => {
@@ -2534,12 +2556,14 @@ const PlaylistGenerator = () => {
                   onBack={() => setActiveTab('home')}
                   showToast={showToast}
                   onRefinePlaylist={(playlist) => {
-                    setGeneratedPlaylist(playlist);
-                    setChatMessages(playlist.chatMessages || []);
-                    setEditedPlaylistName(playlist.playlistName);
-                    setEditedDescription(playlist.description || '');
-                    setShowComposeModal(true);
-                    setComposePhase('refine');
+                    navigate('/generate', {
+                      state: {
+                        refineMode: true,
+                        initialPlaylist: playlist,
+                        initialChatMessages: playlist.chatMessages || [],
+                        returnTab: 'playlists',
+                      },
+                    });
                   }}
                 />
               </>
@@ -2616,57 +2640,9 @@ const PlaylistGenerator = () => {
                 </div>
               )}
               <div className="chat-input-wrapper">
-                <div className="options-menu-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <button
-                    onClick={() => { setSongCountDraft(songCount); setShowOptionsMenu(!showOptionsMenu); }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: '20px',
-                      color: newArtistsOnly || songCount !== 30 ? '#4facfe' : '#8e8e93',
-                      cursor: 'pointer',
-                      padding: '4px'
-                    }}
-                    title="Playlist options"
-                  >
-                    +
-                  </button>
-                  <div
-                    className="prompt-info-icon"
-                    onMouseEnter={() => setShowPromptTooltip(true)}
-                    onMouseLeave={() => setShowPromptTooltip(false)}
-                    style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="18"
-                      height="18"
-                      fill="none"
-                      stroke="#8e8e93"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="16" x2="12" y2="12"/>
-                      <line x1="12" y1="8" x2="12.01" y2="8"/>
-                    </svg>
-                    {showPromptTooltip && (
-                      <div className="prompt-tooltip">
-                        <div className="prompt-tooltip-header">Tips for great playlists:</div>
-                        <ul className="prompt-tooltip-list">
-                          <li><strong>Be specific:</strong> Include artist names, genres, energy level, or time periods</li>
-                          <li><strong>Example:</strong> "25 upbeat indie songs like Phantogram from the past 5 years"</li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 <div
                   className="chat-input-placeholder"
-                  onClick={() => !loading && setShowComposeModal(true)}
+                  onClick={() => !loading && navigate('/generate', { state: { activePlatform } })}
                 >
                   {prompt || 'Create playlist for...'}
                 </div>

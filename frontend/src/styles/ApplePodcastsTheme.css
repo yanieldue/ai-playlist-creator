@@ -877,7 +877,7 @@ body {
 }
 
 /* Dark mode */
-:root.dark-mode .chat-input-placeholder { background: #2c2c2e; color: #636366; }
+:root.dark-mode .chat-input-placeholder { background: transparent; color: #636366; }
 :root.dark-mode .chat-input-placeholder:not(:empty) { color: #ffffff; }
 :root.dark-mode .chat-compose-sheet { background: #1c1c1e; }
 :root.dark-mode .chat-compose-handle { background: #48484a; }
@@ -1620,7 +1620,7 @@ body {
 }
 
 :root.dark-mode .chat-input-wrapper {
-  background: #3a3a3c;
+  background: #2c2c2e;
 }
 
 :root.dark-mode .chat-input-wrapper input {

@@ -7,6 +7,7 @@ import ResetPassword from './components/ResetPassword';
 import Account from './components/Account';
 import FAQ from './components/FAQ';
 import Pricing from './components/Pricing';
+import Generate from './components/Generate';
 import AppleMusicRedirect from './components/AppleMusicRedirect';
 import './styles/App.css';
 
@@ -36,6 +37,7 @@ function App() {
           <Route path="/account" element={<Account />} />
           <Route path="/faq" element={<FAQ />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/generate" element={<Generate />} />
           <Route path="/apple-music-redirect" element={<AppleMusicRedirect />} />
         </Routes>
       </Router>

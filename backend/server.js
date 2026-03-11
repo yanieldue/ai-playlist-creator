@@ -5318,37 +5318,40 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
             const needed = songCount - selectedTracks.length;
             console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${songCount}`);
             try {
+              // Re-run artist-similarity discovery with relaxed constraints (no mood/theme filters)
+              // to pull in more songs that weren't surfaced by the stricter primary pass.
+              const seedArtistsForSupplement = genreData.artistConstraints.requestedArtists?.length > 0
+                ? genreData.artistConstraints.requestedArtists
+                : genreData.artistConstraints.suggestedSeedArtists || [];
+
               const supplementCriteria = {
-                seedArtists: [],
+                seedArtists: seedArtistsForSupplement,
                 genre: genreData.primaryGenre,
-                targetMoods: null,
-                targetThemes: null,
-                popularity: null,
+                targetMoods: null,   // relaxed — no mood filter
+                targetThemes: null,  // relaxed — no theme filter
+                popularity: null,    // relaxed — no popularity filter
                 releaseYear: (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) ? {
                   min: genreData.era.yearRange.min,
                   max: genreData.era.yearRange.max
                 } : null,
-                exclusiveMode: false
+                exclusiveMode: false,
+                confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
               };
 
-              // Single call at offset 50 — skips the top-50 most popular artists
-              // (a genre power-user almost certainly knows them) and lands on mid-tier
-              // artists who are good quality but less widely known.
-              // discoverSongsViaSoundChartsTop already returns song name + ISRC, so we
-              // search Spotify directly — no extra SoundCharts calls per artist.
-              const topSongsPool = await discoverSongsViaSoundChartsTop(supplementCriteria, 100, 50);
-              console.log(`🔁 Top-songs pool (offset=50): ${topSongsPool.length} songs`);
+              // Request a larger pool so we have more candidates to match against
+              const supplementPool = await discoverSongsViaSoundCharts(supplementCriteria, Math.max(needed * 4, 60));
+              console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
               const seenSupplementArtists = new Set();
-              for (const song of topSongsPool) {
+              for (const song of supplementPool) {
                 if (selectedTracks.length >= songCount) break;
                 const artistLower = (song.artistName || '').toLowerCase();
                 if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
                 try {
-                  const searchQuery = song.isrc
-                    ? `isrc:${song.isrc}`
-                    : `track:${song.name} artist:${song.artistName}`;
                   if (platform === 'spotify') {
+                    const searchQuery = song.isrc
+                      ? `isrc:${song.isrc}`
+                      : `track:${song.name} artist:${song.artistName}`;
                     const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
                     const track = result.body.tracks?.items?.[0];
                     if (track && !seenTrackIds.has(track.id)) {
@@ -5368,11 +5371,14 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                   } else if (platform === 'apple') {
                     const platformService = new PlatformService();
                     const appleResults = await platformService.searchTracks(
-                      platformUserId, `${song.name} ${song.artistName}`, tokens, tokens.storefront || 'us', 1
+                      platformUserId,
+                      `${song.name} ${song.artistName}`,
+                      tokens, tokens.storefront || 'us', 1
                     );
                     if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
                       if (!allowExplicit && appleResults[0].explicit) continue;
                       seenTrackIds.add(appleResults[0].id);
+                      seenSupplementArtists.add(artistLower);
                       selectedTracks.push(appleResults[0]);
                     }
                   }
@@ -5380,7 +5386,7 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               }
               console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks (${seenSupplementArtists.size} new artists added)`);
             } catch (suppFetchErr) {
-              console.log('Top-songs supplement failed:', suppFetchErr.message);
+              console.log('Supplement failed:', suppFetchErr.message);
             }
           }
 
