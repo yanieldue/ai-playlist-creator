@@ -639,61 +639,10 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll + fix iOS keyboard gap when compose modal is open
+  // Lock background scroll when compose modal is open
   useEffect(() => {
-    if (!showComposeModal) return;
-
-    // iOS-compatible body scroll lock (overflow:hidden alone doesn't work on iOS)
-    const scrollY = window.scrollY;
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = '100%';
-    document.body.style.overflow = 'hidden';
-
-    // Fix keyboard gap on iOS using visualViewport API.
-    // The key insight: raise the overlay's bottom edge to the keyboard top so that
-    // align-items:flex-end positions the sheet flush with the keyboard, not behind it.
-    const adjustForKeyboard = () => {
-      if (!window.visualViewport) return;
-      const vv = window.visualViewport;
-      const overlay = document.querySelector('.chat-compose-overlay');
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      // How far the keyboard pushes up from the screen bottom
-      const keyboardHeight = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
-      if (overlay) {
-        overlay.style.bottom = `${keyboardHeight}px`;
-      }
-      // Cap the sheet so it never exceeds the visible area
-      if (sheet) {
-        sheet.style.maxHeight = `${vv.height}px`;
-      }
-    };
-
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', adjustForKeyboard);
-      window.visualViewport.addEventListener('scroll', adjustForKeyboard);
-      adjustForKeyboard();
-    }
-
-    return () => {
-      // Restore scroll position (fixed body resets scroll to 0)
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      window.scrollTo(0, scrollY);
-
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', adjustForKeyboard);
-        window.visualViewport.removeEventListener('scroll', adjustForKeyboard);
-      }
-
-      // Reset inline styles
-      const overlay = document.querySelector('.chat-compose-overlay');
-      const sheet = document.querySelector('.chat-compose-sheet--full');
-      if (overlay) overlay.style.bottom = '';
-      if (sheet) sheet.style.maxHeight = '';
-    };
+    document.body.style.overflow = showComposeModal ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
   }, [showComposeModal]);
 
   const fetchUserProfile = async () => {
