@@ -646,6 +646,23 @@ const PlaylistGenerator = () => {
     return () => { document.body.style.overflow = ''; };
   }, [showComposeModal, showPlaylistModal, showChatModal, showGeneratingChatModal]);
 
+  // Keep fixed bottom bar above Safari's floating URL bar using visualViewport
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const offsetFromBottom = window.innerHeight - (vv.offsetTop + vv.height);
+      document.documentElement.style.setProperty('--url-bar-offset', `${Math.max(0, offsetFromBottom)}px`);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   const fetchUserProfile = async () => {
     // Determine which platform userId to use based on activePlatform
     let platformUserId = userId;
