@@ -809,7 +809,6 @@ body {
   display: flex;
   flex-direction: column;
   height: 88vh;
-  height: 88dvh; /* dvh shrinks when keyboard opens on iOS */
   color: #1c1c1e;
   box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
   touch-action: auto;

@@ -639,10 +639,54 @@ const PlaylistGenerator = () => {
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
 
-  // Lock background scroll when compose modal is open
+  // Lock background scroll + fix iOS keyboard gap when compose modal is open
   useEffect(() => {
-    document.body.style.overflow = showComposeModal ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
+    if (!showComposeModal) return;
+
+    // iOS-compatible body scroll lock (overflow:hidden alone doesn't work on iOS)
+    const scrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+
+    // Fix keyboard gap on iOS using visualViewport API
+    const adjustForKeyboard = () => {
+      if (!window.visualViewport) return;
+      const vv = window.visualViewport;
+      const overlay = document.querySelector('.chat-compose-overlay');
+      if (overlay) {
+        overlay.style.height = `${vv.height}px`;
+        overlay.style.top = `${vv.offsetTop}px`;
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', adjustForKeyboard);
+      window.visualViewport.addEventListener('scroll', adjustForKeyboard);
+      adjustForKeyboard();
+    }
+
+    return () => {
+      // Restore scroll position (fixed body resets scroll to 0)
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      window.scrollTo(0, scrollY);
+
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', adjustForKeyboard);
+        window.visualViewport.removeEventListener('scroll', adjustForKeyboard);
+      }
+
+      // Reset any inline styles set by adjustForKeyboard
+      const overlay = document.querySelector('.chat-compose-overlay');
+      if (overlay) {
+        overlay.style.height = '';
+        overlay.style.top = '';
+      }
+    };
   }, [showComposeModal]);
 
   const fetchUserProfile = async () => {
