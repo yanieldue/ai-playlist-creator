@@ -753,7 +753,6 @@ body {
 .chat-input-container-apple {
   position: fixed;
   bottom: 0;
-  bottom: calc(100vh - 100dvh); /* lifts bar above Safari's floating URL bar */
   left: 0;
   right: 0;
   background: rgba(255, 255, 255, 0.95);
