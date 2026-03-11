@@ -2722,22 +2722,23 @@ const PlaylistGenerator = () => {
                       <button className="gen-screen-close" onClick={() => { setShowComposeModal(false); setComposePhase('input'); }}>✕</button>
                     </div>
 
-                    {/* Title area */}
-                    <div className="compose-intro">
-                      <h2 className="compose-intro-title">What's the vibe today?</h2>
-                      <p className="compose-intro-sub">Let's make a playlist together.</p>
-                    </div>
-
-                    {/* Try asking cards */}
-                    <div className="compose-suggestions">
-                      {/* Tips card */}
-                      <div className="compose-tips-card">
-                        <div className="compose-tips-title">Tips for great playlists</div>
-                        <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Be specific — include artist names, genres, energy level, or era</div>
-                        <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
+                    {/* Unified scrollable content above input */}
+                    <div className="compose-scroll-body">
+                      {/* Title area */}
+                      <div className="compose-intro">
+                        <h2 className="compose-intro-title">What's the vibe today?</h2>
+                        <p className="compose-intro-sub">Let's make a playlist together.</p>
                       </div>
-                      <div className="compose-suggestions-label">Try asking</div>
-                      <div className="compose-suggestions-scroll">
+
+                      {/* Try asking cards */}
+                      <div className="compose-suggestions">
+                        {/* Tips card */}
+                        <div className="compose-tips-card">
+                          <div className="compose-tips-title">Tips for great playlists</div>
+                          <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Be specific — include artist names, genres, energy level, or era</div>
+                          <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
+                        </div>
+                        <div className="compose-suggestions-label">Try asking</div>
                         {[
                           'Upbeat hip-hop and R&B for a morning workout, high energy like Drake and Kendrick',
                           'Chill indie folk for a Sunday morning, similar to Bon Iver and Iron & Wine',

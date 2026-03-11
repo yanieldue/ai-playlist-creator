@@ -886,10 +886,15 @@ body {
   color: #636366;
   margin: 0;
 }
-.compose-suggestions {
+/* Single scrollable area for all content above the input */
+.compose-scroll-body {
   flex: 1;
-  padding: 28px 24px 0;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.compose-suggestions {
+  padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -898,12 +903,6 @@ body {
   font-size: 17px;
   font-weight: 700;
   color: #1c1c1e;
-}
-.compose-suggestions-scroll {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
 }
 .compose-suggestion-card {
   display: flex;
