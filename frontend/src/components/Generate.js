@@ -96,6 +96,36 @@ export default function Generate() {
     if (!userId) navigate('/', { replace: true });
   }, []);
 
+  // Shrink page to visual viewport only while keyboard is open (iOS Safari).
+  // Tracking focus prevents resizing during URL-bar hide/show on scroll.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let keyboardOpen = false;
+
+    const resize = () => {
+      if (!pageRef.current || !keyboardOpen) return;
+      pageRef.current.style.height = vv.height + 'px';
+    };
+    const onFocus = () => {
+      keyboardOpen = true;
+      if (pageRef.current) pageRef.current.style.height = vv.height + 'px';
+    };
+    const onBlur = () => {
+      keyboardOpen = false;
+      if (pageRef.current) pageRef.current.style.height = '';
+    };
+
+    vv.addEventListener('resize', resize);
+    document.addEventListener('focusin', onFocus);
+    document.addEventListener('focusout', onBlur);
+    return () => {
+      vv.removeEventListener('resize', resize);
+      document.removeEventListener('focusin', onFocus);
+      document.removeEventListener('focusout', onBlur);
+    };
+  }, []);
+
   const handleGenerate = async (retryCount = 0) => {
     if (!prompt.trim()) return;
 
@@ -286,7 +316,7 @@ export default function Generate() {
   };
 
   return (
-    <div className="generate-page">
+    <div className="generate-page" ref={pageRef}>
       {/* Header */}
       <div className="generate-header">
         <button className="generate-back-btn" onClick={goBack}>
