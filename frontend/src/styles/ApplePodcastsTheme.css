@@ -762,13 +762,6 @@ body {
   border-top: 0.5px solid rgba(0, 0, 0, 0.1);
   z-index: 999;
 }
-/* iOS Safari: compact URL bar is a ~84px overlay that doesn't affect the viewport.
-   Add extra padding so the input row clears it. No JS can detect this bar. */
-@supports (-webkit-touch-callout: none) {
-  .chat-input-container-apple {
-    padding-bottom: calc(env(safe-area-inset-bottom) + 44px);
-  }
-}
 
 /* Tappable placeholder replacing the real input in the bottom bar */
 .chat-input-placeholder {
