@@ -72,6 +72,14 @@ db.exec(`
     expires_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS soundcharts_cache (
+    cache_key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_soundcharts_cache_created ON soundcharts_cache(created_at);
+
   CREATE TABLE IF NOT EXISTS platform_user_ids (
     email TEXT PRIMARY KEY,
     spotify_user_id TEXT,
@@ -327,6 +335,16 @@ const artistCacheOps = {
 
   // Delete cache for specific user
   delete: db.prepare(`DELETE FROM artist_recommendations_cache WHERE user_id = ?`)
+};
+
+// SoundCharts DB cache operations
+const scCacheOps = {
+  get: db.prepare(`SELECT data FROM soundcharts_cache WHERE cache_key = ? AND created_at > ?`),
+  set: db.prepare(`
+    INSERT INTO soundcharts_cache (cache_key, data, created_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, created_at = excluded.created_at
+  `)
 };
 
 // Trending artists cache operations
@@ -618,6 +636,17 @@ class DatabaseService {
 
   deleteCachedTrendingArtists(userId) {
     trendingCacheOps.delete.run(userId);
+  }
+
+  getCachedSC(key) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const row = scCacheOps.get.get(key, sevenDaysAgo);
+    if (!row) return undefined;
+    try { return JSON.parse(row.data); } catch (e) { return undefined; }
+  }
+
+  setCachedSC(key, data) {
+    scCacheOps.set.run(key, JSON.stringify(data), new Date().toISOString());
   }
 
   // Platform User IDs

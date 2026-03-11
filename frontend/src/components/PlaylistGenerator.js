@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import playlistService from '../services/api';
 import mp from '../utils/mixpanel';
 import { isPaid, isWeeklyLimitActive, getWeeklyLimitResetDate, setWeeklyLimitResetsAt } from '../utils/plan';
+import { playlistsCache } from '../utils/cache';
 import { categorizeError, ERROR_CATEGORIES } from '../utils/errorHandler';
 import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
@@ -57,6 +58,9 @@ const PlaylistGenerator = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [lastRetryFunction, setLastRetryFunction] = useState(null);
   const [showChatModal, setShowChatModal] = useState(false);
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composePhase, setComposePhase] = useState('input'); // 'input' | 'loading' | 'tracks'
+  const [lockedTrackIds, setLockedTrackIds] = useState(new Set());
   const [showGeneratingChatModal, setShowGeneratingChatModal] = useState(false);
   const [generatingChatPrompt, setGeneratingChatPrompt] = useState('');
   const [creationResult, setCreationResult] = useState(null); // { success, message, playlistName }
@@ -251,6 +255,17 @@ const PlaylistGenerator = () => {
       setIsAuthenticated(true);
       mp.identify(resolvedUserId);
 
+      // Prefetch playlists in background so the tab loads instantly
+      if (!playlistsCache[resolvedUserId]) {
+        playlistService.getUserPlaylists(resolvedUserId)
+          .then(data => {
+            playlistsCache[resolvedUserId] = data.playlists.sort((a, b) =>
+              new Date(b.createdAt) - new Date(a.createdAt)
+            );
+          })
+          .catch(() => {});
+      }
+
       // Show paywall once for free users who haven't seen it yet
       if (!isPaid() && !localStorage.getItem('seenPricingPage')) {
         setShowPaywall(true);
@@ -301,6 +316,17 @@ const PlaylistGenerator = () => {
         localStorage.setItem('userId', userIdParam);
         mp.identify(userIdParam);
         mp.track('Platform Connected', { platform: spotifyUserIdParam ? 'spotify' : 'apple' });
+
+        // Prefetch playlists in background
+        if (!playlistsCache[userIdParam]) {
+          playlistService.getUserPlaylists(userIdParam)
+            .then(data => {
+              playlistsCache[userIdParam] = data.playlists.sort((a, b) =>
+                new Date(b.createdAt) - new Date(a.createdAt)
+              );
+            })
+            .catch(() => {});
+        }
       }
 
       // If email is provided in callback, update localStorage
@@ -612,6 +638,12 @@ const PlaylistGenerator = () => {
       refineChatBodyRef.current.scrollTop = refineChatBodyRef.current.scrollHeight;
     }
   }, [showChatModal, chatMessages, refineLoadingMessage]);
+
+  // Lock background scroll when compose modal is open
+  useEffect(() => {
+    document.body.style.overflow = showComposeModal ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [showComposeModal]);
 
   const fetchUserProfile = async () => {
     // Determine which platform userId to use based on activePlatform
@@ -957,8 +989,12 @@ const PlaylistGenerator = () => {
     if (retryCount === 0) {
       setLoading(true);
       setGeneratingChatPrompt(prompt.trim());
-      setShowGeneratingChatModal(true);
-      setShowGeneratingModal(false); // Hide old modal
+      if (showComposeModal) {
+        setComposePhase('loading');
+      } else {
+        setShowGeneratingChatModal(true);
+      }
+      setShowGeneratingModal(false);
       setError('');
       setGeneratedPlaylist(null);
     }
@@ -980,8 +1016,12 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount);
       clearInterval(messageInterval);
       setGeneratingMessage('');
-      setShowGeneratingChatModal(false);
       setShowGeneratingModal(false);
+      if (showComposeModal) {
+        setComposePhase('tracks');
+      } else {
+        setShowGeneratingChatModal(false);
+      }
 
       // Store the original prompt and requested song count with the playlist
       const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), requestedSongCount: songCount, chatMessages: [], excludedSongs: [] };
@@ -1027,10 +1067,11 @@ const PlaylistGenerator = () => {
       setEditedPlaylistName(result.playlistName);
       setEditedDescription(result.description);
 
-      // Open modal at step 1
       setModalStep(1);
-      setShowPlaylistModal(true);
       setChatMessages([]);
+      if (!showComposeModal) {
+        setShowPlaylistModal(true);
+      }
       setIsDescriptionExpanded(false);
 
       console.log('Generated playlist:', result);
@@ -1367,6 +1408,7 @@ const PlaylistGenerator = () => {
       if (data.sections && data.sections.length > 0) {
         setTrendingArtistsSections(data.sections);
       }
+
     } catch (err) {
       console.log('Failed to fetch trending artists (non-critical):', err.message);
     } finally {
@@ -1395,6 +1437,7 @@ const PlaylistGenerator = () => {
     if (retryCount === 0) {
       setChatInput('');
       setChatLoading(true);
+      if (showComposeModal) setComposePhase('loading');
       // Add user message to chat
       setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
@@ -1420,9 +1463,14 @@ const PlaylistGenerator = () => {
         .map(msg => msg.content)
         .join('. ');
 
+      const lockedTracks = (generatedPlaylist.tracks || []).filter(t => lockedTrackIds.has(t.id));
+      const lockedContext = lockedTracks.length > 0
+        ? `\n\nKeep these songs exactly as-is: ${lockedTracks.map(t => `"${t.name}" by ${t.artist}`).join(', ')}.`
+        : '';
+
       const refinementPrompt = previousRefinements
-        ? `Original request: "${originalPromptToUse}"${descriptionContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
-        : `Original request: "${originalPromptToUse}"${descriptionContext}\n\nRefinement: ${userMessage}`;
+        ? `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
+        : `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nRefinement: ${userMessage}`;
 
       // Use the originally requested song count to maintain consistency
       const requestedCount = generatedPlaylist.requestedSongCount || songCount;
@@ -1656,8 +1704,12 @@ const PlaylistGenerator = () => {
         // Don't block the user if draft save fails
       }
 
-      // Close chat modal after successful submission
-      setShowChatModal(false);
+      // Close chat modal / return to tracks in compose modal
+      if (showComposeModal) {
+        setComposePhase('tracks');
+      } else {
+        setShowChatModal(false);
+      }
 
       // Show success toast
       showToast('Playlist updated successfully!', 'success');
@@ -1971,20 +2023,28 @@ const PlaylistGenerator = () => {
     }
   };
 
+  const openRefineScreen = () => {
+    setShowPlaylistModal(false);
+    setShowGeneratingChatModal(false);
+    setShowComposeModal(true);
+    setComposePhase('refine');
+  };
+
   const handleResumeDraft = (draftId) => {
     const draft = draftPlaylists.find(d => (d.playlistId || d.id) === draftId);
     if (!draft) return;
 
     // Restore playlist state from draft
-    // Draft data is stored at the top level (playlistName, tracks, etc.)
     setGeneratedPlaylist(draft);
     setChatMessages(draft.chatMessages || []);
     setEditedPlaylistName(draft.playlistName);
     setEditedDescription(draft.description);
-    setModalStep(1);
     setCurrentDraftId(draftId);
-    setShowPlaylistModal(true);
     setIsDescriptionExpanded(false);
+
+    // Open in compose modal tracks phase
+    setComposePhase('tracks');
+    setShowComposeModal(true);
   };
 
   const handleDiscardDraft = async (draftId) => {
@@ -2316,123 +2376,77 @@ const PlaylistGenerator = () => {
                 {/* Page Title */}
                 <h1 className="page-title">Home</h1>
 
-                {/* Quick Generate */}
-                <div className="quick-generate-section">
-                  {[
-                    { label: '🏋️ Workout', prompt: 'High energy workout pump up mix' },
-                    { label: '🌙 Late Night', prompt: 'Late night drive chill vibes' },
-                    { label: '🎉 Party', prompt: 'Party starter hits everyone knows' },
-                    { label: '📚 Focus', prompt: 'Focus and study instrumental mix' },
-                    { label: '☀️ Good Morning', prompt: 'Good morning positive energy' },
-                    { label: '😌 Chill', prompt: 'Chill Sunday afternoon at home' },
-                  ].map(({ label, prompt }) => (
-                    <button
-                      key={label}
-                      className="quick-generate-chip"
-                      onClick={() => {
-                        setPrompt(prompt);
-                        setTimeout(() => {
-                          const input = document.querySelector('.chat-input-container-apple input');
-                          if (input) input.focus();
-                        }, 100);
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Draft Playlists Section - paid only */}
-                {isPaid() && draftPlaylists.length > 0 && (
-                  <div className="unfinished-playlists-section">
-                    <div className="section-header">
-                      <div>
-                        <h2 className="section-title">Unfinished Playlists</h2>
-                        <p className="section-subtitle">Continue editing your drafts</p>
-                      </div>
-                    </div>
-                    <div className="draft-cards-container">
-                      {draftPlaylists.map((draft) => {
-                        const firstTrackImage = draft.tracks?.[0]?.image;
-                        const draftId = draft.playlistId || draft.id;
-                        return (
-                          <div
-                            key={draftId}
-                            className="draft-card-apple"
-                            onClick={() => handleResumeDraft(draftId)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <div className="draft-card-image">
-                              {firstTrackImage ? (
-                                <img src={firstTrackImage} alt={draft.playlistName} />
-                              ) : (
-                                <div className="draft-card-placeholder">
-                                  <Icons.Playlist size={40} />
-                                </div>
-                              )}
-                            </div>
-                            <div className="draft-card-info">
-                              <div className="draft-card-name">{draft.playlistName || 'Untitled Playlist'}</div>
-                              <div className="draft-card-meta">{draft.tracks?.length || 0} tracks</div>
-                            </div>
-                            <button
-                              className="draft-card-delete"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDiscardDraft(draftId);
-                              }}
-                              title="Delete draft"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Check if any platform is connected */}
+                {/* No platform connected */}
                 {!spotifyUserId && !appleMusicUserId ? (
-                  // No platforms connected - show prompt
                   <div className="horizontal-scroll-section">
                     <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                      <h3 style={{
-                        fontSize: '18px',
-                        color: '#ffffff',
-                        marginBottom: '12px',
-                        fontWeight: '600'
-                      }}>
+                      <h3 style={{ fontSize: '18px', color: '#ffffff', marginBottom: '12px', fontWeight: '600' }}>
                         Get Started with AI Playlist Creator
                       </h3>
-                      <p style={{
-                        color: '#8e8e93',
-                        fontSize: '14px',
-                        marginBottom: '24px',
-                        lineHeight: '1.6'
-                      }}>
+                      <p style={{ color: '#8e8e93', fontSize: '14px', marginBottom: '24px', lineHeight: '1.6' }}>
                         Connect your favorite music platform to discover personalized playlists.
                       </p>
-                      <button
-                        onClick={() => setActiveTab('account')}
-                        className="connect-platform-btn"
-                      >
+                      <button onClick={() => setActiveTab('account')} className="connect-platform-btn">
                         Connect a Platform
                       </button>
                     </div>
                   </div>
+                ) : loadingHomeContent ? (
+                  <div className="playlists-loading">
+                    <div className="playlists-loading-spinner" />
+                  </div>
                 ) : (
-                  // User is connected - show content
+                  /* All home content renders at once */
                   <>
-                    {loadingHomeContent ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 20px', gap: '12px' }}>
-                        <div className="loading-spinner-apple"></div>
-                        <p style={{ color: '#8e8e93', fontSize: '14px' }}>Loading...</p>
+                    {/* Draft Playlists - paid only */}
+                    {isPaid() && draftPlaylists.length > 0 && (
+                      <div className="unfinished-playlists-section">
+                        <div className="section-header">
+                          <div>
+                            <h2 className="section-title">Unfinished Playlists</h2>
+                            <p className="section-subtitle">Continue editing your drafts</p>
+                          </div>
+                        </div>
+                        <div className="draft-cards-container">
+                          {draftPlaylists.map((draft) => {
+                            const firstTrackImage = draft.tracks?.[0]?.image;
+                            const draftId = draft.playlistId || draft.id;
+                            return (
+                              <div
+                                key={draftId}
+                                className="draft-card-apple"
+                                onClick={() => handleResumeDraft(draftId)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <div className="draft-card-image">
+                                  {firstTrackImage ? (
+                                    <img src={firstTrackImage} alt={draft.playlistName} />
+                                  ) : (
+                                    <div className="draft-card-placeholder">
+                                      <Icons.Playlist size={40} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="draft-card-info">
+                                  <div className="draft-card-name">{draft.playlistName || 'Untitled Playlist'}</div>
+                                  <div className="draft-card-meta">{draft.tracks?.length || 0} tracks</div>
+                                </div>
+                                <button
+                                  className="draft-card-delete"
+                                  onClick={(e) => { e.stopPropagation(); handleDiscardDraft(draftId); }}
+                                  title="Delete draft"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    ) : <>
+                    )}
 
-                    {/* Show Top Artists section */}
-                    {topArtists.length > 0 ? (
+                    {/* Your Top Artists */}
+                    {topArtists.length > 0 && (
                       <div className="horizontal-scroll-section">
                         <div className="section-header">
                           <div>
@@ -2468,7 +2482,7 @@ const PlaylistGenerator = () => {
                           ))}
                         </div>
                       </div>
-                    ) : null}
+                    )}
 
                     {/* Trending Artists by Genre */}
                     {trendingArtistsSections.map((section) => (
@@ -2507,7 +2521,6 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     ))}
-                    </> /* end loadingHomeContent else */}
                   </>
                 )}
               </div>
@@ -2515,7 +2528,19 @@ const PlaylistGenerator = () => {
 
             {activeTab === 'playlists' && (
               <>
-                <MyPlaylists userId={userId} onBack={() => setActiveTab('home')} showToast={showToast} />
+                <MyPlaylists
+                  userId={userId}
+                  onBack={() => setActiveTab('home')}
+                  showToast={showToast}
+                  onRefinePlaylist={(playlist) => {
+                    setGeneratedPlaylist(playlist);
+                    setChatMessages(playlist.chatMessages || []);
+                    setEditedPlaylistName(playlist.playlistName);
+                    setEditedDescription(playlist.description || '');
+                    setShowComposeModal(true);
+                    setComposePhase('refine');
+                  }}
+                />
               </>
             )}
 
@@ -2638,18 +2663,12 @@ const PlaylistGenerator = () => {
                   </div>
                 </div>
 
-                <input
-                  type="text"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && prompt.trim() && !loading) {
-                      handleGeneratePlaylist();
-                    }
-                  }}
-                  placeholder="Create playlist for..."
-                  disabled={loading}
-                />
+                <div
+                  className="chat-input-placeholder"
+                  onClick={() => !loading && setShowComposeModal(true)}
+                >
+                  {prompt || 'Create playlist for...'}
+                </div>
                 <button
                   onClick={() => handleGeneratePlaylist()}
                   onTouchEnd={(e) => {
@@ -2685,6 +2704,299 @@ const PlaylistGenerator = () => {
             </div>
           )}
 
+
+          {/* Chat Compose Modal — phases: input → loading → tracks */}
+          {showComposeModal && (
+            <div
+              className="chat-compose-overlay chat-compose-overlay--dark"
+              onClick={() => { if (composePhase === 'input') { setShowComposeModal(false); setComposePhase('input'); } else if (composePhase === 'refine') { setComposePhase('tracks'); } }}
+            >
+              <div
+                className="chat-compose-sheet chat-compose-sheet--full"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {composePhase === 'input' && (
+                  <>
+                    {/* Header */}
+                    <div className="gen-screen-header">
+                      <button className="gen-screen-close" onClick={() => { setShowComposeModal(false); setComposePhase('input'); }}>✕</button>
+                    </div>
+
+                    {/* Title area */}
+                    <div className="compose-intro">
+                      <h2 className="compose-intro-title">What's the vibe today?</h2>
+                      <p className="compose-intro-sub">Let's make a playlist together.</p>
+                    </div>
+
+                    {/* Try asking cards */}
+                    <div className="compose-suggestions">
+                      {/* Tips card */}
+                      <div className="compose-tips-card">
+                        <div className="compose-tips-title">Tips for great playlists</div>
+                        <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Be specific — include artist names, genres, energy level, or era</div>
+                        <div className="compose-tips-row"><span className="compose-tips-bullet">•</span> Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
+                      </div>
+                      <div className="compose-suggestions-label">Try asking</div>
+                      <div className="compose-suggestions-scroll">
+                        {[
+                          'Upbeat hip-hop and R&B for a morning workout, high energy like Drake and Kendrick',
+                          'Chill indie folk for a Sunday morning, similar to Bon Iver and Iron & Wine',
+                          'Late night driving songs, moody electronic and alt-R&B like The Weeknd and Frank Ocean',
+                          'Focus instrumentals for deep work, ambient and post-rock like Explosions in the Sky',
+                          'Feel-good 2000s pop and rock road trip hits like Paramore and Fall Out Boy',
+                          'Upbeat Latin pop and reggaeton for a summer party, like Bad Bunny and J Balvin',
+                        ].map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            className="compose-suggestion-card"
+                            onClick={() => setPrompt(suggestion)}
+                          >
+                            <Icons.Sparkles size={16} className="compose-suggestion-icon" />
+                            {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Bottom input */}
+                    <div className="compose-input-area">
+                      <div className="compose-input-row">
+                        <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
+                        <input
+                          type="text"
+                          className="compose-dark-input"
+                          value={prompt}
+                          onChange={(e) => setPrompt(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && prompt.trim() && !loading) handleGeneratePlaylist();
+                          }}
+                          placeholder="Tell me your ideas"
+                          autoFocus
+                        />
+                        <button
+                          className="chat-send-button"
+                          onClick={() => handleGeneratePlaylist()}
+                          disabled={loading || !prompt.trim()}
+                          style={{ visibility: prompt.trim() ? 'visible' : 'hidden' }}
+                        >
+                          <svg viewBox="0 0 24 24" style={{ pointerEvents: 'none' }}>
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="compose-options-row">
+                        <button
+                          className={`compose-option-chip ${newArtistsOnly ? 'active' : ''}`}
+                          onClick={() => setNewArtistsOnly(!newArtistsOnly)}
+                        >
+                          <Icons.Sparkles size={13} /> New Artists Only
+                        </button>
+                        <div className="compose-option-chip">
+                          <Icons.Music size={13} />
+                          <span>Songs</span>
+                          <input
+                            type="number"
+                            value={songCountDraft}
+                            onChange={(e) => setSongCountDraft(e.target.value)}
+                            onBlur={() => { const n = parseInt(songCountDraft, 10); const v = isNaN(n) || n < 1 ? 30 : n; setSongCount(v); setSongCountDraft(v); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="chat-compose-song-count"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {(composePhase === 'loading' || composePhase === 'tracks') && (
+                  <>
+                    {/* Dark header */}
+                    <div className="gen-screen-header">
+                      <button
+                        className="gen-screen-close"
+                        onClick={() => {
+                          setShowComposeModal(false);
+                          setComposePhase('input');
+                          setLoading(false);
+                          setGeneratingError(null);
+                          setWeeklyLimitReached(false);
+                          if (generatedPlaylist) closePlaylistModal();
+                        }}
+                      >✕</button>
+                      {composePhase === 'tracks' && generatedPlaylist && (
+                        <div className="gen-screen-title-block">
+                          <div className="gen-screen-playlist-name">{generatedPlaylist.playlistName}</div>
+                          <div className="gen-screen-song-count">{generatedPlaylist.tracks.length} songs</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Scrollable body */}
+                    <div className="gen-screen-body">
+                      {composePhase === 'loading' && generatingChatPrompt && (
+                        <div className="gen-screen-user-bubble">{generatingChatPrompt}</div>
+                      )}
+
+                      {composePhase === 'loading' && (
+                        <div className="gen-screen-loading">
+                          <div className="gen-screen-ai-avatar">
+                            <div className="wave-loader-small">
+                              <div className="wave-bar"></div>
+                              <div className="wave-bar"></div>
+                              <div className="wave-bar"></div>
+                              <div className="wave-bar"></div>
+                            </div>
+                          </div>
+                          {generatingError ? (
+                            <div className="generating-error-standalone">
+                              <span style={{ color: '#ef4444' }}>{generatingError}</span>
+                              {weeklyLimitReached ? (
+                                <button onClick={() => { setShowComposeModal(false); setComposePhase('input'); setGeneratingError(null); setWeeklyLimitReached(false); setUpgradeModal({ open: true, feature: 'Unlimited Playlists' }); }} className="retry-button-inline" style={{ background: '#1db954', color: '#000' }}>Upgrade</button>
+                              ) : (
+                                <button onClick={() => { setGeneratingError(null); setWeeklyLimitReached(false); handleGeneratePlaylist(); }} className="retry-button-inline">Try Again</button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="gen-screen-status-text">{generatingMessage || 'Creating your playlist...'}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {composePhase === 'tracks' && generatedPlaylist && (
+                        <div className="gen-screen-tracks">
+                          {generatedPlaylist.tracks.map((track) => (
+                            <div key={track.id} className="gen-screen-track-item">
+                              {track.image
+                                ? <img src={track.image} alt={track.album} className="gen-screen-track-img" />
+                                : <div className="gen-screen-track-img-placeholder" />
+                              }
+                              <div className="gen-screen-track-info">
+                                <div className="gen-screen-track-name">
+                                  {track.name}
+                                  {track.explicit && <span className="explicit-badge">E</span>}
+                                </div>
+                                <div className="gen-screen-track-artist">{track.artist}</div>
+                              </div>
+                              <div className="gen-screen-track-actions">
+                                <button
+                                  className={`gen-screen-track-keep ${lockedTrackIds.has(track.id) ? 'active' : ''}`}
+                                  onClick={() => setLockedTrackIds(prev => {
+                                    const next = new Set(prev);
+                                    next.has(track.id) ? next.delete(track.id) : next.add(track.id);
+                                    return next;
+                                  })}
+                                  title={lockedTrackIds.has(track.id) ? 'Unkeep' : 'Keep this song when refining'}
+                                >
+                                  {lockedTrackIds.has(track.id)
+                                    ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                                    : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                  }
+                                </button>
+                                <button className="gen-screen-track-remove" onClick={() => removeTrackFromGenerated(track.id)} title="Remove">
+                                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {generatedPlaylist.description && (
+                            <div className="gen-screen-ai-summary">{generatedPlaylist.description}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    {composePhase === 'tracks' && generatedPlaylist && (
+                      <div className="gen-screen-footer">
+                        <button className="gen-screen-refine-btn" onClick={() => setComposePhase('refine')}>
+                          ✦ Refine this playlist
+                        </button>
+                        <button className="gen-screen-create-btn" onClick={() => {
+                          setShowComposeModal(false);
+                          setComposePhase('input');
+                          setShowPlaylistModal(true);
+                          setModalStep(2);
+                        }}>
+                          Create
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {composePhase === 'refine' && (
+                  <>
+                    <div className="gen-screen-header">
+                      <button className="gen-screen-close" onClick={() => setComposePhase('tracks')}>←</button>
+                      <div className="gen-screen-title-block">
+                        <div className="gen-screen-playlist-name">Refine playlist</div>
+                        <div className="gen-screen-song-count">{generatedPlaylist?.playlistName}</div>
+                      </div>
+                    </div>
+                    <div className="gen-screen-body">
+                      {/* Original prompt */}
+                      {generatedPlaylist?.originalPrompt && (
+                        <div className="gen-screen-user-bubble">{generatedPlaylist.originalPrompt}</div>
+                      )}
+                      {/* Previous refinements */}
+                      {chatMessages.map((msg, i) => (
+                        <div
+                          key={i}
+                          className={msg.role === 'user' ? 'gen-screen-user-bubble' : 'gen-screen-ai-bubble'}
+                        >
+                          {msg.content}
+                        </div>
+                      ))}
+                      {/* Quick suggestions if no history */}
+                      {chatMessages.length === 0 && (
+                        <div className="compose-suggestions" style={{ flex: 'none', padding: 0 }}>
+                          <div className="compose-suggestions-label" style={{ marginBottom: 8 }}>Try asking</div>
+                          <div className="compose-suggestions-scroll">
+                            {[
+                              'More upbeat energy',
+                              'Replace with songs I haven\'t heard before',
+                              'Add more variety in genres',
+                              'Keep only songs from the 2000s',
+                              'Make it more chill and relaxed',
+                            ].map((s) => (
+                              <button key={s} className="compose-suggestion-card" onClick={() => setChatInput(s)}>
+                                <Icons.Sparkles size={16} className="compose-suggestion-icon" />
+                                {s}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="compose-input-area">
+                      <div className="compose-input-row">
+                        <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
+                        <input
+                          type="text"
+                          className="compose-dark-input"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyPress={(e) => { if (e.key === 'Enter' && chatInput.trim() && !chatLoading) handleChatSubmit(); }}
+                          placeholder="Tell me what to change..."
+                          autoFocus
+                        />
+                        <button
+                          className="chat-send-button"
+                          onClick={() => handleChatSubmit()}
+                          disabled={chatLoading || !chatInput.trim()}
+                          style={{ visibility: chatInput.trim() ? 'visible' : 'hidden' }}
+                        >
+                          <svg viewBox="0 0 24 24" style={{ pointerEvents: 'none' }}>
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Generation Modal */}
           {showGeneratingModal && (
@@ -2896,7 +3208,7 @@ const PlaylistGenerator = () => {
                       {/* AI Chat - Below Track List */}
                       <div className="playlist-modal-chat-below">
                         <div className="chat-and-next-container">
-                          <div className="chat-input-container" onClick={() => setShowChatModal(true)}>
+                          <div className="chat-input-container" onClick={() => openRefineScreen()}>
                             <input
                               type="text"
                               value=""
@@ -3122,76 +3434,139 @@ const PlaylistGenerator = () => {
             </div>
           )}
 
-          {/* ChatGPT-style Generating Chat Modal */}
+          {/* Generation Screen — loading then track list, Spotify-style */}
           {showGeneratingChatModal && (
-            <div className="generating-chat-modal-overlay">
-              <div className="generating-chat-modal-content">
-                <div className="generating-chat-header">
-                  <h2>Creating Your Playlist</h2>
+            <div className="gen-screen-overlay">
+              {/* Header */}
+              <div className="gen-screen-header">
+                <button
+                  className="gen-screen-close"
+                  onClick={() => {
+                    setShowGeneratingChatModal(false);
+                    setLoading(false);
+                    setGeneratingError(null);
+                    setWeeklyLimitReached(false);
+                    if (generatedPlaylist) closePlaylistModal();
+                  }}
+                >
+                  ✕
+                </button>
+                {generatedPlaylist && !loading && (
+                  <div className="gen-screen-title-block">
+                    <div className="gen-screen-playlist-name">{generatedPlaylist.playlistName}</div>
+                    <div className="gen-screen-song-count">{generatedPlaylist.tracks.length} songs</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Body */}
+              <div className="gen-screen-body">
+                {/* User prompt bubble */}
+                <div className="gen-screen-user-bubble">
+                  {generatingChatPrompt}
+                </div>
+
+                {!generatedPlaylist ? (
+                  /* Loading state */
+                  <div className="gen-screen-loading">
+                    <div className="gen-screen-ai-avatar">✦</div>
+                    {generatingError ? (
+                      <div className="generating-error-standalone">
+                        <span style={{ color: '#ef4444' }}>{generatingError}</span>
+                        {weeklyLimitReached ? (
+                          <button
+                            onClick={() => {
+                              setShowGeneratingChatModal(false);
+                              setGeneratingError(null);
+                              setWeeklyLimitReached(false);
+                              setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
+                            }}
+                            className="retry-button-inline"
+                            style={{ background: '#1db954', color: '#ffffff' }}
+                          >Upgrade</button>
+                        ) : (
+                          <button
+                            onClick={() => { setGeneratingError(null); setWeeklyLimitReached(false); handleGeneratePlaylist(); }}
+                            className="retry-button-inline"
+                          >Try Again</button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="gen-screen-status-text">{generatingMessage || 'Creating your playlist...'}</div>
+                    )}
+                  </div>
+                ) : (
+                  /* Track list state */
+                  <div className="gen-screen-tracks">
+                    {generatedPlaylist.tracks.map((track, index) => (
+                      <div key={track.id} className="gen-screen-track-item">
+                        {track.image
+                          ? <img src={track.image} alt={track.album} className="gen-screen-track-img" />
+                          : <div className="gen-screen-track-img-placeholder" />
+                        }
+                        <div className="gen-screen-track-info">
+                          <div className="gen-screen-track-name">
+                            {track.name}
+                            {track.explicit && <span className="explicit-badge">E</span>}
+                          </div>
+                          <div className="gen-screen-track-artist">{track.artist}</div>
+                        </div>
+                        <div className="gen-screen-track-actions">
+                          <button
+                            className="gen-screen-track-remove"
+                            onClick={() => removeTrackFromGenerated(track.id)}
+                            title="Remove"
+                          >
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <line x1="8" y1="12" x2="16" y2="12"/>
+                            </svg>
+                          </button>
+                          <a
+                            href={track.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="gen-screen-track-link"
+                            title={`Open in ${activePlatform === 'apple' ? 'Apple Music' : 'Spotify'}`}
+                          >
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <line x1="12" y1="8" x2="12" y2="16"/>
+                              <line x1="8" y1="12" x2="16" y2="12"/>
+                            </svg>
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                    {/* AI summary */}
+                    {generatedPlaylist.description && (
+                      <div className="gen-screen-ai-summary">{generatedPlaylist.description}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer — only shown when tracks are ready */}
+              {generatedPlaylist && !loading && (
+                <div className="gen-screen-footer">
                   <button
+                    className="gen-screen-refine-btn"
+                    onClick={() => openRefineScreen()}
+                  >
+                    ✦ Refine this playlist
+                  </button>
+                  <button
+                    className="gen-screen-create-btn"
                     onClick={() => {
                       setShowGeneratingChatModal(false);
-                      setLoading(false);
-                      setGeneratingError(null);
-                      setWeeklyLimitReached(false);
+                      setShowPlaylistModal(true);
+                      setModalStep(2);
                     }}
-                    className="close-modal-button"
                   >
-                    ×
+                    Create
                   </button>
                 </div>
-
-                <div className="generating-chat-body">
-                  {/* User's prompt */}
-                  <div className="chat-message user">
-                    <div className="chat-message-content">
-                      {generatingChatPrompt}
-                    </div>
-                  </div>
-
-                  {/* Loading indicator - no bubble, small text */}
-                  {generatingError ? (
-                    <div className="generating-error-standalone">
-                      <span style={{ color: '#ef4444' }}>{generatingError}</span>
-                      {weeklyLimitReached ? (
-                        <button
-                          onClick={() => {
-                            setShowGeneratingChatModal(false);
-                            setGeneratingError(null);
-                            setWeeklyLimitReached(false);
-                            setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
-                          }}
-                          className="retry-button-inline"
-                          style={{ background: '#000000', color: '#ffffff' }}
-                        >
-                          Upgrade
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setGeneratingError(null);
-                            setWeeklyLimitReached(false);
-                            handleGeneratePlaylist();
-                          }}
-                          className="retry-button-inline"
-                        >
-                          Try Again
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="loading-status">
-                      <div className="wave-loader-small">
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                      </div>
-                      <span className="loading-status-text">{generatingMessage || 'Starting to create your playlist...'}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           )}
 

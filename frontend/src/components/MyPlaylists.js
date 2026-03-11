@@ -5,6 +5,7 @@ import DeleteConfirmationModal from './DeleteConfirmationModal';
 import ErrorMessage from './ErrorMessage';
 import UpgradeModal from './UpgradeModal';
 import { isPaid } from '../utils/plan';
+import { playlistsCache } from '../utils/cache';
 import '../styles/MyPlaylists.css';
 import '../styles/EditOptionsModal.css';
 import '../styles/PlaylistGenerator.css';
@@ -24,9 +25,9 @@ function isValidSpotifyTrackUri(uri) {
   return /^[0-9a-zA-Z]{22}$/.test(trackId);
 }
 
-const MyPlaylists = ({ userId, onBack, showToast }) => {
-  const [playlists, setPlaylists] = useState([]);
-  const [loading, setLoading] = useState(true);
+const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
+  const [playlists, setPlaylists] = useState(playlistsCache[userId] || []);
+  const [loading, setLoading] = useState(!playlistsCache[userId]);
   const [error, setError] = useState('');
   const [errorLog, setErrorLog] = useState(null);
   const [expandedPlaylistId, setExpandedPlaylistId] = useState(null);
@@ -68,12 +69,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
 
   // Auto-update tooltip state
   const [autoUpdateTooltipId, setAutoUpdateTooltipId] = useState(null);
-
-  // Refinement instructions
-  const [refinementInstructions, setRefinementInstructions] = useState([]);
-  const [refinementInput, setRefinementInput] = useState('');
-  const [addingRefinement, setAddingRefinement] = useState(false);
-  const [showRefinementModal, setShowRefinementModal] = useState(false);
 
   // Helper function to calculate next update time
   const getNextUpdateTime = (frequency) => {
@@ -182,7 +177,12 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
   };
 
   useEffect(() => {
-    fetchPlaylists();
+    if (playlistsCache[userId]) {
+      // Show cached data immediately, refresh silently in background
+      fetchPlaylists(true);
+    } else {
+      fetchPlaylists(false);
+    }
   }, [userId]);
 
   // Close dropdown menu when clicking outside
@@ -199,9 +199,9 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     };
   }, [openMenuId]);
 
-  const fetchPlaylists = async () => {
+  const fetchPlaylists = async (background = false) => {
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       setError('');
       setErrorLog(null);
       const data = await playlistService.getUserPlaylists(userId);
@@ -209,6 +209,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       const sortedPlaylists = data.playlists.sort((a, b) =>
         new Date(b.createdAt) - new Date(a.createdAt)
       );
+      playlistsCache[userId] = sortedPlaylists;
       setPlaylists(sortedPlaylists);
     } catch (err) {
       const log = err.errorLog || {
@@ -218,7 +219,7 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
       setErrorLog(log);
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   };
 
@@ -522,10 +523,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
     setTempUpdateFrequency(playlist.updateFrequency || 'never');
     setTempUpdateMode(playlist.updateMode || 'append');
 
-    // Initialize refinement instructions
-    setRefinementInstructions(playlist.refinementInstructions || []);
-    setRefinementInput('');
-
     setShowEditOptionsModal(true);
   };
 
@@ -620,11 +617,6 @@ const MyPlaylists = ({ userId, onBack, showToast }) => {
           .filter(msg => msg.role === 'user')
           .map(msg => msg.content);
         allRefinements.push(...chatRefinements);
-      }
-
-      // Add refinements from Edit Playlist modal
-      if (refinementInstructions && refinementInstructions.length > 0) {
-        allRefinements.push(...refinementInstructions);
       }
 
       // Add all refinements to context
@@ -723,85 +715,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
     }
   };
 
-  // Handle adding refinement instruction
-  const handleAddRefinement = async () => {
-    if (!isPaid()) {
-      setUpgradeModal({ open: true, feature: 'Refinement Instructions' });
-      return;
-    }
-    if (!refinementInput.trim() || !editOptionsPlaylist) return;
-
-    setAddingRefinement(true);
-    try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          instruction: refinementInput.trim(),
-          action: 'add'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to add refinement instruction');
-      }
-
-      const data = await response.json();
-      setRefinementInstructions(data.refinementInstructions);
-      setRefinementInput('');
-
-      // Update the local playlist object
-      setEditOptionsPlaylist({
-        ...editOptionsPlaylist,
-        refinementInstructions: data.refinementInstructions
-      });
-
-      showToast('Refinement instruction added successfully!', 'success');
-    } catch (err) {
-      console.error('Error adding refinement:', err);
-      showToast('Failed to add refinement instruction', 'error');
-    } finally {
-      setAddingRefinement(false);
-    }
-  };
-
-  // Handle removing refinement instruction
-  const handleRemoveRefinement = async (instruction) => {
-    if (!editOptionsPlaylist) return;
-
-    try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/playlists/${editOptionsPlaylist.playlistId}/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          instruction,
-          action: 'remove'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to remove refinement instruction');
-      }
-
-      const data = await response.json();
-      setRefinementInstructions(data.refinementInstructions);
-
-      // Update the local playlist object
-      setEditOptionsPlaylist({
-        ...editOptionsPlaylist,
-        refinementInstructions: data.refinementInstructions
-      });
-
-      showToast('Refinement instruction removed', 'success');
-    } catch (err) {
-      console.error('Error removing refinement:', err);
-      showToast('Failed to remove refinement instruction', 'error');
-    }
-  };
 
   if (loading) {
     return (
@@ -1416,7 +1329,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </button>
                 )}
 
-                {isPaid() && <div className="chat-input-container" onClick={() => setShowRefinementModal(true)}>
+                {isPaid() && <div className="chat-input-container" onClick={() => onRefinePlaylist && onRefinePlaylist(editOptionsPlaylist)}>
                   <input
                     type="text"
                     value=""
@@ -1428,16 +1341,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93' }}>
                     <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
                   </svg>
-                  {addingRefinement && (
-                    <div style={{ position: 'absolute', right: '50px' }}>
-                      <div className="wave-loader">
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                      </div>
-                    </div>
-                  )}
                 </div>}
               </div>
             </div>
@@ -1459,100 +1362,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
       )}
 
 
-      {/* Refinement Modal */}
-      {showRefinementModal && editOptionsPlaylist && (
-        <div className="chat-modal-overlay" onClick={() => setShowRefinementModal(false)}>
-          <div className="chat-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="chat-modal-header">
-              <h2>Refine Playlist</h2>
-              <button onClick={() => setShowRefinementModal(false)} className="close-modal-button">
-                ×
-              </button>
-            </div>
-
-            <div className="chat-modal-body">
-              {/* Original Prompt */}
-              <div className="chat-message original-prompt">
-                <div className="chat-message-label">Original Request</div>
-                <div className="chat-message-content">
-                  {editOptionsPlaylist.originalPrompt || editOptionsPlaylist.playlistName}
-                </div>
-              </div>
-
-              {/* Saved refinement instructions */}
-              {refinementInstructions && refinementInstructions.length > 0 && (
-                <div className="refinement-list" style={{ padding: '0 0 8px 0' }}>
-                  {refinementInstructions.map((instruction, index) => (
-                    <div key={index} className="refinement-item">
-                      <span className="refinement-item-text">{instruction}</span>
-                      <button
-                        onClick={() => handleRemoveRefinement(instruction)}
-                        className="remove-refinement-button"
-                        title="Remove instruction"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Chat History */}
-              <div className="chat-history">
-                {editOptionsPlaylist.chatMessages && editOptionsPlaylist.chatMessages.map((msg, index) => (
-                  <div key={index} className={`chat-message ${msg.role}`}>
-                    <div className="chat-message-content">
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Chat Input */}
-            <div className="chat-modal-input-area">
-              <div className="chat-modal-input-container">
-                <input
-                  type="text"
-                  value={refinementInput}
-                  onChange={(e) => setRefinementInput(e.target.value)}
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && !addingRefinement && refinementInput.trim()) {
-                      handleAddRefinement();
-                      setShowRefinementModal(false);
-                    }
-                  }}
-                  placeholder="Add a refinement..."
-                  className="chat-modal-input"
-                  disabled={addingRefinement}
-                />
-                <button
-                  onClick={() => {
-                    handleAddRefinement();
-                    setShowRefinementModal(false);
-                  }}
-                  disabled={addingRefinement || !refinementInput.trim()}
-                  className="chat-modal-send-button"
-                  title="Send Message"
-                >
-                  {addingRefinement ? (
-                    <div className="wave-loader">
-                      <div className="wave-bar"></div>
-                      <div className="wave-bar"></div>
-                      <div className="wave-bar"></div>
-                      <div className="wave-bar"></div>
-                    </div>
-                  ) : (
-                    <svg viewBox="0 0 24 24">
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <DeleteConfirmationModal
         isOpen={showDeleteModal}

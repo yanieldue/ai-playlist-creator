@@ -497,8 +497,12 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
   }
 
   const cacheKey = `search:${artistName.toLowerCase()}`;
+  // L1: in-memory cache
   const cached = getSCCache(cacheKey);
   if (cached !== undefined) return cached;
+  // L2: DB cache (7-day TTL, survives restarts)
+  const dbCached = await db.getCachedSC(cacheKey);
+  if (dbCached !== undefined) { setSCCache(cacheKey, dbCached); return dbCached; }
 
   try {
     await throttleSoundCharts();
@@ -538,7 +542,7 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
           } else {
             // No candidate is close in length — likely all wrong
             console.log(`🔍 SoundCharts: "${artistName}" — no close-length match (${candidates.length} candidates all too long) — skipping`);
-            setSCCache(cacheKey, null);
+            setSCCache(cacheKey, null); db.setCachedSC(cacheKey, null);
             return null;
           }
         }
@@ -547,7 +551,7 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
       // If only one viable candidate, return it directly
       if (viableCandidates.length === 1) {
         console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" matched (genres: ${(viableCandidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
-        setSCCache(cacheKey, viableCandidates[0]);
+        setSCCache(cacheKey, viableCandidates[0]); db.setCachedSC(cacheKey, viableCandidates[0]);
         return viableCandidates[0];
       }
 
@@ -573,23 +577,23 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
           const bestNorm = genreRanked[0].artist.name.toLowerCase().replace(/[^a-z0-9]/g, '');
           if (Math.abs(bestNorm.length - searchNorm.length) > 3) {
             console.log(`🔍 SoundCharts: "${artistName}" — no genre/name match among ${viableCandidates.length} results — skipping`);
-            setSCCache(cacheKey, null);
+            setSCCache(cacheKey, null); db.setCachedSC(cacheKey, null);
             return null;
           }
         }
 
         const best = genreRanked[0].artist;
         console.log(`🔍 SoundCharts: "${best.name}" selected from ${viableCandidates.length} matches by genre (${expectedGenre}); genres: ${(best.genres || []).map(g => g.root).join(', ') || 'unknown'}`);
-        setSCCache(cacheKey, best);
+        setSCCache(cacheKey, best); db.setCachedSC(cacheKey, best);
         return best;
       }
 
       // No genre hint — return first viable result (SoundCharts sorts by relevance)
       console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" matched (first of ${viableCandidates.length}; no genre hint)`);
-      setSCCache(cacheKey, viableCandidates[0]);
+      setSCCache(cacheKey, viableCandidates[0]); db.setCachedSC(cacheKey, viableCandidates[0]);
       return viableCandidates[0];
     }
-    setSCCache(cacheKey, null);
+    setSCCache(cacheKey, null); db.setCachedSC(cacheKey, null);
     return null;
   } catch (error) {
     console.log(`⚠️  SoundCharts search error for "${artistName}": ${error.message}`);
@@ -607,8 +611,12 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
   }
 
   const cacheKey = `similar:${artistUuid}:${limit}`;
+  // L1: in-memory cache
   const cached = getSCCache(cacheKey);
   if (cached !== undefined) return cached;
+  // L2: DB cache (7-day TTL)
+  const dbCached = await db.getCachedSC(cacheKey);
+  if (dbCached !== undefined) { setSCCache(cacheKey, dbCached); return dbCached; }
 
   try {
     await throttleSoundCharts();
@@ -630,10 +638,10 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
         uuid: a.uuid,
         slug: a.slug
       }));
-      setSCCache(cacheKey, result);
+      setSCCache(cacheKey, result); db.setCachedSC(cacheKey, result);
       return result;
     }
-    setSCCache(cacheKey, []);
+    setSCCache(cacheKey, []); db.setCachedSC(cacheKey, []);
     return [];
   } catch (error) {
     console.log(`⚠️  SoundCharts similar artists error: ${error.message}`);
@@ -1266,29 +1274,40 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50, knownArtistsSet
       // Similar/discovery artists get full songsPerArtist allocation
       const seedSongsPerArtist = Math.min(2, songsPerArtist);
 
-      for (const artist of orderedArtists) {
-        // When newArtistsOnly: skip song-fetching for known artists (but we still traversed them
-        // for similar artists, so they contributed to the tree). Always fetch seed artists' songs
-        // as they're the reference point, not the target of newArtistsOnly filtering.
+      // Pre-filter: skip known artists in newArtistsOnly mode
+      const artistsToFetch = orderedArtists.filter(artist => {
         if (knownArtistsSet && knownArtistsSet.size > 0 && artist.level > 0) {
           if (knownArtistsSet.has(artist.name.toLowerCase())) {
             console.log(`[NEW-ARTISTS] Skipping songs from known artist: ${artist.name}`);
-            continue;
+            return false;
+          }
+        }
+        return true;
+      });
+
+      // Fetch songs in parallel batches of 2 with 400ms delay between batches
+      const BATCH_SIZE = 2;
+      const BATCH_DELAY_MS = 400;
+      for (let i = 0; i < artistsToFetch.length; i += BATCH_SIZE) {
+        const batch = artistsToFetch.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(artist => {
+          const artistSongLimit = artist.level === 0 ? seedSongsPerArtist : songsPerArtist;
+          return getSoundChartsArtistSongs(artist.uuid, artistSongLimit)
+            .then(songs => ({ artist, songs }));
+        }));
+
+        for (const { artist, songs } of batchResults) {
+          for (const song of songs) {
+            discoveredSongs.push({ ...song, artistName: artist.name, source: artist.source });
           }
         }
 
-        const artistSongLimit = artist.level === 0 ? seedSongsPerArtist : songsPerArtist;
-        const songs = await getSoundChartsArtistSongs(artist.uuid, artistSongLimit);
-        for (const song of songs) {
-          discoveredSongs.push({
-            ...song,
-            artistName: artist.name,
-            source: artist.source
-          });
-        }
+        // Early stop: tighter buffer (1.2x) since we exit Spotify matching early too
+        if (discoveredSongs.length >= limit * 1.2) break;
 
-        // Stop if we have enough songs (with buffer for filtering)
-        if (discoveredSongs.length >= limit * 1.5) break;
+        if (i + BATCH_SIZE < artistsToFetch.length) {
+          await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+        }
       }
     }
   }
@@ -3529,15 +3548,12 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
     }
 
     // Check cache
-    const cached = await db.getCachedTrendingArtists(platformUserId);
     const forceRefresh = req.query.refresh === 'true';
     if (forceRefresh) {
       await db.deleteCachedTrendingArtists(platformUserId);
       console.log(`[trending] Cache cleared for ${platformUserId} (forced refresh)`);
-    } else if (cached && Array.isArray(cached) && cached.length > 0) {
-      console.log(`✓ Returning cached trending artists for ${platformUserId}`);
-      return res.json({ sections: cached });
     }
+    const cached = forceRefresh ? null : await db.getCachedTrendingArtists(platformUserId);
 
     // Get user's top artist genres
     let topGenres = [];
@@ -3624,13 +3640,19 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
 
     console.log(`[trending] Mapped categories: ${[...seenCategories].join(', ')}`);
 
-    // Spotify client credentials for playlist search
+    // Spotify client credentials for playlist search + Quick Generate images
     const spotifyCC2 = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     });
     const ccData2 = await spotifyCC2.clientCredentialsGrant();
     spotifyCC2.setAccessToken(ccData2.body.access_token);
+
+    // Return cached sections if available
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      console.log(`✓ Returning cached trending artists for ${platformUserId}`);
+      return res.json({ sections: cached });
+    }
 
     // Use actual Spotify editorial playlist names — searching by exact name reliably returns
     // the Spotify-owned playlist as the top result, avoiding random user playlists
@@ -3690,12 +3712,20 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
           candidateArtists.push({ id: artist.id, name: artist.name, image });
         }
 
-        // Verify artist genres via Spotify — filter to only those matching this category
-        const artistIds = candidateArtists.map(a => a.id).slice(0, 50);
-        const artistsData = await spotifyCC2.getArtists(artistIds);
+        // Verify artist genres via Spotify in batches of 50 until we have 10 matching artists
         const artistGenreMap = {};
-        for (const a of (artistsData.body?.artists || [])) {
-          if (a) artistGenreMap[a.id] = a.genres || [];
+        for (let i = 0; i < candidateArtists.length; i += 50) {
+          const batch = candidateArtists.slice(i, i + 50).map(a => a.id);
+          const artistsData = await spotifyCC2.getArtists(batch);
+          for (const a of (artistsData.body?.artists || [])) {
+            if (a) artistGenreMap[a.id] = a.genres || [];
+          }
+          // Stop fetching batches early if we already have enough verified matches
+          const verifiedSoFar = candidateArtists.slice(0, i + 50).filter(c => {
+            const genres = artistGenreMap[c.id] || [];
+            return genres.some(g => getGenreCategory(g) === categoryId);
+          }).length;
+          if (verifiedSoFar >= 10) break;
         }
 
         const artists = [];
@@ -5054,6 +5084,10 @@ Return ONLY valid JSON:
                 externalUrl: trackExternalUrl
               });
               console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+              if (allTracks.length >= songCount) {
+                console.log(`🎯 Early stop: reached ${songCount} matched Spotify tracks`);
+                break;
+              }
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }
@@ -5162,6 +5196,10 @@ Return ONLY valid JSON:
                 externalUrl: appleTrackUrl
               });
               console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+              if (allTracks.length >= songCount) {
+                console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`);
+                break;
+              }
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }

@@ -224,7 +224,7 @@ body {
 .main-content {
   padding-top: 50px !important;
   padding-right: 0 !important;
-  padding-bottom: 40px !important;
+  padding-bottom: 100px !important;
   padding-left: 0 !important;
   background: #ffffff !important;
   min-height: 100vh !important;
@@ -253,44 +253,63 @@ body {
   padding: 20px 0 10px 16px;
 }
 
-/* Quick Generate chips */
-.quick-generate-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 4px 16px 16px;
-}
-
-.quick-generate-chip {
-  background: #f2f2f7;
-  border: none;
-  border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #1c1c1e;
+/* Quick Generate Cards */
+.quick-generate-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: 140px;
+  height: 140px;
+  border-radius: 12px;
+  overflow: hidden;
   cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s, transform 0.1s;
-  white-space: nowrap;
+  scroll-snap-align: start;
+  transition: transform 0.15s;
 }
 
-.quick-generate-chip:hover {
-  background: #e5e5ea;
+.quick-generate-card:hover {
   transform: scale(1.03);
 }
 
-.quick-generate-chip:active {
+.quick-generate-card:active {
   transform: scale(0.97);
 }
 
-:root.dark-mode .quick-generate-chip {
-  background: #2c2c2e;
-  color: #ffffff;
+.quick-generate-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-:root.dark-mode .quick-generate-chip:hover {
-  background: #3a3a3c;
+.quick-generate-card-bg {
+  width: 100%;
+  height: 100%;
+}
+
+.quick-generate-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.5) 100%);
+}
+
+.quick-generate-card-label {
+  position: absolute;
+  bottom: 10px;
+  left: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1c1c1e;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+:root.dark-mode .quick-generate-card-label {
+  background: rgba(28, 28, 30, 0.88);
+  color: #ffffff;
 }
 
 .home-content .horizontal-scroll-section {
@@ -341,7 +360,7 @@ body {
 /* Horizontal Scroll Section */
 .horizontal-scroll-section {
   padding: 0 16px;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -351,6 +370,7 @@ body {
   gap: 16px;
   overflow-x: auto;
   padding-bottom: 8px;
+  padding-right: 16px;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
 }
@@ -742,6 +762,289 @@ body {
   z-index: 999;
 }
 
+/* Tappable placeholder replacing the real input in the bottom bar */
+.chat-input-placeholder {
+  flex: 1;
+  height: 36px;
+  line-height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
+  background: #f2f2f7;
+  color: #8e8e93;
+  font-size: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.chat-input-placeholder:not(:empty) { color: #1c1c1e; }
+
+/* Chat Compose Bottom Sheet */
+.chat-compose-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1100;
+  display: flex;
+  align-items: flex-end;
+  overscroll-behavior: contain;
+}
+.chat-compose-overlay--dark {
+  background: rgba(0, 0, 0, 0.6);
+  align-items: flex-end;
+}
+.chat-compose-sheet {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 16px 16px 0 0;
+  padding: 12px 20px 32px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+}
+/* Expanded sheet for all compose phases — stays as bottom sheet */
+.chat-compose-sheet--full {
+  background: #f2f2f7;
+  border-radius: 16px 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 88vh;
+  color: #1c1c1e;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.2);
+  touch-action: auto;
+  overscroll-behavior: contain;
+}
+:root.dark-mode .chat-compose-sheet--full {
+  background: #1c1c1e;
+  color: #ffffff;
+  box-shadow: 0 -4px 32px rgba(0,0,0,0.5);
+}
+.chat-compose-handle {
+  width: 36px;
+  height: 4px;
+  background: #d1d1d6;
+  border-radius: 2px;
+  margin: 0 auto 16px;
+}
+.chat-compose-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1c1c1e;
+  margin: 0 0 14px;
+}
+.chat-compose-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chat-compose-options-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #8e8e93;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+.chat-compose-input {
+  flex: 1;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 20px;
+  border: none;
+  background: #f2f2f7;
+  font-size: 15px;
+  color: #1c1c1e;
+  outline: none;
+  font-family: inherit;
+}
+
+/* Dark mode */
+:root.dark-mode .chat-input-placeholder { background: #2c2c2e; color: #636366; }
+:root.dark-mode .chat-input-placeholder:not(:empty) { color: #ffffff; }
+:root.dark-mode .chat-compose-sheet { background: #1c1c1e; }
+:root.dark-mode .chat-compose-handle { background: #48484a; }
+:root.dark-mode .chat-compose-title { color: #ffffff; }
+:root.dark-mode .chat-compose-input { background: #2c2c2e; color: #ffffff; }
+:root.dark-mode .chat-compose-option-pill { background: #2c2c2e; color: #ebebf5; border-color: #3a3a3c; }
+:root.dark-mode .chat-compose-option-pill.active { background: #0a84ff22; border-color: #0a84ff; color: #0a84ff; }
+:root.dark-mode .chat-compose-song-count { background: #3a3a3c; color: #ffffff; }
+
+/* Compose modal — input phase */
+.compose-intro {
+  padding: 24px 24px 0;
+}
+.compose-intro-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1c1c1e;
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+.compose-intro-sub {
+  font-size: 15px;
+  color: #636366;
+  margin: 0;
+}
+.compose-suggestions {
+  flex: 1;
+  padding: 28px 24px 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.compose-suggestions-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1c1c1e;
+}
+.compose-suggestions-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+.compose-suggestion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #e9e9eb;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  color: #1c1c1e;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.compose-suggestion-card:hover { background: #d8d8dc; }
+.compose-suggestion-icon { color: #636366; flex-shrink: 0; margin-top: 1px; }
+.compose-input-area {
+  padding: 16px 20px 32px;
+  border-top: 0.5px solid rgba(0,0,0,0.08);
+}
+.compose-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border-radius: 30px;
+  padding: 0 16px;
+  height: 44px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+.compose-dark-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  color: #1c1c1e;
+  outline: none;
+  font-family: inherit;
+}
+.compose-dark-input::placeholder { color: #8e8e93; }
+.compose-options-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.compose-option-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid #c7c7cc;
+  background: transparent;
+  color: #636366;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.compose-option-chip.active { border-color: #1db954; color: #1db954; }
+
+.compose-tips-card {
+  background: #e4f0ff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: #3c3c43;
+  line-height: 1.5;
+}
+.compose-tips-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1c1c1e;
+  margin-bottom: 6px;
+}
+.compose-tips-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+.compose-tips-bullet {
+  color: #007aff;
+  flex-shrink: 0;
+}
+
+/* Dark mode overrides for compose input phase */
+:root.dark-mode .compose-intro-title { color: #ffffff; }
+:root.dark-mode .compose-intro-sub { color: #b3b3b3; }
+:root.dark-mode .compose-suggestions-label { color: #ffffff; }
+:root.dark-mode .compose-suggestion-card { background: #2a2a2a; color: #e0e0e0; }
+:root.dark-mode .compose-suggestion-card:hover { background: #333333; }
+:root.dark-mode .compose-suggestion-icon { color: #b3b3b3; }
+:root.dark-mode .compose-input-area { border-top-color: rgba(255,255,255,0.08); }
+:root.dark-mode .compose-input-row { background: #2c2c2e; box-shadow: none; }
+:root.dark-mode .compose-dark-input { color: #ffffff; }
+:root.dark-mode .compose-option-chip { border-color: #3a3a3c; color: #b3b3b3; }
+:root.dark-mode .compose-tips-card { background: #1e2a3a; color: #b3b3b3; }
+:root.dark-mode .compose-tips-title { color: #ffffff; }
+:root.dark-mode .compose-tips-bullet { color: #0a84ff; }
+
+.chat-compose-options {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.chat-compose-option-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  background: #f2f2f7;
+  color: #3c3c43;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chat-compose-option-pill.active {
+  background: #007aff18;
+  border-color: #007aff;
+  color: #007aff;
+}
+.chat-compose-song-count {
+  width: 44px;
+  border: none;
+  background: #e5e5ea;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 13px;
+  text-align: center;
+  font-family: inherit;
+  color: #1c1c1e;
+  outline: none;
+}
+
 .chat-input-wrapper {
   display: flex;
   align-items: center;
@@ -1086,6 +1389,11 @@ body {
 
   .artist-card-apple {
     width: 120px;
+  }
+
+  .quick-generate-card {
+    width: 120px;
+    height: 120px;
   }
 
   .artist-card-image {

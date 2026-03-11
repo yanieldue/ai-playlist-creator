@@ -112,6 +112,14 @@ async function initializeTables() {
         expires_at TIMESTAMP NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS soundcharts_cache (
+        cache_key TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_soundcharts_cache_created ON soundcharts_cache(created_at);
+
       CREATE TABLE IF NOT EXISTS platform_user_ids (
         email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
         spotify_user_id TEXT,
@@ -726,6 +734,34 @@ class DatabaseService {
       await pool.query(`DELETE FROM trending_artists_cache WHERE user_id = $1`, [userId]);
     } catch (error) {
       console.error('Error deleting cached trending artists:', error);
+    }
+  }
+
+  async getCachedSC(key) {
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const result = await pool.query(
+        `SELECT data FROM soundcharts_cache WHERE cache_key = $1 AND created_at > $2`,
+        [key, sevenDaysAgo]
+      );
+      if (result.rows.length === 0) return undefined;
+      return JSON.parse(result.rows[0].data);
+    } catch (error) {
+      console.error('Error getting SC DB cache:', error);
+      return undefined;
+    }
+  }
+
+  async setCachedSC(key, data) {
+    try {
+      await pool.query(
+        `INSERT INTO soundcharts_cache (cache_key, data, created_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (cache_key) DO UPDATE SET data = $2, created_at = NOW()`,
+        [key, JSON.stringify(data)]
+      );
+    } catch (error) {
+      console.error('Error setting SC DB cache:', error);
     }
   }
 
