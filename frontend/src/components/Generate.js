@@ -89,27 +89,10 @@ export default function Generate() {
   const isGeneratingRef = useRef(false);
   const genIntervalRef = useRef(null);
   const refineIntervalRef = useRef(null);
-  const pageRef = useRef(null);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!userId) navigate('/', { replace: true });
-  }, []);
-
-  // Shrink page to visual viewport when keyboard opens (iOS Safari)
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      if (pageRef.current) pageRef.current.style.height = vv.height + 'px';
-    };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    update();
-    return () => {
-      vv.removeEventListener('resize', update);
-      vv.removeEventListener('scroll', update);
-    };
   }, []);
 
   const handleGenerate = async (retryCount = 0) => {
@@ -302,7 +285,7 @@ export default function Generate() {
   };
 
   return (
-    <div className="generate-page" ref={pageRef}>
+    <div className="generate-page">
       {/* Header */}
       <div className="generate-header">
         <button className="generate-back-btn" onClick={goBack}>

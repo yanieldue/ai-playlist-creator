@@ -2,10 +2,7 @@
 
 .generate-page {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100dvh; /* overridden by JS visualViewport when keyboard opens */
+  inset: 0;
   display: flex;
   flex-direction: column;
   background: #ffffff;
