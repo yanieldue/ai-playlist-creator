@@ -150,7 +150,6 @@ const PlaylistGenerator = () => {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [showTrackListMenu, setShowTrackListMenu] = useState(false);
   const trackListMenuRef = useRef(null);
-  const anyModalOpenRef = useRef(false);
 
   // Example prompts for inspiration
   const examplePrompts = [
@@ -643,27 +642,9 @@ const PlaylistGenerator = () => {
   // Lock background scroll when any modal is open
   useEffect(() => {
     const anyModal = showComposeModal || showPlaylistModal || showChatModal || showGeneratingChatModal;
-    anyModalOpenRef.current = anyModal;
     document.body.style.overflow = anyModal ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [showComposeModal, showPlaylistModal, showChatModal, showGeneratingChatModal]);
-
-  // Track URL bar height via visualViewport — bottom bar shrinks as user scrolls,
-  // growing vv.height. maxHeight = URL-bar-hidden height. Offset = delta = URL bar height.
-  // Skips updates when a modal is open (keyboard would give a huge false offset).
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let maxHeight = vv.height;
-    const update = () => {
-      if (anyModalOpenRef.current) return;
-      if (vv.height > maxHeight) maxHeight = vv.height;
-      const offset = Math.max(0, maxHeight - vv.height);
-      document.documentElement.style.setProperty('--url-bar-offset', `${offset}px`);
-    };
-    vv.addEventListener('resize', update);
-    return () => vv.removeEventListener('resize', update);
-  }, []);
 
   const fetchUserProfile = async () => {
     // Determine which platform userId to use based on activePlatform
