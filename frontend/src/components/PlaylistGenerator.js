@@ -650,14 +650,22 @@ const PlaylistGenerator = () => {
     document.body.style.width = '100%';
     document.body.style.overflow = 'hidden';
 
-    // Fix keyboard gap on iOS using visualViewport API
+    // Fix keyboard gap on iOS using visualViewport API.
+    // The key insight: raise the overlay's bottom edge to the keyboard top so that
+    // align-items:flex-end positions the sheet flush with the keyboard, not behind it.
     const adjustForKeyboard = () => {
       if (!window.visualViewport) return;
       const vv = window.visualViewport;
       const overlay = document.querySelector('.chat-compose-overlay');
+      const sheet = document.querySelector('.chat-compose-sheet--full');
+      // How far the keyboard pushes up from the screen bottom
+      const keyboardHeight = Math.max(0, window.innerHeight - vv.offsetTop - vv.height);
       if (overlay) {
-        overlay.style.height = `${vv.height}px`;
-        overlay.style.top = `${vv.offsetTop}px`;
+        overlay.style.bottom = `${keyboardHeight}px`;
+      }
+      // Cap the sheet so it never exceeds the visible area
+      if (sheet) {
+        sheet.style.maxHeight = `${vv.height}px`;
       }
     };
 
@@ -680,12 +688,11 @@ const PlaylistGenerator = () => {
         window.visualViewport.removeEventListener('scroll', adjustForKeyboard);
       }
 
-      // Reset any inline styles set by adjustForKeyboard
+      // Reset inline styles
       const overlay = document.querySelector('.chat-compose-overlay');
-      if (overlay) {
-        overlay.style.height = '';
-        overlay.style.top = '';
-      }
+      const sheet = document.querySelector('.chat-compose-sheet--full');
+      if (overlay) overlay.style.bottom = '';
+      if (sheet) sheet.style.maxHeight = '';
     };
   }, [showComposeModal]);
 
