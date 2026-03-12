@@ -6018,8 +6018,12 @@ DO NOT include any text outside the JSON.`;
 
           console.log(`After vibe check: ${tracksAfterVibeCheck.length} tracks remain (removed ${selectedTracks.length - tracksAfterVibeCheck.length} tracks)`);
 
-          // Trim to target songCount if we have more than needed
-          if (tracksAfterVibeCheck.length > songCount) {
+          // If vibe check was too aggressive (removed more than half), fall back to
+          // the pre-vibe-check selection so we don't end up with far too few songs.
+          if (tracksAfterVibeCheck.length < songCount / 2 && tracksAfterVibeCheck.length < selectedTracks.length) {
+            console.warn(`Vibe check too aggressive (${tracksAfterVibeCheck.length}/${songCount}), reverting to pre-vibe-check selection`);
+            selectedTracks = selectedTracks.slice(0, songCount);
+          } else if (tracksAfterVibeCheck.length > songCount) {
             selectedTracks = tracksAfterVibeCheck.slice(0, songCount);
             console.log(`Trimmed to target count: ${selectedTracks.length} songs (${tracksAfterVibeCheck.length - selectedTracks.length} extra removed)`);
           } else if (tracksAfterVibeCheck.length < songCount) {
