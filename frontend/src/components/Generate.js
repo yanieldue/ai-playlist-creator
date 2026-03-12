@@ -245,6 +245,7 @@ export default function Generate() {
     setGeneratedPlaylist(prev => ({
       ...prev,
       tracks: prev.tracks.filter(t => t.id !== trackId),
+      excludedSongs: track ? [...(prev.excludedSongs || []), track] : (prev.excludedSongs || []),
     }));
     if (track) showToast('Song removed', 'success');
   };
