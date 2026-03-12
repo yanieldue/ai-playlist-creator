@@ -24,6 +24,9 @@ import '../styles/PlaylistGenerator.css';
 import '../styles/ApplePodcastsTheme.css';
 import '../styles/AccountModal.css';
 
+// Module-level timestamp — survives re-mounts (e.g. navigating back from /generate)
+let _homeDataFetchedAt = null;
+
 const PlaylistGenerator = () => {
   const [prompt, setPrompt] = useState('');
   const [userId, setUserId] = useState(null);
@@ -546,19 +549,25 @@ const PlaylistGenerator = () => {
   // Fetch top artists and new artists when user is authenticated or platform changes
   useEffect(() => {
     if (isAuthenticated && userId) {
-      // Only fetch if we have a platform connected
-      if (spotifyUserId || appleMusicUserId) {
-        console.log('[useEffect] Fetching artists for platform:', activePlatform);
-        fetchUserProfile();
-        fetchNewArtists();
-        setLoadingHomeContent(true);
-        Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
-          .finally(() => setLoadingHomeContent(false));
-      } else {
-        // No platform connected — still load drafts but skip artist fetches
-        setNewArtists([]);
-        setLoadingHomeContent(true);
-        fetchDrafts().finally(() => setLoadingHomeContent(false));
+      // Skip re-fetch if data was loaded within the last 5 minutes (e.g. navigating back from /generate)
+      const FIVE_MIN = 5 * 60 * 1000;
+      const dataFresh = _homeDataFetchedAt && Date.now() - _homeDataFetchedAt < FIVE_MIN;
+      if (!dataFresh) {
+        _homeDataFetchedAt = Date.now();
+        // Only fetch if we have a platform connected
+        if (spotifyUserId || appleMusicUserId) {
+          console.log('[useEffect] Fetching artists for platform:', activePlatform);
+          fetchUserProfile();
+          fetchNewArtists();
+          setLoadingHomeContent(true);
+          Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
+            .finally(() => setLoadingHomeContent(false));
+        } else {
+          // No platform connected — still load drafts but skip artist fetches
+          setNewArtists([]);
+          setLoadingHomeContent(true);
+          fetchDrafts().finally(() => setLoadingHomeContent(false));
+        }
       }
 
       // Check if user has completed the tour (only on initial load)
