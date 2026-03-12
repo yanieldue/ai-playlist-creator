@@ -91,11 +91,20 @@ export default function Generate() {
   const genIntervalRef = useRef(null);
   const refineIntervalRef = useRef(null);
   const pageRef = useRef(null);
+  const promptTextareaRef = useRef(null);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!userId) navigate('/', { replace: true });
   }, []);
+
+  // Resize prompt textarea when prompt is set externally (e.g. suggestion click)
+  useEffect(() => {
+    const el = promptTextareaRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = el.scrollHeight + 'px';
+  }, [prompt]);
 
   // On iOS, shrink the page to the visual viewport height when keyboard opens,
   // and track keyboard state so we can hide the intro heading.
@@ -449,6 +458,7 @@ export default function Generate() {
           <div className="generate-input-row">
             <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
             <textarea
+              ref={promptTextareaRef}
               className="generate-text-input"
               value={prompt}
               onChange={e => { setPrompt(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
