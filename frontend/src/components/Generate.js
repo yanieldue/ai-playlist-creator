@@ -123,6 +123,7 @@ export default function Generate() {
     vv.addEventListener('resize', resize);
     return () => {
       document.body.style.overflow = '';
+      window.scrollTo(0, 0);
       if (pageRef.current) {
         pageRef.current.style.height = '';
       }
