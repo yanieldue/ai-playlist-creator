@@ -122,8 +122,8 @@ const PlaylistGenerator = () => {
 
   // Connected platforms
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
-  const [spotifyUserId, setSpotifyUserId] = useState(null);
-  const [appleMusicUserId, setAppleMusicUserId] = useState(null);
+  const [spotifyUserId, setSpotifyUserId] = useState(localStorage.getItem('spotifyUserId'));
+  const [appleMusicUserId, setAppleMusicUserId] = useState(localStorage.getItem('appleMusicUserId'));
   const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
 
   // Artist settings modal
@@ -1336,7 +1336,6 @@ const PlaylistGenerator = () => {
     // Guard: Don't fetch if no userId OR no platform connected
     if (!userId || (!spotifyUserId && !appleMusicUserId)) {
       console.log('fetchTopArtists: Skipping - no userId or no connected platforms');
-      setTopArtists([]);
       return;
     }
 
