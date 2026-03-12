@@ -170,6 +170,19 @@ async function migrateDatabase() {
       ADD COLUMN IF NOT EXISTS subscription_ends_at TIMESTAMP
     `);
 
+    // Add product tour completed column
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS product_tour_completed BOOLEAN DEFAULT FALSE
+    `);
+
+    // Add user settings columns
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS allow_explicit BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS dark_mode BOOLEAN DEFAULT FALSE
+    `);
+
     console.log('✓ PostgreSQL migrations complete');
   } catch (error) {
     console.error('Error running migrations:', error);
@@ -195,6 +208,9 @@ class DatabaseService {
              u.stripe_customer_id as "stripeCustomerId",
              u.stripe_subscription_id as "stripeSubscriptionId",
              u.subscription_status as "subscriptionStatus",
+             u.product_tour_completed as "productTourCompleted",
+             u.allow_explicit as "allowExplicit",
+             u.dark_mode as "darkMode",
              u.created_at as "createdAt", u.updated_at as "updatedAt",
              COALESCE(cp.spotify, false) as spotify,
              COALESCE(cp.apple, false) as apple
@@ -217,6 +233,9 @@ class DatabaseService {
       stripeCustomerId: row.stripeCustomerId || null,
       stripeSubscriptionId: row.stripeSubscriptionId || null,
       subscriptionStatus: row.subscriptionStatus || null,
+      productTourCompleted: row.productTourCompleted || false,
+      allowExplicit: row.allowExplicit !== false, // default true
+      darkMode: row.darkMode || false,
       createdAt: row.createdAt,
       connectedPlatforms: {
         spotify: row.spotify,
@@ -798,6 +817,20 @@ class DatabaseService {
       WHERE spotify_user_id = $1 OR apple_music_user_id = $1
     `, [platformUserId]);
     return result.rows.length > 0 ? result.rows[0].email : null;
+  }
+
+  async markTourCompleted(email) {
+    await pool.query(
+      `UPDATE users SET product_tour_completed = TRUE, updated_at = NOW() WHERE email = $1`,
+      [email]
+    );
+  }
+
+  async updateUserSettings(email, { allowExplicit, darkMode }) {
+    await pool.query(
+      `UPDATE users SET allow_explicit = $1, dark_mode = $2, updated_at = NOW() WHERE email = $3`,
+      [allowExplicit, darkMode, email]
+    );
   }
 
   // Close pool

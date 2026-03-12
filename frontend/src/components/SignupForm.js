@@ -89,6 +89,18 @@ const SignupForm = ({ onSignupComplete }) => {
       localStorage.setItem('userEmail', trimmedEmail);
       localStorage.setItem('musicPlatform', data.platform);
       localStorage.setItem('userPlan', data.plan || 'free');
+      if (data.productTourCompleted) {
+        localStorage.setItem('productTourCompleted', 'true');
+      } else {
+        localStorage.removeItem('productTourCompleted');
+      }
+      localStorage.setItem('allowExplicit', JSON.stringify(data.allowExplicit !== false));
+      localStorage.setItem('darkMode', JSON.stringify(data.darkMode || false));
+      if (data.darkMode) {
+        document.documentElement.classList.add('dark-mode');
+      } else {
+        document.documentElement.classList.remove('dark-mode');
+      }
 
       console.log('SignupForm: Set userEmail to:', trimmedEmail);
 

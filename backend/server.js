@@ -1777,6 +1777,9 @@ app.post('/api/login', async (req, res) => {
       platform: user.platform,
       userId: normalizedEmail, // Always use email as userId
       plan: user.plan || 'free',
+      productTourCompleted: user.productTourCompleted || false,
+      allowExplicit: user.allowExplicit !== false,
+      darkMode: user.darkMode || false,
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -2395,6 +2398,32 @@ app.post('/api/account/create', async (req, res) => {
       error: 'Failed to create user account',
       details: error.message
     });
+  }
+});
+
+// Update user settings (allowExplicit, darkMode)
+app.put('/api/account/settings', async (req, res) => {
+  try {
+    const { email, allowExplicit, darkMode } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    await db.updateUserSettings(email.trim().toLowerCase(), { allowExplicit, darkMode });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update settings error:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Mark product tour as completed
+app.post('/api/account/tour-completed', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    await db.markTourCompleted(email.trim().toLowerCase());
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark tour completed error:', error);
+    res.status(500).json({ error: 'Failed to update tour status' });
   }
 });
 

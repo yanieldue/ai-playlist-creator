@@ -3869,8 +3869,18 @@ const PlaylistGenerator = () => {
       {/* Product Tour */}
       <ProductTour
         isOpen={showProductTour}
-        onClose={() => setShowProductTour(false)}
-        onComplete={() => setShowProductTour(false)}
+        onClose={() => {
+          localStorage.setItem('productTourCompleted', 'true');
+          setShowProductTour(false);
+          const email = localStorage.getItem('userEmail');
+          if (email) playlistService.markTourCompleted(email).catch(() => {});
+        }}
+        onComplete={() => {
+          localStorage.setItem('productTourCompleted', 'true');
+          setShowProductTour(false);
+          const email = localStorage.getItem('userEmail');
+          if (email) playlistService.markTourCompleted(email).catch(() => {});
+        }}
         onNavigateHome={() => setActiveTab('home')}
         onNavigateToPlaylists={() => setActiveTab('playlists')}
         currentTab={activeTab}

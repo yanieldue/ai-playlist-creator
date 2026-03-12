@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import '../styles/Settings.css';
+import playlistService from '../services/api';
 
 const Settings = ({ onBack }) => {
   const [allowExplicit, setAllowExplicit] = useState(() => {
@@ -19,26 +20,30 @@ const Settings = ({ onBack }) => {
 
   const [savedMessage, setSavedMessage] = useState('');
 
-  const saveSetting = (key, value) => {
-    localStorage.setItem(key, JSON.stringify(value));
+  const persistSettings = (newAllowExplicit, newDarkMode) => {
+    localStorage.setItem('allowExplicit', JSON.stringify(newAllowExplicit));
+    localStorage.setItem('darkMode', JSON.stringify(newDarkMode));
     setSavedMessage('Settings saved!');
     setTimeout(() => setSavedMessage(''), 2000);
+    const email = localStorage.getItem('userEmail');
+    if (email) {
+      playlistService.updateSettings(email, { allowExplicit: newAllowExplicit, darkMode: newDarkMode }).catch(() => {});
+    }
   };
 
   const handleToggleExplicit = (newValue) => {
     setAllowExplicit(newValue);
-    saveSetting('allowExplicit', newValue);
+    persistSettings(newValue, darkMode);
   };
 
   const handleToggleDarkMode = (newValue) => {
     setDarkMode(newValue);
-    saveSetting('darkMode', newValue);
-    // Apply dark mode to document
     if (newValue) {
       document.documentElement.classList.add('dark-mode');
     } else {
       document.documentElement.classList.remove('dark-mode');
     }
+    persistSettings(allowExplicit, newValue);
   };
 
   return (

@@ -373,6 +373,16 @@ export const playlistService = {
     const response = await api.delete(`/api/drafts/${userId}/${draftId}`);
     return response.data;
   },
+
+  markTourCompleted: async (email) => {
+    const response = await api.post('/api/account/tour-completed', { email });
+    return response.data;
+  },
+
+  updateSettings: async (email, { allowExplicit, darkMode }) => {
+    const response = await api.put('/api/account/settings', { email, allowExplicit, darkMode });
+    return response.data;
+  },
 };
 
 export default playlistService;
