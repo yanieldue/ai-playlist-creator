@@ -97,39 +97,26 @@ export default function Generate() {
     if (!userId) navigate('/', { replace: true });
   }, []);
 
-  // Prevent iOS Safari from scrolling the document when an input is focused.
-  // Without this, iOS scrolls window.scrollY upward to bring the input into
-  // view, which pushes the fixed page container off-screen (header disappears).
-  // Also shrink page height to visual viewport so keyboard doesn't overlap input.
+  // On iOS, shrink the page to the visual viewport height when keyboard opens,
+  // and track keyboard state so we can hide the intro heading.
   useEffect(() => {
-    // Lock body scroll for this full-screen route
-    const prevOverflow = document.body.style.overflow;
-    const prevPosition = document.body.style.position;
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
 
     const vv = window.visualViewport;
-    if (!vv) return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.position = prevPosition;
-      document.body.style.width = '';
-    };
+    if (!vv) return () => { document.body.style.overflow = ''; };
 
-    const fullHeight = vv.height;
+    // window.screen.height is the physical screen height — stable reference point
+    const screenH = window.screen.height;
     const resize = () => {
       if (!pageRef.current) return;
       pageRef.current.style.height = vv.height + 'px';
-      // Keyboard is open when visual viewport is significantly shorter than initial height
-      const isOpen = vv.height < fullHeight * 0.85;
-      setKeyboardOpen(isOpen);
+      setKeyboardOpen(vv.height < screenH * 0.75);
     };
 
     vv.addEventListener('resize', resize);
     return () => {
-      document.body.style.overflow = prevOverflow;
-      document.body.style.position = prevPosition;
-      document.body.style.width = '';
+      document.body.style.overflow = '';
+      pageRef.current && (pageRef.current.style.height = '');
       vv.removeEventListener('resize', resize);
     };
   }, []);
@@ -468,7 +455,6 @@ export default function Generate() {
               onChange={e => { setPrompt(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && prompt.trim() && !loading) { e.preventDefault(); handleGenerate(); } }}
               placeholder="Tell me your ideas"
-              autoFocus
               rows={1}
             />
             <button
@@ -523,7 +509,6 @@ export default function Generate() {
               onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
               placeholder="Tell me what to change..."
-              autoFocus
               rows={1}
             />
             <button
