@@ -4325,12 +4325,15 @@ SPECIFIC ARTISTS:
 - Be precise with artist names - do NOT confuse similar names (e.g., "C.LACY" is NOT "Steve Lacy")
 - Include ALL mentioned artists, even if they're indie/underground
 - EXCLUSIVE MODE DETECTION:
-  * exclusiveMode: true if user says "only [artist]", "just [artist]", "all songs from [artist]", "exclusively [artist]"
+  * exclusiveMode: true if user wants songs BY that specific artist: "only [artist]", "just [artist]", "all songs from [artist]", "exclusively [artist]", "add [artist] songs", "[artist] songs", "songs from [artist]", "add more [artist]"
   * exclusiveMode: false for "like [artist]", "similar to [artist]", "vibes of [artist]", "artists like [artist]"
 - Examples:
   * "artists like C.LACY or Tyree Thomas" → requestedArtists: ["C.LACY", "Tyree Thomas"], exclusiveMode: false
   * "i only want songs from drake" → requestedArtists: ["Drake"], exclusiveMode: true
   * "just Taylor Swift songs" → requestedArtists: ["Taylor Swift"], exclusiveMode: true
+  * "add one direction songs" → requestedArtists: ["One Direction"], exclusiveMode: true
+  * "add more beyoncé" → requestedArtists: ["Beyoncé"], exclusiveMode: true
+  * "songs from the weeknd" → requestedArtists: ["The Weeknd"], exclusiveMode: true
   * "songs like Need my baby by Reo Xander" → requestedArtists: ["Reo Xander"], exclusiveMode: false
   * "Taylor Swift and Olivia Rodrigo vibes" → requestedArtists: ["Taylor Swift", "Olivia Rodrigo"], exclusiveMode: false
 
@@ -4655,12 +4658,22 @@ Respond ONLY with valid JSON:
       // refinement message from accidentally shifting genre/style. E.g. "add more chill songs"
       // should not turn a hip-hop playlist into lofi — the refinement message text only guides
       // song selection, not the core musical DNA captured in the stored genreData.
+      // EXCEPTION: if the refinement explicitly names specific artists, those artist constraints
+      // should override the original so the user actually gets songs from the requested artists.
       if (existingPlaylistData && existingPlaylistData.genreData) {
+        const refinementArtistConstraints = genreData.artistConstraints; // save before override
         console.log('Restoring full original genre data for refinement consistency');
         genreData = JSON.parse(JSON.stringify(existingPlaylistData.genreData));
-        if (genreData.artistConstraints?.requestedArtists?.length) {
+
+        // If the refinement explicitly requested specific artists, apply those on top
+        if (refinementArtistConstraints?.requestedArtists?.length > 0) {
+          genreData.artistConstraints.requestedArtists = refinementArtistConstraints.requestedArtists;
+          genreData.artistConstraints.exclusiveMode = refinementArtistConstraints.exclusiveMode;
+          console.log(`Refinement overrides artist constraints: ${refinementArtistConstraints.requestedArtists.join(', ')} (exclusive: ${refinementArtistConstraints.exclusiveMode})`);
+        } else if (genreData.artistConstraints?.requestedArtists?.length) {
           console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')} (exclusive: ${genreData.artistConstraints.exclusiveMode})`);
         }
+
         if (genreData.primaryGenre) {
           console.log(`Preserved genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
         }
