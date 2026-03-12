@@ -106,11 +106,9 @@ export default function Generate() {
     if (!vv) return () => { document.body.style.overflow = ''; };
 
     // window.screen.height is the physical screen height — stable reference point
-    const screenH = window.screen.height;
     const resize = () => {
       if (!pageRef.current) return;
       pageRef.current.style.height = vv.height + 'px';
-      setKeyboardOpen(vv.height < screenH * 0.75);
     };
 
     vv.addEventListener('resize', resize);
