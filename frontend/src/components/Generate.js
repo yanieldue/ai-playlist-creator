@@ -109,25 +109,17 @@ export default function Generate() {
     const screenH = window.screen.height;
     const resize = () => {
       if (!pageRef.current) return;
-      // On iOS, position: fixed is relative to the layout viewport, not the visual
-      // viewport. When the keyboard opens, iOS scrolls the visual viewport down
-      // (vv.offsetTop > 0), moving our page above the visible area. We must
-      // reposition the page to match the visual viewport.
-      pageRef.current.style.top = vv.offsetTop + 'px';
       pageRef.current.style.height = vv.height + 'px';
       setKeyboardOpen(vv.height < screenH * 0.75);
     };
 
     vv.addEventListener('resize', resize);
-    vv.addEventListener('scroll', resize);
     return () => {
       document.body.style.overflow = '';
       if (pageRef.current) {
-        pageRef.current.style.top = '';
         pageRef.current.style.height = '';
       }
       vv.removeEventListener('resize', resize);
-      vv.removeEventListener('scroll', resize);
     };
   }, []);
 
