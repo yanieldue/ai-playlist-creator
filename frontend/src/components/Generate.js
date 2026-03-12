@@ -339,16 +339,15 @@ export default function Generate() {
         )}
       </div>
 
-      {/* Scrollable content — hidden when keyboard open in input phase so only the input bar shows */}
-      <div className="generate-content" style={keyboardOpen && phase === 'input' ? { display: 'none' } : undefined}>
-        {phase === 'input' && (
+      {/* Scrollable content — kept in DOM as flex:1 spacer so input bar stays at bottom.
+          Children are hidden when keyboard is open so only blank space shows above the input. */}
+      <div className="generate-content">
+        {phase === 'input' && !keyboardOpen && (
           <>
-            {!keyboardOpen && (
-              <div className="generate-intro">
-                <h2>What's the vibe today?</h2>
-                <p>Let's make a playlist together.</p>
-              </div>
-            )}
+            <div className="generate-intro">
+              <h2>What's the vibe today?</h2>
+              <p>Let's make a playlist together.</p>
+            </div>
             <div className="generate-tips-card">
               <div className="generate-tips-title">Tips for great playlists</div>
               <div>• Be specific — include artist names, genres, energy level, or era</div>
