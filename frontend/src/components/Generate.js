@@ -436,16 +436,8 @@ export default function Generate() {
           )}
 
           {phase === 'loading' && (
-            <div className="generate-loading">
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '100%' }}>
               {generatingPrompt && <div className="generate-user-bubble">{generatingPrompt}</div>}
-              <div className="generate-loading-indicator">
-                <div className="wave-loader-small">
-                  <div className="wave-bar"></div>
-                  <div className="wave-bar"></div>
-                  <div className="wave-bar"></div>
-                  <div className="wave-bar"></div>
-                </div>
-              </div>
               {error ? (
                 <div className="generate-error-box">
                   <span>{error}</span>
@@ -455,7 +447,15 @@ export default function Generate() {
                   }
                 </div>
               ) : (
-                <div className="generate-status">{generatingMessage || refineMessage || 'Creating your playlist...'}</div>
+                <div className="generate-ai-bubble" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="wave-loader-small">
+                    <div className="wave-bar"></div>
+                    <div className="wave-bar"></div>
+                    <div className="wave-bar"></div>
+                    <div className="wave-bar"></div>
+                  </div>
+                  <span style={{ fontSize: 13, color: '#b3b3b3' }}>{generatingMessage || 'Creating your playlist...'}</span>
+                </div>
               )}
             </div>
           )}
