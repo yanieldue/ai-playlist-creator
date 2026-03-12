@@ -372,7 +372,7 @@ export default function Generate() {
       {/* Scrollable content for non-refine phases — kept in DOM as flex:1 spacer */}
       {phase !== 'refine' && (
         <div className="generate-content" ref={contentRef}>
-          {phase === 'input' && !keyboardOpen && (
+          {phase === 'input' && (
             <>
               <div className="generate-intro">
                 <h2>What's the vibe today?</h2>
