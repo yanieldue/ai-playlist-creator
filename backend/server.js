@@ -5420,13 +5420,29 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                     const appleResults = await platformService.searchTracks(
                       platformUserId,
                       `${song.name} ${song.artistName}`,
-                      tokens, tokens.storefront || 'us', 1
+                      tokens, tokens.storefront || 'us', 3
                     );
-                    if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
-                      if (!allowExplicit && appleResults[0].explicit) continue;
-                      seenTrackIds.add(appleResults[0].id);
+                    // Validate artist match and skip garbage tracks
+                    const expectedArtistNorm = (song.artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const supplementTrack = (appleResults || []).find(t => {
+                      const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                      if (!foundArtistNorm.includes(expectedArtistNorm.slice(0, 4)) &&
+                          !expectedArtistNorm.includes(foundArtistNorm.slice(0, 4))) return false;
+                      // Skip remixes, mashups, slowed versions, karaoke, etc.
+                      const nameLower = (t.name || '').toLowerCase();
+                      if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) return false;
+                      return !seenTrackIds.has(t.id);
+                    });
+                    if (supplementTrack) {
+                      if (!allowExplicit && supplementTrack.explicit) continue;
+                      seenTrackIds.add(supplementTrack.id);
                       seenSupplementArtists.add(artistLower);
-                      selectedTracks.push(appleResults[0]);
+                      selectedTracks.push({
+                        ...supplementTrack,
+                        artist: supplementTrack.artists?.[0]?.name || supplementTrack.artist || 'Unknown',
+                        image: supplementTrack.album?.images?.[0]?.url || null,
+                        externalUrl: supplementTrack.url || `https://music.apple.com/us/song/${supplementTrack.id}`,
+                      });
                     }
                   }
                 } catch (songErr) { /* skip individual song errors */ }
