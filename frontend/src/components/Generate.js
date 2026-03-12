@@ -88,6 +88,7 @@ export default function Generate() {
   };
 
   const isGeneratingRef = useRef(false);
+  const generationIdRef = useRef(0);
   const genIntervalRef = useRef(null);
   const refineIntervalRef = useRef(null);
   const pageRef = useRef(null);
@@ -164,12 +165,15 @@ export default function Generate() {
     if (retryCount === 0) {
       if (isGeneratingRef.current) return;
       isGeneratingRef.current = true;
+      generationIdRef.current += 1;
       setLoading(true);
       setGeneratingPrompt(prompt.trim());
       setPhase('loading');
       setError(null);
       setWeeklyLimitReached(false);
     }
+
+    const myGenerationId = generationIdRef.current;
 
     const messages = getGenreMessages(prompt);
     let idx = 0;
@@ -179,11 +183,15 @@ export default function Generate() {
       setGeneratingMessage(messages[idx]);
     }, 1500);
 
+    let willRetry = false;
     try {
       const result = await playlistService.generatePlaylist(
         prompt.trim(), userId, activePlatform, allowExplicit, newArtistsOnly, songCount
       );
       clearInterval(genIntervalRef.current);
+
+      // Ignore stale responses from a previous generation attempt
+      if (myGenerationId !== generationIdRef.current) return;
 
       const playlist = {
         ...result,
@@ -204,8 +212,12 @@ export default function Generate() {
         } catch (_) {}
       }
 
-      setGeneratedPlaylist(playlist);
-      setPhase('tracks');
+      if (playlist.tracks?.length > 0) {
+        setGeneratedPlaylist(playlist);
+        setPhase('tracks');
+      } else {
+        setError('No tracks found. Please try a different prompt.');
+      }
       setNewArtistsOnly(false);
       setSongCount(30);
       isGeneratingRef.current = false;
@@ -226,6 +238,7 @@ export default function Generate() {
 
       const isRetryable = !err.response || [502, 503, 504].includes(err.response?.status);
       if (isRetryable && retryCount < 2) {
+        willRetry = true;
         await new Promise(r => setTimeout(r, Math.pow(2, retryCount) * 1000));
         return handleGenerate(retryCount + 1);
       }
@@ -233,7 +246,8 @@ export default function Generate() {
       setError(err.response?.data?.error || 'Something went wrong. Please try again.');
       isGeneratingRef.current = false;
     } finally {
-      if (retryCount === 0 || retryCount >= 2) {
+      // Don't clear loading state if we're about to retry — keeps the button disabled
+      if (!willRetry && (retryCount === 0 || retryCount >= 2)) {
         setLoading(false);
         setGeneratingMessage('');
       }
