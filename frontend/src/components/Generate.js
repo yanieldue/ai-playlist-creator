@@ -422,13 +422,17 @@ export default function Generate() {
                 <div>• Be specific — include artist names, genres, energy level, or era</div>
                 <div style={{ marginTop: 4 }}>• Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
               </div>
-              <div className="generate-suggestions-label">Try asking</div>
-              {SUGGESTIONS.map(s => (
-                <button key={s} className="generate-suggestion-card" onClick={() => setPrompt(s)}>
-                  <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
-                  {s}
-                </button>
-              ))}
+              {!keyboardOpen && (
+                <>
+                  <div className="generate-suggestions-label">Try asking</div>
+                  {SUGGESTIONS.map(s => (
+                    <button key={s} className="generate-suggestion-card" onClick={() => setPrompt(s)}>
+                      <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
+                      {s}
+                    </button>
+                  ))}
+                </>
+              )}
             </>
           )}
 
