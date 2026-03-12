@@ -126,15 +126,22 @@ export default function Generate() {
     // On iOS, when the keyboard opens, vv.offsetTop becomes non-zero as the OS
     // scrolls to show the focused input — we compensate with a translateY so the
     // page moves down to match the visual viewport's top edge.
+    // Debounce so we only apply the final settled state, not every intermediate
+    // frame during the keyboard opening animation (which causes a visible flash).
+    let timer = null;
     const update = () => {
-      if (!pageRef.current) return;
-      pageRef.current.style.height = vv.height + 'px';
-      pageRef.current.style.transform = `translateY(${vv.offsetTop}px)`;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!pageRef.current) return;
+        pageRef.current.style.height = vv.height + 'px';
+        pageRef.current.style.transform = `translateY(${vv.offsetTop}px)`;
+      }, 50);
     };
 
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     return () => {
+      clearTimeout(timer);
       document.body.style.overflow = '';
       window.scrollTo(0, 0);
       if (pageRef.current) {
