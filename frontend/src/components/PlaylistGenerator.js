@@ -24,8 +24,15 @@ import '../styles/PlaylistGenerator.css';
 import '../styles/ApplePodcastsTheme.css';
 import '../styles/AccountModal.css';
 
-// Module-level timestamp — survives re-mounts (e.g. navigating back from /generate)
-let _homeDataFetchedAt = null;
+// Module-level cache — survives re-mounts (e.g. navigating back from /generate)
+// Stale-while-revalidate: show cached data instantly, refresh silently in background.
+let _homeCache = {
+  topArtists: [],
+  newArtists: [],
+  trendingArtistsSections: [],
+  draftPlaylists: [],
+  fetchedAt: null,
+};
 
 const PlaylistGenerator = () => {
   const [prompt, setPrompt] = useState('');
@@ -52,7 +59,7 @@ const PlaylistGenerator = () => {
   const [updateFrequency, setUpdateFrequency] = useState('never');
   const [updateMode, setUpdateMode] = useState('append');
   const [isPublic, setIsPublic] = useState(true);
-  const [draftPlaylists, setDraftPlaylists] = useState([]);
+  const [draftPlaylists, setDraftPlaylists] = useState(_homeCache.draftPlaylists);
   const [currentDraftId, setCurrentDraftId] = useState(null);
   const [generatingMessage, setGeneratingMessage] = useState('');
   const [showGeneratingModal, setShowGeneratingModal] = useState(false);
@@ -95,22 +102,22 @@ const PlaylistGenerator = () => {
   const [toasts, setToasts] = useState([]);
 
   // Top artists
-  const [topArtists, setTopArtists] = useState([]);
+  const [topArtists, setTopArtists] = useState(_homeCache.topArtists);
   const [loadingTopArtists, setLoadingTopArtists] = useState(false);
   const topArtistsScrollRef = useRef(null);
 
   // New artists (Artists You Should Explore - keeping state for backwards compat)
-  const [newArtists, setNewArtists] = useState([]);
+  const [newArtists, setNewArtists] = useState(_homeCache.newArtists);
   const [loadingNewArtists, setLoadingNewArtists] = useState(false);
-  const [newArtistsFetched, setNewArtistsFetched] = useState(false);
+  const [newArtistsFetched, setNewArtistsFetched] = useState(_homeCache.fetchedAt !== null);
   const newArtistsScrollRef = useRef(null);
   const newArtistsDebounceRef = useRef(null);
 
   // Trending artists by genre
-  const [trendingArtistsSections, setTrendingArtistsSections] = useState([]);
+  const [trendingArtistsSections, setTrendingArtistsSections] = useState(_homeCache.trendingArtistsSections);
   const [loadingTrendingArtists, setLoadingTrendingArtists] = useState(false);
 
-  // Single gate for the entire home content — prevents sections popping in one by one
+  // Single gate for the entire home content — only show spinner when no cached data exists
   const [loadingHomeContent, setLoadingHomeContent] = useState(false);
 
   // Connected platforms
@@ -549,25 +556,25 @@ const PlaylistGenerator = () => {
   // Fetch top artists and new artists when user is authenticated or platform changes
   useEffect(() => {
     if (isAuthenticated && userId) {
-      // Skip re-fetch if data was loaded within the last 5 minutes (e.g. navigating back from /generate)
-      const FIVE_MIN = 5 * 60 * 1000;
-      const dataFresh = _homeDataFetchedAt && Date.now() - _homeDataFetchedAt < FIVE_MIN;
-      if (!dataFresh) {
-        _homeDataFetchedAt = Date.now();
-        // Only fetch if we have a platform connected
-        if (spotifyUserId || appleMusicUserId) {
-          console.log('[useEffect] Fetching artists for platform:', activePlatform);
-          fetchUserProfile();
-          fetchNewArtists();
-          setLoadingHomeContent(true);
-          Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
-            .finally(() => setLoadingHomeContent(false));
-        } else {
-          // No platform connected — still load drafts but skip artist fetches
-          setNewArtists([]);
-          setLoadingHomeContent(true);
-          fetchDrafts().finally(() => setLoadingHomeContent(false));
-        }
+      const hasCachedData = _homeCache.fetchedAt !== null;
+      // Only show the spinner on first load — when there's cached data, refresh silently
+      if (!hasCachedData) setLoadingHomeContent(true);
+
+      _homeCache.fetchedAt = Date.now();
+
+      const finalize = () => {
+        setLoadingHomeContent(false);
+      };
+
+      if (spotifyUserId || appleMusicUserId) {
+        console.log('[useEffect] Fetching artists for platform:', activePlatform);
+        fetchUserProfile();
+        fetchNewArtists();
+        Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()]).finally(finalize);
+      } else {
+        // No platform connected — still load drafts but skip artist fetches
+        if (!hasCachedData) setNewArtists([]);
+        fetchDrafts().finally(finalize);
       }
 
       // Check if user has completed the tour (only on initial load)
@@ -588,6 +595,7 @@ const PlaylistGenerator = () => {
       const response = await playlistService.getDrafts(userId);
       if (response.drafts && response.drafts.length > 0) {
         setDraftPlaylists(response.drafts);
+        _homeCache.draftPlaylists = response.drafts;
       }
     } catch (error) {
       console.error('Failed to load drafts:', error);
@@ -1356,6 +1364,7 @@ const PlaylistGenerator = () => {
       const data = await playlistService.getTopArtists(platformUserId);
       console.log('fetchTopArtists: Received data:', data);
       setTopArtists(data.artists);
+      _homeCache.topArtists = data.artists;
       console.log('fetchTopArtists: Set topArtists to:', data.artists.length, 'artists');
     } catch (err) {
       console.error('Failed to fetch top artists (non-critical):', err);
@@ -1414,6 +1423,7 @@ const PlaylistGenerator = () => {
         // Only overwrite artists if we got a real result — never wipe good data with empty
         if (data.artists && data.artists.length > 0) {
           setNewArtists(data.artists);
+          _homeCache.newArtists = data.artists;
         }
         setNewArtistsFetched(true);
       } catch (err) {
@@ -1439,6 +1449,7 @@ const PlaylistGenerator = () => {
       const data = await playlistService.getTrendingArtists(platformUserId);
       if (data.sections && data.sections.length > 0) {
         setTrendingArtistsSections(data.sections);
+        _homeCache.trendingArtistsSections = data.sections;
       }
 
     } catch (err) {
