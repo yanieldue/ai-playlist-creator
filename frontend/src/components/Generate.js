@@ -109,6 +109,7 @@ export default function Generate() {
     const screenH = window.screen.height;
     const resize = () => {
       if (!pageRef.current) return;
+      pageRef.current.style.top = vv.offsetTop + 'px';
       pageRef.current.style.height = vv.height + 'px';
       setKeyboardOpen(vv.height < screenH * 0.75);
     };
@@ -116,7 +117,10 @@ export default function Generate() {
     vv.addEventListener('resize', resize);
     return () => {
       document.body.style.overflow = '';
-      pageRef.current && (pageRef.current.style.height = '');
+      if (pageRef.current) {
+        pageRef.current.style.top = '';
+        pageRef.current.style.height = '';
+      }
       vv.removeEventListener('resize', resize);
     };
   }, []);
@@ -332,7 +336,7 @@ export default function Generate() {
       </div>
 
       {/* Scrollable content */}
-      <div className="generate-content" style={keyboardOpen && phase === 'input' ? { overflowY: 'hidden' } : undefined}>
+      <div className="generate-content">
         {phase === 'input' && (
           <>
             {!keyboardOpen && (
