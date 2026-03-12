@@ -304,6 +304,12 @@ export default function Generate() {
       clearInterval(refineIntervalRef.current);
       setRefineMessage('');
 
+      const finalChatMessages = [
+        ...chatMessages,
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: 'Updated your playlist.' },
+      ];
+
       const updated = {
         ...result,
         originalPrompt: generatedPlaylist.originalPrompt,
@@ -311,12 +317,22 @@ export default function Generate() {
         excludedSongs: generatedPlaylist.excludedSongs,
         draftId: generatedPlaylist.draftId,
         playlistId: generatedPlaylist.playlistId,
+        chatMessages: finalChatMessages,
       };
 
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Updated your playlist.` }]);
+      setChatMessages(finalChatMessages);
       setGeneratedPlaylist(updated);
       setPhase('tracks');
       setChatLoading(false);
+
+      // Persist chat history back to the draft so it survives navigation
+      if (updated.draftId && isPaid()) {
+        const platformUserId =
+          localStorage.getItem('spotifyUserId') ||
+          localStorage.getItem('appleMusicUserId') ||
+          userId;
+        playlistService.saveDraft(platformUserId, updated).catch(() => {});
+      }
     } catch (err) {
       clearInterval(refineIntervalRef.current);
       setRefineMessage('');
