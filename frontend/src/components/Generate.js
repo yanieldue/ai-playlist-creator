@@ -119,6 +119,7 @@ export default function Generate() {
     };
 
     vv.addEventListener('resize', resize);
+    vv.addEventListener('scroll', resize);
     return () => {
       document.body.style.overflow = '';
       if (pageRef.current) {
@@ -126,6 +127,7 @@ export default function Generate() {
         pageRef.current.style.height = '';
       }
       vv.removeEventListener('resize', resize);
+      vv.removeEventListener('scroll', resize);
     };
   }, []);
 
@@ -461,6 +463,7 @@ export default function Generate() {
               value={prompt}
               onChange={e => { setPrompt(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && prompt.trim() && !loading) { e.preventDefault(); handleGenerate(); } }}
+              onFocus={() => setKeyboardOpen(true)}
               placeholder="Tell me your ideas"
               rows={1}
             />
@@ -515,6 +518,7 @@ export default function Generate() {
               value={chatInput}
               onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
+              onFocus={() => setKeyboardOpen(true)}
               placeholder="Tell me what to change..."
               rows={1}
             />
