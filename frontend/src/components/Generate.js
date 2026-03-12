@@ -116,32 +116,21 @@ export default function Generate() {
       document.body.style.width = '';
     };
 
-    let keyboardOpen = false;
+    const fullHeight = vv.height;
     const resize = () => {
-      if (!pageRef.current || !keyboardOpen) return;
+      if (!pageRef.current) return;
       pageRef.current.style.height = vv.height + 'px';
-    };
-    const onFocus = () => {
-      keyboardOpen = true;
-      setKeyboardOpen(true);
-      if (pageRef.current) pageRef.current.style.height = vv.height + 'px';
-    };
-    const onBlur = () => {
-      keyboardOpen = false;
-      setKeyboardOpen(false);
-      if (pageRef.current) pageRef.current.style.height = '';
+      // Keyboard is open when visual viewport is significantly shorter than initial height
+      const isOpen = vv.height < fullHeight * 0.85;
+      setKeyboardOpen(isOpen);
     };
 
     vv.addEventListener('resize', resize);
-    document.addEventListener('focusin', onFocus);
-    document.addEventListener('focusout', onBlur);
     return () => {
       document.body.style.overflow = prevOverflow;
       document.body.style.position = prevPosition;
       document.body.style.width = '';
       vv.removeEventListener('resize', resize);
-      document.removeEventListener('focusin', onFocus);
-      document.removeEventListener('focusout', onBlur);
     };
   }, []);
 
