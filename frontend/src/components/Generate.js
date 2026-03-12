@@ -520,7 +520,7 @@ export default function Generate() {
       )}
 
       {phase === 'refine' && (
-        <div className="generate-input-bar" style={{ marginTop: 'auto' }}>
+        <div className="generate-input-bar">
           <div className="generate-input-row">
             <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
             <textarea
