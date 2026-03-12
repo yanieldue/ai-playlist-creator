@@ -92,6 +92,7 @@ export default function Generate() {
   const refineIntervalRef = useRef(null);
   const pageRef = useRef(null);
   const promptTextareaRef = useRef(null);
+  const contentRef = useRef(null);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -105,6 +106,13 @@ export default function Generate() {
     el.style.height = '0px';
     el.style.height = el.scrollHeight + 'px';
   }, [prompt]);
+
+  // Scroll chat to bottom when keyboard opens in refine phase so latest message stays visible
+  useEffect(() => {
+    if (keyboardOpen && phase === 'refine' && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight;
+    }
+  }, [keyboardOpen, phase]);
 
   // On iOS, shrink the page to the visual viewport height when keyboard opens,
   // and track keyboard state so we can hide the intro heading.
@@ -343,7 +351,7 @@ export default function Generate() {
 
       {/* Scrollable content — kept in DOM as flex:1 spacer so input bar stays at bottom.
           Children are hidden when keyboard is open so only blank space shows above the input. */}
-      <div className="generate-content">
+      <div className="generate-content" ref={contentRef}>
         {phase === 'input' && !keyboardOpen && (
           <>
             <div className="generate-intro">
@@ -438,7 +446,7 @@ export default function Generate() {
                 {msg.content}
               </div>
             ))}
-            {chatMessages.length === 0 && (
+            {chatMessages.length === 0 && !keyboardOpen && (
               <>
                 <div className="generate-suggestions-label">Try asking</div>
                 {REFINE_SUGGESTIONS.map(s => (
