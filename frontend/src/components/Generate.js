@@ -349,95 +349,100 @@ export default function Generate() {
         )}
       </div>
 
-      {/* Scrollable content — kept in DOM as flex:1 spacer so input bar stays at bottom.
-          Children are hidden when keyboard is open so only blank space shows above the input. */}
-      <div className="generate-content" ref={contentRef}>
-        {phase === 'input' && !keyboardOpen && (
-          <>
-            <div className="generate-intro">
-              <h2>What's the vibe today?</h2>
-              <p>Let's make a playlist together.</p>
-            </div>
-            <div className="generate-tips-card">
-              <div className="generate-tips-title">Tips for great playlists</div>
-              <div>• Be specific — include artist names, genres, energy level, or era</div>
-              <div style={{ marginTop: 4 }}>• Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
-            </div>
-            <div className="generate-suggestions-label">Try asking</div>
-            {SUGGESTIONS.map(s => (
-              <button key={s} className="generate-suggestion-card" onClick={() => setPrompt(s)}>
-                <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
-                {s}
-              </button>
-            ))}
-          </>
-        )}
-
-        {phase === 'loading' && (
-          <div className="generate-loading">
-            {generatingPrompt && <div className="generate-user-bubble">{generatingPrompt}</div>}
-            <div className="generate-loading-indicator">
-              <div className="wave-loader-small">
-                <div className="wave-bar"></div>
-                <div className="wave-bar"></div>
-                <div className="wave-bar"></div>
-                <div className="wave-bar"></div>
+      {/* Scrollable content for non-refine phases — kept in DOM as flex:1 spacer */}
+      {phase !== 'refine' && (
+        <div className="generate-content" ref={contentRef}>
+          {phase === 'input' && !keyboardOpen && (
+            <>
+              <div className="generate-intro">
+                <h2>What's the vibe today?</h2>
+                <p>Let's make a playlist together.</p>
               </div>
-            </div>
-            {error ? (
-              <div className="generate-error-box">
-                <span>{error}</span>
-                {weeklyLimitReached
-                  ? <button onClick={() => navigate('/')}>Upgrade</button>
-                  : <button onClick={() => { setError(null); handleGenerate(); }}>Try Again</button>
-                }
+              <div className="generate-tips-card">
+                <div className="generate-tips-title">Tips for great playlists</div>
+                <div>• Be specific — include artist names, genres, energy level, or era</div>
+                <div style={{ marginTop: 4 }}>• Example: <em>"Upbeat indie songs like Phantogram from the past 5 years"</em></div>
               </div>
-            ) : (
-              <div className="generate-status">{generatingMessage || refineMessage || 'Creating your playlist...'}</div>
-            )}
-          </div>
-        )}
+              <div className="generate-suggestions-label">Try asking</div>
+              {SUGGESTIONS.map(s => (
+                <button key={s} className="generate-suggestion-card" onClick={() => setPrompt(s)}>
+                  <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
+                  {s}
+                </button>
+              ))}
+            </>
+          )}
 
-        {phase === 'tracks' && generatedPlaylist && (
-          <>
-            {generatedPlaylist.tracks.map(track => (
-              <div key={track.id} className="generate-track-item">
-                {track.image
-                  ? <img src={track.image} alt={track.album} className="generate-track-img" />
-                  : <div className="generate-track-img-placeholder" />
-                }
-                <div className="generate-track-info">
-                  <div className="generate-track-name">
-                    {track.name}
-                    {track.explicit && <span className="explicit-badge">E</span>}
+          {phase === 'loading' && (
+            <div className="generate-loading">
+              {generatingPrompt && <div className="generate-user-bubble">{generatingPrompt}</div>}
+              <div className="generate-loading-indicator">
+                <div className="wave-loader-small">
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                </div>
+              </div>
+              {error ? (
+                <div className="generate-error-box">
+                  <span>{error}</span>
+                  {weeklyLimitReached
+                    ? <button onClick={() => navigate('/')}>Upgrade</button>
+                    : <button onClick={() => { setError(null); handleGenerate(); }}>Try Again</button>
+                  }
+                </div>
+              ) : (
+                <div className="generate-status">{generatingMessage || refineMessage || 'Creating your playlist...'}</div>
+              )}
+            </div>
+          )}
+
+          {phase === 'tracks' && generatedPlaylist && (
+            <>
+              {generatedPlaylist.tracks.map(track => (
+                <div key={track.id} className="generate-track-item">
+                  {track.image
+                    ? <img src={track.image} alt={track.album} className="generate-track-img" />
+                    : <div className="generate-track-img-placeholder" />
+                  }
+                  <div className="generate-track-info">
+                    <div className="generate-track-name">
+                      {track.name}
+                      {track.explicit && <span className="explicit-badge">E</span>}
+                    </div>
+                    <div className="generate-track-artist">{track.artist}</div>
                   </div>
-                  <div className="generate-track-artist">{track.artist}</div>
+                  <div className="generate-track-actions">
+                    <button className="generate-track-remove" onClick={() => removeTrack(track.id)} title="Remove">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    </button>
+                    <button
+                      className={`generate-track-keep ${lockedTrackIds.has(track.id) ? 'active' : ''}`}
+                      onClick={() => toggleLock(track.id)}
+                      title={lockedTrackIds.has(track.id) ? 'Unkeep' : 'Keep when refining'}
+                    >
+                      {lockedTrackIds.has(track.id)
+                        ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                        : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                      }
+                    </button>
+                  </div>
                 </div>
-                <div className="generate-track-actions">
-                  <button className="generate-track-remove" onClick={() => removeTrack(track.id)} title="Remove">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                  </button>
-                  <button
-                    className={`generate-track-keep ${lockedTrackIds.has(track.id) ? 'active' : ''}`}
-                    onClick={() => toggleLock(track.id)}
-                    title={lockedTrackIds.has(track.id) ? 'Unkeep' : 'Keep when refining'}
-                  >
-                    {lockedTrackIds.has(track.id)
-                      ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-                      : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                    }
-                  </button>
-                </div>
-              </div>
-            ))}
-            {generatedPlaylist.description && (
-              <div className="generate-ai-summary">{generatedPlaylist.description}</div>
-            )}
-          </>
-        )}
+              ))}
+              {generatedPlaylist.description && (
+                <div className="generate-ai-summary">{generatedPlaylist.description}</div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
-        {phase === 'refine' && (
-          <>
+      {/* Refine phase: wrapper owns both the scrollable chat history and the input bar
+          so the input bar is always pinned to the bottom of the available space. */}
+      {phase === 'refine' && (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div className="generate-content" ref={contentRef}>
             {generatedPlaylist?.originalPrompt && (
               <div className="generate-user-bubble">{generatedPlaylist.originalPrompt}</div>
             )}
@@ -457,9 +462,32 @@ export default function Generate() {
                 ))}
               </>
             )}
-          </>
-        )}
-      </div>
+          </div>
+          <div className="generate-input-bar">
+            <div className="generate-input-row">
+              <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
+              <textarea
+                className="generate-text-input"
+                value={chatInput}
+                onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
+                onFocus={() => setKeyboardOpen(true)}
+                onBlur={() => setKeyboardOpen(false)}
+                placeholder="Tell me what to change..."
+                rows={1}
+              />
+              <button
+                className="generate-send-btn"
+                onClick={handleRefine}
+                disabled={chatLoading || !chatInput.trim()}
+                style={{ visibility: chatInput.trim() ? 'visible' : 'hidden' }}
+              >
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom bar — marginTop:auto pins it to bottom of flex container */}
       {phase === 'input' && (
@@ -516,32 +544,6 @@ export default function Generate() {
           <button className="generate-create-btn" onClick={handleCreate}>
             {refineMode ? 'Done' : 'Create'}
           </button>
-        </div>
-      )}
-
-      {phase === 'refine' && (
-        <div className="generate-input-bar">
-          <div className="generate-input-row">
-            <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
-            <textarea
-              className="generate-text-input"
-              value={chatInput}
-              onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-              onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
-              onFocus={() => setKeyboardOpen(true)}
-              onBlur={() => setKeyboardOpen(false)}
-              placeholder="Tell me what to change..."
-              rows={1}
-            />
-            <button
-              className="generate-send-btn"
-              onClick={handleRefine}
-              disabled={chatLoading || !chatInput.trim()}
-              style={{ visibility: chatInput.trim() ? 'visible' : 'hidden' }}
-            >
-              <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            </button>
-          </div>
         </div>
       )}
 
