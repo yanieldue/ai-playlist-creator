@@ -76,6 +76,7 @@ export default function Generate() {
   const [refineMessage, setRefineMessage] = useState('');
 
   const [toasts, setToasts] = useState([]);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -122,10 +123,12 @@ export default function Generate() {
     };
     const onFocus = () => {
       keyboardOpen = true;
+      setKeyboardOpen(true);
       if (pageRef.current) pageRef.current.style.height = vv.height + 'px';
     };
     const onBlur = () => {
       keyboardOpen = false;
+      setKeyboardOpen(false);
       if (pageRef.current) pageRef.current.style.height = '';
     };
 
@@ -356,10 +359,12 @@ export default function Generate() {
       <div className="generate-content">
         {phase === 'input' && (
           <>
-            <div className="generate-intro">
-              <h2>What's the vibe today?</h2>
-              <p>Let's make a playlist together.</p>
-            </div>
+            {!keyboardOpen && (
+              <div className="generate-intro">
+                <h2>What's the vibe today?</h2>
+                <p>Let's make a playlist together.</p>
+              </div>
+            )}
             <div className="generate-tips-card">
               <div className="generate-tips-title">Tips for great playlists</div>
               <div>• Be specific — include artist names, genres, energy level, or era</div>
