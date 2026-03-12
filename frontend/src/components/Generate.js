@@ -412,7 +412,7 @@ export default function Generate() {
       {phase !== 'refine' && (
         <div className="generate-content" ref={contentRef}>
           {phase === 'input' && (
-            <>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '100%' }}>
               <div className="generate-intro">
                 <h2>What's the vibe today?</h2>
                 <p>Let's make a playlist together.</p>
@@ -433,7 +433,7 @@ export default function Generate() {
                   ))}
                 </>
               )}
-            </>
+            </div>
           )}
 
           {phase === 'loading' && (
