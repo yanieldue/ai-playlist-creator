@@ -1270,9 +1270,10 @@ async function discoverSongsViaSoundCharts(criteria, limit = 50, knownArtistsSet
       const nonSeedArtists = allArtists.filter(a => a.level > 0).sort(() => Math.random() - 0.5);
       const orderedArtists = [...nonSeedArtists, ...seedArtistList];
 
-      // Seed artists get fewer songs (they're the reference point, not the focus)
-      // Similar/discovery artists get full songsPerArtist allocation
-      const seedSongsPerArtist = Math.min(2, songsPerArtist);
+      // Seed artists get fewer songs when used as a vibe reference ("similar to X").
+      // But when the user explicitly asked for songs FROM the artist ("add X songs"),
+      // give them the full allocation so they're well-represented in the playlist.
+      const seedSongsPerArtist = criteria.prioritizeSeedArtists ? songsPerArtist : Math.min(2, songsPerArtist);
 
       // Pre-filter: skip known artists in newArtistsOnly mode
       const artistsToFetch = orderedArtists.filter(artist => {
@@ -4325,15 +4326,15 @@ SPECIFIC ARTISTS:
 - Be precise with artist names - do NOT confuse similar names (e.g., "C.LACY" is NOT "Steve Lacy")
 - Include ALL mentioned artists, even if they're indie/underground
 - EXCLUSIVE MODE DETECTION:
-  * exclusiveMode: true if user wants songs BY that specific artist: "only [artist]", "just [artist]", "all songs from [artist]", "exclusively [artist]", "add [artist] songs", "[artist] songs", "songs from [artist]", "add more [artist]"
-  * exclusiveMode: false for "like [artist]", "similar to [artist]", "vibes of [artist]", "artists like [artist]"
+  * exclusiveMode: true ONLY if user wants nothing but that artist: "only [artist]", "just [artist]", "exclusively [artist]"
+  * exclusiveMode: false for everything else including: "add [artist] songs", "add more [artist]", "include [artist]", "songs from [artist]", "like [artist]", "similar to [artist]", "vibes of [artist]"
 - Examples:
   * "artists like C.LACY or Tyree Thomas" → requestedArtists: ["C.LACY", "Tyree Thomas"], exclusiveMode: false
   * "i only want songs from drake" → requestedArtists: ["Drake"], exclusiveMode: true
   * "just Taylor Swift songs" → requestedArtists: ["Taylor Swift"], exclusiveMode: true
-  * "add one direction songs" → requestedArtists: ["One Direction"], exclusiveMode: true
-  * "add more beyoncé" → requestedArtists: ["Beyoncé"], exclusiveMode: true
-  * "songs from the weeknd" → requestedArtists: ["The Weeknd"], exclusiveMode: true
+  * "add one direction songs" → requestedArtists: ["One Direction"], exclusiveMode: false
+  * "add more beyoncé" → requestedArtists: ["Beyoncé"], exclusiveMode: false
+  * "include some weeknd" → requestedArtists: ["The Weeknd"], exclusiveMode: false
   * "songs like Need my baby by Reo Xander" → requestedArtists: ["Reo Xander"], exclusiveMode: false
   * "Taylor Swift and Olivia Rodrigo vibes" → requestedArtists: ["Taylor Swift", "Olivia Rodrigo"], exclusiveMode: false
 
@@ -4785,6 +4786,10 @@ Respond ONLY with valid JSON:
           max: genreData.era.yearRange.max
         } : null,
         exclusiveMode: genreData.artistConstraints.exclusiveMode === true || genreData.artistConstraints.exclusiveMode === 'true',
+        // True when the user explicitly asked for songs FROM these artists (e.g. "add One Direction songs")
+        // vs using them as a vibe reference ("similar to One Direction"). Seed artists get full song
+        // allocation instead of the default 2-song cap when this is true.
+        prioritizeSeedArtists: (genreData.artistConstraints.requestedArtists?.length > 0) && !(genreData.artistConstraints.exclusiveMode),
         // Confirmed artist UUIDs from SoundCharts reference-song lookup (skips artist name search)
         confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
       };
