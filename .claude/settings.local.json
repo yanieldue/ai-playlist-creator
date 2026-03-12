@@ -23,7 +23,8 @@
       "Bash(kill:*)",
       "Bash(ls:*)",
       "Bash(railway logs:*)",
-      "Bash(git -c:*)"
+      "Bash(git -c:*)",
+      "Bash(CI=false npm run build)"
     ],
     "deny": [],
     "ask": []

@@ -138,7 +138,6 @@ export default function Generate() {
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     return () => {
-      clearTimeout(timer);
       document.body.style.overflow = '';
       window.scrollTo(0, 0);
       if (pageRef.current) {
