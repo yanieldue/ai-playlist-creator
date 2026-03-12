@@ -266,7 +266,6 @@ export default function Generate() {
 
     setChatInput('');
     setChatLoading(true);
-    setPhase('loading');
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
     const msgs = ['Analyzing your request...', 'Finding the perfect tracks...', 'Curating your updated playlist...', 'Almost there...'];
@@ -514,7 +513,18 @@ export default function Generate() {
                 {msg.content}
               </div>
             ))}
-            {chatMessages.length === 0 && !keyboardOpen && (
+            {chatLoading && (
+              <div className="generate-ai-bubble" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="wave-loader-small">
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                  <div className="wave-bar"></div>
+                </div>
+                <span style={{ fontSize: 13, color: '#b3b3b3' }}>{refineMessage}</span>
+              </div>
+            )}
+            {chatMessages.length === 0 && !keyboardOpen && !chatLoading && (
               <>
                 <div className="generate-suggestions-label">Try asking</div>
                 {REFINE_SUGGESTIONS.map(s => (
