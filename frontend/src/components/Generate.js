@@ -445,9 +445,9 @@ export default function Generate() {
         )}
       </div>
 
-      {/* Bottom bar — in document flow, NOT position:fixed */}
+      {/* Bottom bar — marginTop:auto pins it to bottom of flex container */}
       {phase === 'input' && (
-        <div className="generate-input-bar">
+        <div className="generate-input-bar" style={{ marginTop: 'auto' }}>
           <div className="generate-input-row">
             <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
             <textarea
@@ -491,7 +491,7 @@ export default function Generate() {
       )}
 
       {phase === 'tracks' && generatedPlaylist && (
-        <div className="generate-footer">
+        <div className="generate-footer" style={{ marginTop: 'auto' }}>
           <button className="generate-refine-btn" onClick={() => setPhase('refine')}>
             ✦ Refine
           </button>
@@ -502,7 +502,7 @@ export default function Generate() {
       )}
 
       {phase === 'refine' && (
-        <div className="generate-input-bar">
+        <div className="generate-input-bar" style={{ marginTop: 'auto' }}>
           <div className="generate-input-row">
             <Icons.Sparkles size={18} style={{ color: '#b3b3b3', flexShrink: 0 }} />
             <textarea
