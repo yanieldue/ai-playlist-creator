@@ -456,6 +456,7 @@ export default function Generate() {
               onChange={e => { setPrompt(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && prompt.trim() && !loading) { e.preventDefault(); handleGenerate(); } }}
               onFocus={() => setKeyboardOpen(true)}
+              onBlur={() => setKeyboardOpen(false)}
               placeholder="Tell me your ideas"
               rows={1}
             />
@@ -511,6 +512,7 @@ export default function Generate() {
               onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
               onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
               onFocus={() => setKeyboardOpen(true)}
+              onBlur={() => setKeyboardOpen(false)}
               placeholder="Tell me what to change..."
               rows={1}
             />
