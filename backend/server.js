@@ -41,6 +41,9 @@ console.log(`Using ${usePostgres ? 'PostgreSQL' : 'SQLite'} database`);
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Per-user in-flight generation deduplication
+const inFlightGenerations = new Map(); // key: userId+prompt -> timestamp
+
 // Middleware
 // Configure CORS for production and development
 app.use(cors({
@@ -4089,6 +4092,19 @@ app.post('/api/generate-playlist', async (req, res) => {
           }
         }
       }
+    }
+
+    // Deduplicate parallel identical requests from the same user
+    if (!internalCall) {
+      const dedupKey = `${userId}::${prompt}::${songCount}`;
+      const now = Date.now();
+      const last = inFlightGenerations.get(dedupKey);
+      if (last && (now - last) < 15000) {
+        console.log(`[dedup] Rejecting duplicate generation request for key: ${dedupKey}`);
+        return res.status(429).json({ error: 'A generation request is already in progress. Please wait.' });
+      }
+      inFlightGenerations.set(dedupKey, now);
+      setTimeout(() => inFlightGenerations.delete(dedupKey), 30000);
     }
 
     // If userId is email-based, resolve to platform userId
