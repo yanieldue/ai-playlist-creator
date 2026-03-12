@@ -126,16 +126,13 @@ export default function Generate() {
     // On iOS, when the keyboard opens, vv.offsetTop becomes non-zero as the OS
     // scrolls to show the focused input — we compensate with a translateY so the
     // page moves down to match the visual viewport's top edge.
-    // Debounce so we only apply the final settled state, not every intermediate
-    // frame during the keyboard opening animation (which causes a visible flash).
-    let timer = null;
     const update = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (!pageRef.current) return;
-        pageRef.current.style.height = vv.height + 'px';
-        pageRef.current.style.transform = `translateY(${vv.offsetTop}px)`;
-      }, 50);
+      if (!pageRef.current) return;
+      pageRef.current.style.height = vv.height + 'px';
+      pageRef.current.style.transform = `translateY(${vv.offsetTop}px)`;
+      // Reveal the page once the viewport has settled (hides the flash during
+      // keyboard opening where intermediate positions would otherwise be visible)
+      pageRef.current.style.opacity = '1';
     };
 
     vv.addEventListener('resize', update);
@@ -150,8 +147,17 @@ export default function Generate() {
       }
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
+      if (pageRef.current) pageRef.current.style.opacity = '';
     };
   }, []);
+
+  const hidePageForKeyboard = () => {
+    if (pageRef.current) pageRef.current.style.opacity = '0';
+  };
+
+  const showPage = () => {
+    if (pageRef.current) pageRef.current.style.opacity = '1';
+  };
 
   const handleGenerate = async (retryCount = 0) => {
     if (!prompt.trim()) return;
@@ -485,8 +491,8 @@ export default function Generate() {
                 value={chatInput}
                 onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                 onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
-                onFocus={() => setKeyboardOpen(true)}
-                onBlur={() => setKeyboardOpen(false)}
+                onFocus={() => { hidePageForKeyboard(); setKeyboardOpen(true); }}
+                onBlur={() => { showPage(); setKeyboardOpen(false); }}
                 placeholder="Tell me what to change..."
                 rows={1}
               />
