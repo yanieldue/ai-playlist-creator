@@ -109,7 +109,6 @@ export default function Generate() {
     const screenH = window.screen.height;
     const resize = () => {
       if (!pageRef.current) return;
-      pageRef.current.style.top = vv.offsetTop + 'px';
       pageRef.current.style.height = vv.height + 'px';
       setKeyboardOpen(vv.height < screenH * 0.75);
     };
@@ -118,7 +117,6 @@ export default function Generate() {
     return () => {
       document.body.style.overflow = '';
       if (pageRef.current) {
-        pageRef.current.style.top = '';
         pageRef.current.style.height = '';
       }
       vv.removeEventListener('resize', resize);
@@ -335,8 +333,8 @@ export default function Generate() {
         )}
       </div>
 
-      {/* Scrollable content */}
-      <div className="generate-content">
+      {/* Scrollable content — hidden when keyboard open in input phase so only the input bar shows */}
+      <div className="generate-content" style={keyboardOpen && phase === 'input' ? { display: 'none' } : undefined}>
         {phase === 'input' && (
           <>
             {!keyboardOpen && (
