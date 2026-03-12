@@ -122,20 +122,27 @@ export default function Generate() {
     const vv = window.visualViewport;
     if (!vv) return () => { document.body.style.overflow = ''; };
 
-    // window.screen.height is the physical screen height — stable reference point
-    const resize = () => {
+    // Keep the page perfectly aligned with the visual viewport.
+    // On iOS, when the keyboard opens, vv.offsetTop becomes non-zero as the OS
+    // scrolls to show the focused input — we compensate with a translateY so the
+    // page moves down to match the visual viewport's top edge.
+    const update = () => {
       if (!pageRef.current) return;
       pageRef.current.style.height = vv.height + 'px';
+      pageRef.current.style.transform = `translateY(${vv.offsetTop}px)`;
     };
 
-    vv.addEventListener('resize', resize);
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
     return () => {
       document.body.style.overflow = '';
       window.scrollTo(0, 0);
       if (pageRef.current) {
         pageRef.current.style.height = '';
+        pageRef.current.style.transform = '';
       }
-      vv.removeEventListener('resize', resize);
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
     };
   }, []);
 

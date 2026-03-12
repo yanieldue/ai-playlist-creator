@@ -22,7 +22,8 @@
       "Bash(psql:*)",
       "Bash(kill:*)",
       "Bash(ls:*)",
-      "Bash(railway logs:*)"
+      "Bash(railway logs:*)",
+      "Bash(git -c:*)"
     ],
     "deny": [],
     "ask": []
