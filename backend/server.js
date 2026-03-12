@@ -8150,7 +8150,15 @@ async function processPlaylistUpdate(userId, playlist) {
         allowExplicit: true,
         newArtistsOnly: false,
         songCount: playlist.requestedSongCount || playlist.trackCount || 30,
-        excludeTrackUris: (playlist.trackUris || playlist.tracks.map(t => t.uri)).filter(Boolean),
+        // In replace mode, don't exclude current tracks — they can be re-selected freely
+        // (excluding them on a niche-genre playlist can starve the pool and return far fewer songs).
+        // In append mode, exclude them to avoid duplicates.
+        excludeTrackUris: playlist.updateMode === 'replace'
+          ? (playlist.excludedSongs || []).map(s => s.uri || s).filter(Boolean)
+          : [
+              ...(playlist.trackUris || playlist.tracks.map(t => t.uri)).filter(Boolean),
+              ...(playlist.excludedSongs || []).map(s => s.uri || s).filter(Boolean),
+            ],
         playlistId: playlist.playlistId,
         internalCall: true,
       }, { timeout: 180000 });

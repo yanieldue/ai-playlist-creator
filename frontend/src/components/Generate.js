@@ -283,7 +283,8 @@ export default function Generate() {
         ? `\n\nPlaylist description: ${generatedPlaylist.description}` : '';
       const previousRefinements = chatMessages
         .filter(m => m.role === 'user').map(m => m.content).join('. ');
-      const lockedTracks = (generatedPlaylist.tracks || []).filter(t => lockedTrackIds.has(t.id));
+      const allTracks = generatedPlaylist.tracks || [];
+      const lockedTracks = allTracks.filter(t => lockedTrackIds.has(t.id));
       const lockedContext = lockedTracks.length > 0
         ? `\n\nKeep these songs exactly as-is: ${lockedTracks.map(t => `"${t.name}" by ${t.artist}`).join(', ')}.`
         : '';
@@ -291,14 +292,19 @@ export default function Generate() {
         ? `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
         : `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nRefinement: ${userMessage}`;
 
+      const totalSongCount = generatedPlaylist.requestedSongCount || 30;
+      const newSongCount = Math.max(1, totalSongCount - lockedTracks.length);
+      const lockedUris = lockedTracks.map(t => t.uri).filter(Boolean);
+      const excludedUris = (generatedPlaylist.excludedSongs || []).map(s => s.uri).filter(Boolean);
+
       const result = await playlistService.generatePlaylist(
         refinementPrompt,
         userId,
         activePlatform,
         allowExplicit,
         false,
-        generatedPlaylist.requestedSongCount || 30,
-        (generatedPlaylist.excludedSongs || []).map(s => s.uri),
+        newSongCount,
+        [...excludedUris, ...lockedUris],
         generatedPlaylist.playlistId || generatedPlaylist.draftId
       );
 
@@ -311,8 +317,25 @@ export default function Generate() {
         { role: 'assistant', content: 'Updated your playlist.' },
       ];
 
+      // Merge locked tracks back in at their original positions
+      let mergedTracks = result.tracks || [];
+      if (lockedTracks.length > 0) {
+        const originalPositions = allTracks.reduce((acc, t, i) => {
+          if (lockedTrackIds.has(t.id)) acc[t.id] = i;
+          return acc;
+        }, {});
+        // Insert locked tracks at their original indices
+        const merged = [...mergedTracks];
+        for (const lt of lockedTracks) {
+          const pos = Math.min(originalPositions[lt.id], merged.length);
+          merged.splice(pos, 0, lt);
+        }
+        mergedTracks = merged;
+      }
+
       const updated = {
         ...result,
+        tracks: mergedTracks,
         originalPrompt: generatedPlaylist.originalPrompt,
         requestedSongCount: generatedPlaylist.requestedSongCount,
         excludedSongs: generatedPlaylist.excludedSongs,
