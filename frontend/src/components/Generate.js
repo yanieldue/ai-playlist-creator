@@ -356,7 +356,7 @@ export default function Generate() {
       </div>
 
       {/* Scrollable content */}
-      <div className="generate-content">
+      <div className="generate-content" style={keyboardOpen && phase === 'input' ? { overflowY: 'hidden' } : undefined}>
         {phase === 'input' && (
           <>
             {!keyboardOpen && (
