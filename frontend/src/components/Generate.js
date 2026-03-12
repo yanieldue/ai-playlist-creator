@@ -107,12 +107,12 @@ export default function Generate() {
     el.style.height = el.scrollHeight + 'px';
   }, [prompt]);
 
-  // Scroll chat to bottom when keyboard opens in refine phase so latest message stays visible
+  // Scroll chat to bottom when keyboard opens or new messages arrive
   useEffect(() => {
-    if (keyboardOpen && phase === 'refine' && contentRef.current) {
+    if (phase === 'refine' && contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
-  }, [keyboardOpen, phase]);
+  }, [keyboardOpen, phase, chatMessages]);
 
   // On iOS, shrink the page to the visual viewport height when keyboard opens,
   // and track keyboard state so we can hide the intro heading.
