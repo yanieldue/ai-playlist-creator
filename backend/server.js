@@ -1101,6 +1101,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           artistName: item.song.creditName || 'Unknown',
           isrc: item.song?.isrc?.value || item.song?.isrc || null,
           uuid: item.song?.uuid,
+          releaseDate: item.song?.releaseDate || null,
           source: strategy
         }));
       if (mappedItems.length < items.length) {
@@ -4728,18 +4729,38 @@ Respond ONLY with valid JSON:
       console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
     }
 
-    // Map to recommendedTracks (ISRC passed through for exact Spotify lookup)
+    // Map to recommendedTracks (ISRC + releaseDate passed through for exact lookup and era filtering)
     // Filter out any songs with missing names to prevent malformed Spotify searches
+    // Also pre-filter by era using SoundCharts' original releaseDate — this avoids the
+    // "compilation album" problem where Spotify returns a classic song on a recent re-release
+    // and album.release_date passes the year check despite the song being much older.
+    const eraMin = genreData.era?.yearRange?.min || null;
+    const eraMax = genreData.era?.yearRange?.max || null;
     const recommendedTracks = soundChartsDiscoveredSongs
-      .filter(scSong => scSong.name && scSong.name.trim())
+      .filter(scSong => {
+        if (!scSong.name || !scSong.name.trim()) return false;
+        if (scSong.releaseDate && (eraMin || eraMax)) {
+          const year = parseInt(scSong.releaseDate.substring(0, 4));
+          if (eraMin && year < eraMin) {
+            console.log(`[ERA-SC] Pre-filtering "${scSong.name}" by ${scSong.artistName} (${year} < ${eraMin})`);
+            return false;
+          }
+          if (eraMax && year > eraMax) {
+            console.log(`[ERA-SC] Pre-filtering "${scSong.name}" by ${scSong.artistName} (${year} > ${eraMax})`);
+            return false;
+          }
+        }
+        return true;
+      })
       .map(scSong => ({
         track: scSong.name,
         artist: scSong.artistName,
         isrc: scSong.isrc || null,
+        releaseDate: scSong.releaseDate || null,
         source: 'soundcharts'
       }));
 
-    console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts`);
+    console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts (${soundChartsDiscoveredSongs.length - recommendedTracks.length} pre-filtered by era)`);
 
     // Generate playlist name and description
     const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
@@ -4896,17 +4917,23 @@ Return ONLY valid JSON:
                 continue;
               }
 
-              // Enforce release year constraint using Spotify's album.release_date
-              // (SoundCharts releaseDate filter is unreliable — it ranks by streams, not release year)
-              if (track.album?.release_date && (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max)) {
-                const releaseYear = parseInt(track.album.release_date.substring(0, 4));
-                if (genreData.era.yearRange.min && releaseYear < genreData.era.yearRange.min) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${genreData.era.yearRange.min})`);
-                  continue;
-                }
-                if (genreData.era.yearRange.max && releaseYear > genreData.era.yearRange.max) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${genreData.era.yearRange.max})`);
-                  continue;
+              // Enforce release year constraint. Use the EARLIEST known date to avoid
+              // the "compilation album" problem where a classic song appears on a recent
+              // re-release and Spotify's album.release_date passes the year check.
+              if (eraMin || eraMax) {
+                const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
+                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
+                // Use the earlier of the two dates as the canonical release year
+                const releaseYear = (spotifyYear && scYear) ? Math.min(spotifyYear, scYear) : (scYear || spotifyYear);
+                if (releaseYear) {
+                  if (eraMin && releaseYear < eraMin) {
+                    console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${eraMin})`);
+                    continue;
+                  }
+                  if (eraMax && releaseYear > eraMax) {
+                    console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${eraMax})`);
+                    continue;
+                  }
                 }
               }
 
@@ -5040,17 +5067,21 @@ Return ONLY valid JSON:
                 continue;
               }
 
-              // Enforce release year constraint using Apple Music's releaseDate
-              if ((track.releaseDate || track.album?.release_date) && (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max)) {
-                const dateStr = track.releaseDate || track.album?.release_date;
-                const releaseYear = parseInt(dateStr.substring(0, 4));
-                if (genreData.era.yearRange.min && releaseYear < genreData.era.yearRange.min) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${genreData.era.yearRange.min})`);
-                  continue;
-                }
-                if (genreData.era.yearRange.max && releaseYear > genreData.era.yearRange.max) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${genreData.era.yearRange.max})`);
-                  continue;
+              // Enforce release year constraint — use earliest of Apple date and SoundCharts date
+              if (eraMin || eraMax) {
+                const appleYear = (track.releaseDate || track.album?.release_date)
+                  ? parseInt((track.releaseDate || track.album.release_date).substring(0, 4)) : null;
+                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
+                const releaseYear = (appleYear && scYear) ? Math.min(appleYear, scYear) : (scYear || appleYear);
+                if (releaseYear) {
+                  if (eraMin && releaseYear < eraMin) {
+                    console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${eraMin})`);
+                    continue;
+                  }
+                  if (eraMax && releaseYear > eraMax) {
+                    console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${eraMax})`);
+                    continue;
+                  }
                 }
               }
 
