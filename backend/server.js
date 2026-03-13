@@ -1094,6 +1094,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       );
       const items = response.data?.items || [];
       console.log(`✓ SoundCharts returned ${items.length} songs`);
+      if (items.length > 0) console.log(`[DEBUG] top/songs item[0] keys: ${Object.keys(items[0]).join(', ')} | sample: ${JSON.stringify(items[0]).slice(0, 300)}`);
       return items.map(song => ({
         name: song.name,
         artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
