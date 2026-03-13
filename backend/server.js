@@ -1056,11 +1056,22 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
     filters.push({ type: 'artistCareerStages', data: { values: ['superstar', 'mainstream'], operator: 'in' } });
   }
 
+  // Include seed artists so executeSoundChartsStrategy can fall back to artist-based
+  // discovery if the top/songs endpoint is not available on the current plan (403).
+  // When suggestedSeedArtists is empty (e.g. "songs similar to JENNIE" where Claude
+  // puts JENNIE in requestedArtists but not suggestedSeedArtists), use requestedArtists
+  // as seeds so discovery still has artists to expand from.
+  const suggestedSeeds = genreData.artistConstraints.suggestedSeedArtists || [];
+  const seedArtists = isExclusive
+    ? requestedArtists
+    : (suggestedSeeds.length > 0 ? suggestedSeeds : requestedArtists);
+
   return {
     strategy,
     artists: isExclusive ? requestedArtists : [],
+    seedArtists,
     soundchartsFilters: filters,
-    soundchartsSort: { platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
+    soundchartsSort: { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
   };
 }
 
@@ -1080,8 +1091,11 @@ const SOUNDCHARTS_MOOD_MAP = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // executeSoundChartsStrategy — direct attribute-based song discovery.
-// Replaces the old multi-call artist similarity tree.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Cached flag: once we know top/songs returns 403 on this plan, skip the call.
+let topSongsEndpoint403 = false;
+
 async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
@@ -1091,402 +1105,187 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
   // ── top_songs / trending ─────────────────────────────────────────────────
   if (strategy === 'top_songs' || strategy === 'trending') {
-    const sort = soundchartsSort || {
-      platform: 'spotify', metricType: 'streams',
-      period: strategy === 'trending' ? 'week' : 'month',
-      sortBy: 'total', order: 'desc'
-    };
-    const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
-    console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
-    try {
-      await throttleSoundCharts();
-      const response = await axios.post(
-        'https://customer.api.soundcharts.com/api/v2/top/songs',
-        body,
-        {
-          headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-          params: { offset: 0, limit: Math.min(fetchCount, 200) },
-          timeout: 15000
+    if (topSongsEndpoint403) {
+      console.log('⏭️  top/songs not available on plan — using artist-based discovery');
+    } else {
+      const sort = soundchartsSort || {
+        type: 'metric', platform: 'spotify', metricType: 'streams',
+        period: strategy === 'trending' ? 'week' : 'month',
+        sortBy: 'total', order: 'desc'
+      };
+      const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
+      console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
+      try {
+        await throttleSoundCharts();
+        const response = await axios.post(
+          'https://customer.api.soundcharts.com/api/v2/top/songs',
+          body,
+          {
+            headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+            params: { offset: 0, limit: Math.min(fetchCount, 200) },
+            timeout: 15000
+          }
+        );
+        const items = response.data?.items || [];
+        console.log(`✓ SoundCharts returned ${items.length} songs`);
+        return items.map(song => ({
+          name: song.name,
+          artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
+          isrc: song.isrc?.value || song.isrc || null,
+          uuid: song.uuid,
+          source: strategy
+        }));
+      } catch (err) {
+        if (err.response?.status === 403) {
+          console.log('⚠️  SoundCharts top/songs: 403 — plan does not include this endpoint, switching to artist-based');
+          topSongsEndpoint403 = true;
+        } else {
+          console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
+          return [];
         }
-      );
-      const items = response.data?.items || [];
-      console.log(`✓ SoundCharts returned ${items.length} songs`);
-      return items.map(song => ({
-        name: song.name,
-        artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
-        isrc: song.isrc?.value || song.isrc || null,
-        uuid: song.uuid,
-        source: strategy
-      }));
-    } catch (err) {
-      if (err.response?.status === 403) {
-        console.log('⚠️  SoundCharts top/songs: endpoint not available on current plan (403)');
-      } else {
-        console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
       }
-      return [];
     }
+
+    // Artist-based fallback (used when top/songs is unavailable)
+    const seeds = query.seedArtists || [];
+    if (seeds.length === 0) return [];
+    let songs = await executeSoundChartsStrategy(
+      { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
+      fetchCount,
+      confirmedArtistUuids
+    );
+    // Apply release date filter if the original query had one
+    const rdFilter = soundchartsFilters.find(f => f.type === 'releaseDate');
+    if (rdFilter && songs.length > 0) {
+      const minYear = rdFilter.data.min ? parseInt(rdFilter.data.min) : null;
+      const maxYear = rdFilter.data.max ? parseInt(rdFilter.data.max) : null;
+      const before = songs.length;
+      songs = songs.filter(song => {
+        if (!song.releaseDate) return true;
+        const year = new Date(song.releaseDate).getFullYear();
+        if (minYear && year < minYear) return false;
+        if (maxYear && year > maxYear) return false;
+        return true;
+      });
+      if (before !== songs.length) console.log(`🗓️  Release date filter (${minYear || ''}–${maxYear || ''}): ${before} → ${songs.length} songs`);
+    }
+    return songs;
   }
 
-  // ── artist_songs (exclusive mode) ────────────────────────────────────────
+  // ── artist_songs ─────────────────────────────────────────────────────────
   if (strategy === 'artist_songs') {
-    const songs = [];
-    const perArtist = Math.max(Math.ceil(fetchCount / Math.max(artists.length, 1)), 10);
+    const expandToSimilar = query.expandToSimilar === true;
+
+    // Phase 1: resolve seed artist infos
+    const seedInfos = [];
     for (const artistName of artists) {
       try {
         const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
         const artistInfo = confirmedUuid
           ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
           : await getSoundChartsArtistInfo(artistName);
-        if (!artistInfo?.uuid) { console.log(`⚠️  Could not find "${artistName}" on SoundCharts`); continue; }
-        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, perArtist);
+        if (artistInfo?.uuid) seedInfos.push(artistInfo);
+        else console.log(`⚠️  Could not find "${artistName}" on SoundCharts`);
+      } catch (err) {
+        console.log(`⚠️  Error looking up "${artistName}": ${err.message}`);
+      }
+    }
+
+    // Phase 2: expand with similar artists (1 level, 2 per seed) for variety
+    let allArtistInfos = [...seedInfos];
+    if (expandToSimilar && seedInfos.length > 0) {
+      const seenNames = new Set(seedInfos.map(a => a.name.toLowerCase()));
+      const similarNames = [];
+      // Target ~10 total artists. With fewer seeds, take more similar per seed.
+      const similarPerSeed = Math.max(2, Math.ceil(10 / seedInfos.length));
+      for (const seedInfo of seedInfos) {
+        let added = 0;
+        for (const simName of (seedInfo.similarArtists || [])) {
+          if (added >= similarPerSeed) break;
+          if (seenNames.has(simName.toLowerCase())) continue;
+          seenNames.add(simName.toLowerCase());
+          similarNames.push(simName);
+          added++;
+        }
+      }
+      // Extract expected genre slugs from filters (e.g. ['k-pop']) for validation
+      const genreFilter = soundchartsFilters.find(f => f.type === 'songGenres');
+      const expectedGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
+
+      // Genres that indicate a stylistically incompatible artist when the seed doesn't have them
+      const contrastingGenres = ['rock', 'k-rock', 'j-rock', 'alternative', 'metal', 'punk',
+        'country', 'jazz', 'classical', 'folk', 'blues', 'gospel', 'bluegrass'];
+      const seedGenreSet = new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())));
+      const seedHasContrastingGenre = contrastingGenres.some(g => seedGenreSet.has(g));
+
+      for (const simName of similarNames) {
+        try {
+          const simInfo = await getSoundChartsArtistInfo(simName);
+          if (!simInfo?.uuid) continue;
+          const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
+
+          // 1. Must include the expected genre (e.g. k-pop) — prevents genre drift
+          if (expectedGenres.length > 0 && !expectedGenres.some(g => artistGenres.includes(g))) {
+            console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
+            continue;
+          }
+          // 2. If seed has no contrasting genres, reject similar artists that do —
+          //    e.g. seed is pure pop/k-pop → reject rock/alternative artists like The Rose
+          //    Skipped when seed itself is a rock/country/etc. artist
+          if (!seedHasContrastingGenre && contrastingGenres.some(g => artistGenres.includes(g))) {
+            console.log(`⏭️  Skipping "${simInfo.name}" — has contrasting genres [${artistGenres.filter(g => contrastingGenres.includes(g)).join(', ')}]`);
+            continue;
+          }
+
+          allArtistInfos.push(simInfo);
+        } catch (err) { /* skip */ }
+      }
+      console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
+    }
+
+    // Phase 3: fetch songs — distribute evenly across all artists
+    const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(allArtistInfos.length, 1)), 5);
+    const songs = [];
+    for (const artistInfo of allArtistInfos) {
+      try {
+        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
         for (const song of artistSongs) {
           songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs' });
         }
         console.log(`✓ Got ${artistSongs.length} songs from ${artistInfo.name}`);
       } catch (err) {
-        console.log(`⚠️  Error fetching songs for "${artistName}": ${err.message}`);
+        console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
       }
     }
-    return songs;
+
+    // Phase 4: shuffle so artists interleave (prevents one artist dominating)
+    for (let i = songs.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [songs[i], songs[j]] = [songs[j], songs[i]];
+    }
+
+    // Phase 5: deduplicate variants (remixes, karaoke, commentaries, etc.)
+    const normalizeTitle = (t) => (t || '').toLowerCase()
+      .replace(/\s*[\(\[].*?[\)\]]/g, '')
+      .replace(/\s*-\s*(remix|edit|mix|version|live|acoustic|instrumental|karaoke|radio|extended|remaster.*|taylor's version).*$/i, '')
+      .replace(/\s+/g, ' ').trim();
+    const seenTitles = new Set();
+    const deduped = songs.filter(song => {
+      const key = `${normalizeTitle(song.name)}::${(song.artistName || '').toLowerCase()}`;
+      if (seenTitles.has(key)) return false;
+      seenTitles.add(key);
+      return true;
+    });
+    if (deduped.length < songs.length) {
+      console.log(`🧹 Deduped: ${songs.length} → ${deduped.length} (removed ${songs.length - deduped.length} variant tracks)`);
+    }
+    return deduped;
   }
 
   return [];
 }
 
-// Discover top songs by genre/mood using SoundCharts POST /api/v2/top/songs
-// Used when no seed artists are specified — replaces the old hardcoded artist list
-async function discoverSongsViaSoundChartsTop(criteria, limit = 50, offset = 0) {
-  const appId = process.env.SOUNDCHARTS_APP_ID;
-  const apiKey = process.env.SOUNDCHARTS_API_KEY;
-  if (!appId || !apiKey) return [];
 
-  const filters = [];
-
-  // Genre filter — map Claude genre name to SoundCharts slug
-  if (criteria.genre) {
-    const genreLower = criteria.genre.toLowerCase().trim();
-    let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
-    // Partial match if no exact match
-    if (!scGenre) {
-      for (const [key, val] of Object.entries(SOUNDCHARTS_GENRE_MAP)) {
-        if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
-      }
-    }
-    if (scGenre) {
-      filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
-    }
-  }
-
-  // Mood filter — map atmosphere labels to SoundCharts mood values
-  if (criteria.targetMoods && criteria.targetMoods.length > 0) {
-    const scMoods = [...new Set(
-      criteria.targetMoods
-        .map(m => SOUNDCHARTS_MOOD_MAP[m.toLowerCase()] || m)
-        .filter(Boolean)
-    )];
-    if (scMoods.length > 0) {
-      filters.push({ type: 'moods', data: { values: scMoods, operator: 'in' } });
-    }
-  }
-
-  // Release year filter
-  if (criteria.releaseYear?.min || criteria.releaseYear?.max) {
-    const dateFilter = { type: 'releaseDate', data: {} };
-    if (criteria.releaseYear.min) dateFilter.data.min = `${criteria.releaseYear.min}-01-01`;
-    if (criteria.releaseYear.max) dateFilter.data.max = `${criteria.releaseYear.max}-12-31`;
-    filters.push(dateFilter);
-  }
-
-  // Sort by monthly Spotify streams (most popular first)
-  const sort = {
-    type: 'metric',
-    platform: 'spotify',
-    metricType: 'streams',
-    sortBy: 'total',
-    period: 'month',
-    order: 'desc'
-  };
-
-  const body = { sort, ...(filters.length > 0 ? { filters } : {}) };
-  console.log(`   SoundCharts top songs: genre=${criteria.genre || 'any'}, moods=${criteria.targetMoods?.join(',') || 'any'}`);
-
-  try {
-    await throttleSoundCharts();
-    const response = await axios.post(
-      'https://customer.api.soundcharts.com/api/v2/top/songs',
-      body,
-      {
-        headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-        params: { offset, limit: Math.min(limit, 100) },
-        timeout: 15000
-      }
-    );
-
-    const items = response.data?.items || [];
-    console.log(`   SoundCharts top songs returned ${items.length} results`);
-    return items.map(song => ({
-      uuid: song.uuid,
-      name: song.name,
-      artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
-      releaseDate: song.releaseDate,
-      isrc: song.isrc?.value || song.isrc || null,
-    }));
-  } catch (error) {
-    if (error.response?.status === 403) {
-      console.log(`⚠️  SoundCharts top songs: endpoint not available on current plan (403), skipping`);
-    } else {
-      console.log(`⚠️  SoundCharts top songs error: ${error.response?.status} ${error.message}`);
-    }
-    return [];
-  }
-}
-
-// Helper function to discover songs via SoundCharts based on criteria
-// Strategy 1 (seed artists): similarity tree — seed → similar → similar-of-similar
-// Strategy 2 (no seed artists): top songs filtered by genre/mood, sorted by streams
-async function discoverSongsViaSoundCharts(criteria, limit = 50, knownArtistsSet = null) {
-  const appId = process.env.SOUNDCHARTS_APP_ID;
-  const apiKey = process.env.SOUNDCHARTS_API_KEY;
-
-  if (!appId || !apiKey) {
-    console.log('⚠️  SoundCharts not configured, skipping song discovery');
-    return [];
-  }
-
-  console.log('🎵 Discovering songs via SoundCharts...');
-  console.log(`   Criteria: ${JSON.stringify(criteria)}`);
-
-  const discoveredSongs = [];
-  const processedArtists = new Set();
-  const hasSeedArtists = !!(criteria.seedArtists && criteria.seedArtists.length > 0);
-
-  // Strategy 1: If we have seed artists, get their songs + similar artists' songs
-  // Dynamic approach: balance variety across all artists (seed and similar)
-  if (hasSeedArtists) {
-    const isExclusive = criteria.exclusiveMode === true;
-    const numSeedArtists = Math.min(criteria.seedArtists.length, 5);
-
-    // Dynamic calculation for balanced variety
-    // Goal: Get songs from many artists with even distribution
-    // Target ~15-20 unique artists total for good variety
-
-    if (isExclusive) {
-      // Exclusive mode: only seed artists, distribute songs evenly
-      const songsPerArtist = Math.ceil(limit / numSeedArtists);
-      console.log(`   Mode: EXCLUSIVE - ${numSeedArtists} artists, ~${songsPerArtist} songs each`);
-
-      for (const artistName of criteria.seedArtists.slice(0, 5)) {
-        if (processedArtists.has(artistName.toLowerCase())) continue;
-        processedArtists.add(artistName.toLowerCase());
-
-        const confirmedUuidExcl = criteria.confirmedArtistUuids?.[artistName.toLowerCase()];
-        const artistInfo = confirmedUuidExcl
-          ? await getSoundChartsArtistInfoByUuid(confirmedUuidExcl, artistName)
-          : await getSoundChartsArtistInfo(artistName, criteria.genre);
-        if (!artistInfo) continue;
-
-        const songs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
-        for (const song of songs) {
-          discoveredSongs.push({
-            ...song,
-            artistName: artistInfo.name,
-            source: 'seed_artist'
-          });
-        }
-      }
-    } else {
-      // Similar vibe mode: build a discovery tree for maximum variety
-      // Level 0: Seed artists (Pete Bailey, Ansel King, Tyree Thomas)
-      // Level 1: Similar to seeds (CALLMEJB, Scars, Kayvion...)
-      // Level 2: Similar to level 1 (even more discovery)
-
-      const targetTotalArtists = Math.max(20, Math.ceil(limit / 2.5)); // ~2-3 songs per artist for max variety
-      const songsPerArtist = Math.max(2, Math.min(4, Math.ceil(limit / targetTotalArtists)));
-
-      console.log(`   Mode: SIMILAR VIBE - targeting ${targetTotalArtists} artists, ~${songsPerArtist} songs each`);
-
-      // Collect artists at each level
-      const allArtists = []; // { name, uuid, source, level }
-      const level1Artists = []; // Track level 1 for getting their similar artists
-
-      // Level 0: Add seed artists
-      for (const artistName of criteria.seedArtists.slice(0, 5)) {
-        if (processedArtists.has(artistName.toLowerCase())) continue;
-        processedArtists.add(artistName.toLowerCase());
-
-        // Use confirmed UUID from SoundCharts reference-song lookup if available; otherwise search by name
-        const confirmedUuid = criteria.confirmedArtistUuids?.[artistName.toLowerCase()];
-        const artistInfo = confirmedUuid
-          ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
-          : await getSoundChartsArtistInfo(artistName, criteria.genre);
-        if (!artistInfo) continue;
-
-        allArtists.push({
-          name: artistInfo.name,
-          uuid: artistInfo.uuid,
-          source: 'seed_artist',
-          level: 0
-        });
-
-        // Level 1: Add similar artists to seeds (~40% of target from this level)
-        const level1Count = Math.ceil((targetTotalArtists * 0.4) / numSeedArtists);
-        for (const similarArtist of artistInfo.similarArtists.slice(0, level1Count)) {
-          if (processedArtists.has(similarArtist.toLowerCase())) continue;
-          processedArtists.add(similarArtist.toLowerCase());
-
-          const similarInfo = await searchSoundChartsArtist(similarArtist, criteria.genre);
-          if (!similarInfo) continue;
-
-          const artistData = {
-            name: similarInfo.name || similarArtist,
-            uuid: similarInfo.uuid,
-            source: 'similar_artist',
-            level: 1
-          };
-          allArtists.push(artistData);
-          level1Artists.push(artistData);
-        }
-      }
-
-      console.log(`   Level 0 (seeds): ${numSeedArtists} artists`);
-      console.log(`   Level 1 (similar to seeds): ${level1Artists.length} artists`);
-
-      // Level 2: Get similar artists of level 1 artists for even more variety
-      const remainingNeeded = targetTotalArtists - allArtists.length;
-      if (remainingNeeded > 0 && level1Artists.length > 0) {
-        const level2PerArtist = Math.ceil(remainingNeeded / Math.min(level1Artists.length, 5));
-
-        // Pick a subset of level 1 artists to expand (shuffle for variety)
-        const artistsToExpand = level1Artists.sort(() => Math.random() - 0.5).slice(0, 5);
-
-        for (const level1Artist of artistsToExpand) {
-          if (allArtists.length >= targetTotalArtists) break;
-
-          // Get similar artists for this level 1 artist
-          const level1Similar = await getSoundChartsSimilarArtists(level1Artist.uuid, level2PerArtist);
-
-          for (const similar of level1Similar) {
-            if (processedArtists.has(similar.name.toLowerCase())) continue;
-            processedArtists.add(similar.name.toLowerCase());
-
-            allArtists.push({
-              name: similar.name,
-              uuid: similar.uuid,
-              source: 'discovery',
-              level: 2
-            });
-
-            if (allArtists.length >= targetTotalArtists) break;
-          }
-        }
-
-        const level2Count = allArtists.length - numSeedArtists - level1Artists.length;
-        console.log(`   Level 2 (similar to similar): ${level2Count} artists`);
-      }
-
-      // Level 3: When newArtistsOnly is active, levels 1+2 may be mostly known artists.
-      // Go one level deeper to find more obscure/unknown artists.
-      if (knownArtistsSet && knownArtistsSet.size > 0) {
-        const level2Artists = allArtists.filter(a => a.level === 2);
-        const unknownLevel2 = level2Artists.filter(a => !knownArtistsSet.has(a.name.toLowerCase()));
-        const artistsToExpandL3 = unknownLevel2.sort(() => Math.random() - 0.5).slice(0, 4);
-
-        for (const l2Artist of artistsToExpandL3) {
-          if (allArtists.length >= targetTotalArtists * 1.5) break;
-          const l3Similar = await getSoundChartsSimilarArtists(l2Artist.uuid, 5);
-          for (const similar of l3Similar) {
-            if (processedArtists.has(similar.name.toLowerCase())) continue;
-            processedArtists.add(similar.name.toLowerCase());
-            allArtists.push({ name: similar.name, uuid: similar.uuid, source: 'discovery', level: 3 });
-          }
-        }
-        const level3Count = allArtists.filter(a => a.level === 3).length;
-        if (level3Count > 0) console.log(`   Level 3 (deeper discovery): ${level3Count} artists`);
-      }
-
-      console.log(`   Total: ${allArtists.length} unique artists to pull songs from`);
-
-
-      // Get songs from each artist with even distribution
-      // In non-exclusive (similar-vibe) mode: prioritize similar/discovery artists over seed artists
-      // Seed artists appear last so similar artists fill the pool first.
-      // This prevents seed artists from dominating when similar artists fail Spotify lookup.
-      const seedArtistList = allArtists.filter(a => a.level === 0);
-      const nonSeedArtists = allArtists.filter(a => a.level > 0).sort(() => Math.random() - 0.5);
-      const orderedArtists = [...nonSeedArtists, ...seedArtistList];
-
-      // Seed artists get fewer songs when used as a vibe reference ("similar to X").
-      // But when the user explicitly asked for songs FROM the artist ("add X songs"),
-      // give them the full allocation so they're well-represented in the playlist.
-      const seedSongsPerArtist = criteria.prioritizeSeedArtists ? songsPerArtist : Math.min(2, songsPerArtist);
-
-      // Pre-filter: skip known artists in newArtistsOnly mode
-      const artistsToFetch = orderedArtists.filter(artist => {
-        if (knownArtistsSet && knownArtistsSet.size > 0 && artist.level > 0) {
-          if (knownArtistsSet.has(artist.name.toLowerCase())) {
-            console.log(`[NEW-ARTISTS] Skipping songs from known artist: ${artist.name}`);
-            return false;
-          }
-        }
-        return true;
-      });
-
-      // Fetch songs in parallel batches of 2 with 400ms delay between batches
-      const BATCH_SIZE = 2;
-      const BATCH_DELAY_MS = 400;
-      for (let i = 0; i < artistsToFetch.length; i += BATCH_SIZE) {
-        const batch = artistsToFetch.slice(i, i + BATCH_SIZE);
-        const batchResults = await Promise.all(batch.map(artist => {
-          const artistSongLimit = artist.level === 0 ? seedSongsPerArtist : songsPerArtist;
-          return getSoundChartsArtistSongs(artist.uuid, artistSongLimit)
-            .then(songs => ({ artist, songs }));
-        }));
-
-        for (const { artist, songs } of batchResults) {
-          for (const song of songs) {
-            discoveredSongs.push({ ...song, artistName: artist.name, source: artist.source });
-          }
-        }
-
-        // Early stop: tighter buffer (1.2x) since we exit Spotify matching early too
-        if (discoveredSongs.length >= limit * 1.2) break;
-
-        if (i + BATCH_SIZE < artistsToFetch.length) {
-          await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
-        }
-      }
-    }
-  }
-
-  // Strategy 2: No seed artists — use SoundCharts top songs filtered by genre/mood/streams
-  if (!hasSeedArtists && discoveredSongs.length < limit) {
-    const topSongs = await discoverSongsViaSoundChartsTop(criteria, limit);
-    for (const song of topSongs) {
-      discoveredSongs.push({ ...song, source: 'top_songs' });
-    }
-  }
-
-  console.log(`   Discovered ${discoveredSongs.length} songs from SoundCharts`);
-
-  // Apply release year filter if specified (pure metadata — no extra API calls needed)
-  if (criteria.releaseYear && (criteria.releaseYear.min || criteria.releaseYear.max)) {
-    const before = discoveredSongs.length;
-    const filtered = discoveredSongs.filter(song => {
-      if (!song.releaseDate) return true; // keep if unknown
-      const year = new Date(song.releaseDate).getFullYear();
-      if (criteria.releaseYear.min && year < criteria.releaseYear.min) return false;
-      if (criteria.releaseYear.max && year > criteria.releaseYear.max) return false;
-      return true;
-    });
-    if (filtered.length < before) console.log(`   Release year filter: ${before} → ${filtered.length} songs`);
-    return filtered.slice(0, limit);
-  }
-
-  return discoveredSongs.slice(0, limit);
-}
-
-// Helper function to detect if userId is email-based (new format) or platform-specific (old format)
 function isEmailBasedUserId(userId) {
   // Email-based userIds contain @ symbol
   return userId && userId.includes('@');
@@ -5238,7 +5037,7 @@ Return ONLY valid JSON:
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
           // Build seed artist instruction for "similar to X" playlists
-          const seedArtistNames = hasRequestedArtists && !isExclusiveArtistMode
+          const seedArtistNames = hasRequestedArtists && !genreData.artistConstraints.exclusiveMode
             ? genreData.artistConstraints.requestedArtists
             : [];
           const seedArtistInstruction = seedArtistNames.length > 0
@@ -5336,22 +5135,23 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                 ? genreData.artistConstraints.requestedArtists
                 : genreData.artistConstraints.suggestedSeedArtists || [];
 
-              const supplementCriteria = {
-                seedArtists: seedArtistsForSupplement,
-                genre: genreData.primaryGenre,
-                targetMoods: null,   // relaxed — no mood filter
-                targetThemes: null,  // relaxed — no theme filter
-                popularity: null,    // relaxed — no popularity filter
-                releaseYear: (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) ? {
-                  min: genreData.era.yearRange.min,
-                  max: genreData.era.yearRange.max
-                } : null,
-                exclusiveMode: false,
-                confirmedArtistUuids: Object.keys(confirmedArtistUuids).length > 0 ? confirmedArtistUuids : null
+              // Build a relaxed query (genre + era only, no mood) using the new direct endpoint.
+              // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
+              const supplementGenreData = {
+                primaryGenre: genreData.primaryGenre,
+                atmosphere: [],          // relaxed — no mood filter
+                era: genreData.era,
+                trackConstraints: {},    // relaxed — no popularity filter
+                artistConstraints: {
+                  exclusiveMode: false,
+                  requestedArtists: [],
+                  suggestedSeedArtists: seedArtistsForSupplement
+                }
               };
+              const supplementQuery = buildSoundchartsQuery(supplementGenreData, false);
 
               // Request a larger pool so we have more candidates to match against
-              const supplementPool = await discoverSongsViaSoundCharts(supplementCriteria, Math.max(needed * 4, 60));
+              const supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
               const seenSupplementArtists = new Set();
@@ -5418,6 +5218,25 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
             }
           }
 
+          // Final dedup: remove sped-up/live/remix variants that slipped in across passes
+          const normTrackTitle = (t) => (t || '').toLowerCase()
+            .replace(/\s*[\(\[].*?[\)\]]/g, '')
+            .replace(/\s*-\s*(remix|edit|mix|version|live|acoustic|instrumental|sped.?up|slowed|karaoke|radio|extended|remaster).*$/i, '')
+            .replace(/\s+/g, ' ').trim();
+          // Normalize artist to primary only — strips "& Remixer" or "feat. X" so
+          // "KATSEYE & JULiA LEWiS" and "KATSEYE" both reduce to "katseye"
+          const normArtist = (a) => (a || '').toLowerCase()
+            .split(/\s*(?:feat\.|ft\.|featuring)\s*/i)[0]
+            .split(/\s*&\s*/)[0]
+            .trim();
+          const seenFinal = new Set();
+          selectedTracks = selectedTracks.filter(t => {
+            const key = `${normTrackTitle(t.name)}::${normArtist(t.artist)}`;
+            if (seenFinal.has(key)) return false;
+            seenFinal.add(key);
+            return true;
+          });
+
           res.json({
             playlistName: claudePlaylistName,
             description: claudePlaylistDescription,
@@ -5436,20 +5255,16 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
     if (needsFallback && process.env.SOUNDCHARTS_APP_ID) {
       console.log(`🔄 Fallback: Only ${allTracks.length} songs resolved. Expanding with SoundCharts top songs...`);
       try {
-        // Build criteria from genreData for top-songs discovery
-        const fallbackCriteria = {
-          seedArtists: [],
-          genre: genreData.primaryGenre,
-          targetMoods: null,
-          targetThemes: null,
-          popularity: null,
-          releaseYear: (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) ? {
-            min: genreData.era.yearRange.min,
-            max: genreData.era.yearRange.max
-          } : null,
-          exclusiveMode: false
+        // Build a genre+era query (no mood) using the new direct endpoint
+        const fallbackGenreData = {
+          primaryGenre: genreData.primaryGenre,
+          atmosphere: [],
+          era: genreData.era,
+          trackConstraints: {},
+          artistConstraints: { exclusiveMode: false, requestedArtists: [] }
         };
-        const topSongs = await discoverSongsViaSoundChartsTop(fallbackCriteria, songCount * 2);
+        const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false);
+        const topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
         for (const song of topSongs) {
           if (allTracks.length >= songCount * 3) break;

@@ -68,7 +68,9 @@ export default function Generate() {
   const [weeklyLimitReached, setWeeklyLimitReached] = useState(false);
 
   const [generatedPlaylist, setGeneratedPlaylist] = useState(initialPlaylist);
-  const [lockedTrackIds, setLockedTrackIds] = useState(new Set());
+  const [lockedTrackIds, setLockedTrackIds] = useState(
+    new Set(initialPlaylist?.lockedTrackIds || [])
+  );
 
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
@@ -199,6 +201,7 @@ export default function Generate() {
         requestedSongCount: songCount,
         chatMessages: [],
         excludedSongs: [],
+        lockedTrackIds: [...lockedTrackIds],
       };
 
       if (retryCount === 0 && isPaid()) {
@@ -355,6 +358,7 @@ export default function Generate() {
         draftId: generatedPlaylist.draftId,
         playlistId: generatedPlaylist.playlistId,
         chatMessages: finalChatMessages,
+        lockedTrackIds: [...lockedTrackIds],
       };
 
       setChatMessages(finalChatMessages);
@@ -396,7 +400,8 @@ export default function Generate() {
       setPhase('tracks');
       return;
     }
-    if (phase === 'tracks' || phase === 'loading') { setPhase('input'); return; }
+    if (phase === 'loading') { setPhase('input'); return; }
+    if (phase === 'tracks') { navigate('/', { state: { returnTab } }); return; }
     navigate('/', { state: { returnTab } });
   };
 
@@ -558,8 +563,8 @@ export default function Generate() {
                 value={chatInput}
                 onChange={e => { setChatInput(e.target.value); e.target.style.height = '0px'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                 onKeyPress={e => { if (e.key === 'Enter' && !e.shiftKey && chatInput.trim() && !chatLoading) { e.preventDefault(); handleRefine(); } }}
-                onFocus={() => { hidePageForKeyboard(); setKeyboardOpen(true); }}
-                onBlur={() => { showPage(); setKeyboardOpen(false); }}
+                onFocus={() => setKeyboardOpen(true)}
+                onBlur={() => setKeyboardOpen(false)}
                 placeholder="Tell me what to change..."
                 rows={1}
               />
