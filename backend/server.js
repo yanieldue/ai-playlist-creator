@@ -4874,25 +4874,25 @@ Return ONLY valid JSON:
 
               // Check if we already have this track
               if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
+                console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
                 continue;
               }
 
               // Skip tracks that are already in the playlist (for replace mode)
               if (excludeTrackIds.has(track.id)) {
-                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+                console.log(`Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (already in playlist)`);
                 continue;
               }
 
               // Skip tracks from song history (for manual refresh)
               if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
+                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
                 continue;
               }
 
               // Check for explicit content if needed
               if (!allowExplicit && track.explicit) {
-                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
+                console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
                 continue;
               }
 
@@ -4901,31 +4901,31 @@ Return ONLY valid JSON:
               if (track.album?.release_date && (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max)) {
                 const releaseYear = parseInt(track.album.release_date.substring(0, 4));
                 if (genreData.era.yearRange.min && releaseYear < genreData.era.yearRange.min) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists[0].name} (${releaseYear} < ${genreData.era.yearRange.min})`);
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${genreData.era.yearRange.min})`);
                   continue;
                 }
                 if (genreData.era.yearRange.max && releaseYear > genreData.era.yearRange.max) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists[0].name} (${releaseYear} > ${genreData.era.yearRange.max})`);
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${genreData.era.yearRange.max})`);
                   continue;
                 }
               }
 
               // Check song signature (artist + normalized track name)
               const normalizedName = normalizeTrackName(track.name);
-              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
+              const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
 
               if (seenSongSignatures.has(songSignature)) {
                 if (!isUniqueVariation(track.name)) {
-                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name} (same as "${seenSongSignatures.get(songSignature)}")`);
+                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist} (same as "${seenSongSignatures.get(songSignature)}")`);
                   continue;
                 }
               }
 
               // Skip known artists when newArtistsOnly mode is active
               if (newArtistsOnly && knownArtists.size > 0) {
-                const primaryArtist = (track.artists?.[0]?.name || '').toLowerCase();
+                const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
                 if (knownArtists.has(primaryArtist)) {
-                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists[0].name} (known artist)`);
+                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
                   continue;
                 }
               }
@@ -5018,26 +5018,25 @@ Return ONLY valid JSON:
 
               // Check if we already have this track
               if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.name}" by ${track.artists[0].name}`);
+                console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
                 continue;
               }
 
               // Skip tracks that are already in the playlist (for replace mode)
-              const trackUri = track.uri;
-              if (excludeTrackUris.includes(trackUri)) {
-                console.log(`Skipping "${track.name}" by ${track.artists[0].name} (already in playlist)`);
+              if (excludeTrackIds.has(track.id)) {
+                console.log(`Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (already in playlist)`);
                 continue;
               }
 
               // Skip tracks from song history (for manual refresh)
               if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists[0].name} (previously in playlist)`);
+                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
                 continue;
               }
 
               // Check for explicit content if needed
               if (!allowExplicit && track.explicit) {
-                console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
+                console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
                 continue;
               }
 
@@ -5057,11 +5056,11 @@ Return ONLY valid JSON:
 
               // Check song signature (artist + normalized track name)
               const normalizedName = normalizeTrackName(track.name);
-              const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
+              const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
 
               if (seenSongSignatures.has(songSignature)) {
                 if (!isUniqueVariation(track.name)) {
-                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists[0].name} (same as "${seenSongSignatures.get(songSignature)}")`);
+                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist} (same as "${seenSongSignatures.get(songSignature)}")`);
                   continue;
                 }
               }
@@ -5293,15 +5292,21 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                       );
                       // Validate artist match and skip garbage tracks
                       const expectedArtistNorm = (song.artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                      supplementTrack = (appleResults || []).find(t => {
-                        const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (!foundArtistNorm.includes(expectedArtistNorm.slice(0, 4)) &&
-                            !expectedArtistNorm.includes(foundArtistNorm.slice(0, 4))) return false;
+                      supplementTrack = null;
+                      for (const t of (appleResults || [])) {
+                        const foundArtistNorm = (t.artists?.[0]?.name || t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (foundArtistNorm !== expectedArtistNorm &&
+                            !foundArtistNorm.startsWith(expectedArtistNorm) &&
+                            !expectedArtistNorm.startsWith(foundArtistNorm)) {
+                          continue;
+                        }
                         // Skip remixes, mashups, slowed versions, karaoke, etc.
                         const nameLower = (t.name || '').toLowerCase();
-                        if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) return false;
-                        return !seenTrackIds.has(t.id);
-                      }) || null;
+                        if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
+                        if (seenTrackIds.has(t.id)) continue;
+                        supplementTrack = t;
+                        break;
+                      }
                     }
 
                     if (supplementTrack) {
@@ -5544,22 +5549,10 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
       (genreData.trackConstraints.duration.min !== null || genreData.trackConstraints.duration.max !== null) ||
       genreData.trackConstraints.excludeVersions.length > 0 ||
       genreData.artistConstraints.excludeFeatures ||
-      (genreData.culturalContext?.language?.prefer?.length > 0 || genreData.culturalContext?.language?.exclude?.length > 0) ||
       genreData.trackConstraints.albumDiversity.maxPerAlbum !== null;
 
     if (hasMetadataFilters && allTracks.length > 0) {
       const albumTrackCount = {};
-      const languageToMarkets = {
-        'english': ['US', 'GB', 'CA', 'AU', 'NZ', 'IE'],
-        'spanish': ['ES', 'MX', 'AR', 'CO', 'CL', 'PE'],
-        'french': ['FR', 'CA', 'BE', 'CH'],
-        'german': ['DE', 'AT', 'CH'],
-        'italian': ['IT'],
-        'portuguese': ['PT', 'BR'],
-        'japanese': ['JP'],
-        'korean': ['KR'],
-        'chinese': ['CN', 'TW', 'HK']
-      };
 
       tracksForSelection = allTracks.filter(track => {
         // Year range
@@ -5586,17 +5579,6 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
         if (genreData.artistConstraints.excludeFeatures) {
           const nameLower = track.name.toLowerCase();
           if (nameLower.includes('feat.') || nameLower.includes('ft.') || nameLower.includes(' with ') || nameLower.includes('featuring')) return false;
-        }
-
-        // Language (market-based)
-        const langPrefs = genreData.culturalContext?.language;
-        if (langPrefs?.prefer?.length > 0) {
-          const preferredMarkets = langPrefs.prefer.flatMap(l => languageToMarkets[l.toLowerCase()] || []);
-          if (preferredMarkets.length > 0 && track.available_markets && !preferredMarkets.some(m => track.available_markets.includes(m))) return false;
-        }
-        if (langPrefs?.exclude?.length > 0) {
-          const excludedMarkets = langPrefs.exclude.flatMap(l => languageToMarkets[l.toLowerCase()] || []);
-          if (excludedMarkets.length > 0 && track.available_markets && track.available_markets.every(m => excludedMarkets.includes(m))) return false;
         }
 
         // Album diversity
