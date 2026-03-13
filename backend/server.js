@@ -1019,41 +1019,12 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
     if (scGenre) filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
   }
 
-  // Mood filter from atmosphere
-  const moodMap = {
-    'sad': ['Melancholic', 'Sad'], 'melancholic': ['Melancholic', 'Sad'],
-    'happy': ['Happy', 'Joyful', 'Euphoric'], 'upbeat': ['Happy', 'Energetic'],
-    'chill': ['Calm', 'Peaceful'], 'relaxed': ['Calm', 'Peaceful'],
-    'energetic': ['Energetic'], 'hype': ['Energetic', 'Euphoric'],
-    'romantic': ['Romantic', 'Sensual'], 'party': ['Euphoric', 'Energetic'],
-    'dark': ['Dark'], 'motivational': ['Empowering'], 'nostalgic': ['Nostalgic'],
-    'introspective': ['Introspective'], 'aggressive': ['Aggressive'],
-  };
-  const targetMoods = new Set();
-  for (const atmos of (genreData.atmosphere || [])) {
-    const a = atmos.toLowerCase();
-    for (const [key, moods] of Object.entries(moodMap)) {
-      if (a.includes(key)) moods.forEach(m => targetMoods.add(m));
-    }
-  }
-  if (targetMoods.size > 0) {
-    filters.push({ type: 'moods', data: { values: [...targetMoods], operator: 'in' } });
-  }
-
   // Release year filter
   if (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) {
     const rdf = { type: 'releaseDate', data: {} };
     if (genreData.era.yearRange.min) rdf.data.min = `${genreData.era.yearRange.min}-01-01`;
     if (genreData.era.yearRange.max) rdf.data.max = `${genreData.era.yearRange.max}-12-31`;
     filters.push(rdf);
-  }
-
-  // Career stage filter for popularity preference
-  const popPref = genreData.trackConstraints?.popularity?.preference;
-  if (popPref === 'underground' || newArtistsOnly) {
-    filters.push({ type: 'artistCareerStages', data: { values: ['mid_level', 'long_tail'], operator: 'in' } });
-  } else if (popPref === 'mainstream') {
-    filters.push({ type: 'artistCareerStages', data: { values: ['superstar', 'mainstream'], operator: 'in' } });
   }
 
   // Include seed artists so executeSoundChartsStrategy can fall back to artist-based
