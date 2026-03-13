@@ -5012,7 +5012,7 @@ Return ONLY valid JSON:
                                         (genreData.trackConstraints.popularity.max !== null &&
                                          genreData.trackConstraints.popularity.max !== undefined &&
                                          genreData.trackConstraints.popularity.max <= 50);
-        if (genreData.primaryGenre || hasAvoidances || wantsUndergroundFilter || hasRequestedArtists) {
+        if (hasAvoidances || wantsUndergroundFilter || hasRequestedArtists) {
           console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
           // Build seed artist instruction for "similar to X" playlists
@@ -5460,110 +5460,6 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
       if (tracksForSelection.length === 0) tracksForSelection = allTracks;
     }
 
-    // Step 2.75: Apply strict genre validation if a primary genre is specified
-    // This is the same validation used in auto-update to prevent off-genre tracks
-    let genreValidatedTracks = tracksForSelection;
-    if (genreData.primaryGenre && genreData.primaryGenre !== 'not specified' && tracksForSelection.length > 0) {
-      try {
-        console.log(`Applying strict genre validation for "${genreData.primaryGenre}" genre...`);
-
-        // Build track list with genre information for validation
-        const trackListForValidation = tracksForSelection.map(t => {
-          const artistGenres = t.genres && t.genres.length > 0 ? ` [API genres: ${t.genres.join(', ')}]` : '';
-          return `${t.name} by ${t.artist || 'Unknown Artist'}${artistGenres}`;
-        }).join('\n');
-
-        const genreValidationResponse = await anthropic.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          messages: [{
-            role: 'user',
-            content: `You are a music genre expert. Filter out tracks that clearly do not belong in a "${genreData.primaryGenre}" playlist. When in doubt, keep the track.
-
-CRITICAL: The user's playlist description is: "${prompt}"
-
-IMPORTANT DISTINCTION:
-- The playlist DESCRIPTION (like "focus while working" or "chill vibes") is about the MOOD/USE CASE
-- The GENRE requirement ("${genreData.primaryGenre}") is about the MUSICAL STYLE
-- DO NOT reject songs based on title keywords that match the description!
-- Example: For an R&B playlist with description "music to focus while working", only reject "Focus" by Ariana Grande if it is clearly not R&B
-
-YOUR KNOWLEDGE BASE:
-- Use your comprehensive training data about artists, genres, musical styles, and song classifications
-- API genre tags (when provided) are hints, but NOT definitive - use your own knowledge as primary source
-- Consider the artist's full discography, typical style, and the specific song's characteristics
-- Account for artists who cross genres - evaluate each SONG individually, not just the artist
-
-Below is a list of tracks with API genre tags when available. Reject only obvious genre mismatches — it is worse to have too few tracks than to include a borderline case.
-
-RULES FOR "${genreData.primaryGenre}" PLAYLISTS:
-- If the genre is Pop: ACCEPT dance-pop, indie pop, electropop, pop-R&B, synth-pop, and mainstream crossover artists. Only REJECT tracks that are clearly classical, jazz, heavy metal, or pure hip-hop with no pop elements.
-- If the genre is R&B: ACCEPT R&B-pop, neo-soul, and soul. REJECT only pure jazz, smooth jazz, and classical.
-- If the genre is Hip-Hop: ACCEPT rap-pop and hip-hop-R&B crossovers. REJECT classical, jazz, and rock with no hip-hop elements.
-- If the genre is Rock: ACCEPT pop-rock, indie rock, and alternative rock. REJECT classical, jazz, and pure pop with no rock elements.
-- REJECT study music, ambient focus instrumentals, and background music ONLY if the requested genre is not ambient/instrumental.
-- DO NOT over-reject — keep borderline tracks; the AI selection step will refine further.
-
-Examples of REJECTIONS for R&B playlists (only truly off-genre):
-- "Soulful" by Cal Harris Jr. (this is JAZZ, not R&B)
-- Any track that is clearly classical or smooth jazz with no R&B elements
-- "Pieces of Me" by Smooth Jazz All Stars (this is SMOOTH JAZZ, not R&B)
-
-Tracks to evaluate:
-${trackListForValidation}
-
-Respond with valid JSON:
-{
-  "validTracks": ["track 1 by artist 1", "track 2 by artist 2", ...],
-  "rejectedCount": <number of tracks rejected>
-}
-
-Be STRICT. Only include tracks that are genuinely, unambiguously "${genreData.primaryGenre}" GENRE. Use your extensive music knowledge to make accurate determinations. Ignore title-based matches to the mood/description. DO NOT include any text outside the JSON.`
-          }]
-        });
-
-        try {
-          let validationText = genreValidationResponse.content[0].text.trim();
-          // Handle markdown code blocks
-          if (validationText.startsWith('```json')) {
-            validationText = validationText.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-          } else if (validationText.startsWith('```')) {
-            validationText = validationText.replace(/^```\n?/, '').replace(/\n?```$/, '');
-          }
-          const validationData = JSON.parse(validationText);
-          const validTrackNames = new Set(validationData.validTracks || []);
-
-          // Filter tracks based on validation
-          genreValidatedTracks = tracksForSelection.filter(track => {
-            const trackString = `${track.name} by ${track.artist}`;
-            return validTrackNames.has(trackString);
-          });
-
-          console.log(`Genre validation: ${tracksForSelection.length} tracks -> ${genreValidatedTracks.length} valid ${genreData.primaryGenre} tracks (rejected ${validationData.rejectedCount})`);
-
-          if (genreValidatedTracks.length === 0) {
-            console.warn('Warning: No tracks passed genre validation, falling back to original tracks');
-            genreValidatedTracks = tracksForSelection;
-          } else if (genreValidatedTracks.length < songCount) {
-            // Not enough validated tracks — keep all validated ones at the front,
-            // then append unvalidated tracks to fill the gap (selection AI will pick best).
-            const validatedIds = new Set(genreValidatedTracks.map(t => t.id));
-            const unvalidatedTracks = tracksForSelection.filter(t => !validatedIds.has(t.id));
-            console.warn(`Warning: Genre validation left only ${genreValidatedTracks.length} tracks (needed ${songCount}), supplementing with ${unvalidatedTracks.length} unvalidated tracks`);
-            genreValidatedTracks = [...genreValidatedTracks, ...unvalidatedTracks];
-          }
-        } catch (parseError) {
-          console.log('Could not parse genre validation response:', parseError.message);
-          genreValidatedTracks = tracksForSelection; // Fall back to all tracks
-        }
-      } catch (validationError) {
-        console.log('Genre validation failed:', validationError.message);
-        genreValidatedTracks = tracksForSelection; // Fall back to all tracks
-      }
-
-      // Update tracksForSelection to use genre-validated tracks
-      tracksForSelection = genreValidatedTracks;
-    }
 
     // Step 3: Use Claude to select the best songs from the results
     // Detect if this is a single-artist or multi-artist playlist (specific artists mentioned)
