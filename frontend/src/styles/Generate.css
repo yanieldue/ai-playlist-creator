@@ -518,12 +518,3 @@
   color: #1c1c1e;
 }
 
-/* Desktop: constrain width so chat bubbles don't stretch edge-to-edge */
-@media (min-width: 768px) {
-  .generate-page {
-    max-width: 640px;
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
-  }
-}
