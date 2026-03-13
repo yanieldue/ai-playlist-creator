@@ -1094,13 +1094,19 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       );
       const items = response.data?.items || [];
       console.log(`✓ SoundCharts returned ${items.length} songs`);
-      return items.map(item => ({
-        name: item.song?.name,
-        artistName: item.song?.creditName || 'Unknown',
-        isrc: item.song?.isrc?.value || item.song?.isrc || null,
-        uuid: item.song?.uuid,
-        source: strategy
-      }));
+      const mappedItems = items
+        .filter(item => item.song?.name)  // drop items with no song name
+        .map(item => ({
+          name: item.song.name,
+          artistName: item.song.creditName || 'Unknown',
+          isrc: item.song?.isrc?.value || item.song?.isrc || null,
+          uuid: item.song?.uuid,
+          source: strategy
+        }));
+      if (mappedItems.length < items.length) {
+        console.log(`⚠️  Dropped ${items.length - mappedItems.length} SoundCharts items with missing song name`);
+      }
+      return mappedItems;
     } catch (err) {
       if (err.response?.status === 403) {
         console.log('⚠️  SoundCharts top/songs: 403 — falling back to artist-based discovery');
@@ -1112,7 +1118,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
     // Artist-based fallback (used when top/songs is unavailable)
     const seeds = query.seedArtists || [];
-    if (seeds.length === 0) return [];
+    if (seeds.length === 0) {
+      console.log('⚠️  top/songs fallback: no seed artists provided, cannot fall back to artist_songs — returning empty');
+      return [];
+    }
     let songs = await executeSoundChartsStrategy(
       { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
       fetchCount,
@@ -4677,12 +4686,15 @@ Respond ONLY with valid JSON:
     }
 
     // Map to recommendedTracks (ISRC passed through for exact Spotify lookup)
-    const recommendedTracks = soundChartsDiscoveredSongs.map(scSong => ({
-      track: scSong.name,
-      artist: scSong.artistName,
-      isrc: scSong.isrc || null,
-      source: 'soundcharts'
-    }));
+    // Filter out any songs with missing names to prevent malformed Spotify searches
+    const recommendedTracks = soundChartsDiscoveredSongs
+      .filter(scSong => scSong.name && scSong.name.trim())
+      .map(scSong => ({
+        track: scSong.name,
+        artist: scSong.artistName,
+        isrc: scSong.isrc || null,
+        source: 'soundcharts'
+      }));
 
     console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts`);
 
@@ -5000,6 +5012,9 @@ Return ONLY valid JSON:
       }
 
       console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} SoundCharts-discovered songs`);
+      if (newArtistsOnly && allTracks.length === 0 && recommendedTracks.length > 0) {
+        console.warn(`⚠️  [NEW-ARTISTS] All ${recommendedTracks.length} SoundCharts songs were from known artists — no new-artist results found. Fallback will run without the newArtistsOnly filter.`);
+      }
 
       // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
       if (allTracks.length >= 5) {
@@ -5136,6 +5151,7 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
               const seenSupplementArtists = new Set();
               for (const song of supplementPool) {
                 if (selectedTracks.length >= songCount) break;
+                if (!song.name || !song.name.trim()) continue; // skip songs with no name
                 const artistLower = (song.artistName || '').toLowerCase();
                 if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
                 try {
@@ -5247,6 +5263,7 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
         for (const song of topSongs) {
           if (allTracks.length >= songCount * 3) break;
+          if (!song.name || !song.name.trim()) continue; // skip songs with no name
           try {
             const searchQuery = song.isrc
               ? `isrc:${song.isrc}`
