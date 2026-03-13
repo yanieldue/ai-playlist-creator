@@ -1021,7 +1021,7 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
 
   // Release year filter
   if (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) {
-    const rdf = { type: 'releaseDate', data: {} };
+    const rdf = { type: 'releaseDate', data: { operator: 'in' } };
     if (genreData.era.yearRange.min) rdf.data.min = `${genreData.era.yearRange.min}-01-01`;
     if (genreData.era.yearRange.max) rdf.data.max = `${genreData.era.yearRange.max}-12-31`;
     filters.push(rdf);
