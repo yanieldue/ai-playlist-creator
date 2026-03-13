@@ -317,9 +317,13 @@ export default function Generate() {
       const lockedContext = lockedTracks.length > 0
         ? `\n\nKeep these songs exactly as-is: ${lockedTracks.map(t => `"${t.name}" by ${t.artist}`).join(', ')}.`
         : '';
+      const playlistArtists = [...new Set(allTracks.map(t => t.artist).filter(Boolean))].slice(0, 10);
+      const artistContext = playlistArtists.length > 0
+        ? `\n\nKey artists in this playlist: ${playlistArtists.join(', ')}.`
+        : '';
       const refinementPrompt = previousRefinements
-        ? `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
-        : `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}\n\nRefinement: ${userMessage}`;
+        ? `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}${artistContext}\n\nPrevious refinements: ${previousRefinements}\n\nNew refinement: ${userMessage}`
+        : `Original request: "${originalPromptToUse}"${descriptionContext}${lockedContext}${artistContext}\n\nRefinement: ${userMessage}`;
 
       const totalSongCount = generatedPlaylist.requestedSongCount || 30;
       const newSongCount = Math.max(1, totalSongCount - lockedTracks.length);

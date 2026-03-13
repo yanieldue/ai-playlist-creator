@@ -1847,10 +1847,15 @@ const PlaylistGenerator = () => {
       // Get excluded song URIs to avoid re-adding them
       const excludedSongUris = (generatedPlaylist.excludedSongs || []).map(song => song.uri);
 
+      const existingArtists = [...new Set((generatedPlaylist.tracks || []).map(t => t.artist).filter(Boolean))].slice(0, 10);
+      const artistContext = existingArtists.length > 0
+        ? ` Key artists in this playlist: ${existingArtists.join(', ')}.`
+        : '';
+
       // Pass playlistId so backend can use original genre data with SoundCharts
       const playlistIdForAddMore = generatedPlaylist.playlistId || generatedPlaylist.draftId;
       const result = await playlistService.generatePlaylist(
-        `Based on this theme: "${promptToUse}".${descriptionContext}${refinementsContext} Add 10 more similar songs that match this exact vibe and description.`,
+        `Based on this theme: "${promptToUse}".${descriptionContext}${refinementsContext}${artistContext} Add 10 more similar songs that match this exact vibe and description.`,
         userId,
         activePlatform || 'spotify',
         allowExplicit,
