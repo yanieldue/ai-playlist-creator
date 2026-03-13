@@ -1094,8 +1094,6 @@ const SOUNDCHARTS_MOOD_MAP = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Cached flag: once we know top/songs returns 403 on this plan, skip the call.
-let topSongsEndpoint403 = false;
-
 async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
@@ -1105,44 +1103,39 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
   // ── top_songs / trending ─────────────────────────────────────────────────
   if (strategy === 'top_songs' || strategy === 'trending') {
-    if (topSongsEndpoint403) {
-      console.log('⏭️  top/songs not available on plan — using artist-based discovery');
-    } else {
-      const sort = soundchartsSort || {
-        type: 'metric', platform: 'spotify', metricType: 'streams',
-        period: strategy === 'trending' ? 'week' : 'month',
-        sortBy: 'total', order: 'desc'
-      };
-      const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
-      console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
-      try {
-        await throttleSoundCharts();
-        const response = await axios.post(
-          'https://customer.api.soundcharts.com/api/v2/top/songs',
-          body,
-          {
-            headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-            params: { offset: 0, limit: Math.min(fetchCount, 200) },
-            timeout: 15000
-          }
-        );
-        const items = response.data?.items || [];
-        console.log(`✓ SoundCharts returned ${items.length} songs`);
-        return items.map(song => ({
-          name: song.name,
-          artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
-          isrc: song.isrc?.value || song.isrc || null,
-          uuid: song.uuid,
-          source: strategy
-        }));
-      } catch (err) {
-        if (err.response?.status === 403) {
-          console.log('⚠️  SoundCharts top/songs: 403 — plan does not include this endpoint, switching to artist-based');
-          topSongsEndpoint403 = true;
-        } else {
-          console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
-          return [];
+    const sort = soundchartsSort || {
+      type: 'metric', platform: 'spotify', metricType: 'streams',
+      period: strategy === 'trending' ? 'week' : 'month',
+      sortBy: 'total', order: 'desc'
+    };
+    const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
+    console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
+    try {
+      await throttleSoundCharts();
+      const response = await axios.post(
+        'https://customer.api.soundcharts.com/api/v2/top/songs',
+        body,
+        {
+          headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+          params: { offset: 0, limit: Math.min(fetchCount, 200) },
+          timeout: 15000
         }
+      );
+      const items = response.data?.items || [];
+      console.log(`✓ SoundCharts returned ${items.length} songs`);
+      return items.map(song => ({
+        name: song.name,
+        artistName: song.artists?.[0]?.name || song.creditName || 'Unknown',
+        isrc: song.isrc?.value || song.isrc || null,
+        uuid: song.uuid,
+        source: strategy
+      }));
+    } catch (err) {
+      if (err.response?.status === 403) {
+        console.log('⚠️  SoundCharts top/songs: 403 — falling back to artist-based discovery');
+      } else {
+        console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
+        return [];
       }
     }
 
