@@ -4853,6 +4853,20 @@ Return ONLY valid JSON:
                 continue;
               }
 
+              // Enforce release year constraint using Spotify's album.release_date
+              // (SoundCharts releaseDate filter is unreliable — it ranks by streams, not release year)
+              if (track.album?.release_date && (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max)) {
+                const releaseYear = parseInt(track.album.release_date.substring(0, 4));
+                if (genreData.era.yearRange.min && releaseYear < genreData.era.yearRange.min) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists[0].name} (${releaseYear} < ${genreData.era.yearRange.min})`);
+                  continue;
+                }
+                if (genreData.era.yearRange.max && releaseYear > genreData.era.yearRange.max) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists[0].name} (${releaseYear} > ${genreData.era.yearRange.max})`);
+                  continue;
+                }
+              }
+
               // Check song signature (artist + normalized track name)
               const normalizedName = normalizeTrackName(track.name);
               const songSignature = `${track.artists[0].name.toLowerCase()}:${normalizedName}`;
@@ -4964,6 +4978,20 @@ Return ONLY valid JSON:
               if (!allowExplicit && track.explicit) {
                 console.log(`Skipping explicit track: "${track.name}" by ${track.artists[0].name}`);
                 continue;
+              }
+
+              // Enforce release year constraint using Apple Music's releaseDate
+              if ((track.releaseDate || track.album?.release_date) && (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max)) {
+                const dateStr = track.releaseDate || track.album?.release_date;
+                const releaseYear = parseInt(dateStr.substring(0, 4));
+                if (genreData.era.yearRange.min && releaseYear < genreData.era.yearRange.min) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${genreData.era.yearRange.min})`);
+                  continue;
+                }
+                if (genreData.era.yearRange.max && releaseYear > genreData.era.yearRange.max) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${genreData.era.yearRange.max})`);
+                  continue;
+                }
               }
 
               // Check song signature (artist + normalized track name)
