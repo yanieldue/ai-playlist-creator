@@ -169,6 +169,7 @@
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.5;
+  width: fit-content;
   max-width: 90%;
   margin-bottom: 12px;
 }
@@ -515,4 +516,14 @@
 :root.dark-mode .generate-toast {
   background: #f2f2f7;
   color: #1c1c1e;
+}
+
+/* Desktop: constrain width so chat bubbles don't stretch edge-to-edge */
+@media (min-width: 768px) {
+  .generate-page {
+    max-width: 640px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
 }
