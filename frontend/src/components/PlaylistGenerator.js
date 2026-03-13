@@ -598,18 +598,7 @@ const PlaylistGenerator = () => {
 
   const fetchDrafts = async () => {
     try {
-      // Use the same platformUserId logic as saveDraft so the IDs match
-      let fetchUserId = userId;
-      if (activePlatform === 'spotify' && spotifyUserId) {
-        fetchUserId = spotifyUserId;
-      } else if (activePlatform === 'apple' && appleMusicUserId) {
-        fetchUserId = appleMusicUserId;
-      } else if (spotifyUserId) {
-        fetchUserId = spotifyUserId;
-      } else if (appleMusicUserId) {
-        fetchUserId = appleMusicUserId;
-      }
-      const response = await playlistService.getDrafts(fetchUserId);
+      const response = await playlistService.getDrafts(userId);
       if (response.drafts && response.drafts.length > 0) {
         setDraftPlaylists(response.drafts);
         _homeCache.draftPlaylists = response.drafts;
@@ -1087,20 +1076,8 @@ const PlaylistGenerator = () => {
       // Auto-save draft to database for cross-device sync (paid users only, only once per generation)
       if (retryCount === 0 && isPaid()) {
         try {
-          // Determine which platform userId to use
-          let platformUserId = userId;
-          if (activePlatform === 'spotify' && spotifyUserId) {
-            platformUserId = spotifyUserId;
-          } else if (activePlatform === 'apple' && appleMusicUserId) {
-            platformUserId = appleMusicUserId;
-          } else if (spotifyUserId) {
-            platformUserId = spotifyUserId;
-          } else if (appleMusicUserId) {
-            platformUserId = appleMusicUserId;
-          }
-
-          console.log('Saving draft to database for userId:', platformUserId, 'activePlatform:', activePlatform);
-          const draftResponse = await playlistService.saveDraft(platformUserId, playlistWithPrompt);
+          console.log('Saving draft to database for userId:', userId, 'activePlatform:', activePlatform);
+          const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
           // Store the draftId so we can delete it later
           playlistWithPrompt.draftId = draftResponse.draftId;
           console.log('Draft saved successfully with ID:', draftResponse.draftId);
@@ -2113,19 +2090,8 @@ const PlaylistGenerator = () => {
 
   const handleDiscardDraft = async (draftId) => {
     try {
-      // Use platformUserId to match the ID used when saving
-      let deleteUserId = userId;
-      if (activePlatform === 'spotify' && spotifyUserId) {
-        deleteUserId = spotifyUserId;
-      } else if (activePlatform === 'apple' && appleMusicUserId) {
-        deleteUserId = appleMusicUserId;
-      } else if (spotifyUserId) {
-        deleteUserId = spotifyUserId;
-      } else if (appleMusicUserId) {
-        deleteUserId = appleMusicUserId;
-      }
       // Delete from database
-      await playlistService.deleteDraft(deleteUserId, draftId);
+      await playlistService.deleteDraft(userId, draftId);
 
       // Update local state - use playlistId if available, otherwise id
       const updatedDrafts = draftPlaylists.filter(d => (d.playlistId || d.id) !== draftId);

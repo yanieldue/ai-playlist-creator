@@ -206,11 +206,7 @@ export default function Generate() {
 
       if (retryCount === 0 && isPaid()) {
         try {
-          const platformUserId =
-            localStorage.getItem('spotifyUserId') ||
-            localStorage.getItem('appleMusicUserId') ||
-            userId;
-          const draft = await playlistService.saveDraft(platformUserId, playlist);
+          const draft = await playlistService.saveDraft(userId, playlist);
           playlist.draftId = draft.draftId;
         } catch (_) {}
       }
@@ -275,11 +271,7 @@ export default function Generate() {
 
       // Persist to draft immediately so the lock survives navigation
       if (generatedPlaylist?.draftId && isPaid()) {
-        const platformUserId =
-          localStorage.getItem('spotifyUserId') ||
-          localStorage.getItem('appleMusicUserId') ||
-          userId;
-        playlistService.saveDraft(platformUserId, {
+        playlistService.saveDraft(userId, {
           ...generatedPlaylist,
           lockedTrackIds: [...next],
         }).catch(() => {});
@@ -385,11 +377,7 @@ export default function Generate() {
 
       // Persist chat history back to the draft so it survives navigation
       if (updated.draftId && isPaid()) {
-        const platformUserId =
-          localStorage.getItem('spotifyUserId') ||
-          localStorage.getItem('appleMusicUserId') ||
-          userId;
-        playlistService.saveDraft(platformUserId, updated).catch(() => {});
+        playlistService.saveDraft(userId, updated).catch(() => {});
       }
     } catch (err) {
       clearInterval(refineIntervalRef.current);
