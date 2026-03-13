@@ -7911,15 +7911,18 @@ async function processPlaylistUpdate(userId, playlist) {
       console.log(`[AUTO-UPDATE] Avoiding songs similar to ${dislikedSongs.length} disliked song(s)`);
     }
 
+    // Always include tracks + artists so Claude can identify seed artists for discovery
     if (playlist.tracks.length > 0) {
-      prompt = `${prompt}. Reference tracks: ${playlist.tracks.slice(0, 5).map(t => t.name).join(', ')}`;
-    }
+      const refTracks = playlist.tracks.slice(0, 10)
+        .map(t => `"${t.name}" by ${t.artist || t.artists?.[0]?.name || 'Unknown'}`).join(', ');
+      prompt = `${prompt}. Reference tracks: ${refTracks}`;
 
-    if (!playlist.originalPrompt && playlist.tracks.length > 0) {
-      const trackArtists = [...new Set(playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean))].slice(0, 8);
-      if (trackArtists.length > 0) {
-        prompt += `. Key artists in this playlist: ${trackArtists.join(', ')}`;
-        console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${trackArtists.join(', ')}`);
+      const allArtists = [...new Set(playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean))];
+      if (allArtists.length > 0) {
+        prompt += `. Key artists in this playlist: ${allArtists.slice(0, 10).join(', ')}`;
+        if (!playlist.originalPrompt) {
+          console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${allArtists.join(', ')}`);
+        }
       }
     }
 
@@ -8032,7 +8035,8 @@ async function processPlaylistUpdate(userId, playlist) {
           if (playlist.updateMode === 'replace') {
             playlist.tracks = newTracksForRecord;
             playlist.trackUris = newTrackUris;
-            playlist.trackCount = newTrackUris.length;
+            // Preserve the requested count so future updates don't shrink if this run was short
+            playlist.trackCount = playlist.requestedSongCount || Math.max(playlist.trackCount || 0, newTrackUris.length);
           } else {
             if (!playlist.tracks) playlist.tracks = [];
             if (!playlist.trackUris) playlist.trackUris = [];
