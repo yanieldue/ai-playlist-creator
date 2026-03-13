@@ -629,6 +629,111 @@ class AppleMusicService {
   }
 
   /**
+   * Get user's saved library songs and return artist names
+   * @param {string} userToken - User music token
+   * @param {number} limit - Number of songs to fetch (default: 200)
+   * @returns {Array<string>} Array of artist names
+   */
+  async getLibrarySongs(userToken, limit = 200) {
+    try {
+      const data = await this.request('/me/library/songs', userToken, {
+        params: { limit }
+      });
+
+      if (!data.data) {
+        return [];
+      }
+
+      return data.data.map(track => track.attributes.artistName).filter(Boolean);
+    } catch (error) {
+      console.error('Error fetching library songs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Replace all tracks in a playlist (PUT replaces the full list)
+   * @param {string} userToken - User music token
+   * @param {string} playlistId - Library playlist ID
+   * @param {Array<string>} trackIds - Array of track URIs or IDs
+   */
+  async replacePlaylistTracks(userToken, playlistId, trackIds) {
+    // Convert URIs to IDs if needed (strip apple:track: prefix)
+    const ids = trackIds.map(track => {
+      if (typeof track === 'string' && track.startsWith('apple:track:')) {
+        return track.replace('apple:track:', '');
+      }
+      return track;
+    });
+
+    await this.request(
+      `/me/library/playlists/${playlistId}/tracks`,
+      userToken,
+      {
+        method: 'PUT',
+        data: {
+          data: ids.map(id => ({
+            id,
+            type: 'library-songs'
+          }))
+        }
+      }
+    );
+
+    console.log(`✓ Replaced playlist ${playlistId} with ${ids.length} tracks`);
+    return { success: true };
+  }
+
+  /**
+   * Look up a track by ISRC in the Apple Music catalog
+   * @param {string} isrc - ISRC code
+   * @param {string} storefront - Country code (e.g., 'us')
+   * @returns {Object|null} Normalized track object or null if not found
+   */
+  async lookupByIsrc(isrc, storefront) {
+    try {
+      const data = await this.request(`/catalog/${storefront}/songs`, null, {
+        params: {
+          'filter[isrc]': isrc
+        }
+      });
+
+      if (!data.data || data.data.length === 0) {
+        return null;
+      }
+
+      const track = data.data[0];
+      return {
+        id: track.id,
+        name: track.attributes.name,
+        uri: `apple:track:${track.id}`,
+        artists: [{
+          name: track.attributes.artistName
+        }],
+        album: {
+          name: track.attributes.albumName,
+          id: track.relationships?.albums?.data?.[0]?.id || null,
+          images: track.attributes.artwork ? [{
+            url: track.attributes.artwork.url
+              .replace('{w}', '640')
+              .replace('{h}', '640')
+          }] : []
+        },
+        duration_ms: track.attributes.durationInMillis,
+        preview_url: track.attributes.previews?.[0]?.url || null,
+        explicit: track.attributes.contentRating === 'explicit',
+        platform: 'apple',
+        isrc: track.attributes.isrc,
+        releaseDate: track.attributes.releaseDate || null,
+        url: track.attributes.url || `https://music.apple.com/us/song/${track.id}`
+      };
+    } catch (error) {
+      console.error(`Error looking up ISRC ${isrc}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Get artist recommendations based on library analysis
    * Finds similar artists in the catalog that user doesn't already have
    * @param {string} userToken - User music token

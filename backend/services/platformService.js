@@ -319,6 +319,27 @@ class PlatformService {
   }
 
   /**
+   * Replace all tracks in a playlist (Apple Music only — PUT replaces the full list)
+   * For Spotify, use removeTracksFromPlaylist instead.
+   * @param {string} userId - User ID
+   * @param {string} playlistId - Playlist ID
+   * @param {Array<string>} trackUris - Array of track URIs that should remain
+   * @param {Object} tokens - User's tokens
+   */
+  async replacePlaylistTracks(userId, playlistId, trackUris, tokens) {
+    const platform = this.getPlatform(userId);
+
+    if (platform === 'spotify') {
+      throw new Error('replacePlaylistTracks is not supported for Spotify. Use removeTracksFromPlaylist instead.');
+    }
+
+    if (platform === 'apple') {
+      const appleMusicApi = this.getAppleMusicApi(tokens);
+      return await appleMusicApi.replacePlaylistTracks(tokens.access_token, playlistId, trackUris);
+    }
+  }
+
+  /**
    * Remove tracks from a playlist
    * @param {string} userId - User ID
    * @param {string} playlistId - Playlist ID

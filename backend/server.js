@@ -4160,6 +4160,49 @@ app.post('/api/generate-playlist', async (req, res) => {
         console.error('Error fetching listening history:', error);
         // Continue anyway - we'll just not filter
       }
+    } else if (newArtistsOnly && platform === 'apple') {
+      try {
+        console.log('Fetching Apple Music library to filter out known artists...');
+
+        // 1. Load artist history from our database (builds over time, unlimited)
+        try {
+          const artistHistory = await db.getArtistHistory(platformUserId);
+          artistHistory.forEach(artist => {
+            knownArtists.add(artist.artistName.toLowerCase());
+          });
+          console.log(`Loaded ${artistHistory.length} artists from database history`);
+        } catch (dbError) {
+          console.log('Could not load artist history from database:', dbError.message);
+        }
+
+        // 2. Get artists from library playlists (most reliable signal for Apple Music)
+        try {
+          const appleMusicDevToken = generateAppleMusicToken();
+          if (appleMusicDevToken) {
+            const appleMusicApi = new AppleMusicService(appleMusicDevToken);
+
+            const topLibraryArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token);
+            topLibraryArtists.forEach(artist => {
+              knownArtists.add(artist.name.toLowerCase());
+            });
+            console.log(`Loaded ${topLibraryArtists.length} artists from Apple Music library playlists`);
+
+            // 3. Get artists from saved library songs
+            const librarySongArtists = await appleMusicApi.getLibrarySongs(tokens.access_token, 200);
+            librarySongArtists.forEach(artistName => {
+              if (artistName) knownArtists.add(artistName.toLowerCase());
+            });
+            console.log(`Loaded artists from ${librarySongArtists.length} Apple Music library songs`);
+          }
+        } catch (appleErr) {
+          console.log('Could not load Apple Music library artists:', appleErr.message);
+        }
+
+        console.log(`Found ${knownArtists.size} total known artists to filter out (Apple Music)`);
+      } catch (error) {
+        console.error('Error fetching Apple Music listening history:', error);
+        // Continue anyway - we'll just not filter
+      }
     }
 
     console.log('Generating playlist for prompt:', prompt);
@@ -4915,44 +4958,62 @@ Return ONLY valid JSON:
         // For Apple Music users, search Apple Music for recommended songs
         const platformService = new PlatformService();
         const storefront = tokens.storefront || 'us';
+        const appleMusicDevTokenForSearch = generateAppleMusicToken();
+        const appleMusicApiForSearch = appleMusicDevTokenForSearch ? new AppleMusicService(appleMusicDevTokenForSearch) : null;
 
         for (const recommendedSong of recommendedTracks) {
           try {
-            const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
-            const tracks = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
+            let matchedTrack = null;
 
-            if (tracks.length > 0) {
-              // Find a track that matches the requested artist (not just any track with similar name)
-              const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+            // Try ISRC lookup first for exact match
+            if (recommendedSong.isrc && appleMusicApiForSearch) {
+              try {
+                const isrcResult = await appleMusicApiForSearch.lookupByIsrc(recommendedSong.isrc, storefront);
+                if (isrcResult) {
+                  matchedTrack = isrcResult;
+                  console.log(`✓ ISRC match for "${recommendedSong.track}" by ${recommendedSong.artist}`);
+                }
+              } catch (isrcErr) {
+                console.log(`ISRC lookup failed for ${recommendedSong.isrc}, falling back to text search`);
+              }
+            }
 
-              let matchedTrack = null;
-              for (const track of tracks) {
-                const foundArtistNorm = (track.artists?.[0]?.name || track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            // Fall back to text search if ISRC lookup returned nothing
+            if (!matchedTrack) {
+              const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
+              const tracks = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
 
-                // For short artist names (< 6 chars normalized), require exact match to avoid false positives
-                // e.g., "dante" should not match "dante1981" or "dantesco"
-                if (requestedArtistNorm.length < 6) {
-                  if (foundArtistNorm === requestedArtistNorm) {
-                    matchedTrack = track;
-                    break;
-                  }
-                } else {
-                  // For longer names, allow partial matches but be careful
-                  // Only match if one is a substring at a word boundary (start/end)
-                  if (foundArtistNorm === requestedArtistNorm ||
-                      foundArtistNorm.startsWith(requestedArtistNorm) ||
-                      requestedArtistNorm.startsWith(foundArtistNorm)) {
-                    matchedTrack = track;
-                    break;
+              if (tracks.length > 0) {
+                // Find a track that matches the requested artist (not just any track with similar name)
+                const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                for (const track of tracks) {
+                  const foundArtistNorm = (track.artists?.[0]?.name || track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                  // For short artist names (< 6 chars normalized), require exact match to avoid false positives
+                  // e.g., "dante" should not match "dante1981" or "dantesco"
+                  if (requestedArtistNorm.length < 6) {
+                    if (foundArtistNorm === requestedArtistNorm) {
+                      matchedTrack = track;
+                      break;
+                    }
+                  } else {
+                    // For longer names, allow partial matches but be careful
+                    // Only match if one is a substring at a word boundary (start/end)
+                    if (foundArtistNorm === requestedArtistNorm ||
+                        foundArtistNorm.startsWith(requestedArtistNorm) ||
+                        requestedArtistNorm.startsWith(foundArtistNorm)) {
+                      matchedTrack = track;
+                      break;
+                    }
                   }
                 }
               }
+            }
 
-              if (!matchedTrack) {
-                console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist} (artist mismatch)`);
-                continue;
-              }
-
+            if (matchedTrack !== null) {
+              // (matchedTrack is set — proceed with dedup/filter checks below)
+              {
               const track = matchedTrack;
 
               // Check if we already have this track
@@ -5030,6 +5091,7 @@ Return ONLY valid JSON:
                 console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`);
                 break;
               }
+              } // end inner block
             } else {
               console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
             }
@@ -5204,23 +5266,44 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                       });
                     }
                   } else if (platform === 'apple') {
-                    const platformService = new PlatformService();
-                    const appleResults = await platformService.searchTracks(
-                      platformUserId,
-                      `${song.name} ${song.artistName}`,
-                      tokens, tokens.storefront || 'us', 3
-                    );
-                    // Validate artist match and skip garbage tracks
-                    const expectedArtistNorm = (song.artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                    const supplementTrack = (appleResults || []).find(t => {
-                      const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                      if (!foundArtistNorm.includes(expectedArtistNorm.slice(0, 4)) &&
-                          !expectedArtistNorm.includes(foundArtistNorm.slice(0, 4))) return false;
-                      // Skip remixes, mashups, slowed versions, karaoke, etc.
-                      const nameLower = (t.name || '').toLowerCase();
-                      if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) return false;
-                      return !seenTrackIds.has(t.id);
-                    });
+                    const supplementStorefront = tokens.storefront || 'us';
+                    let supplementTrack = null;
+
+                    // Try ISRC lookup first
+                    if (song.isrc) {
+                      try {
+                        const supplementAppleDevToken = generateAppleMusicToken();
+                        if (supplementAppleDevToken) {
+                          const supplementAppleApi = new AppleMusicService(supplementAppleDevToken);
+                          const isrcResult = await supplementAppleApi.lookupByIsrc(song.isrc, supplementStorefront);
+                          if (isrcResult && !seenTrackIds.has(isrcResult.id)) {
+                            supplementTrack = isrcResult;
+                          }
+                        }
+                      } catch (isrcErr) { /* fall through to text search */ }
+                    }
+
+                    // Fall back to text search if ISRC lookup returned nothing
+                    if (!supplementTrack) {
+                      const platformService = new PlatformService();
+                      const appleResults = await platformService.searchTracks(
+                        platformUserId,
+                        `${song.name} ${song.artistName}`,
+                        tokens, supplementStorefront, 3
+                      );
+                      // Validate artist match and skip garbage tracks
+                      const expectedArtistNorm = (song.artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                      supplementTrack = (appleResults || []).find(t => {
+                        const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (!foundArtistNorm.includes(expectedArtistNorm.slice(0, 4)) &&
+                            !expectedArtistNorm.includes(foundArtistNorm.slice(0, 4))) return false;
+                        // Skip remixes, mashups, slowed versions, karaoke, etc.
+                        const nameLower = (t.name || '').toLowerCase();
+                        if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) return false;
+                        return !seenTrackIds.has(t.id);
+                      }) || null;
+                    }
+
                     if (supplementTrack) {
                       if (!allowExplicit && supplementTrack.explicit) continue;
                       seenTrackIds.add(supplementTrack.id);
@@ -5312,13 +5395,37 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
                 });
               }
             } else if (platform === 'apple') {
-              const platformService = new PlatformService();
-              const appleResults = await platformService.searchTracks(
-                platformUserId, `${song.name} ${song.artistName}`, tokens, tokens.storefront || 'us', 1
-              );
-              if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
-                seenTrackIds.add(appleResults[0].id);
-                allTracks.push(appleResults[0]);
+              const fallbackStorefront = tokens.storefront || 'us';
+              let fallbackTrack = null;
+
+              // Try ISRC lookup first
+              if (song.isrc) {
+                try {
+                  const fallbackAppleDevToken = generateAppleMusicToken();
+                  if (fallbackAppleDevToken) {
+                    const fallbackAppleApi = new AppleMusicService(fallbackAppleDevToken);
+                    const isrcResult = await fallbackAppleApi.lookupByIsrc(song.isrc, fallbackStorefront);
+                    if (isrcResult && !seenTrackIds.has(isrcResult.id)) {
+                      fallbackTrack = isrcResult;
+                    }
+                  }
+                } catch (isrcErr) { /* fall through to text search */ }
+              }
+
+              // Fall back to text search if ISRC lookup returned nothing
+              if (!fallbackTrack) {
+                const platformService = new PlatformService();
+                const appleResults = await platformService.searchTracks(
+                  platformUserId, `${song.name} ${song.artistName}`, tokens, fallbackStorefront, 1
+                );
+                if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
+                  fallbackTrack = appleResults[0];
+                }
+              }
+
+              if (fallbackTrack) {
+                seenTrackIds.add(fallbackTrack.id);
+                allTracks.push(fallbackTrack);
               }
             }
           } catch (searchErr) { /* skip individual song errors */ }
@@ -5493,10 +5600,11 @@ Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
         }
 
         // Album diversity
-        if (genreData.trackConstraints.albumDiversity.maxPerAlbum !== null && track.album?.id) {
-          const count = albumTrackCount[track.album.id] || 0;
+        const albumKey = track.album?.id || (track.album?.name && track.artist ? `${track.album.name}::${track.artist}` : null);
+        if (genreData.trackConstraints.albumDiversity.maxPerAlbum !== null && albumKey) {
+          const count = albumTrackCount[albumKey] || 0;
           if (count >= genreData.trackConstraints.albumDiversity.maxPerAlbum) return false;
-          albumTrackCount[track.album.id] = count + 1;
+          albumTrackCount[albumKey] = count + 1;
         }
 
         return true;
@@ -6997,15 +7105,26 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
     userPlaylists.set(userId, userPlaylistsArray);
     await savePlaylist(userId, playlist);
 
-    // Also remove from Spotify if the playlist exists there
+    // Also remove from the platform playlist if it exists there
     try {
-      // If userId is email-based, resolve to Spotify platform userId for API calls
+      // If userId is email-based, resolve to platform userId for API calls
       let platformUserId = userId;
-      if (isEmailBasedUserId(userId)) {
-        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+      const excludePlatformService = new PlatformService();
+      let excludePlatform;
+      try {
+        excludePlatform = excludePlatformService.getPlatform(userId);
+      } catch (platformErr) {
+        // Email-based userId — need to resolve to a platform userId
+        excludePlatform = null;
+      }
+
+      if (!excludePlatform) {
+        // Try Spotify first, then Apple
+        const spotifyUserId = await resolvePlatformUserId(userId, 'spotify');
+        const appleUserId = await resolvePlatformUserId(userId, 'apple');
+        platformUserId = spotifyUserId || appleUserId;
         if (!platformUserId) {
-          console.log('No Spotify connection found for email:', userId);
-          // Skip Spotify removal but don't fail
+          console.log('No platform connection found for email:', userId);
           return res.json({
             success: true,
             excludedSongs: playlist.excludedSongs,
@@ -7013,36 +7132,44 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
             remainingTracks: playlist.tracks.length
           });
         }
+        excludePlatform = excludePlatformService.getPlatform(platformUserId);
       }
 
       const tokens = await getUserTokens(platformUserId);
       if (tokens && trackUri) {
-        const userSpotifyApi = new SpotifyWebApi({
-          clientId: process.env.SPOTIFY_CLIENT_ID,
-          clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-          redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
-        });
-        userSpotifyApi.setAccessToken(tokens.access_token);
-        userSpotifyApi.setRefreshToken(tokens.refresh_token);
+        if (excludePlatform === 'spotify') {
+          const userSpotifyApi = new SpotifyWebApi({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+          });
+          userSpotifyApi.setAccessToken(tokens.access_token);
+          userSpotifyApi.setRefreshToken(tokens.refresh_token);
 
-        // Refresh token if needed
-        try {
-          const refreshData = await userSpotifyApi.refreshAccessToken();
-          userSpotifyApi.setAccessToken(refreshData.body.access_token);
-          tokens.access_token = refreshData.body.access_token;
-          userTokens.set(platformUserId, tokens);
-          await db.updateAccessToken(platformUserId, refreshData.body.access_token);
-        } catch (refreshError) {
-          console.log('Token refresh not needed:', refreshError.message);
+          // Refresh token if needed
+          try {
+            const refreshData = await userSpotifyApi.refreshAccessToken();
+            userSpotifyApi.setAccessToken(refreshData.body.access_token);
+            tokens.access_token = refreshData.body.access_token;
+            userTokens.set(platformUserId, tokens);
+            await db.updateAccessToken(platformUserId, refreshData.body.access_token);
+          } catch (refreshError) {
+            console.log('Token refresh not needed:', refreshError.message);
+          }
+
+          // Remove track from Spotify playlist
+          await userSpotifyApi.removeTracksFromPlaylist(playlistId, [{ uri: trackUri }]);
+          console.log(`[EXCLUDE] Removed track from Spotify playlist`);
+        } else if (excludePlatform === 'apple') {
+          // Apple Music: replace playlist with remaining tracks
+          const remainingUris = (playlist.trackUris || []).filter(u => u !== trackUri);
+          await excludePlatformService.replacePlaylistTracks(platformUserId, playlistId, remainingUris, tokens);
+          console.log(`[EXCLUDE] Replaced Apple Music playlist tracks (removed 1 track)`);
         }
-
-        // Remove track from Spotify playlist
-        await userSpotifyApi.removeTracksFromPlaylist(playlistId, [{ uri: trackUri }]);
-        console.log(`[EXCLUDE] Removed track from Spotify playlist`);
       }
-    } catch (spotifyError) {
-      console.error('Error removing from Spotify (non-critical):', spotifyError.message);
-      // Don't fail the request if Spotify removal fails
+    } catch (platformError) {
+      console.error('Error removing from platform playlist (non-critical):', platformError.message);
+      // Don't fail the request if platform removal fails
     }
 
     res.json({
@@ -7136,10 +7263,18 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     // Remove thumbed-down song from the platform playlist
     if (reaction === 'thumbsDown' && trackUri && playlist.playlistId) {
       try {
-        const tokens = await db.getTokens(userId);
-        if (tokens) {
+        const reactionTokens = await db.getTokens(userId);
+        if (reactionTokens) {
           const platformService = new PlatformService();
-          await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], tokens);
+          const reactionPlatform = platformService.getPlatform(userId);
+          if (reactionPlatform === 'apple') {
+            // Apple Music doesn't support individual track removal; use replace flow instead
+            // Build the remaining track URI list from in-app playlist state
+            const remainingUris = (playlist.trackUris || []).filter(u => u !== trackUri);
+            await platformService.replacePlaylistTracks(userId, playlist.playlistId, remainingUris, reactionTokens);
+          } else {
+            await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], reactionTokens);
+          }
           console.log(`[REACTION] Removed "${trackName}" from platform playlist`);
         }
       } catch (removeErr) {
