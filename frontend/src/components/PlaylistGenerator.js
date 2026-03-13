@@ -598,7 +598,18 @@ const PlaylistGenerator = () => {
 
   const fetchDrafts = async () => {
     try {
-      const response = await playlistService.getDrafts(userId);
+      // Use the same platformUserId logic as saveDraft so the IDs match
+      let fetchUserId = userId;
+      if (activePlatform === 'spotify' && spotifyUserId) {
+        fetchUserId = spotifyUserId;
+      } else if (activePlatform === 'apple' && appleMusicUserId) {
+        fetchUserId = appleMusicUserId;
+      } else if (spotifyUserId) {
+        fetchUserId = spotifyUserId;
+      } else if (appleMusicUserId) {
+        fetchUserId = appleMusicUserId;
+      }
+      const response = await playlistService.getDrafts(fetchUserId);
       if (response.drafts && response.drafts.length > 0) {
         setDraftPlaylists(response.drafts);
         _homeCache.draftPlaylists = response.drafts;
@@ -2102,8 +2113,19 @@ const PlaylistGenerator = () => {
 
   const handleDiscardDraft = async (draftId) => {
     try {
+      // Use platformUserId to match the ID used when saving
+      let deleteUserId = userId;
+      if (activePlatform === 'spotify' && spotifyUserId) {
+        deleteUserId = spotifyUserId;
+      } else if (activePlatform === 'apple' && appleMusicUserId) {
+        deleteUserId = appleMusicUserId;
+      } else if (spotifyUserId) {
+        deleteUserId = spotifyUserId;
+      } else if (appleMusicUserId) {
+        deleteUserId = appleMusicUserId;
+      }
       // Delete from database
-      await playlistService.deleteDraft(userId, draftId);
+      await playlistService.deleteDraft(deleteUserId, draftId);
 
       // Update local state - use playlistId if available, otherwise id
       const updatedDrafts = draftPlaylists.filter(d => (d.playlistId || d.id) !== draftId);
