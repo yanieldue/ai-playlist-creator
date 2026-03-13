@@ -4921,8 +4921,17 @@ Return ONLY valid JSON:
               // the "compilation album" problem where a classic song appears on a recent
               // re-release and Spotify's album.release_date passes the year check.
               if (eraMin || eraMax) {
+                const isCompilation = track.album?.album_type === 'compilation';
                 const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
                 const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
+
+                // If Spotify returned a compilation version and we have no SoundCharts date
+                // to verify the original release year, skip it — can't trust the date.
+                if (isCompilation && !scYear) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (compilation album, original release year unknown)`);
+                  continue;
+                }
+
                 // Use the earlier of the two dates as the canonical release year
                 const releaseYear = (spotifyYear && scYear) ? Math.min(spotifyYear, scYear) : (scYear || spotifyYear);
                 if (releaseYear) {
@@ -5069,9 +5078,9 @@ Return ONLY valid JSON:
 
               // Enforce release year constraint — use earliest of Apple date and SoundCharts date
               if (eraMin || eraMax) {
+                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
                 const appleYear = (track.releaseDate || track.album?.release_date)
                   ? parseInt((track.releaseDate || track.album.release_date).substring(0, 4)) : null;
-                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
                 const releaseYear = (appleYear && scYear) ? Math.min(appleYear, scYear) : (scYear || appleYear);
                 if (releaseYear) {
                   if (eraMin && releaseYear < eraMin) {
