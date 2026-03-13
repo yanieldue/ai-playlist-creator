@@ -4338,9 +4338,11 @@ If the user mentions a specific song title + artist (e.g. "songs like Take It Sl
 - Only extract when the user clearly names BOTH a song title AND an artist.
 
 SEED ARTISTS (CRITICAL):
-When the user doesn't mention specific artists, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
 These are used to find similar artists and build the playlist.
-Examples:
+- When the prompt includes "Current songs include: ...", "Reference tracks: ...", or "Key artists in this playlist: ...", extract up to 5 of the most representative artists from those lists into suggestedSeedArtists. Prefer variety (different artists over repeats).
+- When the user explicitly names artists ("artists like X", "similar to Y"), put them in requestedArtists.
+- When neither of the above apply, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
+Examples (no reference tracks):
 - "top pop songs" → suggestedSeedArtists: ["Taylor Swift", "Dua Lipa", "The Weeknd", "Harry Styles"]
 - "r&b for when I'm in my feels" → suggestedSeedArtists: ["SZA", "Daniel Caesar", "H.E.R.", "Brent Faiyaz"]
 - "underground hip-hop" → suggestedSeedArtists: ["JID", "Denzel Curry", "Freddie Gibbs", "EARTHGANG"]
