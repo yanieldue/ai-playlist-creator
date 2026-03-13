@@ -1208,14 +1208,27 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           added++;
         }
       }
-      // Extract expected genre slugs from filters (e.g. ['k-pop']) for validation
+      // Extract expected genre slugs from filters (e.g. ['r-b', 'k-pop']) for validation
       const genreFilter = soundchartsFilters.find(f => f.type === 'songGenres');
       const expectedGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
+
+      // Normalize genre strings for comparison — SoundCharts filter slugs use hyphens (r-b, k-pop)
+      // but artist genre tags use display text (r&b, k-pop). Normalize both to hyphenated form.
+      const normalizeGenre = g => g.toLowerCase().replace(/&/g, '-').replace(/\s+/g, '-');
+      // An artist "has" a genre if any of their genre strings, when normalized, equal or start with
+      // the expected slug (covers 'r-b/soul' matching 'r-b', etc.)
+      const artistHasGenre = (artistGenres, expected) => {
+        const expNorm = normalizeGenre(expected);
+        return artistGenres.some(ag => {
+          const agNorm = normalizeGenre(ag);
+          return agNorm === expNorm || agNorm.startsWith(expNorm + '/') || agNorm.startsWith(expNorm + '-') || agNorm.includes(expNorm);
+        });
+      };
 
       // Genres that indicate a stylistically incompatible artist when the seed doesn't have them
       const contrastingGenres = ['rock', 'k-rock', 'j-rock', 'alternative', 'metal', 'punk',
         'country', 'jazz', 'classical', 'folk', 'blues', 'gospel', 'bluegrass'];
-      const seedGenreSet = new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())));
+      const seedGenreSet = new Set(seedInfos.flatMap(s => (s.genres || []).map(g => normalizeGenre(g))));
       const seedHasContrastingGenre = contrastingGenres.some(g => seedGenreSet.has(g));
 
       for (const simName of similarNames) {
@@ -1224,16 +1237,16 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           if (!simInfo?.uuid) continue;
           const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
 
-          // 1. Must include the expected genre (e.g. k-pop) — prevents genre drift
-          if (expectedGenres.length > 0 && !expectedGenres.some(g => artistGenres.includes(g))) {
+          // 1. Must include the expected genre (e.g. k-pop, r-b) — prevents genre drift
+          if (expectedGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
             console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
             continue;
           }
           // 2. If seed has no contrasting genres, reject similar artists that do —
           //    e.g. seed is pure pop/k-pop → reject rock/alternative artists like The Rose
           //    Skipped when seed itself is a rock/country/etc. artist
-          if (!seedHasContrastingGenre && contrastingGenres.some(g => artistGenres.includes(g))) {
-            console.log(`⏭️  Skipping "${simInfo.name}" — has contrasting genres [${artistGenres.filter(g => contrastingGenres.includes(g)).join(', ')}]`);
+          if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasGenre(artistGenres, g))) {
+            console.log(`⏭️  Skipping "${simInfo.name}" — has contrasting genres [${artistGenres.filter(g => contrastingGenres.some(c => artistHasGenre([g], c))).join(', ')}]`);
             continue;
           }
 
