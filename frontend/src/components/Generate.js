@@ -272,6 +272,19 @@ export default function Generate() {
     setLockedTrackIds(prev => {
       const next = new Set(prev);
       wasLocked ? next.delete(trackId) : next.add(trackId);
+
+      // Persist to draft immediately so the lock survives navigation
+      if (generatedPlaylist?.draftId && isPaid()) {
+        const platformUserId =
+          localStorage.getItem('spotifyUserId') ||
+          localStorage.getItem('appleMusicUserId') ||
+          userId;
+        playlistService.saveDraft(platformUserId, {
+          ...generatedPlaylist,
+          lockedTrackIds: [...next],
+        }).catch(() => {});
+      }
+
       return next;
     });
     showToast(wasLocked ? 'Song removed from keep list' : "Song locked, song won't change when refining", 'success');
