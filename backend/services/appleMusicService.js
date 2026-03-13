@@ -102,6 +102,7 @@ class AppleMusicService {
       explicit: track.attributes.contentRating === 'explicit',
       platform: 'apple',
       isrc: track.attributes.isrc,
+      releaseDate: track.attributes.releaseDate || null,
       url: track.attributes.url || `https://music.apple.com/us/song/${track.id}`
     }));
   }
