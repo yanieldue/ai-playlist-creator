@@ -201,6 +201,12 @@ const PlaylistGenerator = () => {
       setShowPlaylistModal(true);
       setModalStep(1);
     }
+    if (location.state?.updatedDraft) {
+      const { updatedDraft } = location.state;
+      setDraftPlaylists(prev => prev.map(d =>
+        (d.playlistId || d.id) === updatedDraft.draftId ? { ...d, ...updatedDraft } : d
+      ));
+    }
     // Clear the state so a back/forward doesn't re-trigger
     if (location.state) window.history.replaceState({}, '', window.location.pathname);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

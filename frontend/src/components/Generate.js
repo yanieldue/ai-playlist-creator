@@ -408,13 +408,16 @@ export default function Generate() {
   };
 
   const goBack = () => {
+    const updatedDraft = generatedPlaylist?.draftId
+      ? { ...generatedPlaylist, lockedTrackIds: [...lockedTrackIds] }
+      : null;
     if (phase === 'refine') {
-      if (refineMode) { navigate('/', { state: { returnTab } }); return; }
+      if (refineMode) { navigate('/', { state: { returnTab, updatedDraft } }); return; }
       setPhase('tracks');
       return;
     }
     if (phase === 'loading') { setPhase('input'); return; }
-    if (phase === 'tracks') { navigate('/', { state: { returnTab } }); return; }
+    if (phase === 'tracks') { navigate('/', { state: { returnTab, updatedDraft } }); return; }
     navigate('/', { state: { returnTab } });
   };
 
