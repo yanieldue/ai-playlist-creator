@@ -84,6 +84,10 @@ const PlaylistGenerator = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const searchDropdownRef = useRef(null);
+  // Holds a draft update that arrived via navigation state (from Generate page after refinement).
+  // Applied on top of fetchDrafts result to avoid a race condition where fetchDrafts returns
+  // stale DB data before the fire-and-forget saveDraft from Generate has completed.
+  const pendingDraftUpdateRef = useRef(null);
 
   // User preferences (loaded from localStorage)
   const [allowExplicit, setAllowExplicit] = useState(() => {
@@ -203,6 +207,9 @@ const PlaylistGenerator = () => {
     }
     if (location.state?.updatedDraft) {
       const { updatedDraft } = location.state;
+      // Store for later — fetchDrafts will merge this on top of its result so a
+      // slow DB write doesn't cause the stale draft to win the race.
+      pendingDraftUpdateRef.current = updatedDraft;
       setDraftPlaylists(prev => prev.map(d =>
         (d.playlistId || d.id) === updatedDraft.draftId ? { ...d, ...updatedDraft } : d
       ));
@@ -600,8 +607,18 @@ const PlaylistGenerator = () => {
     try {
       const response = await playlistService.getDrafts(userId);
       if (response.drafts && response.drafts.length > 0) {
-        setDraftPlaylists(response.drafts);
-        _homeCache.draftPlaylists = response.drafts;
+        let drafts = response.drafts;
+        // If the user just came back from a refinement, the DB write may not have
+        // landed yet. Merge the pending update on top so the correct tracks show.
+        const pending = pendingDraftUpdateRef.current;
+        if (pending) {
+          drafts = drafts.map(d =>
+            (d.playlistId || d.id) === pending.draftId ? { ...d, ...pending } : d
+          );
+          pendingDraftUpdateRef.current = null;
+        }
+        setDraftPlaylists(drafts);
+        _homeCache.draftPlaylists = drafts;
       }
     } catch (error) {
       console.error('Failed to load drafts:', error);
