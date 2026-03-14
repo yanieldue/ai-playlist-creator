@@ -67,7 +67,11 @@ export default function Generate() {
   const [error, setError] = useState(null);
   const [weeklyLimitReached, setWeeklyLimitReached] = useState(false);
 
-  const [generatedPlaylist, setGeneratedPlaylist] = useState(initialPlaylist);
+  const [generatedPlaylist, setGeneratedPlaylist] = useState(
+    initialPlaylist
+      ? { ...initialPlaylist, draftId: initialPlaylist.draftId || initialPlaylist.playlistId }
+      : null
+  );
   const [lockedTrackIds, setLockedTrackIds] = useState(
     new Set(initialPlaylist?.lockedTrackIds || [])
   );
@@ -208,6 +212,8 @@ export default function Generate() {
         try {
           const draft = await playlistService.saveDraft(userId, playlist);
           playlist.draftId = draft.draftId;
+          // Save again so draftId is stored inside playlist_data (needed on reload)
+          playlistService.saveDraft(userId, playlist).catch(() => {});
         } catch (_) {}
       }
 
