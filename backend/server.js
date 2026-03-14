@@ -4818,6 +4818,19 @@ Return ONLY valid JSON:
       }
     }
 
+    // Extract the recording year from an ISRC code.
+    // ISRC format: CC-XXX-YY-NNNNN (or without dashes), positions 5-6 = 2-digit year.
+    // This reflects when the recording was originally made, not when it was repackaged.
+    const extractIsrcYear = (isrc) => {
+      if (!isrc) return null;
+      const clean = isrc.replace(/-/g, '');
+      if (clean.length < 7) return null;
+      const twoDigit = parseInt(clean.substring(5, 7), 10);
+      if (isNaN(twoDigit)) return null;
+      // 30–99 → 1930–1999, 00–29 → 2000–2029
+      return twoDigit >= 30 ? 1900 + twoDigit : 2000 + twoDigit;
+    };
+
     // Helper function to normalize track names for comparison
     const normalizeTrackName = (name) => {
       // Remove common suffixes/prefixes that indicate same song
@@ -4924,25 +4937,30 @@ Return ONLY valid JSON:
                 const isCompilation = track.album?.album_type === 'compilation';
                 const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
                 const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
+                const isrcYear = extractIsrcYear(recommendedSong.isrc);
 
-                // If Spotify returned a compilation version and we have no SoundCharts date
-                // to verify the original release year, skip it — can't trust the date.
-                if (isCompilation && !scYear) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (compilation album, original release year unknown)`);
+                // For compilations, don't trust Spotify's album date (it's the compilation date,
+                // not the original recording year). For all tracks, prefer ISRC/SoundCharts years
+                // which reflect the original recording, not a re-release.
+                const candidateYears = isCompilation
+                  ? [isrcYear, scYear]
+                  : [isrcYear, scYear, spotifyYear];
+                const years = candidateYears.filter(y => y !== null);
+
+                // If we have no reliable year data at all, skip to be safe
+                if (years.length === 0) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (no release year data available)`);
                   continue;
                 }
 
-                // Use the earlier of the two dates as the canonical release year
-                const releaseYear = (spotifyYear && scYear) ? Math.min(spotifyYear, scYear) : (scYear || spotifyYear);
-                if (releaseYear) {
-                  if (eraMin && releaseYear < eraMin) {
-                    console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${eraMin})`);
-                    continue;
-                  }
-                  if (eraMax && releaseYear > eraMax) {
-                    console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${eraMax})`);
-                    continue;
-                  }
+                const releaseYear = Math.min(...years);
+                if (eraMin && releaseYear < eraMin) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${eraMin})`);
+                  continue;
+                }
+                if (eraMax && releaseYear > eraMax) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${eraMax})`);
+                  continue;
                 }
               }
 
