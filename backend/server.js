@@ -7946,9 +7946,84 @@ async function processPlaylistUpdate(userId, playlist) {
       console.error(`[AUTO-UPDATE] Track generation failed for ${playlist.playlistName}:`, generationError.message);
     }
 
-    // Push tracks to Spotify
+    // Push tracks to platform (Spotify or Apple Music)
     let tracksWereAdded = false;
-    if (playlistPlatform !== 'apple') {
+
+    // Shared: sync DB record and song history after a successful push
+    const syncAfterPush = (newTracksForRecord, newUris) => {
+      if (playlist.updateMode === 'replace') {
+        playlist.tracks = newTracksForRecord;
+        playlist.trackUris = newUris;
+        // Preserve the requested count so future updates don't shrink if this run was short
+        playlist.trackCount = playlist.requestedSongCount || Math.max(playlist.trackCount || 0, newUris.length);
+      } else {
+        if (!playlist.tracks) playlist.tracks = [];
+        if (!playlist.trackUris) playlist.trackUris = [];
+        playlist.tracks = [...playlist.tracks, ...newTracksForRecord];
+        playlist.trackUris = [...playlist.trackUris, ...newUris];
+        playlist.trackCount = playlist.trackUris.length;
+      }
+      console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
+
+      if (tracksForHistory.length > 0) {
+        const normalizeForHistory = (name) => name.toLowerCase()
+          .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
+          .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
+          .replace(/\s*[\(\[].*?[\)\]]/g, '')
+          .replace(/[^\w\s]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!playlist.songHistory) playlist.songHistory = [];
+        playlist.songHistory = [
+          ...playlist.songHistory,
+          ...tracksForHistory.map(t => `${normalizeForHistory(t.name)}|||${t.artist.toLowerCase()}`)
+        ];
+        if (playlist.songHistory.length > 200) {
+          playlist.songHistory = playlist.songHistory.slice(-200);
+        }
+        console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
+      }
+    };
+
+    if (playlistPlatform === 'apple') {
+      // ── Apple Music ──────────────────────────────────────────────
+      const appleTokens = await getUserTokens(platformUserId);
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (appleTokens && appleMusicDevToken && newTrackUris.length > 0) {
+        const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
+        // Apple Music URIs are "apple:track:{id}" — extract the raw ID
+        const trackIds = newTrackUris
+          .map(uri => (typeof uri === 'string' && uri.startsWith('apple:track:') ? uri.replace('apple:track:', '') : uri))
+          .filter(Boolean);
+        try {
+          if (playlist.updateMode === 'replace') {
+            console.log(`[AUTO-UPDATE] Apple replace mode: replacing all tracks in ${playlist.playlistName}`);
+            await appleMusicApiInstance.replacePlaylistTracks(appleTokens.access_token, playlist.playlistId, trackIds);
+            console.log(`[AUTO-UPDATE] Successfully replaced tracks in Apple Music playlist ${playlist.playlistName}`);
+          } else {
+            await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlist.playlistId, trackIds);
+            console.log(`[AUTO-UPDATE] Successfully appended ${trackIds.length} tracks to Apple Music playlist ${playlist.playlistName}`);
+          }
+          tracksWereAdded = true;
+          const newTracksForRecord = returnedTracksData.map(t => ({
+            id: t.id || null,
+            name: t.name,
+            artist: t.artist || 'Unknown',
+            uri: t.uri,
+            album: t.album || '',
+            image: t.image || null,
+            externalUrl: t.externalUrl || null,
+            explicit: t.explicit || false
+          }));
+          syncAfterPush(newTracksForRecord, newTrackUris);
+        } catch (updateError) {
+          console.error(`[AUTO-UPDATE] Failed to update Apple Music playlist ${playlist.playlistName}:`, updateError.message);
+        }
+      } else {
+        console.log(`[AUTO-UPDATE] Apple Music: missing tokens or dev token for ${playlist.playlistName}, skipping push`);
+      }
+    } else {
+      // ── Spotify ──────────────────────────────────────────────────
       const tokens = await getUserTokens(platformUserId);
       if (tokens && newTrackUris.length > 0) {
         const userSpotifyApi = new SpotifyWebApi({
@@ -7991,8 +8066,6 @@ async function processPlaylistUpdate(userId, playlist) {
             console.log(`[AUTO-UPDATE] Successfully appended ${newTrackUris.length} tracks to ${playlist.playlistName}`);
           }
           tracksWereAdded = true;
-
-          // Sync DB record
           const newTracksForRecord = returnedTracksData.map(t => ({
             id: t.id || null,
             name: t.name,
@@ -8003,46 +8076,12 @@ async function processPlaylistUpdate(userId, playlist) {
             externalUrl: t.externalUrl || null,
             explicit: t.explicit || false
           }));
-
-          if (playlist.updateMode === 'replace') {
-            playlist.tracks = newTracksForRecord;
-            playlist.trackUris = newTrackUris;
-            // Preserve the requested count so future updates don't shrink if this run was short
-            playlist.trackCount = playlist.requestedSongCount || Math.max(playlist.trackCount || 0, newTrackUris.length);
-          } else {
-            if (!playlist.tracks) playlist.tracks = [];
-            if (!playlist.trackUris) playlist.trackUris = [];
-            playlist.tracks = [...playlist.tracks, ...newTracksForRecord];
-            playlist.trackUris = [...playlist.trackUris, ...newTrackUris];
-            playlist.trackCount = playlist.trackUris.length;
-          }
-          console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
-
-          // Update song history
-          if (tracksForHistory.length > 0) {
-            const normalizeTrackName = (name) => name.toLowerCase()
-              .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
-              .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
-              .replace(/\s*[\(\[].*?[\)\]]/g, '')
-              .replace(/[^\w\s]/g, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-
-            if (!playlist.songHistory) playlist.songHistory = [];
-            playlist.songHistory = [
-              ...playlist.songHistory,
-              ...tracksForHistory.map(t => `${normalizeTrackName(t.name)}|||${t.artist.toLowerCase()}`)
-            ];
-            if (playlist.songHistory.length > 200) {
-              playlist.songHistory = playlist.songHistory.slice(-200);
-            }
-            console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
-          }
+          syncAfterPush(newTracksForRecord, newTrackUris);
         } catch (updateError) {
           console.error(`[AUTO-UPDATE] Failed to update ${playlist.playlistName}:`, updateError.message);
         }
       }
-    } // end if (playlistPlatform !== 'apple')
+    }
 
     const nowIso = new Date().toISOString();
     if (tracksWereAdded) {
