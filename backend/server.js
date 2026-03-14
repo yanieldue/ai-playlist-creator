@@ -4918,10 +4918,13 @@ Return ONLY valid JSON:
                 continue;
               }
 
-              // Skip tracks from song history (for manual refresh)
-              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
-                continue;
+              // Skip tracks from song history (for manual refresh / auto-update)
+              if (playlistSongHistory.size > 0) {
+                const historyKey = `${normalizeTrackName(track.name)}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
+                if (playlistSongHistory.has(historyKey)) {
+                  console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
+                  continue;
+                }
               }
 
               // Check for explicit content if needed
@@ -5082,10 +5085,13 @@ Return ONLY valid JSON:
                 continue;
               }
 
-              // Skip tracks from song history (for manual refresh)
-              if (playlistSongHistory.size > 0 && playlistSongHistory.has(track.id)) {
-                console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
-                continue;
+              // Skip tracks from song history (for manual refresh / auto-update)
+              if (playlistSongHistory.size > 0) {
+                const historyKey = `${normalizeTrackName(track.name)}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
+                if (playlistSongHistory.has(historyKey)) {
+                  console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
+                  continue;
+                }
               }
 
               // Check for explicit content if needed
