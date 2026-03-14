@@ -185,6 +185,17 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     }
   }, [userId]);
 
+  // Refresh playlists when user returns to the tab (picks up auto-update changes)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchPlaylists(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [userId]);
+
   // Close dropdown menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
