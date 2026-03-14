@@ -613,7 +613,7 @@ export default function Generate() {
             />
             <button
               className="generate-send-btn"
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={loading || !prompt.trim()}
               style={{ visibility: prompt.trim() ? 'visible' : 'hidden' }}
             >
