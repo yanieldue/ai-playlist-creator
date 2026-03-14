@@ -5094,21 +5094,32 @@ Return ONLY valid JSON:
                 continue;
               }
 
-              // Enforce release year constraint — use earliest of Apple date and SoundCharts date
+              // Enforce release year constraint — use earliest of ISRC, Apple, and SoundCharts date
               if (eraMin || eraMax) {
+                const isCompilation = track.album?.album_type === 'compilation';
                 const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
                 const appleYear = (track.releaseDate || track.album?.release_date)
-                  ? parseInt((track.releaseDate || track.album.release_date).substring(0, 4)) : null;
-                const releaseYear = (appleYear && scYear) ? Math.min(appleYear, scYear) : (scYear || appleYear);
-                if (releaseYear) {
-                  if (eraMin && releaseYear < eraMin) {
-                    console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${eraMin})`);
-                    continue;
-                  }
-                  if (eraMax && releaseYear > eraMax) {
-                    console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${eraMax})`);
-                    continue;
-                  }
+                  ? parseInt((track.releaseDate || track.album?.release_date).substring(0, 4)) : null;
+                const isrcYear = extractIsrcYear(recommendedSong.isrc);
+
+                const candidateYears = isCompilation
+                  ? [isrcYear, scYear]
+                  : [isrcYear, scYear, appleYear];
+                const years = candidateYears.filter(y => y !== null);
+
+                if (years.length === 0) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (no release year data available)`);
+                  continue;
+                }
+
+                const releaseYear = Math.min(...years);
+                if (eraMin && releaseYear < eraMin) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${eraMin})`);
+                  continue;
+                }
+                if (eraMax && releaseYear > eraMax) {
+                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${eraMax})`);
+                  continue;
                 }
               }
 
