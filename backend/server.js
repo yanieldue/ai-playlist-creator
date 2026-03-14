@@ -5163,96 +5163,98 @@ Return ONLY valid JSON:
         console.warn(`⚠️  [NEW-ARTISTS] All ${recommendedTracks.length} SoundCharts songs were from known artists — no new-artist results found. Fallback will run without the newArtistsOnly filter.`);
       }
 
-      // Quick sanity check - remove obvious mismatches (e.g., Lil Baby in an underground R&B playlist)
+      // Vibe check — always run to ensure every track matches the prompt and all refinements
       if (allTracks.length >= 5) {
-        let selectedTracks = [...allTracks]; // Pass ALL tracks to sanity check, slice after filtering
+        let selectedTracks = [...allTracks];
 
-        // Run quick filter if we have genre, seed artists, explicit avoidances, or underground preference
         const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
-        // Note: must check for null/undefined before comparing, as null <= 50 is true in JS
         const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
                                         (genreData.trackConstraints.popularity.max !== null &&
                                          genreData.trackConstraints.popularity.max !== undefined &&
                                          genreData.trackConstraints.popularity.max <= 50);
-        if (hasAvoidances || wantsUndergroundFilter || hasRequestedArtists) {
-          console.log(`🔍 Running quick sanity check on ${selectedTracks.length} tracks...`);
 
-          // Build seed artist instruction for "similar to X" playlists
-          const seedArtistNames = hasRequestedArtists && !genreData.artistConstraints.exclusiveMode
-            ? genreData.artistConstraints.requestedArtists
-            : [];
-          const seedArtistInstruction = seedArtistNames.length > 0
-            ? `- Reference artists: ${seedArtistNames.join(', ')}. These songs were discovered by a music similarity algorithm that can have false positives. REMOVE any song whose artist clearly does not belong in the same musical scene as ${seedArtistNames.join(' and ')} (different era, unrelated genre, or totally different sound world).`
-            : '';
+        console.log(`🎭 Running vibe check on ${selectedTracks.length} tracks...`);
 
-          // When seed artists are provided, be moderately strict about obvious genre mismatches only.
-          // Otherwise be lenient to avoid filtering too aggressively.
-          const leniencyInstruction = seedArtistNames.length > 0
-            ? `Be MODERATELY strict — only remove songs that clearly don't fit the genre/scene. Artists who are adjacent or similar in style should be KEPT even if less famous. Do NOT remove songs just because you're unfamiliar with the artist. When uncertain, KEEP the song. Aim to keep at least 70% of tracks.`
-            : `Be LENIENT — only remove songs that clearly don't fit. When in doubt, KEEP the song.`;
+        // Build constraint lines for the prompt
+        const constraintLines = [];
+        if (genreData.primaryGenre) constraintLines.push(`Genre: ${genreData.primaryGenre}`);
+        if (genreData.style) constraintLines.push(`Style/Vibe: ${genreData.style}`);
+        if (genreData.atmosphere?.length > 0) constraintLines.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
+        if (genreData.contextClues.useCase) constraintLines.push(`Use case: ${genreData.contextClues.useCase}`);
+        if (eraMin || eraMax) {
+          const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
+          constraintLines.push(`Era: songs must be from ${eraDesc}. REMOVE any song originally recorded/released outside this range, even if it was recently repackaged or re-released.`);
+        }
+        if (hasAvoidances) constraintLines.push(`AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
+        if (wantsUndergroundFilter) constraintLines.push(`Popularity: UNDERGROUND/INDIE only — remove mainstream chart artists`);
 
-          try {
-            const sanityCheckResponse = await anthropic.messages.create({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 1000,
-              messages: [{
-                role: 'user',
-                content: `You are filtering a playlist to ensure all songs match the user's request.
+        const seedArtistNames = hasRequestedArtists && !genreData.artistConstraints.exclusiveMode
+          ? genreData.artistConstraints.requestedArtists
+          : [];
+        if (seedArtistNames.length > 0) {
+          constraintLines.push(`Reference artists: ${seedArtistNames.join(', ')}. Remove any artist who clearly does not belong in the same musical scene (different era, unrelated genre, or totally different sound world).`);
+        }
 
-User's request: "${prompt}"
+        // Attach known release year to each track entry so Claude can verify era constraints
+        const trackLines = selectedTracks.map((t, i) => {
+          const yr = t.releaseYear || (t.album?.release_date ? parseInt(t.album.release_date.substring(0, 4)) : null);
+          return `${i + 1}. "${t.name}" by ${t.artist}${yr ? ` (${yr})` : ''}`;
+        });
 
-The user wants songs that are:
-- Genre: ${genreData.primaryGenre || 'not specified'}
-${genreData.style ? `- Style/Vibe: ${genreData.style}` : ''}
-${genreData.atmosphere && genreData.atmosphere.length > 0 ? `- Atmosphere: ${genreData.atmosphere.join(', ')}` : ''}
-${genreData.contextClues.useCase ? `- Use case: ${genreData.contextClues.useCase}` : ''}
-${hasAvoidances ? `- AVOID: ${genreData.contextClues.avoidances.join(', ')}` : ''}
-${wantsUndergroundFilter ? `- Popularity: UNDERGROUND/INDIE only - remove mainstream artists` : ''}
+        try {
+          const vibeCheckResponse = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 800,
+            messages: [{
+              role: 'user',
+              content: `You are doing a final quality check on a playlist to make sure every song truly matches what the user asked for.
+
+User's full request (including any refinements): "${prompt}"
+
+Constraints that every song must satisfy:
+${constraintLines.map(l => `- ${l}`).join('\n')}
 
 Songs to review:
-${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+${trackLines.join('\n')}
 
-Return ONLY a JSON array of indices to KEEP.
+Return ONLY a JSON array of 1-based indices to KEEP — no explanation.
 
-KEEP songs that match the vibe, mood, and style the user requested.
-REMOVE songs that:
-- Don't fit the requested vibe/atmosphere (e.g., upbeat party song in a "chill late night" playlist)
-- Are clearly the wrong genre
-${hasAvoidances ? `- Match what the user wants to AVOID` : ''}
-${wantsUndergroundFilter ? `- Are from mainstream artists with chart hits` : ''}
-${seedArtistInstruction}
+Rules:
+- KEEP songs that genuinely match the user's request and all constraints above.
+- REMOVE songs that clearly violate any constraint (wrong era, wrong genre, wrong vibe, explicitly avoided).
+- When uncertain about a song, KEEP it. Only remove songs you are confident are mismatches.
+- Aim to keep at least 75% of tracks. Do not over-filter.
 
-${leniencyInstruction}
+Example response: [1, 2, 4, 5, 7, ...]`
+            }]
+          });
 
-Example response: [1, 2, 3, 4, 5, 6, 7, 8, ...]`
-              }]
-            });
+          const vibeContent = vibeCheckResponse.content[0].text.trim()
+            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+            .replace(/^```\n?/, '').replace(/\n?```$/, '');
 
-            const sanityContent = sanityCheckResponse.content[0].text.trim()
-              .replace(/^```json\n?/, '').replace(/\n?```$/, '')
-              .replace(/^```\n?/, '').replace(/\n?```$/, '');
+          const keepMatch = vibeContent.match(/\[[\d,\s]*\]/);
+          if (keepMatch) {
+            const keepIndices = JSON.parse(keepMatch[0]);
+            const filteredTracks = keepIndices
+              .map(idx => selectedTracks[idx - 1])
+              .filter(t => t !== undefined);
 
-            const keepMatch = sanityContent.match(/\[([\d,\s]*)\]/);
-            if (keepMatch) {
-              const keepIndices = JSON.parse(keepMatch[0]);
-              const filteredTracks = keepIndices
-                .map(idx => selectedTracks[idx - 1])
-                .filter(t => t !== undefined);
-
-              // Never remove more than 30% of tracks — prevents over-filtering
-              const minKeep = Math.ceil(selectedTracks.length * 0.7);
-              const finalTracks = filteredTracks.length >= minKeep ? filteredTracks : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
-              if (finalTracks.length >= 5) {
-                const removed = selectedTracks.length - finalTracks.length;
-                if (removed > 0) {
-                  console.log(`✂️ Sanity check removed ${removed} mismatched tracks`);
-                }
-                selectedTracks = finalTracks;
+            // Never remove more than 25% of tracks — prevents over-filtering
+            const minKeep = Math.ceil(selectedTracks.length * 0.75);
+            const finalTracks = filteredTracks.length >= minKeep
+              ? filteredTracks
+              : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
+            if (finalTracks.length >= 5) {
+              const removed = selectedTracks.length - finalTracks.length;
+              if (removed > 0) {
+                console.log(`✂️ Vibe check removed ${removed} mismatched tracks`);
               }
+              selectedTracks = finalTracks;
             }
-          } catch (error) {
-            console.log('Sanity check failed, using tracks as-is:', error.message);
           }
+        } catch (error) {
+          console.log('Vibe check failed, using tracks as-is:', error.message);
         }
 
 
