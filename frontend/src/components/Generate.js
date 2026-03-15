@@ -275,8 +275,9 @@ export default function Generate() {
       const next = new Set(prev);
       wasLocked ? next.delete(trackId) : next.add(trackId);
 
-      // Persist to draft immediately so the lock survives navigation
-      if (generatedPlaylist?.draftId && isPaid()) {
+      // Persist to draft immediately so the lock survives navigation.
+      // Only save if draftId is already a draft-* key to avoid overwriting a live playlist record.
+      if (generatedPlaylist?.draftId?.startsWith('draft-') && isPaid()) {
         playlistService.saveDraft(userId, {
           ...generatedPlaylist,
           lockedTrackIds: [...next],
@@ -381,9 +382,22 @@ export default function Generate() {
       setPhase('tracks');
       setChatLoading(false);
 
-      // Persist chat history back to the draft so it survives navigation
+      // Persist chat history back to the draft so it survives navigation.
+      // If draftId is a live playlist ID (not yet a draft-* key), await the save so we can
+      // capture the server-assigned draft-* ID and update state — prevents the live playlist
+      // record from being overwritten and avoids creating a new draft on every subsequent save.
       if (updated.draftId && isPaid()) {
-        playlistService.saveDraft(userId, updated).catch(() => {});
+        const needsDraftIdUpdate = !updated.draftId.startsWith('draft-');
+        if (needsDraftIdUpdate) {
+          try {
+            const saved = await playlistService.saveDraft(userId, updated);
+            if (saved?.draftId) {
+              setGeneratedPlaylist(prev => ({ ...prev, draftId: saved.draftId }));
+            }
+          } catch (_) {}
+        } else {
+          playlistService.saveDraft(userId, updated).catch(() => {});
+        }
       }
     } catch (err) {
       clearInterval(refineIntervalRef.current);

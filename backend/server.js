@@ -6097,8 +6097,14 @@ app.post('/api/drafts/:userId', async (req, res) => {
     const { userId } = req.params;
     const { draftData } = req.body;
 
-    // Generate a unique draft ID if not provided
-    const draftId = draftData.draftId || `draft-${Date.now()}`;
+    // Use existing draft-* ID if present; otherwise generate a new one.
+    // NEVER reuse a live playlist ID (e.g. a Spotify/Apple playlist ID that doesn't start
+    // with "draft-") as the DB key — doing so upserts over the live record with isDraft:true
+    // and causes the playlist to vanish from the playlists page.
+    const existingDraftId = draftData.draftId;
+    const draftId = (existingDraftId && existingDraftId.startsWith('draft-'))
+      ? existingDraftId
+      : `draft-${Date.now()}`;
 
     // Save draft to database
     await savePlaylist(userId, {
