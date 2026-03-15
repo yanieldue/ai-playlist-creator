@@ -1094,6 +1094,19 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       );
       const items = response.data?.items || [];
       console.log(`✓ SoundCharts returned ${items.length} songs`);
+
+      // If a genre filter returned 0 results, the genre slug may be unsupported — retry without it
+      const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres');
+      if (items.length === 0 && genreFilters.length > 0) {
+        const filtersWithoutGenre = soundchartsFilters.filter(f => f.type !== 'songGenres');
+        console.log(`⚠️  SoundCharts genre filter returned 0 — retrying without genre filter`);
+        return executeSoundChartsStrategy(
+          { ...query, soundchartsFilters: filtersWithoutGenre },
+          fetchCount,
+          confirmedArtistUuids
+        );
+      }
+
       const mappedItems = items
         .filter(item => item.song?.name)  // drop items with no song name
         .map(item => ({
