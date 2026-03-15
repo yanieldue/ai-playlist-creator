@@ -1095,11 +1095,23 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       const items = response.data?.items || [];
       console.log(`✓ SoundCharts returned ${items.length} songs`);
 
-      // If a genre filter returned 0 results, the genre slug may be unsupported — retry without it
+      // If a genre filter returned 0 results, the genre slug may be unsupported.
+      // Prefer artist_songs with seed artists (stays genre-relevant) over stripping the filter
+      // (which returns unfiltered global top songs that may be completely off-genre).
       const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres');
       if (items.length === 0 && genreFilters.length > 0) {
+        const seeds = query.seedArtists || [];
+        if (seeds.length > 0) {
+          console.log(`⚠️  SoundCharts genre filter returned 0 — falling back to artist_songs with seeds [${seeds.join(', ')}]`);
+          return executeSoundChartsStrategy(
+            { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
+            fetchCount,
+            confirmedArtistUuids
+          );
+        }
+        // No seed artists — last resort: retry without genre filter
         const filtersWithoutGenre = soundchartsFilters.filter(f => f.type !== 'songGenres');
-        console.log(`⚠️  SoundCharts genre filter returned 0 — retrying without genre filter`);
+        console.log(`⚠️  SoundCharts genre filter returned 0 and no seed artists — retrying without genre filter`);
         return executeSoundChartsStrategy(
           { ...query, soundchartsFilters: filtersWithoutGenre },
           fetchCount,
