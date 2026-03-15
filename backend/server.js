@@ -979,22 +979,24 @@ async function getSoundChartsSongDetails(songUuid, options = {}) {
 }
 
 // Map Claude genre names → SoundCharts genre slugs
+// Genre slugs verified against SoundCharts top/songs API — these are the actual root values
+// the API accepts. Invalid slugs silently return 0 results.
 const SOUNDCHARTS_GENRE_MAP = {
   'pop': 'pop', 'dance pop': 'pop', 'synth-pop': 'pop', 'electropop': 'pop',
-  'hip hop': 'hip-hop', 'hip-hop': 'hip-hop', 'rap': 'hip-hop', 'trap': 'hip-hop',
-  'drill': 'hip-hop', 'underground hip hop': 'hip-hop',
-  'r&b': 'r-b', 'rnb': 'r-b', 'neo soul': 'r-b', 'soul': 'r-b',
-  'rock': 'rock', 'indie rock': 'rock', 'pop rock': 'rock',
-  'alternative': 'alternative', 'indie': 'indie', 'indie pop': 'indie',
-  'electronic': 'electronic', 'edm': 'electronic', 'house': 'electronic',
-  'techno': 'electronic', 'dance': 'electronic',
+  'k-pop': 'pop', 'kpop': 'pop', 'korean pop': 'pop',
+  'hip hop': 'hip hop', 'hip-hop': 'hip hop', 'rap': 'hip hop', 'trap': 'hip hop',
+  'drill': 'hip hop', 'underground hip hop': 'hip hop',
+  'r&b': 'r&b', 'rnb': 'r&b', 'neo soul': 'r&b', 'soul': 'r&b', 'funk': 'r&b',
+  'rock': 'rock', 'indie rock': 'rock', 'pop rock': 'rock', 'punk': 'rock',
+  'alternative': 'alternative', 'indie': 'alternative', 'indie pop': 'alternative',
+  'electronic': 'electro', 'edm': 'electro', 'house': 'electro',
+  'techno': 'electro', 'dance': 'electro', 'lo-fi': 'electro', 'ambient': 'electro',
   'country': 'country', 'country pop': 'country',
   'latin': 'latin', 'reggaeton': 'latin', 'latin pop': 'latin',
-  'jazz': 'jazz', 'funk': 'funk',
-  'metal': 'metal', 'punk': 'punk', 'classical': 'classical',
-  'k-pop': 'k-pop', 'afrobeats': 'afrobeats', 'afro pop': 'afrobeats',
-  'lo-fi': 'lo-fi', 'ambient': 'ambient',
-  'reggae': 'reggae', 'blues': 'blues', 'gospel': 'gospel',
+  'jazz': 'jazz', 'classical': 'classical',
+  'metal': 'metal',
+  'afrobeats': 'african', 'afro pop': 'african', 'afro': 'african',
+  'reggae': 'reggae', 'blues': 'blues', 'gospel': 'r&b',
 };
 
 // Build a SoundCharts query from Claude-extracted genreData.
@@ -1207,13 +1209,13 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           added++;
         }
       }
-      // Extract expected genre slugs from filters (e.g. ['r-b', 'k-pop']) for validation
+      // Extract expected genre slugs from filters (e.g. ['r&b', 'hip hop']) for validation
       const genreFilter = soundchartsFilters.find(f => f.type === 'songGenres');
       const expectedGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
 
-      // Normalize genre strings for comparison — SoundCharts filter slugs use hyphens (r-b, k-pop)
-      // but artist genre tags use display text (r&b, k-pop). Normalize both to hyphenated form.
-      const normalizeGenre = g => g.toLowerCase().replace(/&/g, '-').replace(/\s+/g, '-');
+      // Normalize genre strings for comparison — strip punctuation and spaces so
+      // 'r&b', 'r-b', 'r b' all collapse to 'rb'; 'hip hop' and 'hip-hop' both → 'hiphop'.
+      const normalizeGenre = g => g.toLowerCase().replace(/[^a-z0-9]/g, '');
       // An artist "has" a genre if any of their genre strings, when normalized, equal or start with
       // the expected slug (covers 'r-b/soul' matching 'r-b', etc.)
       const artistHasGenre = (artistGenres, expected) => {
