@@ -1006,9 +1006,13 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
   const suggestedSeeds = genreData.artistConstraints.suggestedSeedArtists || [];
+  // requestedArtists = explicitly named by the user ("I want songs like Daniel J and Dre Dior")
+  // suggestedSeedArtists = Claude's inferred seeds from overall playlist context
+  // Always include requestedArtists first (they're the explicit ask), then fill with
+  // suggestedSeedArtists. Never let suggestedSeedArtists silently replace requestedArtists.
   const seedArtists = isExclusive
     ? requestedArtists
-    : (suggestedSeeds.length > 0 ? suggestedSeeds : requestedArtists);
+    : [...new Set([...requestedArtists, ...suggestedSeeds])];
 
   // Strategy selection:
   // - exclusive mode → artist_songs (only those specific artists)
@@ -1248,8 +1252,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           if (!simInfo?.uuid) continue;
           const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
 
-          // 1. Must include the expected genre (e.g. r&b) — prevents genre drift
-          if (expectedGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
+          // 1. Must include the expected genre (e.g. r&b) — prevents genre drift.
+          // Exception: if the artist has NO genre tags at all (common for long_tail/underground
+          // artists on SoundCharts), don't skip — missing metadata ≠ wrong genre.
+          if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
             console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
             continue;
           }
