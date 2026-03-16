@@ -88,7 +88,6 @@ export default function Generate() {
   const [editedPlaylistName, setEditedPlaylistName] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [updateFrequency, setUpdateFrequency] = useState('never');
-  const [updateMode, setUpdateMode] = useState('append');
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -432,7 +431,7 @@ export default function Generate() {
         autoCreate: true,
         editedPlaylistName: finalName,
         updateFrequency,
-        updateMode,
+        updateMode: 'replace',
       },
     });
   };
@@ -565,19 +564,6 @@ export default function Generate() {
                     </button>
                   ))}
                 </div>
-                {updateFrequency !== 'never' && (
-                  <div className="generate-update-mode-row">
-                    {[['append', '+ Add songs'], ['replace', '↻ Replace songs']].map(([mode, label]) => (
-                      <button
-                        key={mode}
-                        className={`generate-update-mode-btn${updateMode === mode ? ' active' : ''}`}
-                        onClick={() => setUpdateMode(mode)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
               {generatedPlaylist.tracks.map(track => (
                 <div key={track.id} className="generate-track-item">
