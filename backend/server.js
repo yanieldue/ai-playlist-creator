@@ -7954,55 +7954,12 @@ let activeUpdateCount = 0;
 async function processPlaylistUpdate(userId, playlist) {
   console.log(`[AUTO-UPDATE] Updating playlist: ${playlist.playlistName} (${playlist.playlistId})`);
   try {
-    // Build prompt
-    let prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
-    if (playlist.description) {
-      prompt += `. Description: ${playlist.description}`;
-    }
-
-    const allRefinements = [];
-    if (playlist.chatMessages && playlist.chatMessages.length > 0) {
-      allRefinements.push(...playlist.chatMessages.filter(msg => msg.role === 'user').map(msg => msg.content));
-    }
-    if (playlist.refinementInstructions && playlist.refinementInstructions.length > 0) {
-      allRefinements.push(...playlist.refinementInstructions);
-    }
-    if (allRefinements.length > 0) {
-      prompt += `. Refinements: ${allRefinements.join('. ')}`;
-      console.log(`[AUTO-UPDATE] Applied ${allRefinements.length} total refinement(s)`);
-    }
-
+    // Prompt is rebuilt from originalPrompt + stored refinements inside generate-playlist
+    // (same pre-flight logic as manual refresh). Just pass the originalPrompt as a fallback
+    // for imported playlists that have no stored originalPrompt — generate-playlist will use
+    // it as-is since there's nothing to restore.
+    const prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
     if (!playlist.tracks) playlist.tracks = [];
-
-    // Liked/disliked context
-    const likedSongs = playlist.likedSongs || [];
-    const dislikedSongs = playlist.dislikedSongs || [];
-    let userFeedbackContext = '';
-    if (likedSongs.length > 0) {
-      userFeedbackContext += ` User liked: ${likedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ')}.`;
-      console.log(`[AUTO-UPDATE] Incorporating ${likedSongs.length} liked song(s) into prompt`);
-    }
-    if (dislikedSongs.length > 0) {
-      userFeedbackContext += ` User disliked: ${dislikedSongs.slice(0, 5).map(s => `"${s.name}" by ${s.artist}`).join(', ')}.`;
-      console.log(`[AUTO-UPDATE] Avoiding songs similar to ${dislikedSongs.length} disliked song(s)`);
-    }
-
-    // Always include tracks + artists so Claude can identify seed artists for discovery
-    if (playlist.tracks.length > 0) {
-      const refTracks = playlist.tracks.slice(0, 10)
-        .map(t => `"${t.name}" by ${t.artist || t.artists?.[0]?.name || 'Unknown'}`).join(', ');
-      prompt = `${prompt}. Reference tracks: ${refTracks}`;
-
-      const allArtists = [...new Set(playlist.tracks.map(t => t.artist || t.artists?.[0]?.name).filter(Boolean))];
-      if (allArtists.length > 0) {
-        prompt += `. Key artists in this playlist: ${allArtists.slice(0, 10).join(', ')}`;
-        if (!playlist.originalPrompt) {
-          console.log(`[AUTO-UPDATE] Imported playlist — enhanced prompt with artists: ${allArtists.join(', ')}`);
-        }
-      }
-    }
-
-    if (userFeedbackContext) prompt += userFeedbackContext;
 
     // Resolve platform user ID
     const playlistPlatform = playlist.platform || 'spotify';
