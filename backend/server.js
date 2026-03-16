@@ -4296,6 +4296,28 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
+    // For refreshes/refinements: rebuild prompt from originalPrompt + stored refinements
+    // BEFORE Claude extraction so genreData comes from the user's actual intent, not a
+    // frontend-built track list that drifts every refresh.
+    if (playlistId && userId) {
+      const userPlaylistsArray = userPlaylists.get(userId) || [];
+      const storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      if (storedPlaylist?.originalPrompt) {
+        const storedRefinements = [];
+        if (storedPlaylist.chatMessages?.length > 0) {
+          storedRefinements.push(...storedPlaylist.chatMessages.filter(m => m.role === 'user').map(m => m.content));
+        }
+        if (storedPlaylist.refinementInstructions?.length > 0) {
+          storedRefinements.push(...storedPlaylist.refinementInstructions);
+        }
+        prompt = storedPlaylist.originalPrompt;
+        if (storedRefinements.length > 0) {
+          prompt += `. Refinements: ${storedRefinements.join('. ')}`;
+        }
+        console.log(`[REFRESH] Rebuilt prompt from stored data: "${prompt}"`);
+      }
+    }
+
     console.log('Generating playlist for prompt:', prompt);
 
     // Step 0: Use Claude to extract the genre, style, audio features, AND all refinement constraints from the prompt
@@ -4735,49 +4757,10 @@ Respond ONLY with valid JSON:
         console.log(`⚠️  Playlist ${playlistId} not found in memory cache`);
       }
 
-      // For refinements/refreshes, restore the FULL original genreData to prevent the
-      // refinement message from accidentally shifting genre/style. E.g. "add more chill songs"
-      // should not turn a hip-hop playlist into lofi — the refinement message text only guides
-      // song selection, not the core musical DNA captured in the stored genreData.
-      // EXCEPTION: if the refinement explicitly names specific artists, those artist constraints
-      // should override the original so the user actually gets songs from the requested artists.
-      if (existingPlaylistData && existingPlaylistData.genreData) {
-        const refinementArtistConstraints = genreData.artistConstraints; // save before override
-        console.log('Restoring full original genre data for refinement consistency');
-        genreData = JSON.parse(JSON.stringify(existingPlaylistData.genreData));
-
-        // If the refinement explicitly requested specific artists, apply those on top
-        if (refinementArtistConstraints?.requestedArtists?.length > 0) {
-          genreData.artistConstraints.requestedArtists = refinementArtistConstraints.requestedArtists;
-          genreData.artistConstraints.exclusiveMode = refinementArtistConstraints.exclusiveMode;
-          console.log(`Refinement overrides artist constraints: ${refinementArtistConstraints.requestedArtists.join(', ')} (exclusive: ${refinementArtistConstraints.exclusiveMode})`);
-        } else if (genreData.artistConstraints?.requestedArtists?.length) {
-          console.log(`Preserved requested artists: ${genreData.artistConstraints.requestedArtists.join(', ')} (exclusive: ${genreData.artistConstraints.exclusiveMode})`);
-        }
-
-        if (genreData.primaryGenre) {
-          console.log(`Preserved genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
-        }
-      }
-
-      // Also restore the original prompt so the AI call doesn't see a frontend-built prompt
-      // that references stale (possibly wrong-genre) tracks or concatenated refinement text.
-      // The original prompt is the clearest signal of the user's intent.
-      // Append any stored refinements on top so they're preserved (same pattern as auto-update).
-      if (existingPlaylistData && existingPlaylistData.originalPrompt) {
-        const storedRefinements = [];
-        if (existingPlaylistData.chatMessages?.length > 0) {
-          storedRefinements.push(...existingPlaylistData.chatMessages.filter(m => m.role === 'user').map(m => m.content));
-        }
-        if (existingPlaylistData.refinementInstructions?.length > 0) {
-          storedRefinements.push(...existingPlaylistData.refinementInstructions);
-        }
-        let restoredPrompt = existingPlaylistData.originalPrompt;
-        if (storedRefinements.length > 0) {
-          restoredPrompt += `. Refinements: ${storedRefinements.join('. ')}`;
-        }
-        console.log(`Restoring original prompt for AI: "${restoredPrompt}"`);
-        prompt = restoredPrompt;
+      // Prompt was already rebuilt from originalPrompt + refinements before Claude extraction.
+      // genreData comes directly from Claude's analysis of that clean prompt — no overrides needed.
+      if (existingPlaylistData && genreData.primaryGenre) {
+        console.log(`genreData extracted from restored prompt — genre: ${genreData.primaryGenre} / ${genreData.subgenre}`);
       }
     }
 
