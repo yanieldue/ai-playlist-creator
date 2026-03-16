@@ -44,6 +44,7 @@ const PlaylistGenerator = () => {
   const [generatedPlaylist, setGeneratedPlaylist] = useState(null);
   const [error, setError] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+  const [autoCreatePending, setAutoCreatePending] = useState(false);
   const [activeTab, setActiveTab] = useState('home');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
@@ -197,13 +198,23 @@ const PlaylistGenerator = () => {
       setActiveTab(location.state.returnTab);
     }
     if (location.state?.pendingPlaylist) {
-      const { pendingPlaylist, pendingChatMessages } = location.state;
+      const {
+        pendingPlaylist, pendingChatMessages, autoCreate,
+        editedPlaylistName: locationName, updateFrequency: locationFreq, updateMode: locationMode,
+      } = location.state;
       setGeneratedPlaylist(pendingPlaylist);
-      setEditedPlaylistName(pendingPlaylist.playlistName || '');
+      setEditedPlaylistName(locationName || pendingPlaylist.playlistName || '');
       setEditedDescription(pendingPlaylist.description || '');
       setChatMessages(pendingChatMessages || []);
-      setShowPlaylistModal(true);
-      setModalStep(1);
+      if (autoCreate) {
+        setUpdateFrequency(locationFreq || 'never');
+        setUpdateMode(locationMode || 'append');
+        setIsPublic(true);
+        setAutoCreatePending(true);
+      } else {
+        setShowPlaylistModal(true);
+        setModalStep(1);
+      }
     }
     if (location.state?.updatedDraft) {
       const { updatedDraft } = location.state;
@@ -217,6 +228,15 @@ const PlaylistGenerator = () => {
     // Clear the state so a back/forward doesn't re-trigger
     if (location.state) window.history.replaceState({}, '', window.location.pathname);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When Generate.js passes autoCreate:true, all state is set in a single batch above.
+  // This effect fires after that render is committed, so state is ready for handleFinalCreatePlaylist.
+  useEffect(() => {
+    if (autoCreatePending && generatedPlaylist) {
+      setAutoCreatePending(false);
+      handleFinalCreatePlaylist();
+    }
+  }, [autoCreatePending, generatedPlaylist]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // Load platform-specific userIds from localStorage

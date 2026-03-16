@@ -84,6 +84,12 @@ export default function Generate() {
   const [toasts, setToasts] = useState([]);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
+  // Playlist settings (moved from PlaylistGenerator modal)
+  const [editedPlaylistName, setEditedPlaylistName] = useState('');
+  const [editingName, setEditingName] = useState(false);
+  const [updateFrequency, setUpdateFrequency] = useState('never');
+  const [updateMode, setUpdateMode] = useState('append');
+
   const showToast = (message, type = 'success') => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -105,6 +111,13 @@ export default function Generate() {
   useEffect(() => {
     if (!userId) navigate('/', { replace: true });
   }, []);
+
+  // Sync editable name when playlist first loads
+  useEffect(() => {
+    if (generatedPlaylist?.playlistName && !editedPlaylistName) {
+      setEditedPlaylistName(generatedPlaylist.playlistName);
+    }
+  }, [generatedPlaylist?.playlistName]); // eslint-disable-line
 
   // Resize prompt textarea when prompt is set externally (e.g. suggestion click)
   useEffect(() => {
@@ -410,11 +423,16 @@ export default function Generate() {
   };
 
   const handleCreate = () => {
+    const finalName = editedPlaylistName.trim() || generatedPlaylist.playlistName;
     navigate('/', {
       state: {
-        pendingPlaylist: generatedPlaylist,
+        pendingPlaylist: { ...generatedPlaylist, playlistName: finalName },
         pendingChatMessages: chatMessages,
         returnTab,
+        autoCreate: true,
+        editedPlaylistName: finalName,
+        updateFrequency,
+        updateMode,
       },
     });
   };
@@ -440,9 +458,31 @@ export default function Generate() {
         <button className="generate-back-btn" onClick={goBack}>
           {phase === 'refine' ? <Icons.ChevronLeft size={22} /> : <Icons.Close size={20} />}
         </button>
-        {(phase === 'tracks' || phase === 'loading') && generatedPlaylist && (
+        {phase === 'loading' && generatedPlaylist && (
           <div className="generate-header-meta">
             <div className="generate-header-playlist-name">{generatedPlaylist.playlistName}</div>
+            <div className="generate-header-song-count">{generatedPlaylist.tracks?.length || 0} songs</div>
+          </div>
+        )}
+        {phase === 'tracks' && generatedPlaylist && (
+          <div className="generate-header-meta">
+            {editingName ? (
+              <input
+                className="generate-playlist-name-input"
+                value={editedPlaylistName}
+                onChange={e => setEditedPlaylistName(e.target.value)}
+                onBlur={() => setEditingName(false)}
+                onKeyDown={e => { if (e.key === 'Enter') setEditingName(false); }}
+                autoFocus
+              />
+            ) : (
+              <div className="generate-header-name-row">
+                <span className="generate-header-playlist-name">{editedPlaylistName || generatedPlaylist.playlistName}</span>
+                <button className="generate-edit-name-btn" onClick={() => setEditingName(true)} title="Edit name">
+                  <Icons.Edit size={13} />
+                </button>
+              </div>
+            )}
             <div className="generate-header-song-count">{generatedPlaylist.tracks?.length || 0} songs</div>
           </div>
         )}
@@ -509,6 +549,36 @@ export default function Generate() {
 
           {phase === 'tracks' && generatedPlaylist && (
             <>
+              <div className="generate-update-section">
+                <div className="generate-update-freq-row">
+                  {['never', 'daily', 'weekly', 'monthly'].map(freq => (
+                    <button
+                      key={freq}
+                      className={`generate-update-freq-btn${updateFrequency === freq ? ' active' : ''}`}
+                      onClick={() => {
+                        if (freq !== 'never' && !isPaid()) return;
+                        setUpdateFrequency(freq);
+                      }}
+                    >
+                      {freq !== 'never' && !isPaid() && <Icons.Lock size={10} />}
+                      {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {updateFrequency !== 'never' && (
+                  <div className="generate-update-mode-row">
+                    {[['append', '+ Add songs'], ['replace', '↻ Replace songs']].map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        className={`generate-update-mode-btn${updateMode === mode ? ' active' : ''}`}
+                        onClick={() => setUpdateMode(mode)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {generatedPlaylist.tracks.map(track => (
                 <div key={track.id} className="generate-track-item">
                   {track.image

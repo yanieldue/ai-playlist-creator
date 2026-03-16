@@ -59,6 +59,96 @@
   padding: 20px 20px 8px;
 }
 
+/* Editable playlist name in header */
+.generate-header-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.generate-header-name-row .generate-header-playlist-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.generate-edit-name-btn {
+  background: none;
+  border: none;
+  color: #aeaeb2;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.generate-edit-name-btn:hover { color: #636366; }
+.generate-playlist-name-input {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  color: #1c1c1e;
+  background: none;
+  border: none;
+  border-bottom: 1.5px solid #1db954;
+  outline: none;
+  padding: 0 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Auto-update section */
+.generate-update-section {
+  padding: 12px 0 4px;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 4px;
+}
+.generate-update-freq-row {
+  display: flex;
+  gap: 6px;
+}
+.generate-update-freq-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #f2f2f7;
+  border: 1.5px solid transparent;
+  border-radius: 20px;
+  padding: 7px 4px;
+  color: #636366;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.generate-update-freq-btn.active {
+  border-color: #1db954;
+  color: #1db954;
+  background: #f2f2f7;
+}
+.generate-update-mode-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.generate-update-mode-btn {
+  flex: 1;
+  background: #f2f2f7;
+  border: 1.5px solid transparent;
+  border-radius: 20px;
+  padding: 7px 4px;
+  color: #636366;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.generate-update-mode-btn.active {
+  border-color: #000000;
+  color: #000000;
+}
+
 /* Input phase */
 .generate-intro {
   margin-bottom: 20px;
@@ -512,6 +602,29 @@
 :root.dark-mode .generate-create-btn {
   background: #ffffff;
   color: #000000;
+}
+:root.dark-mode .generate-edit-name-btn { color: #636366; }
+:root.dark-mode .generate-edit-name-btn:hover { color: #aeaeb2; }
+:root.dark-mode .generate-playlist-name-input { color: #ffffff; }
+:root.dark-mode .generate-update-section {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+:root.dark-mode .generate-update-freq-btn {
+  background: #2c2c2e;
+  color: #8e8e93;
+}
+:root.dark-mode .generate-update-freq-btn.active {
+  border-color: #1db954;
+  color: #1db954;
+  background: #2c2c2e;
+}
+:root.dark-mode .generate-update-mode-btn {
+  background: #2c2c2e;
+  color: #8e8e93;
+}
+:root.dark-mode .generate-update-mode-btn.active {
+  border-color: #ffffff;
+  color: #ffffff;
 }
 :root.dark-mode .generate-toast {
   background: #f2f2f7;
