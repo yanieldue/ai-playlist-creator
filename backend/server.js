@@ -1005,11 +1005,23 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
   const isExclusive = genreData.artistConstraints.exclusiveMode === true ||
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
-  const strategy = isExclusive && requestedArtists.length > 0 ? 'artist_songs' : 'top_songs';
+  const suggestedSeeds = genreData.artistConstraints.suggestedSeedArtists || [];
+  const seedArtists = isExclusive
+    ? requestedArtists
+    : (suggestedSeeds.length > 0 ? suggestedSeeds : requestedArtists);
+
+  // Strategy selection:
+  // - exclusive mode → artist_songs (only those specific artists)
+  // - seed artists available → artist_songs + expandToSimilar (SoundCharts similar-artist graph
+  //   finds artists with a matching sound, far more precise than genre top-songs)
+  // - no seed artists → top_songs filtered by genre (last resort)
+  const strategy = isExclusive
+    ? 'artist_songs'
+    : (seedArtists.length > 0 ? 'artist_songs' : 'top_songs');
 
   const filters = [];
 
-  // Genre filter
+  // Genre filter (used for top_songs fallback; also passed so artist_songs can apply era filter)
   if (genreData.primaryGenre) {
     const genreLower = genreData.primaryGenre.toLowerCase().trim();
     let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
@@ -1029,19 +1041,10 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
     filters.push(rdf);
   }
 
-  // Include seed artists so executeSoundChartsStrategy can fall back to artist-based
-  // discovery if the top/songs endpoint is not available on the current plan (403).
-  // When suggestedSeedArtists is empty (e.g. "songs similar to JENNIE" where Claude
-  // puts JENNIE in requestedArtists but not suggestedSeedArtists), use requestedArtists
-  // as seeds so discovery still has artists to expand from.
-  const suggestedSeeds = genreData.artistConstraints.suggestedSeedArtists || [];
-  const seedArtists = isExclusive
-    ? requestedArtists
-    : (suggestedSeeds.length > 0 ? suggestedSeeds : requestedArtists);
-
   return {
     strategy,
-    artists: isExclusive ? requestedArtists : [],
+    artists: seedArtists,
+    expandToSimilar: !isExclusive,
     seedArtists,
     soundchartsFilters: filters,
     soundchartsSort: { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
