@@ -4636,12 +4636,17 @@ DO NOT include any text outside the JSON.`
           } catch (err) { /* ignore individual lookup errors */ }
         }
 
-        // Validate each confirmed UUID against Spotify genres.
+        // Validate each confirmed UUID against Spotify genres (app-level token, no user auth —
+        // works for all users regardless of platform).
         // SoundCharts can mislabel underground R&B/hip-hop artists as "electro/techno",
         // OR the reference-song fallback can confirm the wrong homonymous artist
         // (e.g. an electro producer named "Keffer" who also has a song called "Lovin' Feelin'").
         // If Spotify says R&B but SoundCharts says electro-only → wrong entity, invalidate UUID.
-        if (platform === 'spotify' && userSpotifyApi) {
+        try {
+          const ccData = await spotifyApi.clientCredentialsGrant();
+          const appSpotify = new SpotifyWebApi({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET });
+          appSpotify.setAccessToken(ccData.body.access_token);
+
           const ELECTRO = ['electro', 'electronic', 'techno', 'house', 'edm', 'dance', 'trance', 'dubstep'];
           const RNB_HH  = ['r&b', 'rnb', 'soul', 'hip-hop', 'hip hop', 'rap', 'trap'];
           for (const artistName of genreData.artistConstraints.requestedArtists) {
@@ -4649,7 +4654,7 @@ DO NOT include any text outside the JSON.`
             const scGenres = (scInfo?.genres || []).map(g => g.toLowerCase());
             if (scGenres.length === 0) continue; // nothing to validate
             try {
-              const searchRes = await userSpotifyApi.searchArtists(artistName, { limit: 5 });
+              const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
               const items = searchRes.body.artists?.items || [];
               const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
               if (!match?.genres?.length) continue;
@@ -4664,8 +4669,10 @@ DO NOT include any text outside the JSON.`
               } else {
                 console.log(`✓ "${artistName}" genre validated: SC=[${scGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,2).join(',')}]`);
               }
-            } catch (err) { /* ignore Spotify errors — don't invalidate on uncertainty */ }
+            } catch (err) { /* ignore per-artist errors — don't invalidate on uncertainty */ }
           }
+        } catch (err) {
+          console.log(`⚠️  Spotify genre validation skipped: ${err.message}`);
         }
 
         // Aggregate genres, similar artists, and career stages from validated artists only
