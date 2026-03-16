@@ -1216,9 +1216,17 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           added++;
         }
       }
-      // Extract expected genre slugs from filters (e.g. ['r&b', 'hip hop']) for validation
+      // Derive expected genres from the seed artists' actual SoundCharts genres — much more
+      // reliable than Claude's extraction for underground/niche artists Claude may not know.
+      // Fall back to Claude's extracted genre (from soundchartsFilters) only when seeds have
+      // no genre metadata at all.
+      const seedActualGenres = [...new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
       const genreFilter = soundchartsFilters.find(f => f.type === 'songGenres');
-      const expectedGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
+      const claudeGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
+      const expectedGenres = seedActualGenres.length > 0 ? seedActualGenres : claudeGenres;
+      if (seedActualGenres.length > 0) {
+        console.log(`🎯 Similar-artist genre filter: using seed genres [${seedActualGenres.join(', ')}] (not Claude's extraction)`);
+      }
 
       // Normalize genre strings for comparison — strip punctuation and spaces so
       // 'r&b', 'r-b', 'r b' all collapse to 'rb'; 'hip hop' and 'hip-hop' both → 'hiphop'.
