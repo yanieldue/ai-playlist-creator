@@ -6170,6 +6170,13 @@ app.delete('/api/drafts/:userId/:draftId', async (req, res) => {
   try {
     const { userId, draftId } = req.params;
 
+    // Safety guard: only delete records whose DB key is a draft-* ID.
+    // A live playlist ID (Spotify/Apple) should never be deletable via this endpoint.
+    if (!draftId.startsWith('draft-')) {
+      console.warn(`[DRAFTS] Refusing to delete non-draft ID "${draftId}" via drafts endpoint`);
+      return res.status(400).json({ error: 'Invalid draft ID — can only delete draft-* records via this endpoint' });
+    }
+
     const userPlaylistHistory = userPlaylists.get(userId) || [];
     const updatedPlaylists = userPlaylistHistory.filter(p => p.playlistId !== draftId);
     userPlaylists.set(userId, updatedPlaylists);
