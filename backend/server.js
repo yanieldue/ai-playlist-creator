@@ -4763,9 +4763,21 @@ Respond ONLY with valid JSON:
       // Also restore the original prompt so the AI call doesn't see a frontend-built prompt
       // that references stale (possibly wrong-genre) tracks or concatenated refinement text.
       // The original prompt is the clearest signal of the user's intent.
+      // Append any stored refinements on top so they're preserved (same pattern as auto-update).
       if (existingPlaylistData && existingPlaylistData.originalPrompt) {
-        console.log(`Restoring original prompt for AI: "${existingPlaylistData.originalPrompt}"`);
-        prompt = existingPlaylistData.originalPrompt;
+        const storedRefinements = [];
+        if (existingPlaylistData.chatMessages?.length > 0) {
+          storedRefinements.push(...existingPlaylistData.chatMessages.filter(m => m.role === 'user').map(m => m.content));
+        }
+        if (existingPlaylistData.refinementInstructions?.length > 0) {
+          storedRefinements.push(...existingPlaylistData.refinementInstructions);
+        }
+        let restoredPrompt = existingPlaylistData.originalPrompt;
+        if (storedRefinements.length > 0) {
+          restoredPrompt += `. Refinements: ${storedRefinements.join('. ')}`;
+        }
+        console.log(`Restoring original prompt for AI: "${restoredPrompt}"`);
+        prompt = restoredPrompt;
       }
     }
 
