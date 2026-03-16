@@ -1187,8 +1187,12 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     // Phase 1: resolve seed artist infos
     const seedInfos = [];
     for (const artistName of artists) {
+      const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
+      if (confirmedUuid === 'INVALID') {
+        console.log(`⏭️  Skipping "${artistName}" — SoundCharts UUID invalidated (genre mismatch with Spotify)`);
+        continue;
+      }
       try {
-        const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
         const artistInfo = confirmedUuid
           ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
           : await getSoundChartsArtistInfo(artistName);
@@ -4617,27 +4621,58 @@ DO NOT include any text outside the JSON.`
         const artistGenres = [];
         const allSimilarArtists = [];
 
-        // Use SoundCharts to get genres, similar artists, and career stage (for popularity detection)
+        // Use SoundCharts to get genres, similar artists, and career stage (for popularity detection).
+        // Collect per-artist first so we can validate before aggregating.
         console.log('🔍 Checking SoundCharts for artist info and similar artists...');
         const artistCareerStages = [];
+        const artistSCInfoMap = {}; // { nameLower: soundChartsInfo }
         for (const artistName of genreData.artistConstraints.requestedArtists) {
-          // If we already confirmed this artist's UUID via reference song lookup, use it directly
-          // to avoid name-based disambiguation picking the wrong artist (e.g. Spanish Dante vs R&B Dante)
           const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
-          const soundChartsInfo = confirmedUuid
-            ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
-            : await getSoundChartsArtistInfo(artistName);
-          if (soundChartsInfo) {
-            if (soundChartsInfo.genres.length > 0) {
-              artistGenres.push(...soundChartsInfo.genres);
-            }
-            if (soundChartsInfo.similarArtists.length > 0) {
-              allSimilarArtists.push(...soundChartsInfo.similarArtists);
-            }
-            if (soundChartsInfo.careerStage) {
-              artistCareerStages.push(soundChartsInfo.careerStage);
-            }
+          try {
+            const soundChartsInfo = confirmedUuid
+              ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
+              : await getSoundChartsArtistInfo(artistName);
+            if (soundChartsInfo) artistSCInfoMap[artistName.toLowerCase()] = soundChartsInfo;
+          } catch (err) { /* ignore individual lookup errors */ }
+        }
+
+        // Validate each confirmed UUID against Spotify genres.
+        // SoundCharts can mislabel underground R&B/hip-hop artists as "electro/techno",
+        // OR the reference-song fallback can confirm the wrong homonymous artist
+        // (e.g. an electro producer named "Keffer" who also has a song called "Lovin' Feelin'").
+        // If Spotify says R&B but SoundCharts says electro-only → wrong entity, invalidate UUID.
+        if (platform === 'spotify' && userSpotifyApi) {
+          const ELECTRO = ['electro', 'electronic', 'techno', 'house', 'edm', 'dance', 'trance', 'dubstep'];
+          const RNB_HH  = ['r&b', 'rnb', 'soul', 'hip-hop', 'hip hop', 'rap', 'trap'];
+          for (const artistName of genreData.artistConstraints.requestedArtists) {
+            const scInfo = artistSCInfoMap[artistName.toLowerCase()];
+            const scGenres = (scInfo?.genres || []).map(g => g.toLowerCase());
+            if (scGenres.length === 0) continue; // nothing to validate
+            try {
+              const searchRes = await userSpotifyApi.searchArtists(artistName, { limit: 5 });
+              const items = searchRes.body.artists?.items || [];
+              const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
+              if (!match?.genres?.length) continue;
+              const spotifyGenres = match.genres.map(g => g.toLowerCase());
+              const scIsElectroOnly = scGenres.some(g => ELECTRO.some(e => g.includes(e)))
+                                   && !scGenres.some(g => RNB_HH.some(r => g.includes(r)));
+              const spotifyIsRnbHh  = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
+              if (scIsElectroOnly && spotifyIsRnbHh) {
+                console.log(`⚠️  "${artistName}" UUID mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs Spotify=[${spotifyGenres.slice(0,2).join(',')}] — invalidating SC UUID, won't use as seed`);
+                confirmedArtistUuids[artistName.toLowerCase()] = 'INVALID';
+                delete artistSCInfoMap[artistName.toLowerCase()]; // exclude their SC similar artists too
+              } else {
+                console.log(`✓ "${artistName}" genre validated: SC=[${scGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,2).join(',')}]`);
+              }
+            } catch (err) { /* ignore Spotify errors — don't invalidate on uncertainty */ }
           }
+        }
+
+        // Aggregate genres, similar artists, and career stages from validated artists only
+        for (const scInfo of Object.values(artistSCInfoMap)) {
+          if (scInfo.genres?.length > 0) artistGenres.push(...scInfo.genres);
+          if (scInfo.similarArtists?.length > 0) allSimilarArtists.push(...scInfo.similarArtists);
+          if (scInfo.careerStage) artistCareerStages.push(scInfo.careerStage);
         }
 
         // Store similar artists in genreData for use in playlist search
