@@ -127,6 +127,12 @@
   color: #1db954;
   background: #f2f2f7;
 }
+.generate-update-hint {
+  font-size: 11px;
+  color: #8e8e93;
+  margin-top: 6px;
+}
+
 .generate-update-mode-row {
   display: flex;
   gap: 6px;

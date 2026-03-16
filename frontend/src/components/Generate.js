@@ -564,6 +564,11 @@ export default function Generate() {
                     </button>
                   ))}
                 </div>
+                {updateFrequency !== 'never' && (
+                  <div className="generate-update-hint">
+                    Refreshes every {updateFrequency === 'daily' ? 'day' : updateFrequency === 'weekly' ? 'week' : 'month'} at 5 AM local time
+                  </div>
+                )}
               </div>
               {generatedPlaylist.tracks.map(track => (
                 <div key={track.id} className="generate-track-item">
