@@ -1187,17 +1187,30 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     // Phase 1: resolve seed artist infos
     const seedInfos = [];
     for (const artistName of artists) {
-      const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
+      let confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
       if (confirmedUuid === 'INVALID') {
         console.log(`⏭️  Skipping "${artistName}" — SoundCharts UUID invalidated (genre mismatch with Spotify)`);
         continue;
+      }
+      // NOSIMILAR: right artist confirmed, but SC has wrong genre/similar data — fetch songs only
+      let skipSimilarAndGenres = false;
+      if (typeof confirmedUuid === 'string' && confirmedUuid.startsWith('NOSIMILAR:')) {
+        skipSimilarAndGenres = true;
+        confirmedUuid = confirmedUuid.slice('NOSIMILAR:'.length);
       }
       try {
         const artistInfo = confirmedUuid
           ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
           : await getSoundChartsArtistInfo(artistName);
-        if (artistInfo?.uuid) seedInfos.push(artistInfo);
-        else console.log(`⚠️  Could not find "${artistName}" on SoundCharts`);
+        if (artistInfo?.uuid) {
+          if (skipSimilarAndGenres) {
+            // Don't let this artist's wrong SC genres/similar artists affect the pool filter
+            artistInfo.similarArtists = [];
+            artistInfo.genres = [];
+            console.log(`🎵 "${artistName}" — fetching songs only (SC genre data unreliable, using Spotify genres)`);
+          }
+          seedInfos.push(artistInfo);
+        } else console.log(`⚠️  Could not find "${artistName}" on SoundCharts`);
       } catch (err) {
         console.log(`⚠️  Error looking up "${artistName}": ${err.message}`);
       }
@@ -4665,6 +4678,12 @@ DO NOT include any text outside the JSON.`
               if (scIsElectroOnly && spotifyIsRnbHh) {
                 console.log(`⚠️  "${artistName}" SC genre mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs Spotify=[${spotifyGenres.slice(0,2).join(',')}] — keeping UUID for song fetch, using Spotify genres, dropping SC similar artists`);
                 // Don't invalidate UUID — we confirmed the right artist via reference song.
+                // Mark as NOSIMILAR so executeSoundChartsStrategy fetches songs but skips their
+                // wrong-genre SC similar artists and genres when building the artist pool.
+                const existingUuid = confirmedArtistUuids[artistName.toLowerCase()];
+                if (existingUuid && existingUuid !== 'INVALID') {
+                  confirmedArtistUuids[artistName.toLowerCase()] = 'NOSIMILAR:' + existingUuid;
+                }
                 // Remove from artistSCInfoMap so their wrong-genre similar artists don't pollute the pool.
                 delete artistSCInfoMap[artistName.toLowerCase()];
                 // Inject Spotify's correct genres directly into artistGenres for inference.
