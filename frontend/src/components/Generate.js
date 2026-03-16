@@ -102,6 +102,7 @@ export default function Generate() {
   const isGeneratingRef = useRef(false);
   const generationIdRef = useRef(0);
   const genIntervalRef = useRef(null);
+  const generationAbortControllerRef = useRef(null);
   const refineIntervalRef = useRef(null);
   const pageRef = useRef(null);
   const promptTextareaRef = useRef(null);
@@ -204,8 +205,9 @@ export default function Generate() {
 
     let willRetry = false;
     try {
+      generationAbortControllerRef.current = new AbortController();
       const result = await playlistService.generatePlaylist(
-        prompt.trim(), userId, activePlatform, allowExplicit, newArtistsOnly, songCount
+        prompt.trim(), userId, activePlatform, allowExplicit, newArtistsOnly, songCount, [], null, generationAbortControllerRef.current.signal
       );
       clearInterval(genIntervalRef.current);
 
@@ -241,6 +243,12 @@ export default function Generate() {
       isGeneratingRef.current = false;
     } catch (err) {
       clearInterval(genIntervalRef.current);
+
+      if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        isGeneratingRef.current = false;
+        setLoading(false);
+        return;
+      }
 
       if (err.response?.status === 429 && err.response?.data?.code === 'WEEKLY_LIMIT_REACHED') {
         const resetsAt = err.response.data.resetsAt;
@@ -446,7 +454,7 @@ export default function Generate() {
       setPhase('tracks');
       return;
     }
-    if (phase === 'loading') { setPhase('input'); return; }
+    if (phase === 'loading') { generationAbortControllerRef.current?.abort(); setPhase('input'); return; }
     if (phase === 'tracks') { navigate('/', { state: { returnTab, updatedDraft } }); return; }
     navigate('/', { state: { returnTab } });
   };

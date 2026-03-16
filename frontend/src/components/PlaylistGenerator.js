@@ -108,6 +108,8 @@ const PlaylistGenerator = () => {
 
   // Retry function for the gen-screen error state (differs between chat and artist flows)
   const generationRetryFnRef = useRef(null);
+  // AbortController for in-flight generation requests
+  const generationAbortControllerRef = useRef(null);
 
   // Top artists
   const [topArtists, setTopArtists] = useState(_homeCache.topArtists);
@@ -1101,7 +1103,8 @@ const PlaylistGenerator = () => {
     }, 1500);
 
     try {
-      const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount);
+      generationAbortControllerRef.current = new AbortController();
+      const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount, [], null, generationAbortControllerRef.current.signal);
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
@@ -1161,6 +1164,13 @@ const PlaylistGenerator = () => {
     } catch (err) {
       clearInterval(messageInterval);
       setGeneratingMessage('');
+
+      // User cancelled — exit silently
+      if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        isGeneratingRef.current = false;
+        setLoading(false);
+        return;
+      }
 
       // If authentication failed, don't retry
       if (err.response?.status === 401) {
@@ -2211,13 +2221,16 @@ const PlaylistGenerator = () => {
 
     try {
       // Generate playlist with the artist name and selected settings
+      generationAbortControllerRef.current = new AbortController();
       const result = await playlistService.generatePlaylist(
         promptText,
         userId,
         activePlatform || 'spotify',
         allowExplicit,
         artistModalNewArtistsOnly,
-        committedSongCount
+        committedSongCount,
+        [], null,
+        generationAbortControllerRef.current.signal
       );
       clearInterval(messageInterval);
       setGeneratingMessage('');
@@ -2253,6 +2266,10 @@ const PlaylistGenerator = () => {
       setArtistModalSongCountDraft(30);
     } catch (err) {
       clearInterval(messageInterval);
+      if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+        setLoading(false);
+        return;
+      }
       if (err.response?.status === 401) {
         setShowGeneratingChatModal(false);
         localStorage.removeItem('userId');
@@ -3405,6 +3422,7 @@ const PlaylistGenerator = () => {
                 <button
                   className="gen-screen-close"
                   onClick={() => {
+                    generationAbortControllerRef.current?.abort();
                     setShowGeneratingChatModal(false);
                     setLoading(false);
                     setGeneratingError(null);
