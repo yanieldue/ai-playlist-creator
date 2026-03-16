@@ -3483,22 +3483,22 @@ const PlaylistGenerator = () => {
                   /* Track list state */
                   <div className="gen-screen-tracks">
                     <div className="gen-screen-user-bubble" style={{ marginBottom: 8 }}>{generatingChatPrompt}</div>
-                    {generatedPlaylist.tracks.map((track, index) => (
-                      <div key={track.id} className="gen-screen-track-item">
+                    {generatedPlaylist.tracks.map((track) => (
+                      <div key={track.id} className="generate-track-item">
                         {track.image
-                          ? <img src={track.image} alt={track.album} className="gen-screen-track-img" />
-                          : <div className="gen-screen-track-img-placeholder" />
+                          ? <img src={track.image} alt={track.album} className="generate-track-img" />
+                          : <div className="generate-track-img-placeholder" />
                         }
-                        <div className="gen-screen-track-info">
-                          <div className="gen-screen-track-name">
+                        <div className="generate-track-info">
+                          <div className="generate-track-name">
                             {track.name}
                             {track.explicit && <span className="explicit-badge">E</span>}
                           </div>
-                          <div className="gen-screen-track-artist">{track.artist}</div>
+                          <div className="generate-track-artist">{track.artist}</div>
                         </div>
-                        <div className="gen-screen-track-actions">
+                        <div className="generate-track-actions">
                           <button
-                            className="gen-screen-track-remove"
+                            className="generate-track-remove"
                             onClick={() => removeTrackFromGenerated(track.id)}
                             title="Remove"
                           >
@@ -3511,7 +3511,7 @@ const PlaylistGenerator = () => {
                             href={track.externalUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="gen-screen-track-link"
+                            className="generate-track-keep"
                             title={`Open in ${activePlatform === 'apple' ? 'Apple Music' : 'Spotify'}`}
                           >
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
@@ -3523,9 +3523,8 @@ const PlaylistGenerator = () => {
                         </div>
                       </div>
                     ))}
-                    {/* AI summary */}
                     {generatedPlaylist.description && (
-                      <div className="gen-screen-ai-summary">{generatedPlaylist.description}</div>
+                      <div className="generate-ai-summary">{generatedPlaylist.description}</div>
                     )}
                   </div>
                 )}
