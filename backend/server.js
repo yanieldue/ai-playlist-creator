@@ -4636,12 +4636,12 @@ DO NOT include any text outside the JSON.`
           } catch (err) { /* ignore individual lookup errors */ }
         }
 
-        // Validate each confirmed UUID against Spotify genres (app-level token, no user auth —
-        // works for all users regardless of platform).
-        // SoundCharts can mislabel underground R&B/hip-hop artists as "electro/techno",
-        // OR the reference-song fallback can confirm the wrong homonymous artist
-        // (e.g. an electro producer named "Keffer" who also has a song called "Lovin' Feelin'").
-        // If Spotify says R&B but SoundCharts says electro-only → wrong entity, invalidate UUID.
+        // Cross-check confirmed UUIDs against Spotify genres (app-level token — works for all platforms).
+        // SoundCharts sometimes tags artists with the wrong genre (e.g. an R&B artist tagged as electro).
+        // When SC and Spotify disagree:
+        //   - Keep the UUID (the reference-song confirmation means we have the RIGHT artist)
+        //   - Discard SC's similar artists for this artist (they'll be wrong-genre too)
+        //   - Use Spotify's genres instead for genre inference
         try {
           const ccData = await spotifyApi.clientCredentialsGrant();
           const appSpotify = new SpotifyWebApi({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET });
@@ -4663,13 +4663,16 @@ DO NOT include any text outside the JSON.`
                                    && !scGenres.some(g => RNB_HH.some(r => g.includes(r)));
               const spotifyIsRnbHh  = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
               if (scIsElectroOnly && spotifyIsRnbHh) {
-                console.log(`⚠️  "${artistName}" UUID mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs Spotify=[${spotifyGenres.slice(0,2).join(',')}] — invalidating SC UUID, won't use as seed`);
-                confirmedArtistUuids[artistName.toLowerCase()] = 'INVALID';
-                delete artistSCInfoMap[artistName.toLowerCase()]; // exclude their SC similar artists too
+                console.log(`⚠️  "${artistName}" SC genre mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs Spotify=[${spotifyGenres.slice(0,2).join(',')}] — keeping UUID for song fetch, using Spotify genres, dropping SC similar artists`);
+                // Don't invalidate UUID — we confirmed the right artist via reference song.
+                // Remove from artistSCInfoMap so their wrong-genre similar artists don't pollute the pool.
+                delete artistSCInfoMap[artistName.toLowerCase()];
+                // Inject Spotify's correct genres directly into artistGenres for inference.
+                artistGenres.push(...spotifyGenres);
               } else {
                 console.log(`✓ "${artistName}" genre validated: SC=[${scGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,2).join(',')}]`);
               }
-            } catch (err) { /* ignore per-artist errors — don't invalidate on uncertainty */ }
+            } catch (err) { /* ignore per-artist errors — don't discard on uncertainty */ }
           }
         } catch (err) {
           console.log(`⚠️  Spotify genre validation skipped: ${err.message}`);
