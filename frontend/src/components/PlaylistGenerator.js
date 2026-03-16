@@ -106,6 +106,9 @@ const PlaylistGenerator = () => {
   // Toast notifications
   const [toasts, setToasts] = useState([]);
 
+  // Retry function for the gen-screen error state (differs between chat and artist flows)
+  const generationRetryFnRef = useRef(null);
+
   // Top artists
   const [topArtists, setTopArtists] = useState(_homeCache.topArtists);
   const [loadingTopArtists, setLoadingTopArtists] = useState(false);
@@ -1071,6 +1074,7 @@ const PlaylistGenerator = () => {
 
     // Only set initial state on first attempt
     if (retryCount === 0) {
+      generationRetryFnRef.current = handleGeneratePlaylist;
       setLoading(true);
       setGeneratingChatPrompt(prompt.trim());
       if (showComposeModal) {
@@ -2185,7 +2189,8 @@ const PlaylistGenerator = () => {
 
     setShowArtistSettingsModal(false);
     setLoading(true);
-    setShowGeneratingModal(true);
+    generationRetryFnRef.current = handleConfirmArtistSettings;
+    setShowGeneratingChatModal(true);
     setError('');
     setGeneratedPlaylist(null);
 
@@ -2216,7 +2221,6 @@ const PlaylistGenerator = () => {
       );
       clearInterval(messageInterval);
       setGeneratingMessage('');
-      setShowGeneratingModal(false);
 
       // Store the original prompt and requested song count with the playlist
       const playlistWithPrompt = { ...result, originalPrompt: promptText, requestedSongCount: committedSongCount, chatMessages: [], excludedSongs: [] };
@@ -2236,12 +2240,9 @@ const PlaylistGenerator = () => {
       // Set default name and description
       setEditedPlaylistName(result.playlistName);
       setEditedDescription(result.description || '');
-
-      // Open the modal
-      setShowPlaylistModal(true);
-      setModalStep(1);
       setChatMessages([]);
       setIsDescriptionExpanded(false);
+      // gen-screen stays open and switches to track list view automatically
 
       console.log('Generated playlist for artist:', selectedArtist.name);
 
@@ -2253,7 +2254,7 @@ const PlaylistGenerator = () => {
     } catch (err) {
       clearInterval(messageInterval);
       if (err.response?.status === 401) {
-        setShowGeneratingModal(false);
+        setShowGeneratingChatModal(false);
         localStorage.removeItem('userId');
         setUserId(null);
         setIsAuthenticated(false);
@@ -3031,77 +3032,6 @@ const PlaylistGenerator = () => {
             </div>
           )}
 
-          {/* Generation Modal */}
-          {showGeneratingModal && (
-            <div className="generating-chat-modal-overlay">
-              <div className="generating-chat-modal-content">
-                <div className="generating-chat-header">
-                  <h2>Creating Your Playlist</h2>
-                  <button
-                    onClick={() => {
-                      setShowGeneratingModal(false);
-                      setLoading(false);
-                      setGeneratingError(null);
-                      setWeeklyLimitReached(false);
-                    }}
-                    className="close-modal-button"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div className="generating-chat-body">
-                  <div className="chat-message user">
-                    <div className="chat-message-content">
-                      {generatingChatPrompt}
-                    </div>
-                  </div>
-
-                  {generatingError ? (
-                    <div className="generating-error-standalone">
-                      <span style={{ color: '#ef4444' }}>{generatingError}</span>
-                      {weeklyLimitReached ? (
-                        <button
-                          onClick={() => {
-                            setShowGeneratingModal(false);
-                            setGeneratingError(null);
-                            setWeeklyLimitReached(false);
-                            setUpgradeModal({ open: true, feature: 'Unlimited Playlists' });
-                          }}
-                          className="retry-button-inline"
-                          style={{ background: '#000000', color: '#ffffff' }}
-                        >
-                          Upgrade
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setGeneratingError(null);
-                            setWeeklyLimitReached(false);
-                            handleConfirmArtistSettings();
-                          }}
-                          className="retry-button-inline"
-                        >
-                          Try Again
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="loading-status">
-                      <div className="wave-loader-small">
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                        <div className="wave-bar"></div>
-                      </div>
-                      <span className="loading-status-text">{generatingMessage || 'Starting to create your playlist...'}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Playlist Creation Modal */}
           {showPlaylistModal && generatedPlaylist && (
           <div className="playlist-modal-overlay" onClick={closePlaylistModal}>
@@ -3519,7 +3449,7 @@ const PlaylistGenerator = () => {
                           >Upgrade</button>
                         ) : (
                           <button
-                            onClick={() => { setGeneratingError(null); setWeeklyLimitReached(false); handleGeneratePlaylist(); }}
+                            onClick={() => { setGeneratingError(null); setWeeklyLimitReached(false); generationRetryFnRef.current?.(); }}
                             className="retry-button-inline"
                           >Try Again</button>
                         )}
