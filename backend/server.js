@@ -1229,11 +1229,18 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         });
       };
 
-      // Genres that indicate a stylistically incompatible artist when the seed doesn't have them
+      // Genres that indicate a stylistically incompatible artist when the seed doesn't have them.
+      // Use EXACT normalised match only — substring matching would block 'alternative r&b' artists
+      // (Frank Ocean, Steve Lacy) because they contain the word 'alternative'.
       const contrastingGenres = ['rock', 'k-rock', 'j-rock', 'alternative', 'metal', 'punk',
         'country', 'jazz', 'classical', 'folk', 'blues', 'gospel', 'bluegrass'];
       const seedGenreSet = new Set(seedInfos.flatMap(s => (s.genres || []).map(g => normalizeGenre(g))));
-      const seedHasContrastingGenre = contrastingGenres.some(g => seedGenreSet.has(g));
+      const seedHasContrastingGenre = contrastingGenres.some(g => seedGenreSet.has(normalizeGenre(g)));
+      // Exact-match check: artist genre must normalise to exactly the contrasting genre string
+      const artistHasExactGenre = (artistGenres, target) => {
+        const tNorm = normalizeGenre(target);
+        return artistGenres.some(ag => normalizeGenre(ag) === tNorm);
+      };
 
       for (const simName of similarNames) {
         try {
@@ -1241,16 +1248,16 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           if (!simInfo?.uuid) continue;
           const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
 
-          // 1. Must include the expected genre (e.g. k-pop, r-b) — prevents genre drift
+          // 1. Must include the expected genre (e.g. r&b) — prevents genre drift
           if (expectedGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
             console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
             continue;
           }
           // 2. If seed has no contrasting genres, reject similar artists that do —
-          //    e.g. seed is pure pop/k-pop → reject rock/alternative artists like The Rose
-          //    Skipped when seed itself is a rock/country/etc. artist
-          if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasGenre(artistGenres, g))) {
-            console.log(`⏭️  Skipping "${simInfo.name}" — has contrasting genres [${artistGenres.filter(g => contrastingGenres.some(c => artistHasGenre([g], c))).join(', ')}]`);
+          //    e.g. seed is pure pop → reject rock artists. Uses exact match so
+          //    'alternative r&b' does NOT trigger the 'alternative' contrasting-genre block.
+          if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasExactGenre(artistGenres, g))) {
+            console.log(`⏭️  Skipping "${simInfo.name}" — has contrasting genres [${artistGenres.filter(g => contrastingGenres.some(c => artistHasExactGenre([g], c))).join(', ')}]`);
             continue;
           }
 
@@ -1260,16 +1267,63 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
     }
 
-    // Phase 3: fetch songs — distribute evenly across all artists
-    const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(allArtistInfos.length, 1)), 5);
+    // Phase 3: fetch songs.
+    // Strategy: run top_songs with the genre filter and keep only songs whose credited
+    // artist is in the pool. This gives popular, Spotify-findable tracks from relevant
+    // artists instead of alphabetically-sorted deep cuts from the SoundCharts song list.
+    // For artists that don't appear in top_songs (underground/niche), supplement with
+    // direct artist song fetches.
     const songs = [];
-    for (const artistInfo of allArtistInfos) {
+    const poolNames = new Set(allArtistInfos.map(a => a.name.toLowerCase()));
+
+    // 3a: top_songs pass — popular songs from artists in the pool
+    const genreFilterForSongs = soundchartsFilters.find(f => f.type === 'songGenres');
+    if (genreFilterForSongs) {
+      try {
+        const sort = soundchartsSort || { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
+        const body = { sort, filters: [genreFilterForSongs] };
+        await throttleSoundCharts();
+        const resp = await axios.post(
+          'https://customer.api.soundcharts.com/api/v2/top/songs',
+          body,
+          { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: 0, limit: 200 }, timeout: 15000 }
+        );
+        const topItems = resp.data?.items || [];
+        const poolMatches = topItems.filter(item => {
+          const creditName = (item.song?.creditName || '').toLowerCase();
+          return poolNames.has(creditName) || allArtistInfos.some(a => creditName.includes(a.name.toLowerCase()) || a.name.toLowerCase().includes(creditName));
+        });
+        for (const item of poolMatches) {
+          if (item.song?.name) {
+            songs.push({
+              name: item.song.name,
+              artistName: item.song.creditName || 'Unknown',
+              isrc: item.song?.isrc?.value || item.song?.isrc || null,
+              uuid: item.song?.uuid,
+              releaseDate: item.song?.releaseDate || null,
+              source: 'artist_pool_top'
+            });
+          }
+        }
+        console.log(`🎯 Artist pool top_songs: ${poolMatches.length} songs matched from pool of ${allArtistInfos.length} artists`);
+      } catch (err) {
+        console.log(`⚠️  Artist pool top_songs fetch failed: ${err.message}`);
+      }
+    }
+
+    // 3b: direct artist songs for artists not represented in top_songs results
+    const representedArtists = new Set(songs.map(s => s.artistName.toLowerCase()));
+    const unrepresented = allArtistInfos.filter(a => !representedArtists.has(a.name.toLowerCase()));
+    const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
+    for (const artistInfo of unrepresented) {
       try {
         const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
-        for (const song of artistSongs) {
+        // Skip obvious variants (live, remix, bonus, karaoke) to improve Spotify hit rate
+        const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+        for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
           songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs' });
         }
-        console.log(`✓ Got ${artistSongs.length} songs from ${artistInfo.name}`);
+        if (mainSongs.length > 0) console.log(`✓ Got ${mainSongs.length} songs from ${artistInfo.name} (direct)`);
       } catch (err) {
         console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
       }
