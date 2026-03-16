@@ -2136,6 +2136,7 @@ const PlaylistGenerator = () => {
       if (currentDraftId === draftId) {
         setCurrentDraftId(null);
       }
+      showToast('Draft deleted', 'success');
     } catch (error) {
       console.error('Failed to delete draft:', error);
       showToast('Failed to delete draft', 'error');

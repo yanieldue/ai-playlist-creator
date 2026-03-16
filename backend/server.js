@@ -4602,11 +4602,25 @@ DO NOT include any text outside the JSON.`
     // Step 0.3: Look up reference songs FIRST to confirm artist identity before any name-based lookups.
     // This prevents the wrong-artist disambiguation problem (e.g. Spanish "Dante" vs R&B "Dante").
     // referenceSongs come from the user prompt: "songs similar to Ain't No One by Dante"
-    const confirmedArtistUuids = {}; // { artistNameLower: uuid }
+    const confirmedArtistUuids = {};      // { artistNameLower: uuid | 'INVALID' | 'NOSIMILAR:<uuid>' }
+    const confirmedSpotifyArtistIds = {}; // { artistNameLower: spotifyArtistId }
+
+    // Get app-level Spotify token once — used for both reference-song ID lookup and genre validation.
+    // App credentials work for all platforms (no user auth needed).
+    let appSpotify = null;
+    try {
+      const ccData = await spotifyApi.clientCredentialsGrant();
+      appSpotify = new SpotifyWebApi({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET });
+      appSpotify.setAccessToken(ccData.body.access_token);
+    } catch (err) {
+      console.log(`⚠️  Could not get Spotify app token: ${err.message}`);
+    }
+
     const referenceSongs0 = genreData.referenceSongs || [];
     if (referenceSongs0.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
       console.log(`🎯 Looking up ${referenceSongs0.length} reference song(s) on SoundCharts to confirm artist identity...`);
       for (const refSong of referenceSongs0) {
+        // SoundCharts UUID confirmation (existing)
         try {
           const result = await searchSoundChartsSong(refSong.title, refSong.artist);
           if (result?.artistUuid) {
@@ -4617,6 +4631,25 @@ DO NOT include any text outside the JSON.`
           }
         } catch (refErr) {
           console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
+        }
+
+        // Spotify artist ID confirmation (new) — find the exact Spotify artist behind this reference song.
+        // Storing the ID lets us later verify song matches by ID, not just name string,
+        // catching cases like two different artists sharing the name "Dante".
+        if (appSpotify) {
+          try {
+            const q = `track:${refSong.title.replace(/'/g, '')} artist:${refSong.artist}`;
+            const searchRes = await appSpotify.searchTracks(q, { limit: 5 });
+            const tracks = searchRes.body.tracks?.items || [];
+            const artistNorm = refSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const match = tracks.find(t =>
+              (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') === artistNorm
+            );
+            if (match?.artists?.[0]?.id) {
+              confirmedSpotifyArtistIds[refSong.artist.toLowerCase()] = match.artists[0].id;
+              console.log(`✓ Confirmed Spotify artist ID for "${refSong.artist}": ${match.artists[0].id}`);
+            }
+          } catch (err) { /* ignore — song matching will fall back to name check */ }
         }
       }
     }
@@ -4649,17 +4682,14 @@ DO NOT include any text outside the JSON.`
           } catch (err) { /* ignore individual lookup errors */ }
         }
 
-        // Cross-check confirmed UUIDs against Spotify genres (app-level token — works for all platforms).
+        // Cross-check confirmed UUIDs against Spotify genres.
+        // appSpotify was already initialized above with client credentials — works for all platforms.
         // SoundCharts sometimes tags artists with the wrong genre (e.g. an R&B artist tagged as electro).
         // When SC and Spotify disagree:
         //   - Keep the UUID (the reference-song confirmation means we have the RIGHT artist)
         //   - Discard SC's similar artists for this artist (they'll be wrong-genre too)
         //   - Use Spotify's genres instead for genre inference
-        try {
-          const ccData = await spotifyApi.clientCredentialsGrant();
-          const appSpotify = new SpotifyWebApi({ clientId: process.env.SPOTIFY_CLIENT_ID, clientSecret: process.env.SPOTIFY_CLIENT_SECRET });
-          appSpotify.setAccessToken(ccData.body.access_token);
-
+        if (appSpotify) {
           const ELECTRO = ['electro', 'electronic', 'techno', 'house', 'edm', 'dance', 'trance', 'dubstep'];
           const RNB_HH  = ['r&b', 'rnb', 'soul', 'hip-hop', 'hip hop', 'rap', 'trap'];
           for (const artistName of genreData.artistConstraints.requestedArtists) {
@@ -4667,11 +4697,20 @@ DO NOT include any text outside the JSON.`
             const scGenres = (scInfo?.genres || []).map(g => g.toLowerCase());
             if (scGenres.length === 0) continue; // nothing to validate
             try {
-              const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
-              const items = searchRes.body.artists?.items || [];
-              const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
-              if (!match?.genres?.length) continue;
-              const spotifyGenres = match.genres.map(g => g.toLowerCase());
+              // Prefer direct artist ID lookup (exact artist, no ambiguity) over name search
+              let spotifyGenres = [];
+              const confirmedSpotifyId = confirmedSpotifyArtistIds[artistName.toLowerCase()];
+              if (confirmedSpotifyId) {
+                const artistRes = await appSpotify.getArtist(confirmedSpotifyId);
+                spotifyGenres = (artistRes.body.genres || []).map(g => g.toLowerCase());
+              } else {
+                const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
+                const items = searchRes.body.artists?.items || [];
+                const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
+                if (!match?.genres?.length) continue;
+                spotifyGenres = match.genres.map(g => g.toLowerCase());
+              }
+              if (!spotifyGenres.length) continue;
               const scIsElectroOnly = scGenres.some(g => ELECTRO.some(e => g.includes(e)))
                                    && !scGenres.some(g => RNB_HH.some(r => g.includes(r)));
               const spotifyIsRnbHh  = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
@@ -4693,8 +4732,6 @@ DO NOT include any text outside the JSON.`
               }
             } catch (err) { /* ignore per-artist errors — don't discard on uncertainty */ }
           }
-        } catch (err) {
-          console.log(`⚠️  Spotify genre validation skipped: ${err.message}`);
         }
 
         // Aggregate genres, similar artists, and career stages from validated artists only
@@ -5052,6 +5089,20 @@ Return ONLY valid JSON:
                     if (foundArtistNorm === requestedArtistNorm ||
                         foundArtistNorm.startsWith(requestedArtistNorm) ||
                         requestedArtistNorm.startsWith(foundArtistNorm)) { matchedTrack = track; break; }
+                  }
+                }
+              }
+
+              // If we have a confirmed Spotify artist ID (from reference song search), verify it matches.
+              // This catches same-name artists (e.g. two artists both named "Dante") that name-string
+              // matching can't distinguish.
+              if (matchedTrack) {
+                const confirmedSpotifyId = confirmedSpotifyArtistIds[recommendedSong.artist.toLowerCase()];
+                if (confirmedSpotifyId) {
+                  const trackArtistId = matchedTrack.artists?.[0]?.id;
+                  if (trackArtistId && trackArtistId !== confirmedSpotifyId) {
+                    console.log(`✗ "${recommendedSong.track}" by ${recommendedSong.artist} — wrong Spotify artist (expected ${confirmedSpotifyId}, got ${trackArtistId})`);
+                    matchedTrack = null;
                   }
                 }
               }
