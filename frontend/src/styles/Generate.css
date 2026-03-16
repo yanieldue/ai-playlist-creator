@@ -59,6 +59,95 @@
   padding: 20px 20px 8px;
 }
 
+/* Settings bar (between scrollable content and footer) */
+.generate-settings-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-top: 0.5px solid rgba(0, 0, 0, 0.06);
+}
+.generate-settings-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f2f2f7;
+  border: none;
+  border-radius: 20px;
+  padding: 7px 14px;
+  color: #3a3a3c;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.generate-settings-chip:hover { background: #e5e5ea; }
+
+/* Auto-update bottom sheet */
+.generate-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+.generate-sheet {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 20px max(24px, env(safe-area-inset-bottom));
+}
+.generate-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: #d1d1d6;
+  border-radius: 2px;
+  margin: 0 auto 20px;
+}
+.generate-sheet-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #1c1c1e;
+  margin-bottom: 8px;
+}
+.generate-sheet-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 4px;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  text-align: left;
+  gap: 12px;
+  transition: background 0.1s;
+}
+.generate-sheet-option:last-child { border-bottom: none; }
+.generate-sheet-option:active { background: #f2f2f7; }
+.generate-sheet-option.locked { opacity: 0.5; cursor: default; }
+.generate-sheet-option-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.generate-sheet-option-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1c1c1e;
+}
+.generate-sheet-option-desc {
+  font-size: 13px;
+  color: #8e8e93;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Editable playlist name in header */
 .generate-header-name-row {
   display: flex;
@@ -609,6 +698,24 @@
   background: #ffffff;
   color: #000000;
 }
+:root.dark-mode .generate-settings-bar {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+:root.dark-mode .generate-settings-chip {
+  background: #2c2c2e;
+  color: #e0e0e0;
+}
+:root.dark-mode .generate-settings-chip:hover { background: #3a3a3c; }
+:root.dark-mode .generate-sheet {
+  background: #1c1c1e;
+}
+:root.dark-mode .generate-sheet-handle { background: #3a3a3c; }
+:root.dark-mode .generate-sheet-title { color: #ffffff; }
+:root.dark-mode .generate-sheet-option {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+:root.dark-mode .generate-sheet-option:active { background: #2c2c2e; }
+:root.dark-mode .generate-sheet-option-label { color: #ffffff; }
 :root.dark-mode .generate-edit-name-btn { color: #636366; }
 :root.dark-mode .generate-edit-name-btn:hover { color: #aeaeb2; }
 :root.dark-mode .generate-playlist-name-input { color: #ffffff; }

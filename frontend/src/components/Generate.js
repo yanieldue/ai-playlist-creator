@@ -88,6 +88,7 @@ export default function Generate() {
   const [editedPlaylistName, setEditedPlaylistName] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [updateFrequency, setUpdateFrequency] = useState('never');
+  const [updateSheetOpen, setUpdateSheetOpen] = useState(false);
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -548,28 +549,6 @@ export default function Generate() {
 
           {phase === 'tracks' && generatedPlaylist && (
             <>
-              <div className="generate-update-section">
-                <div className="generate-update-freq-row">
-                  {['never', 'daily', 'weekly', 'monthly'].map(freq => (
-                    <button
-                      key={freq}
-                      className={`generate-update-freq-btn${updateFrequency === freq ? ' active' : ''}`}
-                      onClick={() => {
-                        if (freq !== 'never' && !isPaid()) return;
-                        setUpdateFrequency(freq);
-                      }}
-                    >
-                      {freq !== 'never' && !isPaid() && <Icons.Lock size={10} />}
-                      {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                {updateFrequency !== 'never' && (
-                  <div className="generate-update-hint">
-                    Refreshes every {updateFrequency === 'daily' ? 'day' : updateFrequency === 'weekly' ? 'week' : 'month'} at 5 AM local time
-                  </div>
-                )}
-              </div>
               {generatedPlaylist.tracks.map(track => (
                 <div key={track.id} className="generate-track-item">
                   {track.image
@@ -718,13 +697,55 @@ export default function Generate() {
       )}
 
       {phase === 'tracks' && generatedPlaylist && (
-        <div className="generate-footer" style={{ marginTop: 'auto' }}>
-          <button className="generate-refine-btn" onClick={() => setPhase('refine')}>
-            ✦ Refine
-          </button>
-          <button className="generate-create-btn" onClick={handleCreate}>
-            {refineMode ? 'Done' : 'Create'}
-          </button>
+        <>
+          <div className="generate-settings-bar">
+            <button className="generate-settings-chip" onClick={() => setUpdateSheetOpen(true)}>
+              <Icons.Refresh size={13} />
+              {updateFrequency === 'never' ? 'Set updates' : `${updateFrequency.charAt(0).toUpperCase() + updateFrequency.slice(1)} updates`}
+            </button>
+          </div>
+          <div className="generate-footer">
+            <button className="generate-refine-btn" onClick={() => setPhase('refine')}>
+              ✦ Refine
+            </button>
+            <button className="generate-create-btn" onClick={handleCreate}>
+              {refineMode ? 'Done' : 'Create'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Auto-update bottom sheet */}
+      {updateSheetOpen && (
+        <div className="generate-sheet-overlay" onClick={() => setUpdateSheetOpen(false)}>
+          <div className="generate-sheet" onClick={e => e.stopPropagation()}>
+            <div className="generate-sheet-handle" />
+            <div className="generate-sheet-title">Auto-update</div>
+            {[
+              { freq: 'never', label: "Doesn't update", desc: 'You can still refresh manually anytime' },
+              { freq: 'daily',   label: 'Daily',   desc: 'Refreshes every day at 5 AM local time', paid: true },
+              { freq: 'weekly',  label: 'Weekly',  desc: 'Refreshes every week at 5 AM local time', paid: true },
+              { freq: 'monthly', label: 'Monthly', desc: 'Refreshes every month at 5 AM local time', paid: true },
+            ].map(({ freq, label, desc, paid }) => (
+              <button
+                key={freq}
+                className={`generate-sheet-option${updateFrequency === freq ? ' selected' : ''}${paid && !isPaid() ? ' locked' : ''}`}
+                onClick={() => {
+                  if (paid && !isPaid()) return;
+                  setUpdateFrequency(freq);
+                  setUpdateSheetOpen(false);
+                }}
+              >
+                <div className="generate-sheet-option-text">
+                  <span className="generate-sheet-option-label">{label}</span>
+                  <span className="generate-sheet-option-desc">
+                    {paid && !isPaid() ? <><Icons.Lock size={11} /> Upgrade to unlock</> : desc}
+                  </span>
+                </div>
+                {updateFrequency === freq && <Icons.Check size={18} color="#1db954" />}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
