@@ -4224,6 +4224,9 @@
   color: #1c1c1e;
   max-width: 80%;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 :root.dark-mode .gen-screen-ai-bubble { background: #3a3a3c; color: #ffffff; }
 
@@ -4248,9 +4251,8 @@
 }
 
 .gen-screen-status-text {
-  font-size: 15px;
-  color: #636366;
-  padding-left: 4px;
+  font-size: 13px;
+  color: #b3b3b3;
 }
 
 /* Track list */

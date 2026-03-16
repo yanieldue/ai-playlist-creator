@@ -3424,15 +3424,10 @@ const PlaylistGenerator = () => {
 
               {/* Body */}
               <div className="gen-screen-body">
-                {/* User prompt bubble */}
-                <div className="gen-screen-user-bubble">
-                  {generatingChatPrompt}
-                </div>
-
                 {!generatedPlaylist ? (
-                  /* Loading state */
-                  <div className="gen-screen-loading">
-                    <div className="gen-screen-ai-avatar">✦</div>
+                  /* Loading state — matches Generate.js layout: content pinned to bottom */
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '100%' }}>
+                    <div className="gen-screen-user-bubble">{generatingChatPrompt}</div>
                     {generatingError ? (
                       <div className="generating-error-standalone">
                         <span style={{ color: '#ef4444' }}>{generatingError}</span>
@@ -3455,12 +3450,21 @@ const PlaylistGenerator = () => {
                         )}
                       </div>
                     ) : (
-                      <div className="gen-screen-status-text">{generatingMessage || 'Creating your playlist...'}</div>
+                      <div className="gen-screen-ai-bubble">
+                        <div className="wave-loader-small">
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                          <div className="wave-bar"></div>
+                        </div>
+                        <span className="gen-screen-status-text">{generatingMessage || 'Creating your playlist...'}</span>
+                      </div>
                     )}
                   </div>
                 ) : (
                   /* Track list state */
                   <div className="gen-screen-tracks">
+                    <div className="gen-screen-user-bubble" style={{ marginBottom: 8 }}>{generatingChatPrompt}</div>
                     {generatedPlaylist.tracks.map((track, index) => (
                       <div key={track.id} className="gen-screen-track-item">
                         {track.image
