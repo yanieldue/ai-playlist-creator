@@ -125,6 +125,17 @@ async function sendEmail({ to, subject, html }) {
   throw new Error('No email provider configured');
 }
 
+// Normalize a track name for song history deduplication
+function normalizeForHistory(name) {
+  return (name || '').toLowerCase()
+    .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
+    .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
+    .replace(/\s*[\(\[].*?[\)\]]/g, '')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Helper function to validate Spotify track URIs
 // Spotify track IDs should be 22 characters of valid base62 characters (0-9, a-z, A-Z)
 function isValidSpotifyTrackUri(uri) {
@@ -5921,6 +5932,25 @@ Example response: [1, 2, 4, 5, 7, ...]`
             return true;
           });
 
+          // Update song history so auto-update excludes these tracks too
+          if (playlistId && userId) {
+            try {
+              const upa = userPlaylists.get(userId) || [];
+              const upi = upa.findIndex(p => p.playlistId === playlistId);
+              if (upi !== -1) {
+                const pl = upa[upi];
+                if (!pl.songHistory) pl.songHistory = [];
+                pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
+                if (pl.songHistory.length > 200) pl.songHistory = pl.songHistory.slice(-200);
+                userPlaylists.set(userId, upa);
+                await savePlaylist(userId, pl);
+                console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
+              }
+            } catch (histErr) {
+              console.log('[MANUAL-REFRESH] Failed to update song history:', histErr.message);
+            }
+          }
+
           res.json({
             playlistName: claudePlaylistName,
             description: claudePlaylistDescription,
@@ -6394,13 +6424,32 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     }
 
+    // Update song history so auto-update excludes these tracks too
+    if (playlistId && userId) {
+      try {
+        const upa = userPlaylists.get(userId) || [];
+        const upi = upa.findIndex(p => p.playlistId === playlistId);
+        if (upi !== -1) {
+          const pl = upa[upi];
+          if (!pl.songHistory) pl.songHistory = [];
+          pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
+          if (pl.songHistory.length > 200) pl.songHistory = pl.songHistory.slice(-200);
+          userPlaylists.set(userId, upa);
+          await savePlaylist(userId, pl);
+          console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
+        }
+      } catch (histErr) {
+        console.log('[MANUAL-REFRESH] Failed to update song history:', histErr.message);
+      }
+    }
+
     res.json({
       playlistName: claudePlaylistName,
       description: claudePlaylistDescription,
       tracks: selectedTracks,
       trackCount: selectedTracks.length
     });
-    
+
   } catch (error) {
     console.error('Error generating playlist:', error);
     res.status(500).json({ 
@@ -8417,13 +8466,6 @@ async function processPlaylistUpdate(userId, playlist) {
       console.log(`[AUTO-UPDATE] Synced playlist.tracks: ${playlist.trackCount} total tracks`);
 
       if (tracksForHistory.length > 0) {
-        const normalizeForHistory = (name) => name.toLowerCase()
-          .replace(/\s*-\s*(a\s+)?colors?\s+show/gi, '')
-          .replace(/\s*-\s*((single|album|ep)\s+)?version/gi, '')
-          .replace(/\s*[\(\[].*?[\)\]]/g, '')
-          .replace(/[^\w\s]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
         if (!playlist.songHistory) playlist.songHistory = [];
         playlist.songHistory = [
           ...playlist.songHistory,
