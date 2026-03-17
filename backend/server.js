@@ -1525,8 +1525,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     if (expandToSimilar && seedInfos.length > 0) {
       const seenNames = new Set(seedInfos.map(a => a.name.toLowerCase()));
       const similarNames = [];
-      // Target ~10 total artists. With fewer seeds, take more similar per seed.
-      const similarPerSeed = Math.max(2, Math.ceil(10 / seedInfos.length));
+      // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10.
+      const similarTarget = Math.max(10, Math.ceil(fetchCount / 8));
+      const similarPerSeed = Math.max(2, Math.ceil(similarTarget / seedInfos.length));
       for (const seedInfo of seedInfos) {
         let added = 0;
         for (const simName of (seedInfo.similarArtists || [])) {
