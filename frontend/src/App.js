@@ -4,8 +4,6 @@ import PlaylistGenerator from './components/PlaylistGenerator';
 import PlatformSelection from './components/PlatformSelection';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
-import Account from './components/Account';
-import FAQ from './components/FAQ';
 import Pricing from './components/Pricing';
 import Generate from './components/Generate';
 import AppleMusicRedirect from './components/AppleMusicRedirect';
@@ -31,11 +29,15 @@ function App() {
         <Routes>
           <Route path="/" element={<PlaylistGenerator />} />
           <Route path="/login" element={<PlaylistGenerator />} />
+          <Route path="/playlists" element={<PlaylistGenerator />} />
+          <Route path="/settings" element={<PlaylistGenerator />} />
+          <Route path="/account" element={<PlaylistGenerator />} />
+          <Route path="/faq" element={<PlaylistGenerator />} />
+          <Route path="/reactions" element={<PlaylistGenerator />} />
+          <Route path="/feedback" element={<PlaylistGenerator />} />
           <Route path="/platform-selection" element={<PlatformSelection />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/account" element={<Account />} />
-          <Route path="/faq" element={<FAQ />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/generate" element={<Generate />} />
           <Route path="/apple-music-redirect" element={<AppleMusicRedirect />} />

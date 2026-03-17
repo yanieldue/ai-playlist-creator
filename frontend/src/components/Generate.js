@@ -430,9 +430,11 @@ export default function Generate() {
     }
   };
 
+  const tabPath = (tab) => tab === 'playlists' ? '/playlists' : '/';
+
   const handleCreate = () => {
     const finalName = editedPlaylistName.trim() || generatedPlaylist.playlistName;
-    navigate('/', {
+    navigate(tabPath(returnTab), {
       state: {
         pendingPlaylist: { ...generatedPlaylist, playlistName: finalName },
         pendingChatMessages: chatMessages,
@@ -450,13 +452,13 @@ export default function Generate() {
       ? { ...generatedPlaylist, lockedTrackIds: [...lockedTrackIds] }
       : null;
     if (phase === 'refine') {
-      if (refineMode) { navigate('/', { state: { returnTab, updatedDraft } }); return; }
+      if (refineMode) { navigate(tabPath(returnTab), { state: { returnTab, updatedDraft } }); return; }
       setPhase('tracks');
       return;
     }
     if (phase === 'loading') { generationAbortControllerRef.current?.abort(); setPhase('input'); return; }
-    if (phase === 'tracks') { navigate('/', { state: { returnTab, updatedDraft } }); return; }
-    navigate('/', { state: { returnTab } });
+    if (phase === 'tracks') { navigate(tabPath(returnTab), { state: { returnTab, updatedDraft } }); return; }
+    navigate(tabPath(returnTab), { state: { returnTab } });
   };
 
   return (

@@ -45,7 +45,16 @@ const PlaylistGenerator = () => {
   const [error, setError] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [autoCreatePending, setAutoCreatePending] = useState(false);
-  const [activeTab, setActiveTab] = useState('home');
+  const pathToTab = (path) => {
+    const map = { '/playlists': 'playlists', '/settings': 'settings', '/account': 'account', '/faq': 'faq', '/reactions': 'reactions', '/feedback': 'feedback' };
+    return map[path] || 'home';
+  };
+  const tabToPath = (tab) => {
+    const map = { playlists: '/playlists', settings: '/settings', account: '/account', faq: '/faq', reactions: '/reactions', feedback: '/feedback' };
+    return map[tab] || '/';
+  };
+  const activeTab = pathToTab(location.pathname);
+  const setActiveTab = (tab) => navigate(tabToPath(tab));
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -199,9 +208,6 @@ const PlaylistGenerator = () => {
 
   // Handle playlist returned from /generate page
   useEffect(() => {
-    if (location.state?.returnTab) {
-      setActiveTab(location.state.returnTab);
-    }
     if (location.state?.pendingPlaylist) {
       const {
         pendingPlaylist, pendingChatMessages, autoCreate,
