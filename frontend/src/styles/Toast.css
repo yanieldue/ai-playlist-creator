@@ -1,7 +1,7 @@
 /* Toast Container — bottom-center, Spotify-style */
 .toast-container {
   position: fixed;
-  bottom: 100px;
+  bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10000;
@@ -10,6 +10,8 @@
   align-items: center;
   gap: 8px;
   pointer-events: none;
+  width: calc(100vw - 40px);
+  max-width: 480px;
 }
 
 /* Toast */
@@ -20,7 +22,7 @@
   padding: 12px 20px;
   border-radius: 14px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  max-width: min(360px, calc(100vw - 40px));
+  width: 100%;
   pointer-events: all;
   white-space: normal;
   word-break: break-word;
