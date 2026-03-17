@@ -3102,6 +3102,11 @@ const PlaylistGenerator = () => {
                   <div className="playlist-modal-body">
                     {/* Left: Track List */}
                     <div className="playlist-modal-tracks">
+                      {generatedPlaylist.requestedSongCount && generatedPlaylist.tracks.length < generatedPlaylist.requestedSongCount && (
+                        <div className="short-count-note">
+                          Found {generatedPlaylist.tracks.length} of {generatedPlaylist.requestedSongCount} songs — your filters limited what matched your vibe.
+                        </div>
+                      )}
                       <div className="playlist-modal-tracks-header">
                         <h3>Tracks ({generatedPlaylist.tracks.length})</h3>
                         <div className="tracks-header-buttons" ref={trackListMenuRef}>
