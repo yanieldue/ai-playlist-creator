@@ -5393,7 +5393,7 @@ Return ONLY valid JSON:
       // Phase B can do all platform lookups in parallel without hitting the SC throttler.
       if (process.env.SOUNDCHARTS_APP_ID) {
         const scPlatformCode = platform === 'spotify' ? 'spotify' : 'applemusic';
-        const songsNeedingId = recommendedTracks.filter(s => !s.isrc && s.uuid);
+        const songsNeedingId = recommendedTracks.filter(s => !s.isrc && s.uuid).slice(0, songCount * 2);
         if (songsNeedingId.length > 0) {
           console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${songsNeedingId.length} songs without ISRC...`);
           let phaseAConsecFails = 0;
