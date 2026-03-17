@@ -1141,21 +1141,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   <div className="dropdown-content">
                     <div className="form-group">
                       <div
-                        className={`refresh-option-item ${manualRefreshMode === 'append' ? 'active' : ''}`}
-                        onClick={() => setManualRefreshMode('append')}
-                      >
-                        <div className="option-checkbox">
-                          {manualRefreshMode === 'append' && <span className="checkmark"><Icons.Check size={16} /></span>}
-                        </div>
-                        <div className="option-content">
-                          <span className="option-label">Append Songs</span>
-                          <span className="option-description">Add new songs to your existing playlist</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <div
                         className={`refresh-option-item ${manualRefreshMode === 'replace' ? 'active' : ''}`}
                         onClick={() => setManualRefreshMode('replace')}
                       >
@@ -1165,6 +1150,21 @@ IMPORTANT: Pay close attention to the original request and description to unders
                         <div className="option-content">
                           <span className="option-label">Replace All Songs</span>
                           <span className="option-description">Remove old songs and add new ones</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <div
+                        className={`refresh-option-item ${manualRefreshMode === 'append' ? 'active' : ''}`}
+                        onClick={() => setManualRefreshMode('append')}
+                      >
+                        <div className="option-checkbox">
+                          {manualRefreshMode === 'append' && <span className="checkmark"><Icons.Check size={16} /></span>}
+                        </div>
+                        <div className="option-content">
+                          <span className="option-label">Add Songs</span>
+                          <span className="option-description">Add new songs to your existing playlist</span>
                         </div>
                       </div>
                     </div>
