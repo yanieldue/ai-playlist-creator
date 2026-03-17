@@ -965,7 +965,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               onClick={() => handleToggleLock(playlist.playlistId, track)}
                               title={(playlist.lockedTracks || []).includes(track.id) ? 'Unlock — song can be replaced on update' : 'Lock — keep this song on every update'}
                             >
-                              <Icons.Lock size={16} />
+                              <Icons.Lock size={14} />
                             </button>
                           </div>
                         </div>
