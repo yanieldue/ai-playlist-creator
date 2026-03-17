@@ -4688,7 +4688,8 @@ Respond ONLY with valid JSON in this format:
     "popularity": { "min": 0-100 or null, "max": 0-100 or null, "preference": "mainstream/underground/balanced" or null },
     "duration": { "min": seconds or null, "max": seconds or null },
     "excludeVersions": ["live", "remix", "acoustic", "cover", "instrumental", "edit", "remaster"] or [],
-    "albumDiversity": { "maxPerAlbum": number or null, "preferDeepCuts": boolean, "preferSingles": boolean }
+    "albumDiversity": { "maxPerAlbum": number or null, "preferDeepCuts": boolean, "preferSingles": boolean },
+    "artistDiversity": { "maxPerArtist": number or null }
   },
   "artistConstraints": {
     "vocalGender": "male/female/mixed/any" or null,
@@ -4745,6 +4746,11 @@ ALBUM DIVERSITY:
 - "no more than 2 per album": maxPerAlbum: 2
 - "album tracks", "deep cuts": preferDeepCuts: true
 - "singles only", "hits only": preferSingles: true
+
+ARTIST DIVERSITY:
+- "each song by different artist", "one song per artist", "no repeats by same artist", "every song different artist", "no artist twice": maxPerArtist: 1
+- "no more than 2 songs per artist", "max 2 per artist": maxPerArtist: 2
+- "more diversity" (without specific artist count): maxPerArtist: 2
 
 VOCALS:
 - "female vocals", "female artists": vocalGender: "female"
@@ -4856,7 +4862,8 @@ DO NOT include any text outside the JSON.`
         popularity: { min: null, max: null, preference: null },
         duration: { min: null, max: null },
         excludeVersions: [],
-        albumDiversity: { maxPerAlbum: null, preferDeepCuts: false, preferSingles: false }
+        albumDiversity: { maxPerAlbum: null, preferDeepCuts: false, preferSingles: false },
+        artistDiversity: { maxPerArtist: null }
       },
       artistConstraints: {
         vocalGender: null,
@@ -5330,6 +5337,7 @@ Return ONLY valid JSON:
     const allTracks = [];
     const seenTrackIds = new Set(); // To prevent exact duplicates
     const seenSongSignatures = new Map(); // To prevent same song by same artist from different albums
+    const artistTrackCount = new Map(); // Per-artist track count for maxPerArtist enforcement
     const excludeTrackIds = new Set(excludeTrackUris.map(uri => uri.split(':').pop())); // Extract track IDs from URIs
 
     // Load song history if playlistId is provided (for manual refresh)
@@ -5562,6 +5570,16 @@ Return ONLY valid JSON:
             console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
             return false;
           }
+        }
+        const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+        if (maxPerArtist !== null && maxPerArtist !== undefined) {
+          const artistKey = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+          const currentCount = artistTrackCount.get(artistKey) || 0;
+          if (currentCount >= maxPerArtist) {
+            console.log(`[ARTIST-LIMIT] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${currentCount}/${maxPerArtist} per artist)`);
+            return false;
+          }
+          artistTrackCount.set(artistKey, currentCount + 1);
         }
         seenTrackIds.add(track.id);
         seenSongSignatures.set(songSignature, track.name);
@@ -5908,6 +5926,12 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
                   if (!allowExplicit && track.explicit) continue;
+                  const suppMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+                  if (suppMaxPerArtist !== null && suppMaxPerArtist !== undefined) {
+                    const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+                    if ((artistTrackCount.get(ak) || 0) >= suppMaxPerArtist) continue;
+                    artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
+                  }
                   seenTrackIds.add(track.id);
                   seenSupplementArtists.add((song.artistName || '').toLowerCase());
                   selectedTracks.push({
@@ -5964,6 +5988,12 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
                   if (!allowExplicit && track.explicit) continue;
+                  const gfMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+                  if (gfMaxPerArtist !== null && gfMaxPerArtist !== undefined) {
+                    const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+                    if ((artistTrackCount.get(ak) || 0) >= gfMaxPerArtist) continue;
+                    artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
+                  }
                   seenTrackIds.add(track.id);
                   selectedTracks.push({
                     id: track.id, name: track.name,
@@ -6160,7 +6190,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
       // For non-exclusive mode, limit tracks per artist to maintain discovery balance
       if (!genreData.artistConstraints.exclusiveMode) {
-        const maxTracksPerArtist = 3; // Allow max 3 tracks per artist
+        const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
 
         // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
         const artistTrackMap = new Map();
