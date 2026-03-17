@@ -5396,8 +5396,14 @@ Return ONLY valid JSON:
         const songsNeedingId = recommendedTracks.filter(s => !s.isrc && s.uuid);
         if (songsNeedingId.length > 0) {
           console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${songsNeedingId.length} songs without ISRC...`);
+          let phaseAConsecFails = 0;
           for (const song of songsNeedingId) {
             song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
+            if (song.platformId) { phaseAConsecFails = 0; }
+            else if (++phaseAConsecFails >= 5) {
+              console.log(`🔍 [Phase A] Stopping early — 5 consecutive misses`);
+              break;
+            }
           }
           const found = songsNeedingId.filter(s => s.platformId).length;
           console.log(`🔍 [Phase A] Got platform IDs for ${found}/${songsNeedingId.length} songs`);
@@ -5484,8 +5490,14 @@ Return ONLY valid JSON:
         const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
         if (needing.length === 0) return;
         console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
+        let consecFails = 0;
         for (const song of needing) {
           song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
+          if (song.platformId) { consecFails = 0; }
+          else if (++consecFails >= 5) {
+            console.log(`🔍 [Phase A] Stopping early — 5 consecutive misses`);
+            break;
+          }
         }
         console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
       };
@@ -5910,6 +5922,61 @@ Example response: [1, 2, 4, 5, 7, ...]`
               console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks (${seenSupplementArtists.size} new artists added)`);
             } catch (suppFetchErr) {
               console.log('Supplement failed:', suppFetchErr.message);
+            }
+          }
+
+          // Gap fill: if still short after supplement, pull from top_songs (different pool)
+          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
+            const gapNeeded = songCount - selectedTracks.length;
+            console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
+            try {
+              const gapGenreData = {
+                primaryGenre: genreData.primaryGenre,
+                atmosphere: [],
+                era: genreData.era,
+                trackConstraints: {},
+                artistConstraints: { exclusiveMode: false, requestedArtists: [] }
+              };
+              const gapQuery = buildSoundchartsQuery(gapGenreData, false, allowExplicit);
+              const gapPool = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60));
+              console.log(`🔄 Gap fill pool: ${gapPool.length} top_songs candidates`);
+              await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
+
+              const gfStorefront = tokens.storefront || 'us';
+              const gfAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
+              const gfAppleApi = gfAppleDevToken ? new AppleMusicService(gfAppleDevToken) : null;
+              const gfPlatformSvc = platform === 'apple' ? new PlatformService() : null;
+
+              for (let gi = 0; gi < gapPool.length && selectedTracks.length < songCount; gi += BATCH_SIZE) {
+                const batch = gapPool.slice(gi, gi + BATCH_SIZE).filter(s => s.name?.trim());
+                const results = await Promise.all(batch.map(song =>
+                  findTrackOnPlatform(song, { storefront: gfStorefront, appleMusicApi: gfAppleApi, platformSvc: gfPlatformSvc })
+                    .then(r => ({ song, result: r }))
+                    .catch(() => ({ song, result: null }))
+                ));
+                for (const { result } of results) {
+                  if (selectedTracks.length >= songCount) break;
+                  if (!result) continue;
+                  const { track } = result;
+                  if (seenTrackIds.has(track.id)) continue;
+                  if (!allowExplicit && track.explicit) continue;
+                  seenTrackIds.add(track.id);
+                  selectedTracks.push({
+                    id: track.id, name: track.name,
+                    artist: track.artists?.[0]?.name || track.artist || 'Unknown',
+                    uri: track.uri,
+                    album: track.album?.name || track.album,
+                    image: track.album?.images?.[0]?.url || null,
+                    previewUrl: track.preview_url,
+                    externalUrl: track.url || track.external_urls?.spotify ||
+                      (platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null),
+                    explicit: track.explicit || false, genres: []
+                  });
+                }
+              }
+              console.log(`🔄 After gap fill: ${selectedTracks.length}/${songCount} tracks`);
+            } catch (gapErr) {
+              console.log('Gap fill failed:', gapErr.message);
             }
           }
 
