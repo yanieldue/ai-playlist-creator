@@ -81,8 +81,13 @@
 .section-title {
   font-size: 16px;
   font-weight: 600;
+  line-height: 1.4;
   color: #1a202c;
   margin: 0 0 var(--space-sm) 0;
+}
+
+.dropdown-title {
+  line-height: 1.4;
 }
 
 .section-description {
