@@ -601,37 +601,9 @@
   line-height: 1;
 }
 
-/* Toast — override container to bottom-center Spotify style */
+/* Generate page toasts sit above the footer bar */
 .generate-toast-container {
-  top: auto !important;
   bottom: 110px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  align-items: center;
-}
-.generate-toast-container .toast {
-  min-width: unset !important;
-  max-width: calc(100vw - 40px) !important;
-  padding: 12px 20px !important;
-  border-radius: 14px !important;
-  font-size: 14px !important;
-  gap: 10px !important;
-  animation: gen-toast-in 0.2s ease forwards !important;
-  white-space: nowrap;
-}
-.generate-toast-container .toast-icon {
-  width: 20px !important;
-  height: 20px !important;
-  background: none !important;
-  border-radius: 0 !important;
-}
-.generate-toast-container .toast-message {
-  font-size: 14px !important;
-  line-height: 1.4 !important;
-}
-@keyframes gen-toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Dark mode ────────────────────────────────────────────── */
