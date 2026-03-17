@@ -2669,7 +2669,7 @@ const PlaylistGenerator = () => {
             )}
 
             {activeTab === 'reactions' && (
-              <SongReactions userId={userId} onBack={() => setActiveTab('home')} />
+              <SongReactions userId={userId} onBack={() => setActiveTab('home')} showToast={showToast} />
             )}
           </div>
 

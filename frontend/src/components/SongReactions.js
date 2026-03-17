@@ -3,7 +3,7 @@ import playlistService from '../services/api';
 import Icons from './Icons';
 import '../styles/SongReactions.css';
 
-const SongReactions = ({ userId, onBack }) => {
+const SongReactions = ({ userId, onBack, showToast }) => {
   const [likedSongs, setLikedSongs] = useState([]);
   const [dislikedSongs, setDislikedSongs] = useState([]);
   const [activeSection, setActiveSection] = useState('liked');
@@ -41,11 +41,14 @@ const SongReactions = ({ userId, onBack }) => {
       );
       if (activeSection === 'liked') {
         setLikedSongs(prev => prev.filter(s => s.id !== song.id));
+        showToast?.(`Like removed from "${song.name}"`, 'success');
       } else {
         setDislikedSongs(prev => prev.filter(s => s.id !== song.id));
+        showToast?.(`Dislike removed from "${song.name}"`, 'success');
       }
     } catch (err) {
       console.error('Failed to remove reaction:', err);
+      showToast?.('Failed to remove reaction', 'error');
     } finally {
       setRemoving(null);
     }
