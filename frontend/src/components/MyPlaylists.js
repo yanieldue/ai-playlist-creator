@@ -374,7 +374,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
       }));
 
       if (newReaction === 'thumbsUp') {
-        showToast(`Great! Future updates will include more songs like "${track.name}"`, 'success');
+        showToast(`Future updates will include more songs like "${track.name}"`, 'success');
       } else if (newReaction === 'thumbsDown') {
         showToast(`Removed "${track.name}" - future updates will avoid similar songs`, 'success');
       } else {

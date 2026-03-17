@@ -1,16 +1,15 @@
-/* Toast Container — bottom-center, Spotify-style */
+/* Toast Container — bottom, Spotify-style */
 .toast-container {
   position: fixed;
-  bottom: 40px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10000;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 8px;
   pointer-events: none;
-  width: calc(100vw - 40px);
+  width: calc(100vw - 32px);
   max-width: 480px;
 }
 
@@ -18,10 +17,10 @@
 .toast {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
-  border-radius: 14px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   width: 100%;
   pointer-events: all;
   white-space: normal;
@@ -29,10 +28,11 @@
   animation: toastSlideIn 0.2s ease forwards, toastFadeOut 0.3s ease 2.7s;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   font-size: 14px;
+  box-sizing: border-box;
 }
 
 @keyframes toastSlideIn {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -43,7 +43,7 @@
 
 /* Toast Types */
 .toast-success {
-  background: #000000;
+  background: #1c1c1e;
   color: #ffffff;
 }
 
@@ -54,18 +54,20 @@
 }
 
 .toast-info {
-  background: #000000;
+  background: #1c1c1e;
   color: #ffffff;
 }
 
 /* Toast Icon */
 .toast-icon {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
 }
 
 /* Toast Message */

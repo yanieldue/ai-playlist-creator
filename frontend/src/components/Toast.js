@@ -13,14 +13,10 @@ const Toast = ({ message, type = 'success', onClose, duration = 3000 }) => {
 
   const getIcon = () => {
     switch (type) {
-      case 'success':
-        return <Icons.Check size={20} />;
-      case 'error':
-        return <Icons.Close size={20} />;
-      case 'info':
-        return <Icons.Info size={20} />;
-      default:
-        return <Icons.Check size={20} />;
+      case 'success': return <Icons.Check size={18} />;
+      case 'error':   return <Icons.Close size={18} />;
+      case 'info':    return <Icons.Info size={18} />;
+      default:        return <Icons.Check size={18} />;
     }
   };
 
