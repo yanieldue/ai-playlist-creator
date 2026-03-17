@@ -886,6 +886,55 @@ async function searchSoundChartsSong(title, artist) {
   }
 }
 
+// Given a SoundCharts song UUID and platform code ('spotify' or 'applemusic'),
+// return the platform track ID (or null if not found).
+// Uses GET /api/v2/song/{uuid}/identifiers?platform=<p>&onlyDefault=true
+// This lets us skip unreliable title-based text search for songs without an ISRC.
+async function getSoundChartsSongPlatformId(songUuid, scPlatform) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey || !songUuid) return null;
+
+  const cacheKey = `song-platformid:${scPlatform}:${songUuid}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
+  try {
+    await throttleSoundCharts();
+    const response = await axios.get(
+      `https://customer.api.soundcharts.com/api/v2/song/${songUuid}/identifiers`,
+      {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+        params: { platform: scPlatform, onlyDefault: true, offset: 0, limit: 5 },
+        timeout: 10000
+      }
+    );
+
+    const items = response.data?.items || [];
+    const platformItem = items.find(item =>
+      (item.platform || '').toLowerCase() === scPlatform ||
+      (item.identifier || '').includes(scPlatform)
+    );
+
+    if (platformItem) {
+      let id = platformItem.identifier || platformItem.id || platformItem.value || null;
+      // Spotify identifiers may be full URLs — extract just the track ID
+      if (scPlatform === 'spotify' && id && id.includes('spotify.com/track/')) {
+        id = id.split('spotify.com/track/')[1].split('?')[0];
+      }
+      setSCCache(cacheKey, id);
+      return id;
+    }
+
+    setSCCache(cacheKey, null);
+    return null;
+  } catch (error) {
+    console.log(`⚠️  SoundCharts identifiers error for UUID ${songUuid} (${scPlatform}): ${error.message}`);
+    setSCCache(cacheKey, null);
+    return null;
+  }
+}
+
 // Helper function to get song details including audio features from SoundCharts
 async function getSoundChartsSongDetails(songUuid, options = {}) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
@@ -999,9 +1048,53 @@ const SOUNDCHARTS_GENRE_MAP = {
   'reggae': 'reggae', 'blues': 'blues', 'gospel': 'r&b',
 };
 
+// Map Claude subgenre labels → SoundCharts sub-genre slugs
+const SOUNDCHARTS_SUBGENRE_MAP = {
+  // Pop subgenres
+  'dance pop': 'dance pop', 'electropop': 'electropop', 'synth-pop': 'synth pop',
+  'indie pop': 'indie pop', 'art pop': 'art pop', 'dream pop': 'dream pop',
+  'k-pop': 'k-pop', 'j-pop': 'j-pop',
+  // Hip-hop subgenres
+  'trap': 'trap', 'drill': 'drill', 'lo-fi hip hop': 'lo-fi hip hop',
+  'conscious hip hop': 'conscious hip hop', 'mumble rap': 'mumble rap',
+  'phonk': 'phonk', 'cloud rap': 'cloud rap',
+  // R&B subgenres
+  'neo soul': 'neo soul', 'contemporary r&b': 'contemporary r&b',
+  'alternative r&b': 'alternative r&b',
+  // Electronic subgenres
+  'house': 'house', 'deep house': 'deep house', 'tech house': 'tech house',
+  'techno': 'techno', 'dubstep': 'dubstep', 'drum and bass': 'drum and bass',
+  'ambient': 'ambient', 'lo-fi': 'lo-fi', 'chillout': 'chillout',
+  'trance': 'trance', 'future bass': 'future bass',
+  // Rock subgenres
+  'indie rock': 'indie rock', 'alternative rock': 'alternative rock',
+  'punk rock': 'punk rock', 'hard rock': 'hard rock', 'emo': 'emo',
+  'shoegaze': 'shoegaze', 'grunge': 'grunge',
+  // Latin subgenres
+  'reggaeton': 'reggaeton', 'latin pop': 'latin pop', 'bachata': 'bachata',
+  'salsa': 'salsa', 'dembow': 'dembow',
+};
+
+// Map lyrical theme labels → SoundCharts themes filter values
+const SOUNDCHARTS_THEME_MAP = {
+  'love': 'Love', 'romance': 'Love', 'romantic': 'Love',
+  'heartbreak': 'Heartbreak', 'breakup': 'Heartbreak', 'heartbroken': 'Heartbreak',
+  'party': 'Party', 'club': 'Party', 'nightlife': 'Party',
+  'motivational': 'Motivation', 'motivation': 'Motivation', 'empowerment': 'Motivation',
+  'workout': 'Sport', 'fitness': 'Sport', 'sport': 'Sport', 'gym': 'Sport',
+  'road trip': 'Travel', 'travel': 'Travel',
+  'nostalgia': 'Nostalgia', 'nostalgic': 'Nostalgia',
+  'summer': 'Summer', 'beach': 'Summer',
+  'friendship': 'Friendship', 'friends': 'Friendship',
+  'introspective': 'Introspection', 'self-reflection': 'Introspection',
+  'money': 'Success', 'success': 'Success', 'hustle': 'Success',
+  'spiritual': 'Spirituality', 'faith': 'Spirituality',
+  'protest': 'Social Issues', 'social': 'Social Issues',
+};
+
 // Build a SoundCharts query from Claude-extracted genreData.
 // Used by executeSoundChartsStrategy() to replace the old similarity-tree approach.
-function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
+function buildSoundchartsQuery(genreData, newArtistsOnly = false, allowExplicit = true) {
   const isExclusive = genreData.artistConstraints.exclusiveMode === true ||
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
@@ -1045,6 +1138,143 @@ function buildSoundchartsQuery(genreData, newArtistsOnly = false) {
     filters.push(rdf);
   }
 
+  // Mood filter — collect unique SC mood values from atmosphere + style + keyCharacteristics
+  const moodLabels = [
+    ...(genreData.atmosphere || []),
+    ...(genreData.keyCharacteristics || []),
+    genreData.style || '',
+  ].map(l => l.toLowerCase().trim()).filter(Boolean);
+
+  const scMoods = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
+  if (scMoods.length > 0) {
+    filters.push({ type: 'moods', data: { values: scMoods, operator: 'in' } });
+    console.log(`🎭 SoundCharts mood filter: [${scMoods.join(', ')}]`);
+  }
+
+  // Audio feature filters — only applied when using top_songs (no seed artists).
+  // With seed artists the artist graph already constrains the sound; stacking audio
+  // feature ranges on top would shrink the pool too aggressively.
+  if (strategy === 'top_songs') {
+    // Merge feature ranges from all matched labels, taking the most permissive overlap
+    // (highest min, lowest max) so we don't over-filter on conflicting signals.
+    const featureRanges = {};
+    for (const label of moodLabels) {
+      const features = SOUNDCHARTS_AUDIO_FEATURE_MAP[label];
+      if (!features) continue;
+      for (const [feature, range] of Object.entries(features)) {
+        if (!featureRanges[feature]) featureRanges[feature] = {};
+        if (range.min !== undefined) featureRanges[feature].min = Math.max(featureRanges[feature].min ?? 0, range.min);
+        if (range.max !== undefined) featureRanges[feature].max = Math.min(featureRanges[feature].max ?? 9999, range.max);
+      }
+    }
+
+    // Skip any feature where min > max (contradictory signals, e.g. "energetic" + "chill")
+    for (const [feature, range] of Object.entries(featureRanges)) {
+      if (range.min !== undefined && range.max !== undefined && range.min > range.max) {
+        console.log(`⚠️  Skipping contradictory ${feature} filter (min ${range.min} > max ${range.max})`);
+        continue;
+      }
+      const filterData = {};
+      if (range.min !== undefined) filterData.min = range.min;
+      if (range.max !== undefined) filterData.max = range.max;
+      filters.push({ type: feature, data: filterData });
+      console.log(`🎛️  SoundCharts audio filter: ${feature} ${JSON.stringify(filterData)}`);
+    }
+  }
+
+  // Language filter
+  const preferredLangs = genreData.culturalContext?.language?.prefer || [];
+  if (preferredLangs.length > 0) {
+    // SoundCharts uses ISO 639-1 codes (e.g. 'en', 'es', 'ko')
+    const ISO_LANG_MAP = {
+      'english': 'en', 'spanish': 'es', 'french': 'fr', 'portuguese': 'pt',
+      'korean': 'ko', 'japanese': 'ja', 'german': 'de', 'italian': 'it',
+      'hindi': 'hi', 'arabic': 'ar', 'mandarin': 'zh', 'chinese': 'zh',
+      'russian': 'ru', 'dutch': 'nl', 'swedish': 'sv',
+    };
+    const langCodes = preferredLangs
+      .map(l => ISO_LANG_MAP[l.toLowerCase()] || (l.length === 2 ? l.toLowerCase() : null))
+      .filter(Boolean);
+    if (langCodes.length > 0) {
+      filters.push({ type: 'languageCode', data: { values: langCodes, operator: 'in' } });
+      console.log(`🌐 SoundCharts language filter: [${langCodes.join(', ')}]`);
+    }
+  }
+
+  // Explicit filter — filter at source instead of relying on post-processing
+  if (!allowExplicit) {
+    filters.push({ type: 'explicit', data: { value: false } });
+  }
+
+  // Duration filter — pass trackConstraints directly to SoundCharts
+  const durMin = genreData.trackConstraints?.duration?.min;
+  const durMax = genreData.trackConstraints?.duration?.max;
+  if (durMin || durMax) {
+    const durData = {};
+    if (durMin) durData.min = durMin;
+    if (durMax) durData.max = durMax;
+    filters.push({ type: 'duration', data: durData });
+    console.log(`⏱️  SoundCharts duration filter: ${JSON.stringify(durData)}s`);
+  }
+
+  // Subgenre filter
+  if (genreData.subgenre) {
+    const subLower = genreData.subgenre.toLowerCase().trim();
+    const scSubgenre = SOUNDCHARTS_SUBGENRE_MAP[subLower] ||
+      Object.entries(SOUNDCHARTS_SUBGENRE_MAP).find(([k]) => subLower.includes(k) || k.includes(subLower))?.[1];
+    if (scSubgenre) {
+      filters.push({ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } });
+      console.log(`🎸 SoundCharts subgenre filter: ${scSubgenre}`);
+    }
+  }
+
+  // Lyrical themes filter — from Claude-extracted lyricalContent.themes + useCase
+  const themeLabels = [
+    ...(genreData.lyricalContent?.themes || []),
+    genreData.contextClues?.useCase || '',
+  ].map(l => l.toLowerCase().trim()).filter(Boolean);
+  const scThemes = [...new Set(themeLabels.map(l => SOUNDCHARTS_THEME_MAP[l]).filter(Boolean))];
+  if (scThemes.length > 0) {
+    filters.push({ type: 'themes', data: { values: scThemes, operator: 'in' } });
+    console.log(`📝 SoundCharts themes filter: [${scThemes.join(', ')}]`);
+  }
+
+  // Artist career stage filter — maps popularity preference to career stage
+  const popPref = genreData.trackConstraints?.popularity?.preference;
+  const popMax = genreData.trackConstraints?.popularity?.max;
+  if (popPref === 'underground' || (popMax !== null && popMax !== undefined && popMax <= 40)) {
+    filters.push({ type: 'artistCareerStages', data: { values: ['long_tail', 'developing'], operator: 'in' } });
+    console.log(`🎤 SoundCharts career stage filter: underground (long_tail, developing)`);
+  } else if (popPref === 'mainstream' || (genreData.trackConstraints?.popularity?.min !== null &&
+             genreData.trackConstraints?.popularity?.min !== undefined &&
+             genreData.trackConstraints?.popularity?.min >= 70)) {
+    filters.push({ type: 'artistCareerStages', data: { values: ['mainstream', 'superstar'], operator: 'in' } });
+    console.log(`🎤 SoundCharts career stage filter: mainstream/superstar`);
+  }
+
+  // Liveness filter — if user excluded live versions, filter them out at source
+  const excludeVersions = genreData.trackConstraints?.excludeVersions || [];
+  if (excludeVersions.includes('live')) {
+    filters.push({ type: 'liveness', data: { max: 0.4 } });
+    console.log(`🎙️  SoundCharts liveness filter: max 0.4 (no live recordings)`);
+  }
+
+  // Speechiness filter — high speechiness = rap/spoken word; low = sung music
+  // Only applied on top_songs since artist graph already handles genre
+  if (strategy === 'top_songs') {
+    const avoidances = genreData.contextClues?.avoidances || [];
+    const lyricsAvoid = genreData.lyricalContent?.avoid || [];
+    const allAvoid = [...avoidances, ...lyricsAvoid].map(a => a.toLowerCase());
+    if (allAvoid.some(a => a.includes('rap') || a.includes('hip hop') || a.includes('spoken'))) {
+      filters.push({ type: 'speechiness', data: { max: 0.33 } });
+      console.log(`🗣️  SoundCharts speechiness filter: max 0.33 (no rap/spoken word)`);
+    } else if (genreData.primaryGenre?.toLowerCase().includes('rap') ||
+               genreData.primaryGenre?.toLowerCase().includes('hip hop')) {
+      filters.push({ type: 'speechiness', data: { min: 0.33 } });
+      console.log(`🗣️  SoundCharts speechiness filter: min 0.33 (rap/hip-hop focus)`);
+    }
+  }
+
   return {
     strategy,
     artists: seedArtists,
@@ -1067,6 +1297,69 @@ const SOUNDCHARTS_MOOD_MAP = {
   'party': 'Euphoric', 'euphoric': 'Euphoric',
   'melancholy': 'Melancholic', 'nostalgic': 'Nostalgic',
   'spiritual': 'Spiritual', 'peaceful': 'Peaceful',
+  'excited': 'Energetic', 'intense': 'Aggressive', 'dreamy': 'Peaceful',
+  'rebellious': 'Aggressive', 'confident': 'Empowering', 'powerful': 'Empowering',
+  'groovy': 'Euphoric', 'fun': 'Joyful', 'playful': 'Joyful', 'summer': 'Happy',
+};
+
+// Map Claude atmosphere/characteristic labels → SoundCharts audio feature ranges.
+// Only applied on top_songs (no seed artists) — artist_songs already finds genre-relevant songs
+// via the artist graph, so audio feature filters there would narrow the pool too aggressively.
+// Values are 0–1 (normalized) except tempo (BPM).
+const SOUNDCHARTS_AUDIO_FEATURE_MAP = {
+  // Energy (intensity/activity level)
+  'energetic': { energy: { min: 0.72 } },
+  'hype':      { energy: { min: 0.80 } },
+  'intense':   { energy: { min: 0.78 } },
+  'workout':   { energy: { min: 0.75 } },
+  'powerful':  { energy: { min: 0.72 } },
+  'chill':     { energy: { max: 0.45 } },
+  'relaxed':   { energy: { max: 0.45 } },
+  'calm':      { energy: { max: 0.40 } },
+  'peaceful':  { energy: { max: 0.40 } },
+  'ambient':   { energy: { max: 0.35 } },
+  'lo-fi':     { energy: { max: 0.50 } },
+  'sleep':     { energy: { max: 0.30 } },
+  'focus':     { energy: { max: 0.55 } },
+  'study':     { energy: { max: 0.55 } },
+
+  // Valence (musical positivity)
+  'happy':     { valence: { min: 0.65 } },
+  'feel-good': { valence: { min: 0.62 } },
+  'upbeat':    { valence: { min: 0.60 } },
+  'joyful':    { valence: { min: 0.70 } },
+  'fun':       { valence: { min: 0.60 } },
+  'summer':    { valence: { min: 0.60 } },
+  'playful':   { valence: { min: 0.60 } },
+  'sad':       { valence: { max: 0.35 } },
+  'melancholic': { valence: { max: 0.40 } },
+  'melancholy':  { valence: { max: 0.40 } },
+  'dark':      { valence: { max: 0.30 } },
+  'heartbreak': { valence: { max: 0.38 } },
+  'emotional': { valence: { max: 0.45 } },
+
+  // Danceability
+  'dance':     { danceability: { min: 0.72 } },
+  'danceable': { danceability: { min: 0.72 } },
+  'party':     { danceability: { min: 0.75 } },
+  'groovy':    { danceability: { min: 0.68 } },
+  'club':      { danceability: { min: 0.78 } },
+
+  // Acousticness
+  'acoustic':   { acousticness: { min: 0.60 } },
+  'unplugged':  { acousticness: { min: 0.60 } },
+  'raw':        { acousticness: { min: 0.50 } },
+
+  // Instrumentalness
+  'instrumental':  { instrumentalness: { min: 0.55 } },
+  'no vocals':     { instrumentalness: { min: 0.55 } },
+  'concentration': { instrumentalness: { min: 0.40 } },
+
+  // Tempo (BPM)
+  'slow':   { tempo: { max: 85 } },
+  'ballad': { tempo: { max: 90 } },
+  'fast':   { tempo: { min: 128 } },
+  'uptempo': { tempo: { min: 120 } },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4410,11 +4703,12 @@ Respond ONLY with valid JSON in this format:
 EXTRACTION GUIDELINES:
 
 ERA & TIME:
-- "90s", "2000s", "2010s": Extract decade
-- "past 5 years", "last 3 years", "recent": Calculate from ${new Date().getFullYear()} (e.g., "last 5 years" = ${new Date().getFullYear() - 5}-${new Date().getFullYear()})
-- "from 2015 to 2020": Set min/max
-- "only 2020 songs": Set both min and max to same year
-- "contemporary", "modern": Set min to ${new Date().getFullYear() - 5}
+- CRITICAL: ONLY set yearRange.min/max for EXPLICIT year specifications. NEVER set yearRange.min/max for decade descriptors — only set the decade field.
+- "90s", "2000s", "2010s", "X classics", "[decade] vibes", "old school", "throwback": Set decade field ONLY — leave yearRange.min and yearRange.max as null
+- "past 5 years", "last 3 years", "recent": Set yearRange.min to ${new Date().getFullYear() - 5} (adjust N), yearRange.max to ${new Date().getFullYear()}
+- "from 2015 to 2020": Set min: 2015, max: 2020
+- "only 2020 songs": Set both min and max to 2020
+- "contemporary", "modern": Set min to ${new Date().getFullYear() - 5}, max to null
 
 POPULARITY:
 - "mainstream hits", "popular songs": min: 70
@@ -4909,7 +5203,7 @@ Respond ONLY with valid JSON:
     // Discover songs via SoundCharts — direct attribute-based query (no similarity tree)
     let soundChartsDiscoveredSongs = [];
     if (process.env.SOUNDCHARTS_APP_ID) {
-      const scQuery = buildSoundchartsQuery(genreData, newArtistsOnly);
+      const scQuery = buildSoundchartsQuery(genreData, newArtistsOnly, allowExplicit);
       const fetchCount = Math.min(songCount * 3, 200);
       console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target)`);
       console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
@@ -4928,9 +5222,9 @@ Respond ONLY with valid JSON:
     // Also pre-filter by era using SoundCharts' original releaseDate — this avoids the
     // "compilation album" problem where Spotify returns a classic song on a recent re-release
     // and album.release_date passes the year check despite the song being much older.
-    const eraMin = genreData.era?.yearRange?.min || null;
-    const eraMax = genreData.era?.yearRange?.max || null;
-    const recommendedTracks = soundChartsDiscoveredSongs
+    let eraMin = genreData.era?.yearRange?.min || null;
+    let eraMax = genreData.era?.yearRange?.max || null;
+    let recommendedTracks = soundChartsDiscoveredSongs
       .filter(scSong => {
         if (!scSong.name || !scSong.name.trim()) return false;
         if (scSong.releaseDate && (eraMin || eraMax)) {
@@ -4950,11 +5244,35 @@ Respond ONLY with valid JSON:
         track: scSong.name,
         artist: scSong.artistName,
         isrc: scSong.isrc || null,
+        uuid: scSong.uuid || null,
         releaseDate: scSong.releaseDate || null,
         source: 'soundcharts'
       }));
 
     console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts (${soundChartsDiscoveredSongs.length - recommendedTracks.length} pre-filtered by era)`);
+
+    // Safety: if era filtering was too aggressive (dropped >60% of songs and we have fewer than 2x target),
+    // relax the era filter and use all songs — decade soft-filtering via vibe check will still apply.
+    if ((eraMin || eraMax) && soundChartsDiscoveredSongs.length > 0) {
+      const totalValid = soundChartsDiscoveredSongs.filter(s => s.name?.trim()).length;
+      const filteredRatio = totalValid > 0 ? recommendedTracks.length / totalValid : 1;
+      if (filteredRatio < 0.4 && recommendedTracks.length < songCount * 2) {
+        console.warn(`⚠️  [ERA] Era filter too aggressive (kept ${Math.round(filteredRatio * 100)}% of songs, only ${recommendedTracks.length} remain for target ${songCount}). Relaxing era constraints.`);
+        eraMin = null;
+        eraMax = null;
+        recommendedTracks = soundChartsDiscoveredSongs
+          .filter(s => s.name?.trim())
+          .map(scSong => ({
+            track: scSong.name,
+            artist: scSong.artistName,
+            isrc: scSong.isrc || null,
+            uuid: scSong.uuid || null,
+            releaseDate: scSong.releaseDate || null,
+            source: 'soundcharts'
+          }));
+        console.log(`📋 After relaxing era filter: ${recommendedTracks.length} songs available`);
+      }
+    }
 
     // Generate playlist name and description
     const hasRequestedArtists = genreData.artistConstraints.requestedArtists &&
@@ -5059,326 +5377,337 @@ Return ONLY valid JSON:
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
 
-      if (platform === 'spotify') {
-        // Search Spotify for each recommended song
-        for (const recommendedSong of recommendedTracks) {
-          try {
-            // Prefer ISRC lookup (exact match) — fall back to text search
-            const searchQuery = recommendedSong.isrc
-              ? `isrc:${recommendedSong.isrc}`
-              : `track:${recommendedSong.track} artist:${recommendedSong.artist}`;
-            const searchPromise = userSpotifyApi.searchTracks(searchQuery, { limit: 5 });
-            const searchResult = await Promise.race([
-              searchPromise,
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
+      // ── Phase A: pre-fetch SoundCharts platform IDs (serial+throttled, one-time cost) ──
+      // For songs that have no ISRC, fetch the platform ID from SC identifiers upfront so
+      // Phase B can do all platform lookups in parallel without hitting the SC throttler.
+      if (process.env.SOUNDCHARTS_APP_ID) {
+        const scPlatformCode = platform === 'spotify' ? 'spotify' : 'applemusic';
+        const songsNeedingId = recommendedTracks.filter(s => !s.isrc && s.uuid);
+        if (songsNeedingId.length > 0) {
+          console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${songsNeedingId.length} songs without ISRC...`);
+          for (const song of songsNeedingId) {
+            song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
+          }
+          const found = songsNeedingId.filter(s => s.platformId).length;
+          console.log(`🔍 [Phase A] Got platform IDs for ${found}/${songsNeedingId.length} songs`);
+        }
+      }
+
+      // ── Shared platform track finder — used by main, supplement, and fallback loops ──
+      // Tries (1) ISRC, (2) pre-fetched platform ID, (3) text search.
+      // Returns { track, usedExact } or null. Safe to run in parallel (read-only).
+      const findTrackOnPlatform = async (song, opts = {}) => {
+        const { storefront = 'us', appleMusicApi = null, platformSvc = null } = opts;
+        const artistName = song.artistName || song.artist || '';
+
+        if (platform === 'spotify') {
+          // 1. ISRC
+          if (song.isrc) {
+            const r = await Promise.race([
+              userSpotifyApi.searchTracks(`isrc:${song.isrc}`, { limit: 5 }),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
             ]);
-            const tracks = searchResult.body.tracks.items;
+            const items = r.body.tracks.items;
+            if (items.length > 0) return { track: items[0], usedExact: true };
+          }
+          // 2. SC platform ID (pre-fetched)
+          if (song.platformId) {
+            const r = await Promise.race([
+              userSpotifyApi.getTrack(song.platformId),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+            ]);
+            if (r.body?.id) return { track: r.body, usedExact: true };
+          }
+          // 3. Text search
+          const r = await Promise.race([
+            userSpotifyApi.searchTracks(`track:${song.name} artist:${artistName}`, { limit: 5 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+          ]);
+          const items = r.body.tracks.items;
+          if (items.length === 0) return null;
+          const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const reqNorm = norm(artistName);
+          for (const t of items) {
+            const fn = norm(t.artists?.[0]?.name);
+            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn))
+              return { track: t, usedExact: false };
+          }
+          return null;
 
-            if (tracks.length > 0) {
-              let matchedTrack = tracks[0]; // ISRC search returns exact match; text search needs artist check
-
-              if (!recommendedSong.isrc) {
-                // Text search: find a track that matches the requested artist
-                const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-                matchedTrack = null;
-                for (const track of tracks) {
-                  const foundArtistNorm = (track.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                  if (requestedArtistNorm.length < 6) {
-                    if (foundArtistNorm === requestedArtistNorm) { matchedTrack = track; break; }
-                  } else {
-                    if (foundArtistNorm === requestedArtistNorm ||
-                        foundArtistNorm.startsWith(requestedArtistNorm) ||
-                        requestedArtistNorm.startsWith(foundArtistNorm)) { matchedTrack = track; break; }
-                  }
-                }
-              }
-
-              // If we have a confirmed Spotify artist ID (from reference song search), verify it matches.
-              // This catches same-name artists (e.g. two artists both named "Dante") that name-string
-              // matching can't distinguish.
-              if (matchedTrack) {
-                const confirmedSpotifyId = confirmedSpotifyArtistIds[recommendedSong.artist.toLowerCase()];
-                if (confirmedSpotifyId) {
-                  const trackArtistId = matchedTrack.artists?.[0]?.id;
-                  if (trackArtistId && trackArtistId !== confirmedSpotifyId) {
-                    console.log(`✗ "${recommendedSong.track}" by ${recommendedSong.artist} — wrong Spotify artist (expected ${confirmedSpotifyId}, got ${trackArtistId})`);
-                    matchedTrack = null;
-                  }
-                }
-              }
-
-              if (!matchedTrack) {
-                console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist} (artist mismatch)`);
-                continue;
-              }
-
-              const track = matchedTrack;
-
-              // Check if we already have this track
-              if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-                continue;
-              }
-
-              // Skip tracks that are already in the playlist (for replace mode)
-              if (excludeTrackIds.has(track.id)) {
-                console.log(`Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (already in playlist)`);
-                continue;
-              }
-
-              // Skip tracks from song history (for manual refresh / auto-update)
-              if (playlistSongHistory.size > 0) {
-                const historyKey = `${normalizeTrackName(track.name)}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
-                if (playlistSongHistory.has(historyKey)) {
-                  console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
-                  continue;
-                }
-              }
-
-              // Check for explicit content if needed
-              if (!allowExplicit && track.explicit) {
-                console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-                continue;
-              }
-
-              // Enforce release year constraint. Use the EARLIEST known date to avoid
-              // the "compilation album" problem where a classic song appears on a recent
-              // re-release and Spotify's album.release_date passes the year check.
-              if (eraMin || eraMax) {
-                const isCompilation = track.album?.album_type === 'compilation';
-                const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
-                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
-                const isrcYear = extractIsrcYear(recommendedSong.isrc);
-
-                // For compilations, don't trust Spotify's album date (it's the compilation date,
-                // not the original recording year). For all tracks, prefer ISRC/SoundCharts years
-                // which reflect the original recording, not a re-release.
-                const candidateYears = isCompilation
-                  ? [isrcYear, scYear]
-                  : [isrcYear, scYear, spotifyYear];
-                const years = candidateYears.filter(y => y !== null);
-
-                // If we have no reliable year data at all, skip to be safe
-                if (years.length === 0) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (no release year data available)`);
-                  continue;
-                }
-
-                const releaseYear = Math.min(...years);
-                if (eraMin && releaseYear < eraMin) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${eraMin})`);
-                  continue;
-                }
-                if (eraMax && releaseYear > eraMax) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${eraMax})`);
-                  continue;
-                }
-              }
-
-              // Check song signature (artist + normalized track name)
-              const normalizedName = normalizeTrackName(track.name);
-              const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
-
-              if (seenSongSignatures.has(songSignature)) {
-                if (!isUniqueVariation(track.name)) {
-                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist} (same as "${seenSongSignatures.get(songSignature)}")`);
-                  continue;
-                }
-              }
-
-              // Skip known artists when newArtistsOnly mode is active
-              if (newArtistsOnly && knownArtists.size > 0) {
-                const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
-                if (knownArtists.has(primaryArtist)) {
-                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
-                  continue;
-                }
-              }
-
-              seenTrackIds.add(track.id);
-              seenSongSignatures.set(songSignature, track.name);
-              // Normalize track format to have 'artist', 'image', and 'externalUrl' properties for consistency
-              // For Apple Music, construct URL from track ID if not provided
-              const trackExternalUrl = track.url || track.external_urls?.spotify ||
-                (track.platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null);
-              allTracks.push({
-                ...track,
-                artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
-                image: track.album?.images?.[0]?.url || null,
-                externalUrl: trackExternalUrl
-              });
-              console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-              if (allTracks.length >= songCount) {
-                console.log(`🎯 Early stop: reached ${songCount} matched Spotify tracks`);
-                break;
-              }
-            } else {
-              console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
+        } else if (platform === 'apple') {
+          // 1. ISRC
+          if (song.isrc && appleMusicApi) {
+            try {
+              const result = await appleMusicApi.lookupByIsrc(song.isrc, storefront);
+              if (result) return { track: result, usedExact: true };
+            } catch (_) { /* fall through */ }
+          }
+          // 2. SC platform ID (pre-fetched)
+          if (song.platformId && appleMusicApi) {
+            try {
+              const result = await appleMusicApi.getTrack(song.platformId, storefront);
+              if (result) return { track: result, usedExact: true };
+            } catch (_) { /* fall through */ }
+          }
+          // 3. Text search
+          if (platformSvc) {
+            const results = await platformSvc.searchTracks(platformUserId, `${song.name} ${artistName}`, tokens, storefront, 5);
+            const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const reqNorm = norm(artistName);
+            for (const t of (results || [])) {
+              const fn = norm(t.artists?.[0]?.name || t.artist);
+              const nameLower = (t.name || '').toLowerCase();
+              if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
+              if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn))
+                return { track: t, usedExact: false };
             }
-          } catch (error) {
-            console.log(`Error searching for "${recommendedSong.track}": ${error.message}`);
+          }
+          return null;
+        }
+        return null;
+      };
+
+      // ── Shared Phase A helper — pre-fetch SC platform IDs for a song pool ──
+      const prefetchPlatformIds = async (pool, scPlatformCode) => {
+        if (!process.env.SOUNDCHARTS_APP_ID) return;
+        const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
+        if (needing.length === 0) return;
+        console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
+        for (const song of needing) {
+          song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
+        }
+        console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
+      };
+
+      // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
+      // Returns true and mutates allTracks/seenTrackIds/seenSongSignatures if track passes all checks.
+      const validateAndAdd = (track, recommendedSong, platform) => {
+        if (seenTrackIds.has(track.id)) {
+          console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+          return false;
+        }
+        if (excludeTrackIds.has(track.id)) {
+          console.log(`Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (already in playlist)`);
+          return false;
+        }
+        if (playlistSongHistory.size > 0) {
+          const historyKey = `${normalizeTrackName(track.name)}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
+          if (playlistSongHistory.has(historyKey)) {
+            console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
+            return false;
           }
         }
+        if (!allowExplicit && track.explicit) {
+          console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+          return false;
+        }
+        if (eraMin || eraMax) {
+          const isCompilation = track.album?.album_type === 'compilation';
+          const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
+          const appleYear = (track.releaseDate || track.album?.release_date)
+            ? parseInt((track.releaseDate || track.album?.release_date).substring(0, 4)) : null;
+          const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
+          const isrcYear = extractIsrcYear(recommendedSong.isrc);
+          const platformYear = platform === 'apple' ? appleYear : spotifyYear;
+          const candidateYears = isCompilation ? [isrcYear, scYear] : [isrcYear, scYear, platformYear];
+          const years = candidateYears.filter(y => y !== null);
+          if (years.length === 0) {
+            console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (no release year data)`);
+            return false;
+          }
+          const releaseYear = Math.min(...years);
+          if (eraMin && releaseYear < eraMin) {
+            console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} < ${eraMin})`);
+            return false;
+          }
+          if (eraMax && releaseYear > eraMax) {
+            console.log(`[ERA] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${releaseYear} > ${eraMax})`);
+            return false;
+          }
+        }
+        const normalizedName = normalizeTrackName(track.name);
+        const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
+        if (seenSongSignatures.has(songSignature) && !isUniqueVariation(track.name)) {
+          console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+          return false;
+        }
+        if (newArtistsOnly && knownArtists.size > 0) {
+          const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+          if (knownArtists.has(primaryArtist)) {
+            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
+            return false;
+          }
+        }
+        seenTrackIds.add(track.id);
+        seenSongSignatures.set(songSignature, track.name);
+        const externalUrl = track.url || track.external_urls?.spotify ||
+          (platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null);
+        allTracks.push({
+          ...track,
+          artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
+          image: track.album?.images?.[0]?.url || null,
+          externalUrl
+        });
+        console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+        return true;
+      };
+
+      const BATCH_SIZE = 10;
+
+      if (platform === 'spotify') {
+
+        // Per-song Spotify lookup (runs in parallel within each batch)
+        const findSpotifyTrack = async (recommendedSong) => {
+          // 1st: ISRC exact match
+          if (recommendedSong.isrc) {
+            const result = await Promise.race([
+              userSpotifyApi.searchTracks(`isrc:${recommendedSong.isrc}`, { limit: 5 }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
+            ]);
+            const items = result.body.tracks.items;
+            if (items.length > 0) return { track: items[0], usedExact: true };
+          }
+
+          // 2nd: direct Spotify ID from SC identifiers (pre-fetched in Phase A)
+          if (recommendedSong.platformId) {
+            const result = await Promise.race([
+              userSpotifyApi.getTrack(recommendedSong.platformId),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Track lookup timeout')), 5000))
+            ]);
+            if (result.body?.id) {
+              console.log(`🎯 SC identifiers match: "${recommendedSong.track}" by ${recommendedSong.artist} → ${recommendedSong.platformId}`);
+              return { track: result.body, usedExact: true };
+            }
+          }
+
+          // 3rd: text search fallback
+          const result = await Promise.race([
+            userSpotifyApi.searchTracks(`track:${recommendedSong.track} artist:${recommendedSong.artist}`, { limit: 5 }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
+          ]);
+          const items = result.body.tracks.items;
+          if (items.length === 0) return null;
+
+          // Text search: find a track that matches the requested artist
+          const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (const t of items) {
+            const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (requestedArtistNorm.length < 6) {
+              if (foundArtistNorm === requestedArtistNorm) return { track: t, usedExact: false };
+            } else {
+              if (foundArtistNorm === requestedArtistNorm ||
+                  foundArtistNorm.startsWith(requestedArtistNorm) ||
+                  requestedArtistNorm.startsWith(foundArtistNorm)) return { track: t, usedExact: false };
+            }
+          }
+          return null;
+        };
+
+        // ── Phase B: batched parallel Spotify lookups ──
+        for (let i = 0; i < recommendedTracks.length && allTracks.length < songCount; i += BATCH_SIZE) {
+          const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
+            try {
+              const found = await findSpotifyTrack(recommendedSong);
+              return { recommendedSong, found };
+            } catch (err) {
+              console.log(`Error searching for "${recommendedSong.track}": ${err.message}`);
+              return { recommendedSong, found: null };
+            }
+          }));
+
+          for (const { recommendedSong, found } of batchResults) {
+            if (allTracks.length >= songCount) break;
+            if (!found) { console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`); continue; }
+
+            let { track } = found;
+
+            // Verify confirmed Spotify artist ID (catches same-name artist collisions)
+            if (!found.usedExact) {
+              const confirmedSpotifyId = confirmedSpotifyArtistIds[recommendedSong.artist.toLowerCase()];
+              if (confirmedSpotifyId) {
+                const trackArtistId = track.artists?.[0]?.id;
+                if (trackArtistId && trackArtistId !== confirmedSpotifyId) {
+                  console.log(`✗ "${recommendedSong.track}" by ${recommendedSong.artist} — wrong Spotify artist`);
+                  continue;
+                }
+              }
+            }
+
+            if (!validateAndAdd(track, recommendedSong, 'spotify')) continue;
+            if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Spotify tracks`); break; }
+          }
+        }
+
       } else if (platform === 'apple') {
-        // For Apple Music users, search Apple Music for recommended songs
         const platformService = new PlatformService();
         const storefront = tokens.storefront || 'us';
         const appleMusicDevTokenForSearch = generateAppleMusicToken();
         const appleMusicApiForSearch = appleMusicDevTokenForSearch ? new AppleMusicService(appleMusicDevTokenForSearch) : null;
 
-        for (const recommendedSong of recommendedTracks) {
-          try {
-            let matchedTrack = null;
-
-            // Try ISRC lookup first for exact match
-            if (recommendedSong.isrc && appleMusicApiForSearch) {
-              try {
-                const isrcResult = await appleMusicApiForSearch.lookupByIsrc(recommendedSong.isrc, storefront);
-                if (isrcResult) {
-                  matchedTrack = isrcResult;
-                  console.log(`✓ ISRC match for "${recommendedSong.track}" by ${recommendedSong.artist}`);
-                }
-              } catch (isrcErr) {
-                console.log(`ISRC lookup failed for ${recommendedSong.isrc}, falling back to text search`);
-              }
+        // Per-song Apple Music lookup (runs in parallel within each batch)
+        const findAppleTrack = async (recommendedSong) => {
+          // 1st: ISRC exact match
+          if (recommendedSong.isrc && appleMusicApiForSearch) {
+            try {
+              const result = await appleMusicApiForSearch.lookupByIsrc(recommendedSong.isrc, storefront);
+              if (result) return { track: result, usedExact: true };
+            } catch (isrcErr) {
+              console.log(`ISRC lookup failed for ${recommendedSong.isrc}, falling back`);
             }
+          }
 
-            // Fall back to text search if ISRC lookup returned nothing
-            if (!matchedTrack) {
-              const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
-              const tracks = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
-
-              if (tracks.length > 0) {
-                // Find a track that matches the requested artist (not just any track with similar name)
-                const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                for (const track of tracks) {
-                  const foundArtistNorm = (track.artists?.[0]?.name || track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-                  // For short artist names (< 6 chars normalized), require exact match to avoid false positives
-                  // e.g., "dante" should not match "dante1981" or "dantesco"
-                  if (requestedArtistNorm.length < 6) {
-                    if (foundArtistNorm === requestedArtistNorm) {
-                      matchedTrack = track;
-                      break;
-                    }
-                  } else {
-                    // For longer names, allow partial matches but be careful
-                    // Only match if one is a substring at a word boundary (start/end)
-                    if (foundArtistNorm === requestedArtistNorm ||
-                        foundArtistNorm.startsWith(requestedArtistNorm) ||
-                        requestedArtistNorm.startsWith(foundArtistNorm)) {
-                      matchedTrack = track;
-                      break;
-                    }
-                  }
-                }
+          // 2nd: direct Apple Music ID from SC identifiers (pre-fetched in Phase A)
+          if (recommendedSong.platformId && appleMusicApiForSearch) {
+            try {
+              const result = await appleMusicApiForSearch.getTrack(recommendedSong.platformId, storefront);
+              if (result) {
+                console.log(`🎯 SC identifiers match: "${recommendedSong.track}" by ${recommendedSong.artist} → ${recommendedSong.platformId}`);
+                return { track: result, usedExact: true };
               }
+            } catch (idErr) {
+              console.log(`⚠️  Direct Apple Music ID lookup failed for ${recommendedSong.platformId}: ${idErr.message}`);
             }
+          }
 
-            if (matchedTrack !== null) {
-              // (matchedTrack is set — proceed with dedup/filter checks below)
-              {
-              const track = matchedTrack;
+          // 3rd: text search fallback
+          const searchQuery = `${recommendedSong.track} ${recommendedSong.artist}`;
+          const items = await platformService.searchTracks(platformUserId, searchQuery, tokens, storefront, 5);
+          if (!items || items.length === 0) return null;
 
-              // Check if we already have this track
-              if (seenTrackIds.has(track.id)) {
-                console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-                continue;
-              }
-
-              // Skip tracks that are already in the playlist (for replace mode)
-              if (excludeTrackIds.has(track.id)) {
-                console.log(`Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (already in playlist)`);
-                continue;
-              }
-
-              // Skip tracks from song history (for manual refresh / auto-update)
-              if (playlistSongHistory.size > 0) {
-                const historyKey = `${normalizeTrackName(track.name)}|||${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}`;
-                if (playlistSongHistory.has(historyKey)) {
-                  console.log(`[MANUAL-REFRESH] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (previously in playlist)`);
-                  continue;
-                }
-              }
-
-              // Check for explicit content if needed
-              if (!allowExplicit && track.explicit) {
-                console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-                continue;
-              }
-
-              // Enforce release year constraint — use earliest of ISRC, Apple, and SoundCharts date
-              if (eraMin || eraMax) {
-                const isCompilation = track.album?.album_type === 'compilation';
-                const scYear = recommendedSong.releaseDate ? parseInt(recommendedSong.releaseDate.substring(0, 4)) : null;
-                const appleYear = (track.releaseDate || track.album?.release_date)
-                  ? parseInt((track.releaseDate || track.album?.release_date).substring(0, 4)) : null;
-                const isrcYear = extractIsrcYear(recommendedSong.isrc);
-
-                const candidateYears = isCompilation
-                  ? [isrcYear, scYear]
-                  : [isrcYear, scYear, appleYear];
-                const years = candidateYears.filter(y => y !== null);
-
-                if (years.length === 0) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (no release year data available)`);
-                  continue;
-                }
-
-                const releaseYear = Math.min(...years);
-                if (eraMin && releaseYear < eraMin) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} < ${eraMin})`);
-                  continue;
-                }
-                if (eraMax && releaseYear > eraMax) {
-                  console.log(`[ERA] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (${releaseYear} > ${eraMax})`);
-                  continue;
-                }
-              }
-
-              // Check song signature (artist + normalized track name)
-              const normalizedName = normalizeTrackName(track.name);
-              const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
-
-              if (seenSongSignatures.has(songSignature)) {
-                if (!isUniqueVariation(track.name)) {
-                  console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist} (same as "${seenSongSignatures.get(songSignature)}")`);
-                  continue;
-                }
-              }
-
-              // Skip known artists when newArtistsOnly mode is active
-              if (newArtistsOnly && knownArtists.size > 0) {
-                const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
-                if (knownArtists.has(primaryArtist)) {
-                  console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artist || track.artists?.[0]?.name} (known artist)`);
-                  continue;
-                }
-              }
-
-              seenTrackIds.add(track.id);
-              seenSongSignatures.set(songSignature, track.name);
-              // Normalize track format to have 'artist', 'image', and 'externalUrl' properties for consistency
-              // For Apple Music, construct URL from track ID if not provided
-              const appleTrackUrl = track.url || `https://music.apple.com/us/song/${track.id}`;
-              allTracks.push({
-                ...track,
-                artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
-                image: track.album?.images?.[0]?.url || null,
-                externalUrl: appleTrackUrl
-              });
-              console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
-              if (allTracks.length >= songCount) {
-                console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`);
-                break;
-              }
-              } // end inner block
+          const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (const t of items) {
+            const foundArtistNorm = (t.artists?.[0]?.name || t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (requestedArtistNorm.length < 6) {
+              if (foundArtistNorm === requestedArtistNorm) return { track: t, usedExact: false };
             } else {
-              console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`);
+              if (foundArtistNorm === requestedArtistNorm ||
+                  foundArtistNorm.startsWith(requestedArtistNorm) ||
+                  requestedArtistNorm.startsWith(foundArtistNorm)) return { track: t, usedExact: false };
             }
-          } catch (error) {
-            console.log(`Error searching for "${recommendedSong.track}": ${error.message}`);
+          }
+          return null;
+        };
+
+        // ── Phase B: batched parallel Apple Music lookups ──
+        for (let i = 0; i < recommendedTracks.length && allTracks.length < songCount; i += BATCH_SIZE) {
+          const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
+          const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
+            try {
+              const found = await findAppleTrack(recommendedSong);
+              return { recommendedSong, found };
+            } catch (err) {
+              console.log(`Error searching for "${recommendedSong.track}": ${err.message}`);
+              return { recommendedSong, found: null };
+            }
+          }));
+
+          for (const { recommendedSong, found } of batchResults) {
+            if (allTracks.length >= songCount) break;
+            if (!found) { console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`); continue; }
+
+            if (!validateAndAdd(found.track, recommendedSong, 'apple')) continue;
+            if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`); break; }
           }
         }
       }
@@ -5516,97 +5845,56 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   suggestedSeedArtists: seedArtistsForSupplement
                 }
               };
-              const supplementQuery = buildSoundchartsQuery(supplementGenreData, false);
+              const supplementQuery = buildSoundchartsQuery(supplementGenreData, false, allowExplicit);
 
               // Request a larger pool so we have more candidates to match against
               const supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
               const seenSupplementArtists = new Set();
-              for (const song of supplementPool) {
-                if (selectedTracks.length >= songCount) break;
-                if (!song.name || !song.name.trim()) continue; // skip songs with no name
-                const artistLower = (song.artistName || '').toLowerCase();
-                if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(artistLower)) continue;
-                try {
-                  if (platform === 'spotify') {
-                    const searchQuery = song.isrc
-                      ? `isrc:${song.isrc}`
-                      : `track:${song.name} artist:${song.artistName}`;
-                    const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
-                    const track = result.body.tracks?.items?.[0];
-                    if (track && !seenTrackIds.has(track.id)) {
-                      if (!allowExplicit && track.explicit) continue;
-                      seenTrackIds.add(track.id);
-                      seenSupplementArtists.add(artistLower);
-                      selectedTracks.push({
-                        id: track.id, name: track.name,
-                        artist: track.artists?.[0]?.name || 'Unknown',
-                        uri: track.uri, album: track.album?.name,
-                        image: track.album?.images?.[0]?.url,
-                        previewUrl: track.preview_url,
-                        externalUrl: track.external_urls?.spotify,
-                        explicit: track.explicit, genres: []
-                      });
-                    }
-                  } else if (platform === 'apple') {
-                    const supplementStorefront = tokens.storefront || 'us';
-                    let supplementTrack = null;
 
-                    // Try ISRC lookup first
-                    if (song.isrc) {
-                      try {
-                        const supplementAppleDevToken = generateAppleMusicToken();
-                        if (supplementAppleDevToken) {
-                          const supplementAppleApi = new AppleMusicService(supplementAppleDevToken);
-                          const isrcResult = await supplementAppleApi.lookupByIsrc(song.isrc, supplementStorefront);
-                          if (isrcResult && !seenTrackIds.has(isrcResult.id)) {
-                            supplementTrack = isrcResult;
-                          }
-                        }
-                      } catch (isrcErr) { /* fall through to text search */ }
-                    }
+              // Phase A: pre-fetch SC platform IDs for songs missing ISRC
+              await prefetchPlatformIds(supplementPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
-                    // Fall back to text search if ISRC lookup returned nothing
-                    if (!supplementTrack) {
-                      const platformService = new PlatformService();
-                      const appleResults = await platformService.searchTracks(
-                        platformUserId,
-                        `${song.name} ${song.artistName}`,
-                        tokens, supplementStorefront, 3
-                      );
-                      // Validate artist match and skip garbage tracks
-                      const expectedArtistNorm = (song.artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                      supplementTrack = null;
-                      for (const t of (appleResults || [])) {
-                        const foundArtistNorm = (t.artists?.[0]?.name || t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (foundArtistNorm !== expectedArtistNorm &&
-                            !foundArtistNorm.startsWith(expectedArtistNorm) &&
-                            !expectedArtistNorm.startsWith(foundArtistNorm)) {
-                          continue;
-                        }
-                        // Skip remixes, mashups, slowed versions, karaoke, etc.
-                        const nameLower = (t.name || '').toLowerCase();
-                        if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
-                        if (seenTrackIds.has(t.id)) continue;
-                        supplementTrack = t;
-                        break;
-                      }
-                    }
+              // Set up Apple Music instances once (reused across all batches)
+              const suppStorefront = tokens.storefront || 'us';
+              const suppAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
+              const suppAppleApi = suppAppleDevToken ? new AppleMusicService(suppAppleDevToken) : null;
+              const suppPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
-                    if (supplementTrack) {
-                      if (!allowExplicit && supplementTrack.explicit) continue;
-                      seenTrackIds.add(supplementTrack.id);
-                      seenSupplementArtists.add(artistLower);
-                      selectedTracks.push({
-                        ...supplementTrack,
-                        artist: supplementTrack.artists?.[0]?.name || supplementTrack.artist || 'Unknown',
-                        image: supplementTrack.album?.images?.[0]?.url || null,
-                        externalUrl: supplementTrack.url || `https://music.apple.com/us/song/${supplementTrack.id}`,
-                      });
-                    }
-                  }
-                } catch (songErr) { /* skip individual song errors */ }
+              // Phase B: parallel batches of 10
+              for (let si = 0; si < supplementPool.length && selectedTracks.length < songCount; si += BATCH_SIZE) {
+                const batch = supplementPool.slice(si, si + BATCH_SIZE).filter(song => {
+                  if (!song.name?.trim()) return false;
+                  const al = (song.artistName || '').toLowerCase();
+                  if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(al)) return false;
+                  return true;
+                });
+                const batchResults = await Promise.all(batch.map(song =>
+                  findTrackOnPlatform(song, { storefront: suppStorefront, appleMusicApi: suppAppleApi, platformSvc: suppPlatformSvc })
+                    .then(result => ({ song, result }))
+                    .catch(() => ({ song, result: null }))
+                ));
+                for (const { song, result } of batchResults) {
+                  if (selectedTracks.length >= songCount) break;
+                  if (!result) continue;
+                  const { track } = result;
+                  if (seenTrackIds.has(track.id)) continue;
+                  if (!allowExplicit && track.explicit) continue;
+                  seenTrackIds.add(track.id);
+                  seenSupplementArtists.add((song.artistName || '').toLowerCase());
+                  selectedTracks.push({
+                    id: track.id, name: track.name,
+                    artist: track.artists?.[0]?.name || track.artist || 'Unknown',
+                    uri: track.uri,
+                    album: track.album?.name || track.album,
+                    image: track.album?.images?.[0]?.url || null,
+                    previewUrl: track.preview_url,
+                    externalUrl: track.url || track.external_urls?.spotify ||
+                      (platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null),
+                    explicit: track.explicit || false, genres: []
+                  });
+                }
               }
               console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks (${seenSupplementArtists.size} new artists added)`);
             } catch (suppFetchErr) {
@@ -5659,66 +5947,45 @@ Example response: [1, 2, 4, 5, 7, ...]`
           trackConstraints: {},
           artistConstraints: { exclusiveMode: false, requestedArtists: [] }
         };
-        const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false);
+        const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
         const topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
-        for (const song of topSongs) {
-          if (allTracks.length >= songCount * 3) break;
-          if (!song.name || !song.name.trim()) continue; // skip songs with no name
-          try {
-            const searchQuery = song.isrc
-              ? `isrc:${song.isrc}`
-              : `track:${song.name} artist:${song.artistName}`;
-            if (platform === 'spotify') {
-              const result = await userSpotifyApi.searchTracks(searchQuery, { limit: 1 });
-              const track = result.body.tracks?.items?.[0];
-              if (track && !seenTrackIds.has(track.id)) {
-                seenTrackIds.add(track.id);
-                allTracks.push({
-                  id: track.id, name: track.name,
-                  artist: track.artists?.[0]?.name || 'Unknown',
-                  uri: track.uri, album: track.album?.name,
-                  image: track.album?.images?.[0]?.url,
-                  previewUrl: track.preview_url,
-                  externalUrl: track.external_urls?.spotify,
-                  explicit: track.explicit, genres: []
-                });
-              }
-            } else if (platform === 'apple') {
-              const fallbackStorefront = tokens.storefront || 'us';
-              let fallbackTrack = null;
 
-              // Try ISRC lookup first
-              if (song.isrc) {
-                try {
-                  const fallbackAppleDevToken = generateAppleMusicToken();
-                  if (fallbackAppleDevToken) {
-                    const fallbackAppleApi = new AppleMusicService(fallbackAppleDevToken);
-                    const isrcResult = await fallbackAppleApi.lookupByIsrc(song.isrc, fallbackStorefront);
-                    if (isrcResult && !seenTrackIds.has(isrcResult.id)) {
-                      fallbackTrack = isrcResult;
-                    }
-                  }
-                } catch (isrcErr) { /* fall through to text search */ }
-              }
+        // Phase A: pre-fetch SC platform IDs for songs missing ISRC
+        await prefetchPlatformIds(topSongs, platform === 'spotify' ? 'spotify' : 'applemusic');
 
-              // Fall back to text search if ISRC lookup returned nothing
-              if (!fallbackTrack) {
-                const platformService = new PlatformService();
-                const appleResults = await platformService.searchTracks(
-                  platformUserId, `${song.name} ${song.artistName}`, tokens, fallbackStorefront, 1
-                );
-                if (appleResults?.[0] && !seenTrackIds.has(appleResults[0].id)) {
-                  fallbackTrack = appleResults[0];
-                }
-              }
+        // Set up Apple Music instances once (reused across all batches)
+        const fbStorefront = tokens.storefront || 'us';
+        const fbAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
+        const fbAppleApi = fbAppleDevToken ? new AppleMusicService(fbAppleDevToken) : null;
+        const fbPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
-              if (fallbackTrack) {
-                seenTrackIds.add(fallbackTrack.id);
-                allTracks.push(fallbackTrack);
-              }
-            }
-          } catch (searchErr) { /* skip individual song errors */ }
+        // Phase B: parallel batches of 10
+        for (let fi = 0; fi < topSongs.length && allTracks.length < songCount * 3; fi += BATCH_SIZE) {
+          const batch = topSongs.slice(fi, fi + BATCH_SIZE).filter(s => s.name?.trim());
+          const batchResults = await Promise.all(batch.map(song =>
+            findTrackOnPlatform(song, { storefront: fbStorefront, appleMusicApi: fbAppleApi, platformSvc: fbPlatformSvc })
+              .then(result => ({ song, result }))
+              .catch(() => ({ song, result: null }))
+          ));
+          for (const { result } of batchResults) {
+            if (allTracks.length >= songCount * 3) break;
+            if (!result) continue;
+            const { track } = result;
+            if (seenTrackIds.has(track.id)) continue;
+            seenTrackIds.add(track.id);
+            allTracks.push({
+              id: track.id, name: track.name,
+              artist: track.artists?.[0]?.name || track.artist || 'Unknown',
+              uri: track.uri,
+              album: track.album?.name || track.album,
+              image: track.album?.images?.[0]?.url || null,
+              previewUrl: track.preview_url,
+              externalUrl: track.url || track.external_urls?.spotify ||
+                (platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null),
+              explicit: track.explicit || false, genres: []
+            });
+          }
         }
         console.log(`🔄 After SoundCharts top-songs fallback: ${allTracks.length} tracks`);
         needsFallback = false; // Mark as handled
