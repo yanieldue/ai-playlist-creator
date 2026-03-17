@@ -45,16 +45,6 @@ const PlaylistGenerator = () => {
   const [error, setError] = useState('');
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
   const [autoCreatePending, setAutoCreatePending] = useState(false);
-  const pathToTab = (path) => {
-    const map = { '/playlists': 'playlists', '/settings': 'settings', '/account': 'account', '/faq': 'faq', '/reactions': 'reactions', '/feedback': 'feedback' };
-    return map[path] || 'home';
-  };
-  const tabToPath = (tab) => {
-    const map = { playlists: '/playlists', settings: '/settings', account: '/account', faq: '/faq', reactions: '/reactions', feedback: '/feedback' };
-    return map[tab] || '/';
-  };
-  const activeTab = pathToTab(location.pathname);
-  const setActiveTab = (tab) => navigate(tabToPath(tab));
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -184,6 +174,17 @@ const PlaylistGenerator = () => {
   // Router hooks
   const navigate = useNavigate();
   const location = useLocation();
+
+  const pathToTab = (path) => {
+    const map = { '/playlists': 'playlists', '/settings': 'settings', '/account': 'account', '/faq': 'faq', '/reactions': 'reactions', '/feedback': 'feedback' };
+    return map[path] || 'home';
+  };
+  const tabToPath = (tab) => {
+    const map = { playlists: '/playlists', settings: '/settings', account: '/account', faq: '/faq', reactions: '/reactions', feedback: '/feedback' };
+    return map[tab] || '/';
+  };
+  const activeTab = pathToTab(location.pathname);
+  const setActiveTab = (tab) => navigate(tabToPath(tab));
 
   // Example prompts for inspiration
   const examplePrompts = [
