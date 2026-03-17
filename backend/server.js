@@ -1525,8 +1525,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     if (expandToSimilar && seedInfos.length > 0) {
       const seenNames = new Set(seedInfos.map(a => a.name.toLowerCase()));
       const similarNames = [];
-      // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10.
-      const similarTarget = Math.max(10, Math.ceil(fetchCount / 8));
+      // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10, max 20.
+      // Cap at 20 to avoid runaway serial SC calls for large song counts (each call is ~300ms).
+      const similarTarget = Math.min(Math.max(10, Math.ceil(fetchCount / 8)), 20);
       const similarPerSeed = Math.max(2, Math.ceil(similarTarget / seedInfos.length));
       for (const seedInfo of seedInfos) {
         let added = 0;
@@ -5576,7 +5577,9 @@ Return ONLY valid JSON:
         return true;
       };
 
-      const BATCH_SIZE = 10;
+      // Scale batch size with song count so Phase B lookup time stays roughly constant:
+      // 30 songs → 10, 50 songs → 17, 100 songs → 25 (capped)
+      const BATCH_SIZE = Math.min(Math.max(10, Math.ceil(songCount / 3)), 25);
 
       if (platform === 'spotify') {
 
