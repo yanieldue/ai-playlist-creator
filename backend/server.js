@@ -1676,6 +1676,14 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       [songs[i], songs[j]] = [songs[j], songs[i]];
     }
 
+    // Phase 5a: drop songs whose names have no alphanumeric characters (e.g. Coldplay symbol tracks ⦵ ❍ ♡)
+    // These can't be found via Spotify/Apple Music name search and Phase A rarely resolves them
+    const beforeSymbolFilter = songs.length;
+    songs = songs.filter(song => /[a-zA-Z0-9]/.test(song.name || ''));
+    if (songs.length < beforeSymbolFilter) {
+      console.log(`🧹 Symbol filter: removed ${beforeSymbolFilter - songs.length} unsearchable tracks`);
+    }
+
     // Phase 5: deduplicate variants (remixes, karaoke, commentaries, etc.)
     const normalizeTitle = (t) => (t || '').toLowerCase()
       .replace(/\s*[\(\[].*?[\)\]]/g, '')
@@ -5418,8 +5426,8 @@ Return ONLY valid JSON:
           for (const song of songsNeedingId) {
             song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
             if (song.platformId) { phaseAConsecFails = 0; }
-            else if (++phaseAConsecFails >= 5) {
-              console.log(`🔍 [Phase A] Stopping early — 5 consecutive misses`);
+            else if (++phaseAConsecFails >= 2) {
+              console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
               break;
             }
           }
@@ -5512,8 +5520,8 @@ Return ONLY valid JSON:
         for (const song of needing) {
           song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
           if (song.platformId) { consecFails = 0; }
-          else if (++consecFails >= 5) {
-            console.log(`🔍 [Phase A] Stopping early — 5 consecutive misses`);
+          else if (++consecFails >= 2) {
+            console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
             break;
           }
         }
