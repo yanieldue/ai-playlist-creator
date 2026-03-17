@@ -8974,7 +8974,7 @@ app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
 
     console.log(`[BILLING-PORTAL] Creating portal session for ${email}, customer: ${stripeCustomerId}`);
     const stripe = getStripe();
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://tryfins.com';
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
       return_url: `${frontendUrl}/`,
