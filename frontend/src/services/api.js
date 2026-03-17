@@ -203,6 +203,12 @@ export const playlistService = {
     return response.data;
   },
 
+  // Toggle lock on a track (locked tracks survive refresh/auto-update)
+  toggleLock: async (playlistId, userId, trackId) => {
+    const response = await api.post(`/api/playlists/${playlistId}/toggle-lock`, { userId, trackId });
+    return response.data;
+  },
+
   // Exclude a song from playlist (immediate removal + learning)
   excludeSong: async (playlistId, userId, trackId, trackUri, artistName) => {
     const response = await api.post(`/api/playlists/${playlistId}/exclude-song`, {

@@ -7746,6 +7746,37 @@ app.post('/api/playlists/:playlistId/refine', async (req, res) => {
   }
 });
 
+// Toggle lock on a track (locked tracks survive auto-update and manual refresh)
+app.post('/api/playlists/:playlistId/toggle-lock', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { userId, trackId } = req.body;
+    if (!userId || !trackId) return res.status(400).json({ error: 'userId and trackId required' });
+
+    const userPlaylistsArray = userPlaylists.get(userId) || [];
+    const idx = userPlaylistsArray.findIndex(p => p.playlistId === playlistId);
+    if (idx === -1) return res.status(404).json({ error: 'Playlist not found' });
+
+    const playlist = userPlaylistsArray[idx];
+    if (!playlist.lockedTracks) playlist.lockedTracks = [];
+
+    const alreadyLocked = playlist.lockedTracks.includes(trackId);
+    if (alreadyLocked) {
+      playlist.lockedTracks = playlist.lockedTracks.filter(id => id !== trackId);
+    } else {
+      playlist.lockedTracks.push(trackId);
+    }
+
+    userPlaylists.set(userId, userPlaylistsArray);
+    await savePlaylist(userId, playlist);
+
+    res.json({ locked: !alreadyLocked, lockedTracks: playlist.lockedTracks });
+  } catch (err) {
+    console.error('toggle-lock error:', err);
+    res.status(500).json({ error: 'Failed to toggle lock' });
+  }
+});
+
 // Exclude a song from playlist (immediate removal + learning)
 app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
   try {
@@ -8650,9 +8681,15 @@ async function processPlaylistUpdate(userId, playlist) {
                 console.log(`[AUTO-UPDATE]   ${idx + 1}. "${item.track?.name || 'Unknown'}" - URI: ${item.track?.uri || 'null'}`);
               });
             }
+            const lockedUris = new Set(
+              (playlist.lockedTracks || [])
+                .map(id => (playlist.tracks || []).find(t => t.id === id)?.uri)
+                .filter(Boolean)
+            );
             const currentTrackUris = allTrackItems
-              .filter(item => item.track && item.track.uri && validUriRegex.test(item.track.uri))
+              .filter(item => item.track && item.track.uri && validUriRegex.test(item.track.uri) && !lockedUris.has(item.track.uri))
               .map(item => item.track.uri);
+            if (lockedUris.size > 0) console.log(`[AUTO-UPDATE] Keeping ${lockedUris.size} locked tracks in ${playlist.playlistName}`);
             console.log(`[AUTO-UPDATE] Removing ${currentTrackUris.length} valid tracks from ${playlist.playlistName}`);
             if (currentTrackUris.length > 0) {
               try {
