@@ -784,22 +784,24 @@
   color: #c7c7cc;
   border-radius: 50%;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease;
   flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .track-lock-button:hover {
   color: #ff9500;
   background: rgba(255, 149, 0, 0.1);
-  transform: scale(1.1);
 }
 
-.track-lock-button.locked {
-  color: #ff9500;
+.track-lock-button.locked,
+.track-lock-button.locked:focus,
+.track-lock-button.locked:active {
+  color: #ff9500 !important;
 }
 
 .track-lock-button.locked:hover {
-  color: #c7c7cc;
+  color: #c7c7cc !important;
   background: rgba(0, 0, 0, 0.05);
 }
 
@@ -812,12 +814,14 @@
   background: rgba(255, 159, 10, 0.15);
 }
 
-:root.dark-mode .track-lock-button.locked {
-  color: #ff9f0a;
+:root.dark-mode .track-lock-button.locked,
+:root.dark-mode .track-lock-button.locked:focus,
+:root.dark-mode .track-lock-button.locked:active {
+  color: #ff9f0a !important;
 }
 
 :root.dark-mode .track-lock-button.locked:hover {
-  color: #48484a;
+  color: #48484a !important;
   background: rgba(255, 255, 255, 0.05);
 }
 
