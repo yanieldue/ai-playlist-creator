@@ -581,9 +581,7 @@ const PlaylistGenerator = () => {
 
       // Reload top artists and new artists with the new active platform
       if (storedUserId) {
-        // Clear data and set flag to refetch
-        setTopArtists([]);
-        setNewArtists([]);
+        // Keep existing data visible (stale-while-revalidate) — let the useEffect refetch
         setNewArtistsFetched(false);
         // Don't call fetch functions here - let the useEffect handle it after state updates
       } else {
