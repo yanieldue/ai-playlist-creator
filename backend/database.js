@@ -158,6 +158,12 @@ function migrateDatabase() {
     console.log('✓ Added subscription_ends_at column');
   }
 
+  const hasTrialUsed = usersTableInfo.some(col => col.name === 'trial_used');
+  if (!hasTrialUsed) {
+    db.exec('ALTER TABLE users ADD COLUMN trial_used INTEGER DEFAULT 0');
+    console.log('✓ Added trial_used column');
+  }
+
   // Add artist_history table if it doesn't exist
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='artist_history'").all();
   if (tables.length === 0) {
@@ -379,6 +385,7 @@ class DatabaseService {
       stripeCustomerId: user.stripe_customer_id || null,
       stripeSubscriptionId: user.stripe_subscription_id || null,
       subscriptionStatus: user.subscription_status || null,
+      trialUsed: Boolean(user.trial_used),
       createdAt: user.created_at,
       connectedPlatforms: {
         spotify: Boolean(user.spotify),
@@ -399,6 +406,11 @@ class DatabaseService {
   updateStripeCustomer(email, stripeCustomerId) {
     const updatedAt = new Date().toISOString();
     db.prepare('UPDATE users SET stripe_customer_id = ?, updated_at = ? WHERE email = ?').run(stripeCustomerId, updatedAt, email);
+  }
+
+  markTrialUsed(email) {
+    const updatedAt = new Date().toISOString();
+    db.prepare('UPDATE users SET trial_used = 1, updated_at = ? WHERE email = ?').run(updatedAt, email);
   }
 
   updateSubscription(email, { subscriptionId, status, endsAt, plan }) {

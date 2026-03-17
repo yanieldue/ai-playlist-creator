@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Icons from './Icons';
@@ -27,18 +27,26 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = useState('monthly');
   const [loading, setLoading] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [trialUsed, setTrialUsed] = useState(true); // default true = hide until confirmed eligible
 
   const userId = localStorage.getItem('userId');
   const alreadyPaid = isPaid();
+  const showTrial = !alreadyPaid && !trialUsed;
+
+  useEffect(() => {
+    if (!userId || alreadyPaid) return;
+    const email = userId.includes('@') ? userId : null;
+    if (!email) return;
+    axios.get(`${API_BASE}/api/account/${encodeURIComponent(email)}`)
+      .then(({ data }) => setTrialUsed(data.trialUsed || false))
+      .catch(() => setTrialUsed(true)); // on error, don't show trial
+  }, [userId, alreadyPaid]);
 
   const handleUpgrade = async () => {
-    if (!userId) {
-      navigate('/');
-      return;
-    }
+    if (!userId) { navigate('/'); return; }
     if (alreadyPaid) return;
-
     setLoading(true);
     setError(null);
     try {
@@ -51,6 +59,23 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
     } catch (err) {
       setError('Something went wrong. Please try again.');
       setLoading(false);
+    }
+  };
+
+  const handleStartTrial = async () => {
+    if (!userId) { navigate('/'); return; }
+    setTrialLoading(true);
+    setError(null);
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/stripe/create-checkout-session`, {
+        userId,
+        trial: true,
+      });
+      localStorage.setItem('seenPricingPage', 'true');
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err.response?.data?.error || 'Something went wrong. Please try again.');
+      setTrialLoading(false);
     }
   };
 
@@ -144,6 +169,16 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
 
           {error && <p className="pricing-error">{error}</p>}
 
+          {showTrial && (
+            <button
+              className="pricing-cta pricing-cta-trial"
+              onClick={handleStartTrial}
+              disabled={trialLoading}
+            >
+              {trialLoading ? 'Loading…' : 'Start 7-Day Free Trial'}
+            </button>
+          )}
+
           <button
             className="pricing-cta pricing-cta-pro"
             onClick={handleUpgrade}
@@ -151,6 +186,10 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
           >
             {alreadyPaid ? 'Current Plan' : loading ? 'Loading…' : `Get Pro — ${billingPeriod === 'annual' ? '$24.99/yr' : '$2.99/mo'}`}
           </button>
+
+          {showTrial && (
+            <p className="pricing-trial-note">7 days free, then $24.99/year. Cancel before trial ends and you won't be charged.</p>
+          )}
         </div>
       </div>
 

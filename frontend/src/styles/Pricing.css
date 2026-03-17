@@ -275,6 +275,33 @@
   transform: none;
 }
 
+.pricing-cta-trial {
+  background: linear-gradient(135deg, #1DB954, #17a349);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.pricing-cta-trial:hover:not(:disabled) {
+  background: linear-gradient(135deg, #17a349, #128a3b);
+  transform: translateY(-1px);
+}
+
+.pricing-cta-trial:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.pricing-trial-note {
+  font-size: 12px;
+  color: #8e8e93;
+  text-align: center;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
 .pricing-error {
   color: #ff453a;
   font-size: 13px;

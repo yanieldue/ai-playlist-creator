@@ -2429,6 +2429,7 @@ app.get('/api/account/:email', async (req, res) => {
       spotifyUserId: platformUserIds?.spotify_user_id || memUser?.spotifyUserId,
       appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
       plan: dbUser.plan || 'free',
+      trialUsed: dbUser.trialUsed || false,
     });
   } catch (error) {
     console.error('Get account error:', error);
@@ -8850,16 +8851,26 @@ app.post('/api/log-error', async (req, res) => {
 // POST /api/stripe/create-checkout-session
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    const { userId, billingPeriod } = req.body;
+    const { userId, billingPeriod, trial } = req.body;
     if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
     const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
     if (!email) return res.status(400).json({ error: 'User not found' });
 
-    const priceId = billingPeriod === 'annual'
+    // Trial always uses annual price
+    const effectivePeriod = trial ? 'annual' : billingPeriod;
+    const priceId = effectivePeriod === 'annual'
       ? process.env.STRIPE_PRICE_ANNUAL
       : process.env.STRIPE_PRICE_MONTHLY;
     if (!priceId) return res.status(500).json({ error: 'Stripe price not configured' });
+
+    // Prevent double-trials
+    if (trial) {
+      const userRecord = await db.getUser(email);
+      if (userRecord?.trialUsed) {
+        return res.status(400).json({ error: 'Free trial already used' });
+      }
+    }
 
     // Create or reuse Stripe customer
     const stripe = getStripe();
@@ -8871,16 +8882,25 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       await db.updateStripeCustomer(email, stripeCustomerId);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const session = await stripe.checkout.sessions.create({
+    let frontendUrl = process.env.FRONTEND_URL || 'https://tryfins.com';
+    if (!frontendUrl.startsWith('http')) frontendUrl = 'https://' + frontendUrl;
+
+    const sessionParams = {
       mode: 'subscription',
       customer: stripeCustomerId,
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${frontendUrl}/?payment=success`,
       cancel_url: `${frontendUrl}/pricing`,
       metadata: { email },
-    });
+    };
 
+    if (trial) {
+      sessionParams.subscription_data = { trial_period_days: 7 };
+      // Mark trial as used immediately to prevent double-clicks
+      await db.markTrialUsed(email);
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
     res.json({ url: session.url });
   } catch (error) {
     console.error('Stripe create-checkout-session error:', error);
