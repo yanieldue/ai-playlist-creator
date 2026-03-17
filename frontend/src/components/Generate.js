@@ -731,12 +731,18 @@ export default function Generate() {
           <div className="generate-sheet" onClick={e => e.stopPropagation()}>
             <div className="generate-sheet-handle" />
             <div className="generate-sheet-title">Auto-update</div>
-            {[
-              { freq: 'never', label: "Doesn't update", desc: 'You can still refresh manually anytime' },
-              { freq: 'daily',   label: 'Daily',   desc: 'Refreshes every day at 5 AM local time', paid: true },
-              { freq: 'weekly',  label: 'Weekly',  desc: 'Refreshes every week at 5 AM local time', paid: true },
-              { freq: 'monthly', label: 'Monthly', desc: 'Refreshes every month at 5 AM local time', paid: true },
-            ].map(({ freq, label, desc, paid }) => (
+            {(() => {
+              const now = new Date();
+              const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+              const dateNum = now.getDate();
+              const dateSuffix = dateNum === 1 ? 'st' : dateNum === 2 ? 'nd' : dateNum === 3 ? 'rd' : 'th';
+              return [
+                { freq: 'never',   label: "Doesn't update", desc: 'You can still refresh manually anytime' },
+                { freq: 'daily',   label: 'Daily',   desc: 'Refreshes every day at 5 AM', paid: true },
+                { freq: 'weekly',  label: 'Weekly',  desc: `Refreshes every ${dayName} at 5 AM`, paid: true },
+                { freq: 'monthly', label: 'Monthly', desc: `Refreshes on the ${dateNum}${dateSuffix} of each month at 5 AM`, paid: true },
+              ];
+            })().map(({ freq, label, desc, paid }) => (
               <button
                 key={freq}
                 className={`generate-sheet-option${updateFrequency === freq ? ' selected' : ''}${paid && !isPaid() ? ' locked' : ''}`}
