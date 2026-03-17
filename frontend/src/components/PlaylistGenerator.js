@@ -1132,7 +1132,6 @@ const PlaylistGenerator = () => {
         }
       }
 
-      setGeneratedPlaylist(playlistWithPrompt);
       mp.track('Playlist Generated', {
         prompt: prompt.trim(),
         song_count: result.tracks?.length || 0,
@@ -1142,15 +1141,21 @@ const PlaylistGenerator = () => {
         allow_explicit: allowExplicit,
       });
 
+      // Navigate to Generate page for track review — gives consistent UI with the /generate flow
+      if (!showComposeModal) {
+        navigate('/generate', { state: { initialPlaylist: playlistWithPrompt, returnTab: 'home' } });
+        setNewArtistsOnly(false);
+        setSongCount(30);
+        return;
+      }
+
+      setGeneratedPlaylist(playlistWithPrompt);
       // Initialize playlist name and description
       setEditedPlaylistName(result.playlistName);
       setEditedDescription(result.description);
 
       setModalStep(1);
       setChatMessages([]);
-      if (!showComposeModal) {
-        setShowPlaylistModal(true);
-      }
       setIsDescriptionExpanded(false);
 
       console.log('Generated playlist:', result);
@@ -2248,15 +2253,6 @@ const PlaylistGenerator = () => {
         // Don't block the user if draft save fails
       }
 
-      setGeneratedPlaylist(playlistWithPrompt);
-
-      // Set default name and description
-      setEditedPlaylistName(result.playlistName);
-      setEditedDescription(result.description || '');
-      setChatMessages([]);
-      setIsDescriptionExpanded(false);
-      // gen-screen stays open and switches to track list view automatically
-
       console.log('Generated playlist for artist:', selectedArtist.name);
 
       // Reset artist modal state
@@ -2264,6 +2260,10 @@ const PlaylistGenerator = () => {
       setArtistModalNewArtistsOnly(false);
       setArtistModalSongCount(30);
       setArtistModalSongCountDraft(30);
+
+      // Navigate to Generate page for track review — gives consistent UI with the /generate flow
+      setShowGeneratingChatModal(false);
+      navigate('/generate', { state: { initialPlaylist: playlistWithPrompt, returnTab: 'home' } });
     } catch (err) {
       clearInterval(messageInterval);
       if (err.name === 'CanceledError' || err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
