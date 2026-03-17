@@ -1378,7 +1378,7 @@ const SOUNDCHARTS_AUDIO_FEATURE_MAP = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Cached flag: once we know top/songs returns 403 on this plan, skip the call.
-async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}) {
+async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
@@ -1527,7 +1527,11 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       const similarNames = [];
       // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10, max 20.
       // Cap at 20 to avoid runaway serial SC calls for large song counts (each call is ~300ms).
-      const similarTarget = Math.min(Math.max(10, Math.ceil(fetchCount / 8)), 20);
+      // minArtists overrides the cap when per-artist diversity requires more unique artists.
+      const similarTarget = Math.max(
+        minArtists > 0 ? minArtists : 0,
+        Math.min(Math.max(10, Math.ceil(fetchCount / 8)), 20)
+      );
       const similarPerSeed = Math.max(2, Math.ceil(similarTarget / seedInfos.length));
       for (const seedInfo of seedInfos) {
         let added = 0;
@@ -5225,10 +5229,13 @@ Respond ONLY with valid JSON:
     if (process.env.SOUNDCHARTS_APP_ID) {
       const scQuery = buildSoundchartsQuery(genreData, newArtistsOnly, allowExplicit);
       const fetchCount = Math.min(songCount * 3, 200);
-      console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target)`);
+      // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
+      const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+      const minArtistsNeeded = maxPerArtist ? Math.ceil(songCount / maxPerArtist * 1.5) : 0;
+      console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
       console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
       try {
-        soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids);
+        soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded);
         console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
       } catch (scErr) {
         console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
@@ -5893,7 +5900,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
               const supplementQuery = buildSoundchartsQuery(supplementGenreData, false, allowExplicit);
 
               // Request a larger pool so we have more candidates to match against
-              const supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids);
+              const suppMinArtists = maxPerArtist ? Math.ceil(needed / maxPerArtist * 1.5) : 0;
+              const supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
               const seenSupplementArtists = new Set();
@@ -5966,7 +5974,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 artistConstraints: { exclusiveMode: false, requestedArtists: [] }
               };
               const gapQuery = buildSoundchartsQuery(gapGenreData, false, allowExplicit);
-              const gapPool = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60));
+              const gfMinArtists = maxPerArtist ? Math.ceil(gapNeeded / maxPerArtist * 1.5) : 0;
+              const gapPool = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
               console.log(`🔄 Gap fill pool: ${gapPool.length} top_songs candidates`);
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
