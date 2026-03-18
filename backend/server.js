@@ -4368,17 +4368,20 @@ async function parseMixTracklist(videoTitle, description) {
 }
 
 async function getYouTubeAudioUrl(youtubeUrl) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]);
-    let url = '';
-    proc.stdout.on('data', d => { url += d.toString(); });
-    proc.on('close', code => {
-      const trimmed = url.trim().split('\n')[0]; // first URL if multiple formats
-      if (code === 0 && trimmed) resolve(trimmed);
-      else reject(new Error('yt-dlp failed to get audio URL'));
-    });
-    proc.on('error', () => reject(new Error('yt-dlp not installed')));
+  const response = await axios.post('https://api.cobalt.tools/', {
+    url: youtubeUrl,
+    downloadMode: 'audio',
+    audioFormat: 'mp3',
+  }, {
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+    timeout: 15000,
   });
+  const { status, url, urls } = response.data;
+  const audioUrl = url || (Array.isArray(urls) && urls[0]);
+  if ((status === 'stream' || status === 'redirect' || status === 'tunnel') && audioUrl) {
+    return audioUrl;
+  }
+  throw new Error(`cobalt.tools returned status: ${status}`);
 }
 
 async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
@@ -4564,7 +4567,7 @@ app.get('/api/analyze-mix', async (req, res) => {
       send({ type: 'status', message: 'Extracting audio stream...' });
       audioUrl = await getYouTubeAudioUrl(youtubeUrl);
     } catch (e) {
-      send({ type: 'error', message: 'Audio extraction requires yt-dlp. Install it with: pip3 install yt-dlp' });
+      send({ type: 'error', message: `Could not extract audio for scanning: ${audioErr.message}` });
       return res.end();
     }
 
