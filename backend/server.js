@@ -12,6 +12,7 @@ const geoip = require('geoip-lite');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
 const nodemailer = require('nodemailer');
+const { spawn } = require('child_process');
 const getStripe = () => {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not configured');
   return require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -1105,7 +1106,7 @@ const SOUNDCHARTS_THEME_MAP = {
 
 // Build a SoundCharts query from Claude-extracted genreData.
 // Used by executeSoundChartsStrategy() to replace the old similarity-tree approach.
-function buildSoundchartsQuery(genreData, newArtistsOnly = false, allowExplicit = true) {
+function buildSoundchartsQuery(genreData, allowExplicit = true) {
   const isExclusive = genreData.artistConstraints.exclusiveMode === true ||
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
@@ -1808,7 +1809,7 @@ async function savePlaylist(userId, playlistData) {
       console.error('Error saving playlist to database:', error);
     }
 
-    // Record all artists from this playlist so newArtistsOnly has a growing history
+    // Record all artists from this playlist for history tracking
     try {
       const tracks = playlistData.tracks || [];
       const artistNames = [...new Set(
@@ -4315,6 +4316,298 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
+// ─── Mix Analyzer helpers ────────────────────────────────────────────────────
+
+function extractYouTubeId(url) {
+  const patterns = [
+    /[?&]v=([^&#]+)/,
+    /youtu\.be\/([^?&#]+)/,
+    /youtube\.com\/embed\/([^?&#]+)/,
+  ];
+  for (const p of patterns) {
+    const m = (url || '').match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function parseIsoDuration(iso) {
+  const m = (iso || '').match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
+}
+
+async function parseMixTracklist(videoTitle, description) {
+  const combined = `${videoTitle || ''}\n\n${description || ''}`;
+  console.log(`[analyze-mix] Description length: ${(description || '').length} chars`);
+  console.log(`[analyze-mix] Description preview: ${(description || '').slice(0, 300)}`);
+
+  // Skip Claude call only if description is basically empty
+  if ((description || '').trim().length < 20) {
+    console.log('[analyze-mix] Description too short, skipping tracklist parse');
+    return [];
+  }
+
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `Extract the tracklist from this DJ mix. Return a JSON array of objects with "title" and "artist" fields. Return [] if no tracklist exists. Skip timestamps, track numbers, and non-song lines.\n\n${combined.slice(0, 7000)}\n\nReturn ONLY valid JSON. Example: [{"title":"Song Name","artist":"Artist Name"}]`
+      }]
+    });
+    const raw = resp.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
+    console.log(`[analyze-mix] Claude tracklist response: ${raw.slice(0, 200)}`);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(t => t.title) : [];
+  } catch (e) {
+    console.log('parseMixTracklist failed:', e.message);
+    return [];
+  }
+}
+
+async function getYouTubeAudioUrl(youtubeUrl) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('python3', ['-m', 'yt_dlp','-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]);
+    let url = '';
+    proc.stdout.on('data', d => { url += d.toString(); });
+    proc.on('close', code => {
+      const trimmed = url.trim().split('\n')[0]; // first URL if multiple formats
+      if (code === 0 && trimmed) resolve(trimmed);
+      else reject(new Error('yt-dlp failed to get audio URL'));
+    });
+    proc.on('error', () => reject(new Error('yt-dlp not installed')));
+  });
+}
+
+async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', [
+      '-ss', String(startSeconds),
+      '-i',  audioUrl,
+      '-t',  String(durationSeconds),
+      '-f',  'mp3',
+      '-ac', '1',
+      '-ar', '22050',
+      '-ab', '64k',
+      '-v',  'quiet',
+      'pipe:1',
+    ]);
+    const chunks = [];
+    proc.stdout.on('data', c => chunks.push(c));
+    const timer = setTimeout(() => { proc.kill(); }, 25000);
+    proc.on('close', code => {
+      clearTimeout(timer);
+      if (chunks.length > 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg exited ${code} at ${startSeconds}s`));
+    });
+    proc.on('error', () => reject(new Error('ffmpeg not installed')));
+  });
+}
+
+async function recognizeWithAudD(audioBuffer) {
+  const form = new URLSearchParams();
+  form.append('api_token', process.env.AUDD_API_KEY);
+  form.append('audio', audioBuffer.toString('base64'));
+  const resp = await axios.post('https://api.audd.io/', form.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 15000,
+  });
+  return resp.data?.result || null;
+}
+
+// GET /api/analyze-mix — SSE endpoint; streams identified tracks back as they're found
+app.get('/api/analyze-mix', async (req, res) => {
+  const { youtubeUrl, userId, platform = 'spotify' } = req.query;
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  let closed = false;
+  req.on('close', () => { closed = true; });
+
+  const send = (data) => {
+    if (!closed) res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const videoId = extractYouTubeId(youtubeUrl);
+    if (!videoId) {
+      send({ type: 'error', message: 'Invalid YouTube URL' });
+      return res.end();
+    }
+
+    // Resolve platform user + tokens
+    let platformUserId = userId;
+    if (userId && isEmailBasedUserId(userId)) {
+      platformUserId = await resolvePlatformUserId(userId, platform);
+    }
+    const tokens = platformUserId ? await getUserTokens(platformUserId) : null;
+    if (!tokens) {
+      send({ type: 'error', message: 'Not authenticated with music platform' });
+      return res.end();
+    }
+
+    // ── Step 1: Get video metadata ───────────────────────────────────────────
+    send({ type: 'status', message: 'Loading video info...' });
+    let videoTitle = '', videoDescription = '', videoDuration = 0;
+
+    // Primary: yt-dlp --dump-json (no API key needed, most reliable)
+    let metaLoaded = false;
+    try {
+      const meta = await new Promise((resolve, reject) => {
+        const proc = spawn('python3', ['-m', 'yt_dlp','--dump-json', '--no-playlist', youtubeUrl]);
+        let out = '';
+        proc.stdout.on('data', d => { out += d.toString(); });
+        proc.on('close', code => {
+          if (code === 0 && out.trim()) {
+            try { resolve(JSON.parse(out.trim())); } catch { reject(new Error('Bad JSON')); }
+          } else {
+            reject(new Error(`yt-dlp exited ${code}`));
+          }
+        });
+        proc.on('error', () => reject(new Error('python3 not found')));
+        setTimeout(() => { proc.kill(); reject(new Error('yt-dlp timeout')); }, 20000);
+      });
+      videoTitle       = meta.title || '';
+      videoDescription = meta.description || '';
+      videoDuration    = meta.duration || 0;
+      metaLoaded = true;
+    } catch (e) {
+      console.log('[analyze-mix] yt-dlp metadata failed:', e.message);
+    }
+
+    // Fallback: YouTube Data API (requires YOUTUBE_API_KEY)
+    if (!metaLoaded && process.env.YOUTUBE_API_KEY) {
+      try {
+        const ytResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+          params: { id: videoId, part: 'snippet,contentDetails', key: process.env.YOUTUBE_API_KEY },
+          timeout: 8000,
+        });
+        const item = ytResp.data.items?.[0];
+        if (item) {
+          videoTitle       = item.snippet.title;
+          videoDescription = item.snippet.description;
+          videoDuration    = parseIsoDuration(item.contentDetails.duration);
+          metaLoaded = true;
+        }
+      } catch (e) {
+        console.log('[analyze-mix] YouTube API fallback failed:', e.message);
+      }
+    }
+
+    if (!metaLoaded) {
+      send({ type: 'error', message: 'Could not load video. Install yt-dlp (pip3 install yt-dlp) or set YOUTUBE_API_KEY.' });
+      return res.end();
+    }
+
+    send({ type: 'info', title: videoTitle, duration: videoDuration });
+
+    // Platform search helper
+    const platformSvc = new PlatformService();
+    const storefront  = tokens.storefront || 'us';
+    const seenIds     = new Set();
+
+    const searchAndEmit = async (title, artist) => {
+      if (closed) return false;
+      const query = artist ? `${title} ${artist}` : title;
+      try {
+        const results = await platformSvc.searchTracks(platformUserId, query, tokens, storefront, 1);
+        if (results?.length > 0) {
+          const t = results[0];
+          if (seenIds.has(t.id)) return true; // duplicate, still counts as matched
+          seenIds.add(t.id);
+          send({
+            type:     'track',
+            id:       t.id,
+            name:     t.name,
+            artist:   t.artists[0].name,
+            album:    t.album.name,
+            image:    t.album.images?.[0]?.url || null,
+            uri:      t.uri,
+            explicit: t.explicit || false,
+          });
+          return true;
+        }
+      } catch (e) { /* continue */ }
+      send({ type: 'unmatched', title, artist });
+      return false;
+    };
+
+    // ── Step 2: Description parsing ──────────────────────────────────────────
+    send({ type: 'status', message: 'Scanning description for tracklist...' });
+    const tracklist = await parseMixTracklist(videoTitle, videoDescription);
+
+    if (tracklist.length > 0) {
+      send({ type: 'source', method: 'description', total: tracklist.length });
+      for (const track of tracklist) {
+        if (closed) break;
+        await searchAndEmit(track.title, track.artist);
+      }
+      send({ type: 'done' });
+      return res.end();
+    }
+
+    // ── Step 3: Audio fingerprinting fallback ────────────────────────────────
+    send({ type: 'source', method: 'audio', message: 'No tracklist found — scanning audio...' });
+
+    if (!process.env.AUDD_API_KEY) {
+      send({ type: 'error', message: 'No tracklist found in the description. Add AUDD_API_KEY to enable audio recognition for mixes without tracklistings.' });
+      return res.end();
+    }
+
+    let audioUrl;
+    try {
+      send({ type: 'status', message: 'Extracting audio stream...' });
+      audioUrl = await getYouTubeAudioUrl(youtubeUrl);
+    } catch (e) {
+      send({ type: 'error', message: 'Audio extraction requires yt-dlp. Install it with: pip3 install yt-dlp' });
+      return res.end();
+    }
+
+    // Scan at regular intervals; skip ahead further after a match (min song ~2min in a DJ mix)
+    const scanInterval  = 30;   // probe every 30s
+    const skipOnMatch   = 120;  // after matching, jump 2min ahead
+    const maxDuration   = Math.min(videoDuration || 7200, 7200);
+    const seenSongKeys  = new Set();
+    let   currentTime   = 0;
+    let   scanned       = 0;
+
+    while (currentTime < maxDuration && !closed) {
+      send({ type: 'progress', current: currentTime, total: maxDuration, scanned });
+      try {
+        const buf    = await extractAudioSegment(audioUrl, currentTime);
+        const result = await recognizeWithAudD(buf);
+        scanned++;
+
+        if (result?.title) {
+          const key = `${(result.artist || '').toLowerCase()}:${result.title.toLowerCase()}`;
+          if (!seenSongKeys.has(key)) {
+            seenSongKeys.add(key);
+            await searchAndEmit(result.title, result.artist);
+            currentTime += skipOnMatch;
+            continue;
+          }
+        }
+      } catch (e) {
+        console.log(`[analyze-mix] segment @${currentTime}s failed: ${e.message}`);
+      }
+      currentTime += scanInterval;
+    }
+
+    send({ type: 'done' });
+    res.end();
+
+  } catch (err) {
+    console.error('[analyze-mix] fatal:', err);
+    send({ type: 'error', message: err.message || 'Analysis failed' });
+    res.end();
+  }
+});
+
 // Legacy Spotify search endpoint (kept for backwards compatibility)
 app.post('/api/search-spotify', async (req, res) => {
   try {
@@ -4404,7 +4697,7 @@ app.post('/api/search-spotify', async (req, res) => {
 // Generate playlist using AI
 app.post('/api/generate-playlist', async (req, res) => {
   try {
-    let { prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null, internalCall = false } = req.body;
+    let { prompt, userId, platform = 'spotify', allowExplicit = true, songCount = 30, excludeTrackUris = [], playlistId = null, internalCall = false } = req.body;
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
@@ -4494,132 +4787,6 @@ app.post('/api/generate-playlist', async (req, res) => {
       } catch (refreshError) {
         console.log('Token refresh failed or not needed:', refreshError.message);
         // Continue anyway - token might still be valid
-      }
-    }
-
-    // Get user's listening history if newArtistsOnly is enabled
-    let knownArtists = new Set();
-    if (newArtistsOnly && platform === 'spotify') {
-      try {
-        console.log('Fetching user listening history to filter out known artists...');
-
-        // 1. Load artist history from our database (builds over time, unlimited)
-        try {
-          const artistHistory = await db.getArtistHistory(platformUserId);
-          artistHistory.forEach(artist => {
-            knownArtists.add(artist.artistName.toLowerCase());
-          });
-          console.log(`Loaded ${artistHistory.length} artists from database history`);
-        } catch (dbError) {
-          console.log('Could not load artist history from database:', dbError.message);
-        }
-
-        // 2. Get user's top artists from Spotify (all time, last 6 months, last 4 weeks)
-        const timeRanges = ['long_term', 'medium_term', 'short_term'];
-        for (const timeRange of timeRanges) {
-          try {
-            const topArtistsData = await userSpotifyApi.getMyTopArtists({
-              time_range: timeRange,
-              limit: 50
-            });
-            topArtistsData.body.items.forEach(artist => {
-              knownArtists.add(artist.name.toLowerCase());
-            });
-          } catch (err) {
-            console.log(`Failed to get top artists for ${timeRange}:`, err.message);
-          }
-        }
-
-        // 3. Get user's recently played tracks from Spotify
-        try {
-          const recentlyPlayed = await userSpotifyApi.getMyRecentlyPlayedTracks({ limit: 50 });
-          recentlyPlayed.body.items.forEach(item => {
-            item.track.artists.forEach(artist => {
-              knownArtists.add(artist.name.toLowerCase());
-            });
-          });
-        } catch (err) {
-          console.log('Failed to get recently played tracks:', err.message);
-        }
-
-        // 4. Get artists from user's liked/saved songs (up to 200 tracks = 4 pages)
-        // Catches artists the user has heard but who don't appear in top artists
-        try {
-          let savedOffset = 0;
-          const savedLimit = 50;
-          const savedPages = 4; // 200 saved tracks max to keep it fast
-          for (let page = 0; page < savedPages; page++) {
-            const savedData = await userSpotifyApi.getMySavedTracks({ limit: savedLimit, offset: savedOffset });
-            const items = savedData.body.items || [];
-            items.forEach(item => {
-              item.track?.artists?.forEach(artist => {
-                knownArtists.add(artist.name.toLowerCase());
-              });
-            });
-            if (items.length < savedLimit) break; // no more pages
-            savedOffset += savedLimit;
-          }
-        } catch (err) {
-          console.log('Failed to get saved tracks:', err.message);
-        }
-
-        // 5. Get artists the user follows explicitly
-        try {
-          const followedData = await userSpotifyApi.getFollowedArtists({ limit: 50 });
-          (followedData.body.artists?.items || []).forEach(artist => {
-            knownArtists.add(artist.name.toLowerCase());
-          });
-        } catch (err) {
-          console.log('Failed to get followed artists:', err.message);
-        }
-
-        console.log(`Found ${knownArtists.size} total known artists to filter out`);
-      } catch (error) {
-        console.error('Error fetching listening history:', error);
-        // Continue anyway - we'll just not filter
-      }
-    } else if (newArtistsOnly && platform === 'apple') {
-      try {
-        console.log('Fetching Apple Music library to filter out known artists...');
-
-        // 1. Load artist history from our database (builds over time, unlimited)
-        try {
-          const artistHistory = await db.getArtistHistory(platformUserId);
-          artistHistory.forEach(artist => {
-            knownArtists.add(artist.artistName.toLowerCase());
-          });
-          console.log(`Loaded ${artistHistory.length} artists from database history`);
-        } catch (dbError) {
-          console.log('Could not load artist history from database:', dbError.message);
-        }
-
-        // 2. Get artists from library playlists (most reliable signal for Apple Music)
-        try {
-          const appleMusicDevToken = generateAppleMusicToken();
-          if (appleMusicDevToken) {
-            const appleMusicApi = new AppleMusicService(appleMusicDevToken);
-
-            const topLibraryArtists = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token);
-            topLibraryArtists.forEach(artist => {
-              knownArtists.add(artist.name.toLowerCase());
-            });
-            console.log(`Loaded ${topLibraryArtists.length} artists from Apple Music library playlists`);
-
-            // 3. Get artists from saved library songs
-            const librarySongArtists = await appleMusicApi.getLibrarySongs(tokens.access_token, 200);
-            librarySongArtists.forEach(artistName => {
-              if (artistName) knownArtists.add(artistName.toLowerCase());
-            });
-            console.log(`Loaded artists from ${librarySongArtists.length} Apple Music library songs`);
-          }
-        } catch (appleErr) {
-          console.log('Could not load Apple Music library artists:', appleErr.message);
-        }
-
-        console.log(`Found ${knownArtists.size} total known artists to filter out (Apple Music)`);
-      } catch (error) {
-        console.error('Error fetching Apple Music listening history:', error);
-        // Continue anyway - we'll just not filter
       }
     }
 
@@ -5220,7 +5387,7 @@ Respond ONLY with valid JSON:
     let soundChartsDiscoveredSongs = [];
     const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
     if (process.env.SOUNDCHARTS_APP_ID) {
-      const scQuery = buildSoundchartsQuery(genreData, newArtistsOnly, allowExplicit);
+      const scQuery = buildSoundchartsQuery(genreData, allowExplicit);
       const fetchCount = Math.min(songCount * 3, 200);
       // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
       const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
@@ -5566,21 +5733,6 @@ Return ONLY valid JSON:
           console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
           return false;
         }
-        if (newArtistsOnly) {
-          const artistName = track.artists?.[0]?.name || track.artist || '';
-          const primaryArtist = artistName.toLowerCase();
-          // 1. History check first (fast) — skip artists the user has already heard
-          if (knownArtists.size > 0 && knownArtists.has(primaryArtist)) {
-            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (known artist)`);
-            return false;
-          }
-          // 2. CareerStage check (all users) — only allow long_tail and developing artists
-          const scArtist = await searchSoundChartsArtist(artistName);
-          if (scArtist?.careerStage === 'mainstream' || scArtist?.careerStage === 'superstar') {
-            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (careerStage: ${scArtist.careerStage})`);
-            return false;
-          }
-        }
         const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
         if (maxPerArtist !== null && maxPerArtist !== undefined) {
           const artistKey = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
@@ -5764,14 +5916,8 @@ Return ONLY valid JSON:
       }
 
       console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} SoundCharts-discovered songs`);
-      if (newArtistsOnly && allTracks.length === 0 && recommendedTracks.length > 0) {
-        console.warn(`⚠️  [NEW-ARTISTS] All ${recommendedTracks.length} SoundCharts songs were from known artists — no new-artist results found. Fallback will run without the newArtistsOnly filter.`);
-      }
 
-      // Vibe check + supplement block.
-      // Enter when we have tracks to check, OR when New Artists Only is active (supplement
-      // needs to run even if the primary pass found 0 songs because the user knows everyone).
-      if (allTracks.length >= 5 || newArtistsOnly) {
+      if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks];
 
         // Vibe check — only run when we actually have tracks to review
@@ -5874,27 +6020,17 @@ Example response: [1, 2, 4, 5, 7, ...]`
         console.log(`🎯 Returning ${selectedTracks.length} tracks`);
 
         // Only take the early return if we have enough tracks — otherwise fall through to fallback.
-        // When New Artists Only is active, always enter this block so the supplement can run
-        // (the primary pass may yield 0 songs if the user knows all artists in the pool).
-        if (selectedTracks.length >= Math.min(songCount, 15) || newArtistsOnly) {
+        if (selectedTracks.length >= Math.min(songCount, 15)) {
           // Supplement with more songs if short of target.
-          // Artist-first approach: fetch top songs by genre to get a pool of artists,
-          // skip known artists up-front, then fetch songs per new artist.
-          // This avoids wasted Spotify lookups on songs from artists the user already knows.
           if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const needed = songCount - selectedTracks.length;
             console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${songCount}`);
             try {
               // Re-run artist-similarity discovery with relaxed constraints (no mood/theme filters)
               // to pull in more songs that weren't surfaced by the stricter primary pass.
-              // When New Artists Only is active, use the similar artists as seeds instead of the
-              // original seed artist — this fetches 2nd-degree similar artists that are in the same
-              // neighborhood but likely unknown to the user (since their immediate pool is exhausted).
-              const seedArtistsForSupplement = newArtistsOnly && genreData.artistConstraints.similarArtists?.length > 0
-                ? genreData.artistConstraints.similarArtists
-                : (genreData.artistConstraints.requestedArtists?.length > 0
-                    ? genreData.artistConstraints.requestedArtists
-                    : genreData.artistConstraints.suggestedSeedArtists || []);
+              const seedArtistsForSupplement = genreData.artistConstraints.requestedArtists?.length > 0
+                ? genreData.artistConstraints.requestedArtists
+                : genreData.artistConstraints.suggestedSeedArtists || [];
 
               // Build a relaxed query (genre + era only, no mood) using the new direct endpoint.
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
@@ -5909,7 +6045,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   suggestedSeedArtists: seedArtistsForSupplement
                 }
               };
-              const supplementQuery = buildSoundchartsQuery(supplementGenreData, false, allowExplicit);
+              const supplementQuery = buildSoundchartsQuery(supplementGenreData, allowExplicit);
 
               // Request a larger pool so we have more candidates to match against
               const suppMinArtists = maxPerArtist ? Math.min(Math.ceil(needed / maxPerArtist * 1.5), 40) : 0;
@@ -5931,8 +6067,6 @@ Example response: [1, 2, 4, 5, 7, ...]`
               for (let si = 0; si < supplementPool.length && selectedTracks.length < songCount; si += BATCH_SIZE) {
                 const batch = supplementPool.slice(si, si + BATCH_SIZE).filter(song => {
                   if (!song.name?.trim()) return false;
-                  const al = (song.artistName || '').toLowerCase();
-                  if (newArtistsOnly && knownArtists.size > 0 && knownArtists.has(al)) return false;
                   return true;
                 });
                 const batchResults = await Promise.all(batch.map(song =>
@@ -5974,9 +6108,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
           }
 
           // Gap fill: if still short after supplement, pull from top_songs (different pool)
-          // Skip when New Artists Only is active — better to return fewer on-prompt songs
-          // and show the "found X of Y" note than pad with off-prompt top songs.
-          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID && !newArtistsOnly) {
+          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const gapNeeded = songCount - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
             try {
@@ -8580,7 +8712,6 @@ async function processPlaylistUpdate(userId, playlist) {
         userId,
         platform: playlistPlatform,
         allowExplicit: true,
-        newArtistsOnly: false,
         songCount: playlist.requestedSongCount || playlist.trackCount || 30,
         // In replace mode, don't exclude current tracks — they can be re-selected freely
         // (excluding them on a niche-genre playlist can starve the pool and return far fewer songs).

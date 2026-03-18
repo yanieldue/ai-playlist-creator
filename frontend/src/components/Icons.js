@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader, FiEye, FiEyeOff } from 'react-icons/fi';
+import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader, FiEye, FiEyeOff, FiMinusCircle, FiHeadphones, FiLink, FiClipboard } from 'react-icons/fi';
 
 // Icon components - using Feather Icons from react-icons
 const Icons = {
@@ -125,6 +125,22 @@ const Icons = {
 
   EyeOff: ({ size = 24, color = 'currentColor' }) => (
     <FiEyeOff size={size} color={color} />
+  ),
+
+  MinusCircle: ({ size = 24, color = 'currentColor' }) => (
+    <FiMinusCircle size={size} color={color} />
+  ),
+
+  Headphones: ({ size = 24, color = 'currentColor' }) => (
+    <FiHeadphones size={size} color={color} />
+  ),
+
+  Link: ({ size = 24, color = 'currentColor' }) => (
+    <FiLink size={size} color={color} />
+  ),
+
+  Clipboard: ({ size = 24, color = 'currentColor' }) => (
+    <FiClipboard size={size} color={color} />
   ),
 
 };

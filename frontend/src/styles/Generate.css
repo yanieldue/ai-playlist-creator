@@ -590,15 +590,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #8e8e93;
-  border: 1px solid #8e8e93;
+  font-size: 9px;
+  font-weight: 600;
+  color: #fff;
+  background: #8e8e93;
   border-radius: 3px;
-  width: 1.1em;
-  height: 1.1em;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   line-height: 1;
+  vertical-align: middle;
 }
 
 /* Generate page toasts sit above the footer bar */

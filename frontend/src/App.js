@@ -6,6 +6,7 @@ import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import Pricing from './components/Pricing';
 import Generate from './components/Generate';
+import FromMix from './components/FromMix';
 import AppleMusicRedirect from './components/AppleMusicRedirect';
 import './styles/App.css';
 
@@ -40,6 +41,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/generate" element={<Generate />} />
+          <Route path="/from-mix" element={<FromMix />} />
           <Route path="/apple-music-redirect" element={<AppleMusicRedirect />} />
         </Routes>
       </Router>

@@ -113,13 +113,12 @@ export const playlistService = {
   },
 
   // Generate playlist using AI
-  generatePlaylist: async (prompt, userId, platform = 'spotify', allowExplicit = true, newArtistsOnly = false, songCount = 30, excludeTrackUris = [], playlistId = null, signal = null) => {
+  generatePlaylist: async (prompt, userId, platform = 'spotify', allowExplicit = true, songCount = 30, excludeTrackUris = [], playlistId = null, signal = null) => {
     const response = await api.post('/api/generate-playlist', {
       prompt,
       userId,
       platform,
       allowExplicit,
-      newArtistsOnly,
       songCount,
       excludeTrackUris,
       playlistId,

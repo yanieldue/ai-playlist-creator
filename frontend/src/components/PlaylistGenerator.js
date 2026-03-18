@@ -20,6 +20,7 @@ import Toast from './Toast';
 import Icons from './Icons';
 import ErrorMessage from './ErrorMessage';
 import ProductTour from './ProductTour';
+import MixAnalyzerModal from './MixAnalyzerModal';
 import '../styles/PlaylistGenerator.css';
 import '../styles/ApplePodcastsTheme.css';
 import '../styles/AccountModal.css';
@@ -94,12 +95,14 @@ const PlaylistGenerator = () => {
     const saved = localStorage.getItem('allowExplicit');
     return saved !== null ? JSON.parse(saved) : true;
   });
-  const [newArtistsOnly, setNewArtistsOnly] = useState(false);
   const [songCount, setSongCount] = useState(30);
   const [songCountDraft, setSongCountDraft] = useState(30);
+  const [showMixModal, setShowMixModal] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showPromptTooltip, setShowPromptTooltip] = useState(false);
   const optionsMenuRef = useRef(null);
+  const createMenuRef = useRef(null);
   const refineChatBodyRef = useRef(null);
 
   // Toast notifications
@@ -706,6 +709,9 @@ const PlaylistGenerator = () => {
         setShowOptionsMenu(false);
         setSongCountDraft(songCount);
       }
+      if (showCreateMenu && createMenuRef.current && !createMenuRef.current.contains(event.target)) {
+        setShowCreateMenu(false);
+      }
       if (showTrackListMenu && trackListMenuRef.current && !trackListMenuRef.current.contains(event.target)) {
         setShowTrackListMenu(false);
       }
@@ -713,7 +719,7 @@ const PlaylistGenerator = () => {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showProfileDropdown, showSearchResults, showOptionsMenu, showTrackListMenu]);
+  }, [showProfileDropdown, showSearchResults, showOptionsMenu, showCreateMenu, showTrackListMenu]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -1109,7 +1115,7 @@ const PlaylistGenerator = () => {
 
     try {
       generationAbortControllerRef.current = new AbortController();
-      const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, newArtistsOnly, songCount, [], null, generationAbortControllerRef.current.signal);
+      const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, songCount, [], null, generationAbortControllerRef.current.signal);
       clearInterval(messageInterval);
       setGeneratingMessage('');
       setShowGeneratingModal(false);
@@ -1142,14 +1148,12 @@ const PlaylistGenerator = () => {
         song_count: result.tracks?.length || 0,
         requested_song_count: songCount,
         platform: activePlatform || 'spotify',
-        new_artists_only: newArtistsOnly,
         allow_explicit: allowExplicit,
       });
 
       // Navigate to Generate page for track review — gives consistent UI with the /generate flow
       if (!showComposeModal) {
         navigate('/generate', { state: { initialPlaylist: playlistWithPrompt, returnTab: 'home' } });
-        setNewArtistsOnly(false);
         setSongCount(30);
         return;
       }
@@ -1166,7 +1170,6 @@ const PlaylistGenerator = () => {
       console.log('Generated playlist:', result);
 
       // Reset options to defaults after successful generation
-      setNewArtistsOnly(false);
       setSongCount(30);
 
       // Reset generation lock
@@ -1583,7 +1586,6 @@ const PlaylistGenerator = () => {
         userId,
         activePlatform || 'spotify',
         allowExplicit,
-        newArtistsOnly,
         requestedCount,
         excludedSongUris,
         playlistIdForRefinement
@@ -1908,7 +1910,6 @@ const PlaylistGenerator = () => {
         userId,
         activePlatform || 'spotify',
         allowExplicit,
-        newArtistsOnly,
         10,
         excludedSongUris,
         playlistIdForAddMore
@@ -2634,85 +2635,40 @@ const PlaylistGenerator = () => {
             )}
           </div>
 
-          {/* Chat Input - Fixed above tab bar */}
+          {/* Create FAB - Fixed above tab bar */}
           {activeTab === 'home' && !showGeneratingChatModal && (
-            <div className="chat-input-container-apple">
-              {showOptionsMenu && (
-                <div
-                  className="options-menu-apple"
-                  ref={optionsMenuRef}
-                  style={{ position: 'fixed', bottom: '75px', left: '20px', zIndex: 10001 }}
-                >
+            <div className="create-fab-container" ref={createMenuRef}>
+              {showCreateMenu && (
+                <div className="create-fab-menu">
                   <button
-                    onClick={() => setNewArtistsOnly(!newArtistsOnly)}
-                    className="options-menu-item"
+                    className="create-fab-option"
+                    onClick={() => { setShowCreateMenu(false); navigate('/generate', { state: { activePlatform } }); }}
                   >
-                    <span><Icons.Sparkles size={18} /></span>
-                    <span>New Artists Only {newArtistsOnly && <Icons.Check size={16} />}</span>
+                    <span className="create-fab-option-icon">✦</span>
+                    <div className="create-fab-option-text">
+                      <span className="create-fab-option-label">From Prompt</span>
+                      <span className="create-fab-option-sub">Describe your vibe</span>
+                    </div>
                   </button>
-                  <div className="options-menu-item" style={{ cursor: 'default' }}>
-                    <span><Icons.Music size={18} /></span>
-                    <span>Songs: </span>
-                    <input
-                      type="number"
-                      value={songCountDraft}
-                      onChange={(e) => setSongCountDraft(e.target.value)}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        width: '60px',
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        border: '1px solid #e2e8f0',
-                        marginLeft: 'auto'
-                      }}
-                    />
-                  </div>
                   <button
-                    onClick={() => {
-                      const num = parseInt(songCountDraft, 10);
-                      const committed = isNaN(num) || num < 1 ? 30 : num;
-                      setSongCount(committed);
-                      setSongCountDraft(committed);
-                      setShowOptionsMenu(false);
-                    }}
-                    className="options-menu-apply-button"
+                    className="create-fab-option"
+                    onClick={() => { setShowCreateMenu(false); navigate('/from-mix', { state: { returnTab: activeTab } }); }}
                   >
-                    Apply
+                    <span className="create-fab-option-icon"><Icons.Headphones size={20} /></span>
+                    <div className="create-fab-option-text">
+                      <span className="create-fab-option-label">From Mix</span>
+                      <span className="create-fab-option-sub">Paste a YouTube DJ mix</span>
+                    </div>
                   </button>
                 </div>
               )}
-              <div className="chat-input-wrapper">
-                <div
-                  className="chat-input-placeholder"
-                  onClick={() => !loading && navigate('/generate', { state: { activePlatform } })}
-                >
-                  {prompt || 'Create playlist for...'}
-                </div>
-                <button
-                  onClick={() => handleGeneratePlaylist()}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    if (!loading && prompt.trim()) {
-                      handleGeneratePlaylist();
-                    }
-                  }}
-                  disabled={loading || !prompt.trim()}
-                  className="chat-send-button"
-                  title="Generate Playlist"
-                >
-                  {loading ? (
-                    <div className="loading-spinner-apple">
-                      <div className="wave-bar-1" style={{ width: '3px', height: '14px', backgroundColor: 'white', borderRadius: '1px' }}></div>
-                      <div className="wave-bar-2" style={{ width: '3px', height: '14px', backgroundColor: 'white', borderRadius: '1px' }}></div>
-                      <div className="wave-bar-3" style={{ width: '3px', height: '14px', backgroundColor: 'white', borderRadius: '1px' }}></div>
-                    </div>
-                  ) : (
-                    <svg viewBox="0 0 24 24" style={{ pointerEvents: 'none' }}>
-                      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
+              <button
+                className={`create-fab-btn${showCreateMenu ? ' active' : ''}`}
+                onClick={() => setShowCreateMenu(v => !v)}
+              >
+                <span className="create-fab-sparkle">✦</span>
+                Create
+              </button>
               {errorInfo && (
                 <ErrorMessage
                   errorLog={errorInfo}
@@ -2804,11 +2760,8 @@ const PlaylistGenerator = () => {
                         </button>
                       </div>
                       <div className="compose-options-row">
-                        <button
-                          className={`compose-option-chip ${newArtistsOnly ? 'active' : ''}`}
-                          onClick={() => setNewArtistsOnly(!newArtistsOnly)}
-                        >
-                          <Icons.Sparkles size={13} /> New Artists Only
+                        <button className="compose-option-chip" onClick={() => navigate('/from-mix', { state: { returnTab: activeTab } })}>
+                          <Icons.Headphones size={13} /> From Mix
                         </button>
                         <div className="compose-option-chip">
                           <Icons.Music size={13} />
@@ -3065,10 +3018,7 @@ const PlaylistGenerator = () => {
                     <div className="playlist-modal-tracks">
                       {generatedPlaylist.requestedSongCount && generatedPlaylist.tracks.length < generatedPlaylist.requestedSongCount && (
                         <div className="short-count-note">
-                          Found {generatedPlaylist.tracks.length} of {generatedPlaylist.requestedSongCount} songs —{' '}
-                          {newArtistsOnly
-                            ? 'not enough undiscovered artists matched your vibe.'
-                            : 'your filters limited what matched your vibe.'}
+                          Found {generatedPlaylist.tracks.length} of {generatedPlaylist.requestedSongCount} songs — your filters limited what matched your vibe.
                         </div>
                       )}
                       <div className="playlist-modal-tracks-header">
@@ -3885,6 +3835,26 @@ const PlaylistGenerator = () => {
           // Signup complete will redirect to platform selection
         }} />
       )}
+
+      <MixAnalyzerModal
+        isOpen={showMixModal}
+        onClose={() => setShowMixModal(false)}
+        userId={userId}
+        platform={activePlatform}
+        onTracksFound={(tracks, playlistName) => {
+          const playlist = {
+            tracks,
+            playlistName,
+            description: `Songs identified from: ${playlistName}`,
+            requestedSongCount: tracks.length,
+            chatMessages: [],
+            excludedSongs: [],
+          };
+          setGeneratedPlaylist(playlist);
+          setComposePhase('tracks');
+          setShowMixModal(false);
+        }}
+      />
     </div>
   );
 };

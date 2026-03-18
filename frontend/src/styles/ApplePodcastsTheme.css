@@ -783,6 +783,148 @@ body {
 }
 .chat-input-placeholder:not(:empty) { color: #1c1c1e; }
 
+/* ── Create FAB ─────────────────────────────────────────────────────────────── */
+.create-fab-container {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 64px); /* sit above tab bar */
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 999;
+  pointer-events: none; /* let taps pass through transparent area */
+}
+
+.create-fab-btn {
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #1c1c1e;
+  color: #ffffff;
+  border: none;
+  border-radius: 24px;
+  padding: 13px 28px;
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  letter-spacing: 0.01em;
+}
+
+.create-fab-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.create-fab-btn.active {
+  background: #2c2c2e;
+}
+
+.create-fab-sparkle {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+/* Options menu that floats above the FAB */
+.create-fab-menu {
+  pointer-events: all;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  width: 220px;
+  animation: fabMenuIn 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  transform-origin: bottom right;
+}
+
+@keyframes fabMenuIn {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.create-fab-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.create-fab-option:last-child {
+  border-bottom: none;
+}
+
+.create-fab-option:active {
+  background: #f2f2f7;
+}
+
+.create-fab-option-icon {
+  font-size: 1.3rem;
+  width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.create-fab-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.create-fab-option-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+
+.create-fab-option-sub {
+  font-size: 0.75rem;
+  color: #8e8e93;
+}
+
+/* Dark mode */
+:root.dark-mode .create-fab-btn {
+  background: #f2f2f7;
+  color: #1c1c1e;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+:root.dark-mode .create-fab-btn.active {
+  background: #e5e5ea;
+}
+
+:root.dark-mode .create-fab-menu {
+  background: #2c2c2e;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+:root.dark-mode .create-fab-option:active {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .create-fab-option {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+:root.dark-mode .create-fab-option-label {
+  color: #ffffff;
+}
+
+:root.dark-mode .create-fab-option-sub {
+  color: #636366;
+}
+
 /* Chat Compose Bottom Sheet */
 .chat-compose-overlay {
   position: fixed;

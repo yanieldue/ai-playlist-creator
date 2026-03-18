@@ -57,7 +57,6 @@ export default function Generate() {
 
   const [phase, setPhase] = useState(refineMode ? 'refine' : initialPlaylist ? 'tracks' : 'input');
   const [prompt, setPrompt] = useState(initialPrompt);
-  const [newArtistsOnly, setNewArtistsOnly] = useState(false);
   const [songCount, setSongCount] = useState(30);
   const [songCountDraft, setSongCountDraft] = useState(30);
 
@@ -207,7 +206,7 @@ export default function Generate() {
     try {
       generationAbortControllerRef.current = new AbortController();
       const result = await playlistService.generatePlaylist(
-        prompt.trim(), userId, activePlatform, allowExplicit, newArtistsOnly, songCount, [], null, generationAbortControllerRef.current.signal
+        prompt.trim(), userId, activePlatform, allowExplicit, songCount, [], null, generationAbortControllerRef.current.signal
       );
       clearInterval(genIntervalRef.current);
 
@@ -238,7 +237,6 @@ export default function Generate() {
       } else {
         setError('No tracks found. Please try a different prompt.');
       }
-      setNewArtistsOnly(false);
       setSongCount(30);
       isGeneratingRef.current = false;
     } catch (err) {
@@ -685,12 +683,6 @@ export default function Generate() {
             </button>
           </div>
           <div className="generate-options-row">
-            <button
-              className={`generate-option-chip ${newArtistsOnly ? 'active' : ''}`}
-              onClick={() => setNewArtistsOnly(!newArtistsOnly)}
-            >
-              <Icons.Sparkles size={13} /> New Artists Only
-            </button>
             <div className="generate-option-chip">
               <Icons.Music size={13} />
               <span>Songs</span>
@@ -773,6 +765,7 @@ export default function Generate() {
           ))}
         </div>
       )}
+
     </div>
   );
 }

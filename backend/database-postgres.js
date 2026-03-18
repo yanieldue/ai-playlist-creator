@@ -559,13 +559,15 @@ class DatabaseService {
   }
 
   async savePlaylist(userId, playlistId, playlistData) {
+    // Serialize immediately so concurrent saves don't race on a shared object reference
+    const serialized = JSON.stringify(playlistData);
     await pool.query(`
       INSERT INTO playlists (user_id, playlist_id, playlist_data, created_at, updated_at)
       VALUES ($1, $2, $3, NOW(), NOW())
       ON CONFLICT (user_id, playlist_id) DO UPDATE SET
         playlist_data = $3,
         updated_at = NOW()
-    `, [userId, playlistId, JSON.stringify(playlistData)]);
+    `, [userId, playlistId, serialized]);
   }
 
   async deletePlaylist(userId, playlistId) {
