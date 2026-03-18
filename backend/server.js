@@ -4567,7 +4567,7 @@ app.get('/api/analyze-mix', async (req, res) => {
       send({ type: 'status', message: 'Extracting audio stream...' });
       audioUrl = await getYouTubeAudioUrl(youtubeUrl);
     } catch (e) {
-      send({ type: 'error', message: `Could not extract audio for scanning: ${audioErr.message}` });
+      send({ type: 'error', message: `Could not extract audio for scanning: ${e.message}` });
       return res.end();
     }
 
