@@ -5880,9 +5880,14 @@ Example response: [1, 2, 4, 5, 7, ...]`
             try {
               // Re-run artist-similarity discovery with relaxed constraints (no mood/theme filters)
               // to pull in more songs that weren't surfaced by the stricter primary pass.
-              const seedArtistsForSupplement = genreData.artistConstraints.requestedArtists?.length > 0
-                ? genreData.artistConstraints.requestedArtists
-                : genreData.artistConstraints.suggestedSeedArtists || [];
+              // When New Artists Only is active, use the similar artists as seeds instead of the
+              // original seed artist — this fetches 2nd-degree similar artists that are in the same
+              // neighborhood but likely unknown to the user (since their immediate pool is exhausted).
+              const seedArtistsForSupplement = newArtistsOnly && genreData.artistConstraints.similarArtists?.length > 0
+                ? genreData.artistConstraints.similarArtists
+                : (genreData.artistConstraints.requestedArtists?.length > 0
+                    ? genreData.artistConstraints.requestedArtists
+                    : genreData.artistConstraints.suggestedSeedArtists || []);
 
               // Build a relaxed query (genre + era only, no mood) using the new direct endpoint.
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
