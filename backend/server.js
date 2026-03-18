@@ -1614,7 +1614,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     // artists instead of alphabetically-sorted deep cuts from the SoundCharts song list.
     // For artists that don't appear in top_songs (underground/niche), supplement with
     // direct artist song fetches.
-    const songs = [];
+    let songs = [];
     const poolNames = new Set(allArtistInfos.map(a => a.name.toLowerCase()));
 
     // 3a: top_songs pass — popular songs from artists in the pool
@@ -5393,6 +5393,24 @@ Return ONLY valid JSON:
       return variations.some(variation => lowerName.includes(variation));
     };
 
+    // ── Shared Phase A helper — pre-fetch SC platform IDs for a song pool ──
+    const prefetchPlatformIds = async (pool, scPlatformCode) => {
+      if (!process.env.SOUNDCHARTS_APP_ID) return;
+      const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
+      if (needing.length === 0) return;
+      console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
+      let consecFails = 0;
+      for (const song of needing) {
+        song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
+        if (song.platformId) { consecFails = 0; }
+        else if (++consecFails >= 2) {
+          console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
+          break;
+        }
+      }
+      console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
+    };
+
     // If we have songs from SoundCharts, search for them on the user's platform
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
@@ -5491,24 +5509,6 @@ Return ONLY valid JSON:
           return null;
         }
         return null;
-      };
-
-      // ── Shared Phase A helper — pre-fetch SC platform IDs for a song pool ──
-      const prefetchPlatformIds = async (pool, scPlatformCode) => {
-        if (!process.env.SOUNDCHARTS_APP_ID) return;
-        const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
-        if (needing.length === 0) return;
-        console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
-        let consecFails = 0;
-        for (const song of needing) {
-          song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
-          if (song.platformId) { consecFails = 0; }
-          else if (++consecFails >= 2) {
-            console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
-            break;
-          }
-        }
-        console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
       };
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
