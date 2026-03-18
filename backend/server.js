@@ -4462,24 +4462,47 @@ app.get('/api/analyze-mix', async (req, res) => {
     const storefront  = tokens.storefront || 'us';
     const seenIds     = new Set();
 
+    const hasNonAscii = (str) => /[^\x00-\x7F]/.test(str);
+
+    const searchSpotify = async (title, artist) => {
+      const query = artist ? `${title} ${artist}` : title;
+      const results = await platformSvc.searchTracks(platformUserId, query, tokens, storefront, 1);
+      return results?.length > 0 ? results[0] : null;
+    };
+
     const searchAndEmit = async (title, artist) => {
       if (closed) return false;
-      const query = artist ? `${title} ${artist}` : title;
       try {
-        const results = await platformSvc.searchTracks(platformUserId, query, tokens, storefront, 1);
-        if (results?.length > 0) {
-          const t = results[0];
-          if (seenIds.has(t.id)) return true; // duplicate, still counts as matched
-          seenIds.add(t.id);
+        let track = await searchSpotify(title, artist);
+
+        // If no results and title has non-ASCII characters, try translating to English
+        if (!track && hasNonAscii(title) && process.env.GEMINI_API_KEY) {
+          try {
+            const { GoogleGenerativeAI } = require('@google/generative-ai');
+            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const result = await model.generateContent(
+              `Translate this song title to English for searching on Spotify. Return ONLY the translated title, nothing else: "${title}"`
+            );
+            const englishTitle = result.response.text().trim().replace(/^["']|["']$/g, '');
+            if (englishTitle && englishTitle !== title) {
+              track = await searchSpotify(englishTitle, artist);
+            }
+          } catch (e) { /* translation failed, fall through to unmatched */ }
+        }
+
+        if (track) {
+          if (seenIds.has(track.id)) return true;
+          seenIds.add(track.id);
           send({
             type:     'track',
-            id:       t.id,
-            name:     t.name,
-            artist:   t.artists[0].name,
-            album:    t.album.name,
-            image:    t.album.images?.[0]?.url || null,
-            uri:      t.uri,
-            explicit: t.explicit || false,
+            id:       track.id,
+            name:     track.name,
+            artist:   track.artists[0].name,
+            album:    track.album.name,
+            image:    track.album.images?.[0]?.url || null,
+            uri:      track.uri,
+            explicit: track.explicit || false,
           });
           return true;
         }
