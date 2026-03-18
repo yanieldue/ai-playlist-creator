@@ -4469,7 +4469,7 @@ app.get('/api/analyze-mix', async (req, res) => {
             reject(new Error(`yt-dlp exited ${code}`));
           }
         });
-        proc.on('error', () => reject(new Error('python3 not found')));
+        proc.on('error', (err) => reject(new Error(`yt-dlp spawn error: ${err.code}`)));
         setTimeout(() => { proc.kill(); reject(new Error('yt-dlp timeout')); }, 20000);
       });
       videoTitle       = meta.title || '';

@@ -2,4 +2,4 @@
 nixPkgs = ["python3", "ffmpeg", "yt-dlp"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci", "python3 -m pip install --upgrade yt-dlp"]
