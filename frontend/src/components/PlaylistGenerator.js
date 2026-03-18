@@ -613,7 +613,7 @@ const PlaylistGenerator = () => {
         console.log('[useEffect] Fetching artists for platform:', activePlatform);
         fetchUserProfile();
         fetchNewArtists();
-        Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()]).finally(finalize);
+        Promise.all([fetchTopArtists(), fetchDrafts()]).finally(finalize);
       } else {
         // No platform connected — still load drafts but skip artist fetches
         if (!hasCachedData) setNewArtists([]);
@@ -674,7 +674,7 @@ const PlaylistGenerator = () => {
               if (currentUserId) {
                 fetchNewArtists();
                 setLoadingHomeContent(true);
-                Promise.all([fetchTopArtists(), fetchTrendingArtists(), fetchDrafts()])
+                Promise.all([fetchTopArtists(), fetchDrafts()])
                   .finally(() => setLoadingHomeContent(false));
               } else {
                 console.log('PlaylistGenerator: No userId available, cannot fetch artists yet');
@@ -2586,43 +2586,6 @@ const PlaylistGenerator = () => {
                       </div>
                     )}
 
-                    {/* Trending Artists by Genre */}
-                    {trendingArtistsSections.map((section) => (
-                      <div key={section.categoryId} className="horizontal-scroll-section">
-                        <div className="section-header">
-                          <div>
-                            <h2 className="section-title">Trending Artists in {section.displayGenre} This Week</h2>
-                          </div>
-                        </div>
-                        <div className="horizontal-scroll-container">
-                          {section.artists.map((artist) => (
-                            <div
-                              key={artist.id}
-                              className="artist-card-apple"
-                              onClick={() => handleArtistClick(artist)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <div className="artist-card-image">
-                                {artist.image ? (
-                                  <img
-                                    src={artist.image}
-                                    alt={artist.name}
-                                    onError={(e) => {
-                                      e.target.style.display = 'none';
-                                      e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                  />
-                                ) : null}
-                                <span style={{ display: artist.image ? 'none' : 'flex' }}>
-                                  <Icons.Microphone size={32} />
-                                </span>
-                              </div>
-                              <div className="artist-card-name">{artist.name}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
                   </>
                 )}
               </div>
