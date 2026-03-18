@@ -2184,7 +2184,6 @@ const PlaylistGenerator = () => {
     mp.track('Artist Clicked', { artist_name: artist.name, artist_id: artist.id });
     // Open settings modal for this artist
     setSelectedArtist(artist);
-    setArtistModalNewArtistsOnly(false);
     setArtistModalSongCount(30);
     setArtistModalSongCountDraft(30);
     setShowArtistSettingsModal(true);
@@ -2193,7 +2192,6 @@ const PlaylistGenerator = () => {
   const handleCancelArtistSettings = () => {
     setShowArtistSettingsModal(false);
     setSelectedArtist(null);
-    setArtistModalNewArtistsOnly(false);
     setArtistModalSongCount(30);
     setArtistModalSongCountDraft(30);
   };
@@ -2262,7 +2260,6 @@ const PlaylistGenerator = () => {
 
       // Reset artist modal state
       setSelectedArtist(null);
-      setArtistModalNewArtistsOnly(false);
       setArtistModalSongCount(30);
       setArtistModalSongCountDraft(30);
 
