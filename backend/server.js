@@ -4510,12 +4510,17 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    send({ type: 'status', message: 'Analyzing video with Gemini AI...' });
+    send({ type: 'status', message: 'Analyzing video with Gemini AI... (this may take 30–60 seconds)' });
 
     try {
       const { GoogleGenerativeAI } = require('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' }, { timeout: 120000 });
+
+      // Send keepalive pings every 15s so SSE connection stays alive
+      const keepalive = setInterval(() => {
+        if (!closed) send({ type: 'status', message: 'Still analyzing video...' });
+      }, 15000);
 
       const result = await model.generateContent([
         {
@@ -4532,6 +4537,7 @@ If you cannot identify any songs, return [].`,
         },
       ]);
 
+      clearInterval(keepalive);
       let raw = result.response.text().trim()
         .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       console.log('[analyze-mix] Gemini response preview:', raw.slice(0, 200));
