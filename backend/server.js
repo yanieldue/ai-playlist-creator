@@ -4369,7 +4369,7 @@ async function parseMixTracklist(videoTitle, description) {
 
 async function getYouTubeAudioUrl(youtubeUrl) {
   return new Promise((resolve, reject) => {
-    const proc = spawn('python3', ['-m', 'yt_dlp','-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]);
+    const proc = spawn('yt-dlp', ['-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]);
     let url = '';
     proc.stdout.on('data', d => { url += d.toString(); });
     proc.on('close', code => {
@@ -4459,7 +4459,7 @@ app.get('/api/analyze-mix', async (req, res) => {
     let metaLoaded = false;
     try {
       const meta = await new Promise((resolve, reject) => {
-        const proc = spawn('python3', ['-m', 'yt_dlp','--dump-json', '--no-playlist', youtubeUrl]);
+        const proc = spawn('yt-dlp', ['--dump-json', '--no-playlist', youtubeUrl]);
         let out = '';
         proc.stdout.on('data', d => { out += d.toString(); });
         proc.on('close', code => {
