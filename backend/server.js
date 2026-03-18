@@ -5967,7 +5967,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
           }
 
           // Gap fill: if still short after supplement, pull from top_songs (different pool)
-          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
+          // Skip when New Artists Only is active — better to return fewer on-prompt songs
+          // and show the "found X of Y" note than pad with off-prompt top songs.
+          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID && !newArtistsOnly) {
             const gapNeeded = songCount - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
             try {

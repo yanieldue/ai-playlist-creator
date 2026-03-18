@@ -3065,7 +3065,10 @@ const PlaylistGenerator = () => {
                     <div className="playlist-modal-tracks">
                       {generatedPlaylist.requestedSongCount && generatedPlaylist.tracks.length < generatedPlaylist.requestedSongCount && (
                         <div className="short-count-note">
-                          Found {generatedPlaylist.tracks.length} of {generatedPlaylist.requestedSongCount} songs — your filters limited what matched your vibe.
+                          Found {generatedPlaylist.tracks.length} of {generatedPlaylist.requestedSongCount} songs —{' '}
+                          {newArtistsOnly
+                            ? 'not enough undiscovered artists matched your vibe.'
+                            : 'your filters limited what matched your vibe.'}
                         </div>
                       )}
                       <div className="playlist-modal-tracks-header">
