@@ -4368,34 +4368,37 @@ async function parseMixTracklist(videoTitle, description) {
 }
 
 async function getYouTubeAudioUrl(youtubeUrl) {
-  const videoId = extractYouTubeId(youtubeUrl);
-  if (!videoId) throw new Error('Invalid YouTube URL');
-
-  // Try multiple public Piped instances in case one is down
-  const pipedInstances = [
-    'https://pipedapi.kavin.rocks',
-    'https://piped-api.garudalinux.org',
-    'https://api.piped.yt',
+  // Try yt-dlp with iOS player client (bypasses bot detection better than default)
+  const attempts = [
+    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist',
+      '--extractor-args', 'youtube:player_client=ios', youtubeUrl]],
+    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist',
+      '--extractor-args', 'youtube:player_client=mweb', youtubeUrl]],
+    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]],
   ];
 
-  let lastError;
-  for (const instance of pipedInstances) {
+  for (const [cmd, args] of attempts) {
     try {
-      const response = await axios.get(`${instance}/streams/${videoId}`, { timeout: 15000 });
-      const audioStreams = response.data?.audioStreams;
-      if (!Array.isArray(audioStreams) || audioStreams.length === 0) continue;
-      // Pick highest bitrate stream
-      const best = audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-      if (best?.url) {
-        console.log(`[piped] got audio URL from ${instance}, bitrate: ${best.bitrate}`);
-        return best.url;
-      }
+      const url = await new Promise((resolve, reject) => {
+        const proc = spawn(cmd, args);
+        let out = '';
+        proc.stdout.on('data', d => { out += d.toString(); });
+        proc.stderr.on('data', d => console.warn('[yt-dlp stderr]', d.toString().trim()));
+        proc.on('close', code => {
+          const trimmed = out.trim().split('\n')[0];
+          if (code === 0 && trimmed) resolve(trimmed);
+          else reject(new Error(`yt-dlp exited ${code}`));
+        });
+        proc.on('error', err => reject(new Error(`yt-dlp spawn error: ${err.code}`)));
+        setTimeout(() => { proc.kill(); reject(new Error('yt-dlp timeout')); }, 30000);
+      });
+      console.log(`[yt-dlp] got audio URL with args: ${args.join(' ')}`);
+      return url;
     } catch (err) {
-      console.warn(`[piped] ${instance} failed: ${err.message}`);
-      lastError = err;
+      console.warn(`[yt-dlp] attempt failed: ${err.message}`);
     }
   }
-  throw new Error(`All Piped instances failed: ${lastError?.message}`);
+  throw new Error('yt-dlp could not extract audio URL after all attempts');
 }
 
 async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
