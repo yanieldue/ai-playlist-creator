@@ -4033,6 +4033,7 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
                 name: ra.name,
                 image: ra.images?.[0]?.url || null,
                 genres: ra.genres || [],
+                popularity: ra.popularity || 0,
                 uri: `spotify:artist:${ra.id}`,
               };
             }
@@ -4091,6 +4092,7 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
                 name: ra.name,
                 image: ra.images?.[0]?.url || null,
                 genres: ra.genres || [],
+                popularity: ra.popularity || 0,
                 uri: `spotify:artist:${ra.id}`,
               };
             }
@@ -4117,13 +4119,16 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       return res.json({ sections: [] });
     }
 
-    // Build sections: group related artists by the user's top categories
+    // Build sections: group related artists by the user's top categories,
+    // sorted by Spotify popularity (trending signal) and filtered to popular artists only
+    const POPULARITY_THRESHOLD = 50; // 0–100; filters out obscure/inactive artists
     const allRelated = Object.values(relatedArtists);
     const sections = [];
     for (const categoryId of seenCategories) {
       const displayGenre = CATEGORY_DISPLAY[categoryId] || categoryGenreMap[categoryId];
       const artists = allRelated
-        .filter(a => a.genres.some(g => getGenreCategory(g) === categoryId))
+        .filter(a => a.genres.some(g => getGenreCategory(g) === categoryId) && a.popularity >= POPULARITY_THRESHOLD)
+        .sort((a, b) => b.popularity - a.popularity)
         .slice(0, 10)
         .map(({ id, name, image, uri }) => ({ id, name, image, uri }));
 
