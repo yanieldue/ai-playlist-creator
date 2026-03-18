@@ -4493,6 +4493,31 @@ app.get('/api/analyze-mix', async (req, res) => {
     const tracklist = await parseMixTracklist(videoTitle, videoDescription);
 
     if (tracklist.length > 0) {
+      // If all tracks are missing artists, use Gemini to fill them in
+      const missingArtists = tracklist.every(t => !t.artist);
+      if (missingArtists && process.env.GEMINI_API_KEY) {
+        send({ type: 'status', message: 'Tracklist found but no artists — using AI to identify artists...' });
+        try {
+          const { GoogleGenerativeAI } = require('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' }, { timeout: 180000 });
+          const keepalive = setInterval(() => { if (!closed) send({ type: 'status', message: 'Still identifying artists...' }); }, 15000);
+          const titleList = tracklist.map((t, i) => `${i + 1}. ${t.title}`).join('\n');
+          const result = await model.generateContent([
+            { fileData: { mimeType: 'video/mp4', fileUri: youtubeUrl } },
+            { text: `This video contains these songs:\n${titleList}\n\nFor each song, identify the artist. Return ONLY a JSON array matching the same order:\n[{"title":"...","artist":"..."},...]\nNo markdown, no explanation.` },
+          ]);
+          clearInterval(keepalive);
+          let raw = result.response.text().trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+          const filled = JSON.parse(raw);
+          if (Array.isArray(filled) && filled.length === tracklist.length) {
+            filled.forEach((t, i) => { if (t.artist) tracklist[i].artist = t.artist; });
+          }
+        } catch (e) {
+          console.warn('[analyze-mix] Gemini artist fill failed:', e.message);
+        }
+      }
+
       send({ type: 'source', method: 'description', total: tracklist.length });
       for (const track of tracklist) {
         if (closed) break;
