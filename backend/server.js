@@ -4367,69 +4367,6 @@ async function parseMixTracklist(videoTitle, description) {
   }
 }
 
-async function getYouTubeAudioUrl(youtubeUrl) {
-  const videoId = extractYouTubeId(youtubeUrl);
-  if (!videoId) throw new Error('Invalid YouTube URL');
-  if (!process.env.YTSTREAM_API_KEY) throw new Error('YTSTREAM_API_KEY not set');
-
-  const response = await axios.get('https://ytstream-download-youtube-videos.p.rapidapi.com/dl', {
-    params: { id: videoId },
-    headers: {
-      'X-RapidAPI-Key': process.env.YTSTREAM_API_KEY,
-      'X-RapidAPI-Host': 'ytstream-download-youtube-videos.p.rapidapi.com',
-    },
-    timeout: 15000,
-  });
-
-  const formats = response.data?.adaptiveFormats || [];
-  const audioFormats = formats.filter(f => f.mimeType?.startsWith('audio/'));
-  if (!audioFormats.length) throw new Error('No audio formats found in YTStream response');
-
-  // Pick highest bitrate audio stream
-  const best = audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
-  console.log(`[ytstream] using audio format itag=${best.itag} mimeType=${best.mimeType} bitrate=${best.bitrate}`);
-  return best.url;
-}
-
-async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', [
-      '-ss', String(startSeconds),
-      '-i',  audioUrl,
-      '-t',  String(durationSeconds),
-      '-f',  'mp3',
-      '-ac', '1',
-      '-ar', '22050',
-      '-ab', '64k',
-      'pipe:1',
-    ]);
-    const chunks = [];
-    let stderrOut = '';
-    proc.stdout.on('data', c => chunks.push(c));
-    proc.stderr.on('data', d => { stderrOut += d.toString(); });
-    const timer = setTimeout(() => { proc.kill(); }, 25000);
-    proc.on('close', code => {
-      clearTimeout(timer);
-      if (chunks.length > 0) resolve(Buffer.concat(chunks));
-      else {
-        if (stderrOut) console.error(`[ffmpeg stderr @${startSeconds}s]`, stderrOut.slice(-500));
-        reject(new Error(`ffmpeg exited ${code} at ${startSeconds}s`));
-      }
-    });
-    proc.on('error', () => reject(new Error('ffmpeg not installed')));
-  });
-}
-
-async function recognizeWithAudD(audioBuffer) {
-  const form = new URLSearchParams();
-  form.append('api_token', process.env.AUDD_API_KEY);
-  form.append('audio', audioBuffer.toString('base64'));
-  const resp = await axios.post('https://api.audd.io/', form.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: 15000,
-  });
-  return resp.data?.result || null;
-}
 
 // GET /api/analyze-mix — SSE endpoint; streams identified tracks back as they're found
 app.get('/api/analyze-mix', async (req, res) => {
@@ -4565,51 +4502,54 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    // ── Step 3: Audio fingerprinting fallback ────────────────────────────────
-    send({ type: 'source', method: 'audio', message: 'No tracklist found — scanning audio...' });
+    // ── Step 3: Gemini video analysis fallback ───────────────────────────────
+    send({ type: 'source', method: 'gemini', message: 'No tracklist found — using AI to identify songs...' });
 
-    if (!process.env.AUDD_API_KEY) {
-      send({ type: 'error', message: 'No tracklist found in the description. Add AUDD_API_KEY to enable audio recognition for mixes without tracklistings.' });
+    if (!process.env.GEMINI_API_KEY) {
+      send({ type: 'error', message: 'No tracklist found in the description. Add GEMINI_API_KEY to enable AI song identification for mixes without tracklistings.' });
       return res.end();
     }
 
-    let audioUrl;
+    send({ type: 'status', message: 'Analyzing video with Gemini AI...' });
+
     try {
-      send({ type: 'status', message: 'Extracting audio stream...' });
-      audioUrl = await getYouTubeAudioUrl(youtubeUrl);
-    } catch (e) {
-      send({ type: 'error', message: `Could not extract audio for scanning: ${e.message}` });
-      return res.end();
-    }
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Scan at regular intervals; skip ahead further after a match (min song ~2min in a DJ mix)
-    const scanInterval  = 30;   // probe every 30s
-    const skipOnMatch   = 120;  // after matching, jump 2min ahead
-    const maxDuration   = Math.min(videoDuration || 7200, 7200);
-    const seenSongKeys  = new Set();
-    let   currentTime   = 0;
-    let   scanned       = 0;
+      const result = await model.generateContent([
+        {
+          fileData: {
+            mimeType: 'video/mp4',
+            fileUri: youtubeUrl,
+          },
+        },
+        {
+          text: `List every song played in this DJ mix video. For each song provide the artist and title.
+Return ONLY a JSON array, no markdown, no explanation. Format:
+[{"title":"Song Title","artist":"Artist Name"},...]
+If you cannot identify any songs, return [].`,
+        },
+      ]);
 
-    while (currentTime < maxDuration && !closed) {
-      send({ type: 'progress', current: currentTime, total: maxDuration, scanned });
-      try {
-        const buf    = await extractAudioSegment(audioUrl, currentTime);
-        const result = await recognizeWithAudD(buf);
-        scanned++;
+      let raw = result.response.text().trim()
+        .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      console.log('[analyze-mix] Gemini response preview:', raw.slice(0, 200));
 
-        if (result?.title) {
-          const key = `${(result.artist || '').toLowerCase()}:${result.title.toLowerCase()}`;
-          if (!seenSongKeys.has(key)) {
-            seenSongKeys.add(key);
-            await searchAndEmit(result.title, result.artist);
-            currentTime += skipOnMatch;
-            continue;
-          }
-        }
-      } catch (e) {
-        console.log(`[analyze-mix] segment @${currentTime}s failed: ${e.message}`);
+      const geminiTracks = JSON.parse(raw);
+      if (!Array.isArray(geminiTracks) || geminiTracks.length === 0) {
+        send({ type: 'error', message: 'Gemini could not identify any songs in this mix.' });
+        return res.end();
       }
-      currentTime += scanInterval;
+
+      for (const track of geminiTracks) {
+        if (closed) break;
+        await searchAndEmit(track.title, track.artist);
+      }
+    } catch (e) {
+      console.error('[analyze-mix] Gemini error:', e.message);
+      send({ type: 'error', message: `AI analysis failed: ${e.message}` });
+      return res.end();
     }
 
     send({ type: 'done' });

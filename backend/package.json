@@ -10,6 +10,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@distube/ytdl-core": "^4.16.12",
+    "@google/generative-ai": "^0.24.1",
     "@sendgrid/mail": "^8.1.6",
     "axios": "^1.6.0",
     "better-sqlite3": "^12.5.0",
