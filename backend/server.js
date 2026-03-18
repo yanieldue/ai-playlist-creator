@@ -4006,11 +4006,25 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       jazz: 'Jazz', classical: 'Classical', christian: 'Christian',
     };
 
-    // topArtistIds: IDs of the user's own top artists (to exclude from discovery)
-    // relatedArtists: map of spotifyId → { id, name, image, genres, uri }
+    // Spotify genre search tags per category (used with genre: filter in search API)
+    const CATEGORY_GENRE_QUERY = {
+      kpop: 'k-pop', hiphop: 'hip-hop', rnb: 'r-n-b', pop: 'pop',
+      latin: 'latin', rock: 'rock', edm_dance: 'edm', country: 'country',
+      indie_alt: 'indie', afro: 'afrobeat', metal: 'metal',
+      jazz: 'jazz', classical: 'classical', christian: 'gospel',
+    };
+
     const topArtistIds = new Set();
-    const relatedArtists = {};
     let topGenres = [];
+
+    // Phase 1: get user's top artists + genres (platform-specific)
+    // Always use a Spotify CC client for the genre search in Phase 2
+    const spotifyCC = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+    });
+    const ccData = await spotifyCC.clientCredentialsGrant();
+    spotifyCC.setAccessToken(ccData.body.access_token);
 
     if (platform === 'spotify') {
       const tokens = await getUserTokens(platformUserId);
@@ -4032,7 +4046,6 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       const topArtistsList = topArtistsData.body.items || [];
       topArtistsList.forEach(a => topArtistIds.add(a.id));
 
-      // Collect genre counts from top artists
       const genreCounts = {};
       for (const artist of topArtistsList) {
         for (const genre of (artist.genres || [])) {
@@ -4042,27 +4055,8 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       topGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
       console.log(`[trending] Spotify top genres: ${topGenres.slice(0, 5).join(', ')}`);
 
-      // Fetch related artists for top 10 artists in parallel
-      await Promise.all(topArtistsList.slice(0, 10).map(async (artist) => {
-        try {
-          const related = await userSpotifyApi.getArtistRelatedArtists(artist.id);
-          for (const ra of (related.body.artists || [])) {
-            if (!topArtistIds.has(ra.id) && !relatedArtists[ra.id]) {
-              relatedArtists[ra.id] = {
-                id: ra.id,
-                name: ra.name,
-                image: ra.images?.[0]?.url || null,
-                genres: ra.genres || [],
-                popularity: ra.popularity || 0,
-                uri: `spotify:artist:${ra.id}`,
-              };
-            }
-          }
-        } catch (e) {}
-      }));
-
     } else {
-      // Apple Music: resolve artists via Spotify client credentials
+      // Apple Music: resolve via Spotify CC to get genres
       const tokens = await getUserTokens(platformUserId);
       if (!tokens) return res.json({ sections: [] });
 
@@ -4071,54 +4065,21 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       const topArtistsList = await appleMusicApi.getTopArtistsFromLibrary(tokens.access_token, 15);
       if (topArtistsList.length === 0) return res.json({ sections: [] });
 
-      const spotifyCC = new SpotifyWebApi({
-        clientId: process.env.SPOTIFY_CLIENT_ID,
-        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-      });
-      const ccData = await spotifyCC.clientCredentialsGrant();
-      spotifyCC.setAccessToken(ccData.body.access_token);
-
-      // Look up each Apple Music artist on Spotify to get their Spotify ID + genres
-      const spotifyArtists = [];
+      const genreCounts = {};
       await Promise.all(topArtistsList.slice(0, 10).map(async (artist) => {
         try {
           const result = await spotifyCC.searchArtists(artist.name, { limit: 1 });
           const match = result.body.artists?.items?.[0];
           if (match && match.name.toLowerCase() === artist.name.toLowerCase()) {
-            spotifyArtists.push(match);
             topArtistIds.add(match.id);
-          }
-        } catch (e) {}
-      }));
-
-      // Collect genre counts
-      const genreCounts = {};
-      for (const artist of spotifyArtists) {
-        for (const genre of (artist.genres || [])) {
-          genreCounts[genre] = (genreCounts[genre] || 0) + 1;
-        }
-      }
-      topGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
-      console.log(`[trending] Apple Music top genres (via Spotify CC): ${topGenres.slice(0, 5).join(', ')}`);
-
-      // Fetch related artists for each resolved Spotify artist
-      await Promise.all(spotifyArtists.map(async (artist) => {
-        try {
-          const related = await spotifyCC.getArtistRelatedArtists(artist.id);
-          for (const ra of (related.body.artists || [])) {
-            if (!topArtistIds.has(ra.id) && !relatedArtists[ra.id]) {
-              relatedArtists[ra.id] = {
-                id: ra.id,
-                name: ra.name,
-                image: ra.images?.[0]?.url || null,
-                genres: ra.genres || [],
-                popularity: ra.popularity || 0,
-                uri: `spotify:artist:${ra.id}`,
-              };
+            for (const genre of (match.genres || [])) {
+              genreCounts[genre] = (genreCounts[genre] || 0) + 1;
             }
           }
         } catch (e) {}
       }));
+      topGenres = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).map(([g]) => g);
+      console.log(`[trending] Apple Music top genres (via Spotify CC): ${topGenres.slice(0, 5).join(', ')}`);
     }
 
     // Map user's top genres to up to 3 category buckets
@@ -4139,22 +4100,31 @@ app.get('/api/trending-artists/:userId', async (req, res) => {
       return res.json({ sections: [] });
     }
 
-    // Build sections: group related artists by the user's top categories,
-    // sorted by Spotify popularity (trending signal) and filtered to popular artists only
-    const POPULARITY_THRESHOLD = 50; // 0–100; filters out obscure/inactive artists
-    const allRelated = Object.values(relatedArtists);
+    // Phase 2: for each category, search Spotify for popular artists in that genre,
+    // excluding artists the user already listens to
+    const POPULARITY_THRESHOLD = 40;
     const sections = [];
     for (const categoryId of seenCategories) {
-      const displayGenre = CATEGORY_DISPLAY[categoryId] || categoryGenreMap[categoryId];
-      const artists = allRelated
-        .filter(a => a.genres.some(g => getGenreCategory(g) === categoryId) && a.popularity >= POPULARITY_THRESHOLD)
-        .sort((a, b) => b.popularity - a.popularity)
-        .slice(0, 10)
-        .map(({ id, name, image, uri }) => ({ id, name, image, uri }));
+      try {
+        const displayGenre = CATEGORY_DISPLAY[categoryId] || categoryGenreMap[categoryId];
+        const genreQuery = CATEGORY_GENRE_QUERY[categoryId];
+        if (!genreQuery) continue;
 
-      if (artists.length > 0) {
-        sections.push({ categoryId, displayGenre, artists });
-        console.log(`[trending] Section "${displayGenre}": ${artists.length} artists`);
+        const searchResult = await spotifyCC.search(`genre:${genreQuery}`, ['artist'], { limit: 50, market: 'US' });
+        const candidates = searchResult.body.artists?.items || [];
+
+        const artists = candidates
+          .filter(a => a && !topArtistIds.has(a.id) && a.popularity >= POPULARITY_THRESHOLD)
+          .sort((a, b) => b.popularity - a.popularity)
+          .slice(0, 10)
+          .map(a => ({ id: a.id, name: a.name, image: a.images?.[0]?.url || null, uri: `spotify:artist:${a.id}` }));
+
+        if (artists.length > 0) {
+          sections.push({ categoryId, displayGenre, artists });
+          console.log(`[trending] Section "${displayGenre}": ${artists.length} artists`);
+        }
+      } catch (err) {
+        console.log(`[trending] Failed for category ${categoryId}:`, err.message);
       }
     }
 
