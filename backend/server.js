@@ -5970,7 +5970,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 primaryGenre: genreData.primaryGenre,
                 atmosphere: [],
                 era: genreData.era,
-                trackConstraints: {},
+                // Preserve popularity preference so career stage filter applies
+                // (prevents unrelated mainstream artists like Ed Sheeran appearing)
+                trackConstraints: { popularity: genreData.trackConstraints?.popularity },
                 artistConstraints: { exclusiveMode: false, requestedArtists: [] }
               };
               const gapQuery = buildSoundchartsQuery(gapGenreData, false, allowExplicit);
