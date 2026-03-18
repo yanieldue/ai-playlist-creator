@@ -4401,16 +4401,20 @@ async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12)
       '-ac', '1',
       '-ar', '22050',
       '-ab', '64k',
-      '-v',  'quiet',
       'pipe:1',
     ]);
     const chunks = [];
+    let stderrOut = '';
     proc.stdout.on('data', c => chunks.push(c));
+    proc.stderr.on('data', d => { stderrOut += d.toString(); });
     const timer = setTimeout(() => { proc.kill(); }, 25000);
     proc.on('close', code => {
       clearTimeout(timer);
       if (chunks.length > 0) resolve(Buffer.concat(chunks));
-      else reject(new Error(`ffmpeg exited ${code} at ${startSeconds}s`));
+      else {
+        if (stderrOut) console.error(`[ffmpeg stderr @${startSeconds}s]`, stderrOut.slice(-500));
+        reject(new Error(`ffmpeg exited ${code} at ${startSeconds}s`));
+      }
     });
     proc.on('error', () => reject(new Error('ffmpeg not installed')));
   });
