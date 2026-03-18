@@ -53,11 +53,9 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
   const [expandManualRefresh, setExpandManualRefresh] = useState(false);
   const [manualRefreshMode, setManualRefreshMode] = useState('append');
   const [manualRefreshSongCount, setManualRefreshSongCount] = useState(30);
-  const [manualRefreshNewArtistsOnly, setManualRefreshNewArtistsOnly] = useState(false);
 
   // Track generation settings (shared - for auto-update and main settings page)
   const [refreshSongCount, setRefreshSongCount] = useState(30);
-  const [refreshNewArtistsOnly, setRefreshNewArtistsOnly] = useState(false);
 
   // Delete confirmation modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -539,10 +537,8 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     setEditOptionsPlaylist(playlist);
     setExpandManualRefresh(false);
     setManualRefreshMode('append');
-    setManualRefreshNewArtistsOnly(false);
     setManualRefreshSongCount(30);
     setRefreshSongCount(30);
-    setRefreshNewArtistsOnly(false);
     setTempUpdateFrequency(playlist.updateFrequency || 'never');
     setTempUpdateMode(playlist.updateMode || 'append');
 
@@ -684,7 +680,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
         userId,
         platform,
         true, // allowExplicit
-        manualRefreshNewArtistsOnly,
+        false,
         manualRefreshSongCount,
         excludeUris,
         editOptionsPlaylist.playlistId // Pass playlistId so backend can load song history
@@ -1211,21 +1207,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       </p>
                     </div>
 
-                    <div className="form-group">
-                      <div
-                        className={`refresh-option-item ${manualRefreshNewArtistsOnly ? 'active' : ''}`}
-                        onClick={() => setManualRefreshNewArtistsOnly(!manualRefreshNewArtistsOnly)}
-                      >
-                        <div className="option-checkbox">
-                          {manualRefreshNewArtistsOnly && <span className="checkmark"><Icons.Check size={16} /></span>}
-                        </div>
-                        <div className="option-content">
-                          <span className="option-label">New Artists Only</span>
-                          <span className="option-description">Only include artists you haven't listened to before</span>
-                        </div>
-                      </div>
-                    </div>
-
                     <button
                       onClick={handleManualRefresh}
                       disabled={refreshing}
@@ -1269,20 +1250,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </p>
                 </div>
 
-                <div className="form-group">
-                  <div
-                    className={`refresh-option-item ${refreshNewArtistsOnly ? 'active' : ''}`}
-                    onClick={() => setRefreshNewArtistsOnly(!refreshNewArtistsOnly)}
-                  >
-                    <div className="option-checkbox">
-                      {refreshNewArtistsOnly && <span className="checkmark"><Icons.Check size={16} /></span>}
-                    </div>
-                    <div className="option-content">
-                      <span className="option-label">New Artists Only</span>
-                      <span className="option-description">Only include artists you haven't listened to before</span>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               {/* Auto-Update Settings Section */}
