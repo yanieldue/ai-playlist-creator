@@ -4499,7 +4499,6 @@ app.post('/api/generate-playlist', async (req, res) => {
 
     // Get user's listening history if newArtistsOnly is enabled
     let knownArtists = new Set();
-    let dbHistoryCount = 0; // tracks only app-generated playlist history (new-user signal)
     if (newArtistsOnly && platform === 'spotify') {
       try {
         console.log('Fetching user listening history to filter out known artists...');
@@ -4507,7 +4506,6 @@ app.post('/api/generate-playlist', async (req, res) => {
         // 1. Load artist history from our database (builds over time, unlimited)
         try {
           const artistHistory = await db.getArtistHistory(platformUserId);
-          dbHistoryCount = artistHistory.length;
           artistHistory.forEach(artist => {
             knownArtists.add(artist.artistName.toLowerCase());
           });
@@ -4587,7 +4585,6 @@ app.post('/api/generate-playlist', async (req, res) => {
         // 1. Load artist history from our database (builds over time, unlimited)
         try {
           const artistHistory = await db.getArtistHistory(platformUserId);
-          dbHistoryCount = artistHistory.length;
           artistHistory.forEach(artist => {
             knownArtists.add(artist.artistName.toLowerCase());
           });
@@ -5567,20 +5564,18 @@ Return ONLY valid JSON:
           return false;
         }
         if (newArtistsOnly) {
-          const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
-          // History-based filter: skip artists the user has listened to before
+          const artistName = track.artists?.[0]?.name || track.artist || '';
+          const primaryArtist = artistName.toLowerCase();
+          // 1. History check first (fast) — skip artists the user has already heard
           if (knownArtists.size > 0 && knownArtists.has(primaryArtist)) {
-            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
+            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (known artist)`);
             return false;
           }
-          // CareerStage fallback for new users with little app history: skip mainstream/superstar artists
-          if (dbHistoryCount < 20) {
-            const artistName = track.artists?.[0]?.name || track.artist;
-            const scArtist = await searchSoundChartsArtist(artistName);
-            if (scArtist?.careerStage === 'mainstream' || scArtist?.careerStage === 'superstar') {
-              console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (careerStage: ${scArtist.careerStage}, new user fallback)`);
-              return false;
-            }
+          // 2. CareerStage check (all users) — only allow long_tail and developing artists
+          const scArtist = await searchSoundChartsArtist(artistName);
+          if (scArtist?.careerStage === 'mainstream' || scArtist?.careerStage === 'superstar') {
+            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (careerStage: ${scArtist.careerStage})`);
+            return false;
           }
         }
         const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
