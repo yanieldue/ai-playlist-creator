@@ -5563,10 +5563,16 @@ Return ONLY valid JSON:
           console.log(`Skipping duplicate song: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
           return false;
         }
-        if (newArtistsOnly && knownArtists.size > 0) {
+        if (newArtistsOnly) {
           const primaryArtist = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
-          if (knownArtists.has(primaryArtist)) {
+          // History-based filter: skip artists the user has listened to before
+          if (knownArtists.size > 0 && knownArtists.has(primaryArtist)) {
             console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
+            return false;
+          }
+          // Popularity fallback for new users with little history: skip mainstream artists
+          if (knownArtists.size < 20 && (track.popularity || 0) >= 50) {
+            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (popularity ${track.popularity} >= 50, new user fallback)`);
             return false;
           }
         }
