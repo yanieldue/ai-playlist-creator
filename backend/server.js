@@ -5768,9 +5768,14 @@ Return ONLY valid JSON:
         console.warn(`⚠️  [NEW-ARTISTS] All ${recommendedTracks.length} SoundCharts songs were from known artists — no new-artist results found. Fallback will run without the newArtistsOnly filter.`);
       }
 
-      // Vibe check — always run to ensure every track matches the prompt and all refinements
-      if (allTracks.length >= 5) {
+      // Vibe check + supplement block.
+      // Enter when we have tracks to check, OR when New Artists Only is active (supplement
+      // needs to run even if the primary pass found 0 songs because the user knows everyone).
+      if (allTracks.length >= 5 || newArtistsOnly) {
         let selectedTracks = [...allTracks];
+
+        // Vibe check — only run when we actually have tracks to review
+        if (selectedTracks.length >= 5) {
 
         const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
         const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
@@ -5861,6 +5866,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
         } catch (error) {
           console.log('Vibe check failed, using tracks as-is:', error.message);
         }
+        } // end if (selectedTracks.length >= 5)
 
 
         // Return the final tracks
