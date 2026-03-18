@@ -4368,20 +4368,29 @@ async function parseMixTracklist(videoTitle, description) {
 }
 
 async function getYouTubeAudioUrl(youtubeUrl) {
-  const response = await axios.post('https://api.cobalt.tools/', {
-    url: youtubeUrl,
-    downloadMode: 'audio',
-    audioFormat: 'mp3',
-  }, {
-    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-    timeout: 15000,
-  });
+  let response;
+  try {
+    response = await axios.post('https://api.cobalt.tools/', {
+      url: youtubeUrl,
+      downloadMode: 'audio',
+      audioFormat: 'mp3',
+      filenameStyle: 'basic',
+    }, {
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      timeout: 20000,
+    });
+  } catch (err) {
+    const body = err.response?.data;
+    console.error('[cobalt] request failed:', err.response?.status, JSON.stringify(body));
+    throw new Error(`cobalt.tools error ${err.response?.status}: ${JSON.stringify(body)}`);
+  }
+  console.log('[cobalt] response:', JSON.stringify(response.data));
   const { status, url, urls } = response.data;
   const audioUrl = url || (Array.isArray(urls) && urls[0]);
   if ((status === 'stream' || status === 'redirect' || status === 'tunnel') && audioUrl) {
     return audioUrl;
   }
-  throw new Error(`cobalt.tools returned status: ${status}`);
+  throw new Error(`cobalt.tools returned status: ${status} — ${JSON.stringify(response.data)}`);
 }
 
 async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
