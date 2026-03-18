@@ -5411,6 +5411,9 @@ Return ONLY valid JSON:
       console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
     };
 
+    // Scale batch size with song count so Phase B lookup time stays roughly constant
+    const BATCH_SIZE = Math.min(Math.max(10, Math.ceil(songCount / 3)), 25);
+
     // If we have songs from SoundCharts, search for them on the user's platform
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
@@ -5601,10 +5604,6 @@ Return ONLY valid JSON:
         console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
         return true;
       };
-
-      // Scale batch size with song count so Phase B lookup time stays roughly constant:
-      // 30 songs → 10, 50 songs → 17, 100 songs → 25 (capped)
-      const BATCH_SIZE = Math.min(Math.max(10, Math.ceil(songCount / 3)), 25);
 
       if (platform === 'spotify') {
 
