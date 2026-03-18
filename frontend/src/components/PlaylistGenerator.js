@@ -2644,7 +2644,7 @@ const PlaylistGenerator = () => {
                     className="create-fab-option"
                     onClick={e => { e.stopPropagation(); setShowCreateMenu(false); navigate('/generate', { state: { activePlatform } }); }}
                   >
-                    <span className="create-fab-option-icon"><Icons.Sparkles size={20} /></span>
+                    <span className="create-fab-option-icon"><Icons.Plus size={20} /></span>
                     <div className="create-fab-option-text">
                       <span className="create-fab-option-label">From Prompt</span>
                       <span className="create-fab-option-sub">Describe your vibe</span>
@@ -2666,7 +2666,7 @@ const PlaylistGenerator = () => {
                 className={`create-fab-btn${showCreateMenu ? ' active' : ''}`}
                 onClick={() => setShowCreateMenu(v => !v)}
               >
-                <Icons.Sparkles size={16} />
+                <Icons.Plus size={16} />
                 Create
               </button>
               {errorInfo && (
