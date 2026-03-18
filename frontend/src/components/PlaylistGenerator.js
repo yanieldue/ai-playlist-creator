@@ -2639,37 +2639,34 @@ const PlaylistGenerator = () => {
           {activeTab === 'home' && !showGeneratingChatModal && (
             <div className="create-fab-container" ref={createMenuRef}>
               {showCreateMenu && (
-                <>
-                  <div className="create-fab-backdrop" onClick={() => setShowCreateMenu(false)} />
-                  <div className="create-fab-menu" onClick={e => e.stopPropagation()}>
-                    <button
-                      className="create-fab-option"
-                      onClick={() => { setShowCreateMenu(false); navigate('/generate', { state: { activePlatform } }); }}
-                    >
-                      <span className="create-fab-option-icon">✦</span>
-                      <div className="create-fab-option-text">
-                        <span className="create-fab-option-label">From Prompt</span>
-                        <span className="create-fab-option-sub">Describe your vibe</span>
-                      </div>
-                    </button>
-                    <button
-                      className="create-fab-option"
-                      onClick={() => { setShowCreateMenu(false); navigate('/from-mix', { state: { returnTab: activeTab } }); }}
-                    >
-                      <span className="create-fab-option-icon"><Icons.Headphones size={20} /></span>
-                      <div className="create-fab-option-text">
-                        <span className="create-fab-option-label">From Mix</span>
-                        <span className="create-fab-option-sub">Paste a YouTube DJ mix</span>
-                      </div>
-                    </button>
-                  </div>
-                </>
+                <div className="create-fab-menu">
+                  <button
+                    className="create-fab-option"
+                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); navigate('/generate', { state: { activePlatform } }); }}
+                  >
+                    <span className="create-fab-option-icon"><Icons.Sparkles size={20} /></span>
+                    <div className="create-fab-option-text">
+                      <span className="create-fab-option-label">From Prompt</span>
+                      <span className="create-fab-option-sub">Describe your vibe</span>
+                    </div>
+                  </button>
+                  <button
+                    className="create-fab-option"
+                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); navigate('/from-mix', { state: { returnTab: activeTab } }); }}
+                  >
+                    <span className="create-fab-option-icon"><Icons.Headphones size={20} /></span>
+                    <div className="create-fab-option-text">
+                      <span className="create-fab-option-label">From Mix</span>
+                      <span className="create-fab-option-sub">Paste a YouTube DJ mix</span>
+                    </div>
+                  </button>
+                </div>
               )}
               <button
                 className={`create-fab-btn${showCreateMenu ? ' active' : ''}`}
                 onClick={() => setShowCreateMenu(v => !v)}
               >
-                <span className="create-fab-sparkle">✦</span>
+                <Icons.Sparkles size={16} />
                 Create
               </button>
               {errorInfo && (
