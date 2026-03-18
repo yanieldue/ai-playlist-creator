@@ -13,6 +13,7 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
   const [statusMsg, setStatusMsg]       = useState('');
   const [progress, setProgress]         = useState(null);   // { current, total, scanned }
   const [source, setSource]             = useState(null);   // 'description' | 'audio'
+  const [totalExpected, setTotalExpected] = useState(null);
   const [errorMsg, setErrorMsg]         = useState('');
   const esRef = useRef(null);
 
@@ -30,6 +31,7 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
       setProgress(null);
       setSource(null);
       setErrorMsg('');
+      setTotalExpected(null);
     }
   }, [isOpen]);
 
@@ -64,6 +66,7 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
           break;
         case 'source':
           setSource(data.method);
+          if (data.total) setTotalExpected(data.total);
           if (data.method === 'audio') {
             setStatusMsg('No tracklist found — scanning audio for songs...');
           } else {
@@ -161,7 +164,11 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
                 {videoTitle || 'Analyzing...'}
               </div>
               <div className="mix-results-meta">
-                {tracks.length > 0 && <span className="mix-found-count">{tracks.length} found</span>}
+                {tracks.length > 0 && (
+                  <span className="mix-found-count">
+                    {totalExpected ? `${tracks.length} / ${totalExpected} found` : `${tracks.length} found`}
+                  </span>
+                )}
                 {totalMinutes > 0 && <span className="mix-duration">{totalMinutes} min</span>}
               </div>
             </div>
@@ -218,7 +225,8 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
               {/* Unmatched songs note */}
               {phase === 'done' && unmatched.length > 0 && (
                 <div className="mix-unmatched-note">
-                  {unmatched.length} song{unmatched.length !== 1 ? 's' : ''} couldn't be matched on {platform === 'apple' ? 'Apple Music' : 'Spotify'}
+                  {unmatched.length} song{unmatched.length !== 1 ? 's' : ''} not found on {platform === 'apple' ? 'Apple Music' : 'Spotify'}:{' '}
+                  {unmatched.map(t => t.title).join(', ')}
                 </div>
               )}
             </div>

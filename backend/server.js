@@ -4468,6 +4468,19 @@ app.get('/api/analyze-mix', async (req, res) => {
 
     const hasNonAscii = (str) => /[^\x00-\x7F]/.test(str);
 
+    // Check if a Spotify result title is a plausible match for what we searched.
+    // Splits both into significant words (3+ chars, not stopwords) and requires
+    // at least one word in common. Prevents Spotify's "best guess" false positives.
+    const STOPWORDS = new Set(['the','a','an','in','on','at','to','for','of','and','or','but','is','it','be','me','my','you','we','he','she','they','just','not','so','if','by','as','with','from','up','do','did','was','are','has','had','will','no','can','its','our','out','his','her','now','new','all','one','two','feat','ft']);
+    const sigWords = (s) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w));
+    const titleMatches = (searchTitle, resultTitle) => {
+      if (hasNonAscii(searchTitle)) return true; // non-ASCII: can't reliably compare, trust the result
+      const qWords = sigWords(searchTitle);
+      if (qWords.length === 0) return true; // too short to check
+      const rWords = new Set(sigWords(resultTitle));
+      return qWords.some(w => rWords.has(w));
+    };
+
     const searchSpotify = async (title, artist) => {
       const query = artist ? `${title} ${artist}` : title;
       const results = await platformSvc.searchTracks(platformUserId, query, tokens, storefront, 1);
@@ -4478,6 +4491,12 @@ app.get('/api/analyze-mix', async (req, res) => {
       if (closed) return false;
       try {
         let track = await searchSpotify(title, artist);
+
+        // Reject false positives: if result title shares no significant words with search title, discard it
+        if (track && !titleMatches(title, track.name)) {
+          log(`false positive rejected: searched "${title}", got "${track.name}"`);
+          track = null;
+        }
 
         // If no results and title has non-ASCII characters, try translating to English
         if (!track && hasNonAscii(title) && process.env.GEMINI_API_KEY) {
@@ -4491,7 +4510,13 @@ app.get('/api/analyze-mix', async (req, res) => {
             const englishTitle = result.response.text().trim().replace(/^["']|["']$/g, '');
             log(`translate "${title}" → "${englishTitle}"`);
             if (englishTitle && englishTitle !== title) {
-              track = await searchSpotify(englishTitle, artist);
+              const translated = await searchSpotify(englishTitle, artist);
+              // Apply similarity check using translated title
+              if (translated && titleMatches(englishTitle, translated.name)) {
+                track = translated;
+              } else if (translated) {
+                log(`false positive rejected after translation: searched "${englishTitle}", got "${translated.name}"`);
+              }
             }
           } catch (e) {
             log(`translation failed for "${title}": ${e.message}`);
