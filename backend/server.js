@@ -4337,14 +4337,13 @@ function parseIsoDuration(iso) {
   return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
 }
 
-async function parseMixTracklist(videoTitle, description) {
+async function parseMixTracklist(videoTitle, description, log = console.log) {
   const combined = `${videoTitle || ''}\n\n${description || ''}`;
-  console.log(`[analyze-mix] Description length: ${(description || '').length} chars`);
-  console.log(`[analyze-mix] Description preview: ${(description || '').slice(0, 300)}`);
+  log(`description length=${(description || '').length} preview="${(description || '').slice(0, 200).replace(/\n/g, ' ')}"`);
 
   // Skip Claude call only if description is basically empty
   if ((description || '').trim().length < 20) {
-    console.log('[analyze-mix] Description too short, skipping tracklist parse');
+    log('description too short, skipping tracklist parse');
     return [];
   }
 
@@ -4358,11 +4357,11 @@ async function parseMixTracklist(videoTitle, description) {
       }]
     });
     const raw = resp.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
-    console.log(`[analyze-mix] Claude tracklist response: ${raw.slice(0, 200)}`);
+    log(`tracklist parsed: ${raw.slice(0, 400).replace(/\n/g, ' ')}`);
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter(t => t.title) : [];
   } catch (e) {
-    console.log('parseMixTracklist failed:', e.message);
+    log(`parseMixTracklist failed: ${e.message}`);
     return [];
   }
 }
@@ -4380,9 +4379,14 @@ app.get('/api/analyze-mix', async (req, res) => {
   let closed = false;
   req.on('close', () => { closed = true; });
 
+  const reqId = Math.random().toString(36).slice(2, 7);
+  const log = (...args) => console.log(`[mix:${reqId}]`, ...args);
+
   const send = (data) => {
     if (!closed) res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
+
+  log(`START url=${youtubeUrl} user=${userId} platform=${platform}`);
 
   try {
     const videoId = extractYouTubeId(youtubeUrl);
@@ -4428,7 +4432,7 @@ app.get('/api/analyze-mix', async (req, res) => {
       videoDuration    = meta.duration || 0;
       metaLoaded = true;
     } catch (e) {
-      console.log('[analyze-mix] yt-dlp metadata failed:', e.message);
+      log(`yt-dlp metadata failed: ${e.message}`);
     }
 
     // Fallback: YouTube Data API (requires YOUTUBE_API_KEY)
@@ -4446,7 +4450,7 @@ app.get('/api/analyze-mix', async (req, res) => {
           metaLoaded = true;
         }
       } catch (e) {
-        console.log('[analyze-mix] YouTube API fallback failed:', e.message);
+        log(`YouTube API fallback failed: ${e.message}`);
       }
     }
 
@@ -4485,15 +4489,19 @@ app.get('/api/analyze-mix', async (req, res) => {
               `Translate this song title to English for searching on Spotify. Return ONLY the translated title, nothing else: "${title}"`
             );
             const englishTitle = result.response.text().trim().replace(/^["']|["']$/g, '');
+            log(`translate "${title}" → "${englishTitle}"`);
             if (englishTitle && englishTitle !== title) {
               track = await searchSpotify(englishTitle, artist);
             }
-          } catch (e) { /* translation failed, fall through to unmatched */ }
+          } catch (e) {
+            log(`translation failed for "${title}": ${e.message}`);
+          }
         }
 
         if (track) {
           if (seenIds.has(track.id)) return true;
           seenIds.add(track.id);
+          log(`matched "${title}" → "${track.name}" by ${track.artists[0].name}`);
           send({
             type:     'track',
             id:       track.id,
@@ -4506,16 +4514,21 @@ app.get('/api/analyze-mix', async (req, res) => {
           });
           return true;
         }
-      } catch (e) { /* continue */ }
+      } catch (e) {
+        log(`search error for "${title}": ${e.message}`);
+      }
+      log(`unmatched "${title}" by "${artist}"`);
       send({ type: 'unmatched', title, artist });
       return false;
     };
 
     // ── Step 2: Description parsing ──────────────────────────────────────────
+    log(`video title="${videoTitle}" duration=${videoDuration}s`);
     send({ type: 'status', message: 'Scanning description for tracklist...' });
-    const tracklist = await parseMixTracklist(videoTitle, videoDescription);
+    const tracklist = await parseMixTracklist(videoTitle, videoDescription, log);
 
     if (tracklist.length > 0) {
+      log(`tracklist found: ${tracklist.length} tracks`);
       // If all tracks are missing artists, use Gemini to fill them in
       const missingArtists = tracklist.every(t => !t.artist);
       if (missingArtists && process.env.GEMINI_API_KEY) {
@@ -4537,7 +4550,7 @@ app.get('/api/analyze-mix', async (req, res) => {
             filled.forEach((t, i) => { if (t.artist) tracklist[i].artist = t.artist; });
           }
         } catch (e) {
-          console.warn('[analyze-mix] Gemini artist fill failed:', e.message);
+          log(`Gemini artist fill failed: ${e.message}`);
         }
       }
 
@@ -4588,7 +4601,7 @@ If you cannot identify any songs, return [].`,
       clearInterval(keepalive);
       let raw = result.response.text().trim()
         .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-      console.log('[analyze-mix] Gemini response preview:', raw.slice(0, 200));
+      log(`Gemini response preview: ${raw.slice(0, 200).replace(/\n/g, ' ')}`);
 
       const geminiTracks = JSON.parse(raw);
       if (!Array.isArray(geminiTracks) || geminiTracks.length === 0) {
@@ -4601,16 +4614,17 @@ If you cannot identify any songs, return [].`,
         await searchAndEmit(track.title, track.artist);
       }
     } catch (e) {
-      console.error('[analyze-mix] Gemini error:', e.message);
+      log(`Gemini error: ${e.message}`);
       send({ type: 'error', message: `AI analysis failed: ${e.message}` });
       return res.end();
     }
 
     send({ type: 'done' });
+    log('DONE');
     res.end();
 
   } catch (err) {
-    console.error('[analyze-mix] fatal:', err);
+    log(`fatal: ${err.message}`);
     send({ type: 'error', message: err.message || 'Analysis failed' });
     res.end();
   }
