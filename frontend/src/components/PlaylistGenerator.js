@@ -141,7 +141,6 @@ const PlaylistGenerator = () => {
   // Artist settings modal
   const [showArtistSettingsModal, setShowArtistSettingsModal] = useState(false);
   const [selectedArtist, setSelectedArtist] = useState(null);
-  const [artistModalNewArtistsOnly, setArtistModalNewArtistsOnly] = useState(false);
   const [artistModalSongCount, setArtistModalSongCount] = useState(30);
   const [artistModalSongCountDraft, setArtistModalSongCountDraft] = useState(30);
 
@@ -2238,7 +2237,7 @@ const PlaylistGenerator = () => {
         userId,
         activePlatform || 'spotify',
         allowExplicit,
-        artistModalNewArtistsOnly,
+        false,
         committedSongCount,
         [], null,
         generationAbortControllerRef.current.signal
@@ -3527,21 +3526,6 @@ const PlaylistGenerator = () => {
                 )}
 
                 <div className="modal-body">
-                  <div className="form-group">
-                    <div
-                      className={`refresh-option-item ${artistModalNewArtistsOnly ? 'active' : ''}`}
-                      onClick={() => setArtistModalNewArtistsOnly(!artistModalNewArtistsOnly)}
-                    >
-                      <div className="option-checkbox">
-                        {artistModalNewArtistsOnly && <span className="checkmark"><Icons.Check size={16} /></span>}
-                      </div>
-                      <div className="option-content">
-                        <span className="option-label">New Artists Only</span>
-                        <span className="option-description">Discover artists you've never listened to</span>
-                      </div>
-                    </div>
-                  </div>
-
                   <div className="form-group">
                     <label htmlFor="artist-song-count">Number of Songs</label>
                     <input
