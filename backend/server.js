@@ -4466,15 +4466,13 @@ app.get('/api/analyze-mix', async (req, res) => {
     const storefront  = tokens.storefront || 'us';
     const seenIds     = new Set();
 
-    const hasNonAscii = (str) => /[^\x00-\x7F]/.test(str);
-
-    // Check if a Spotify result title is a plausible match for what we searched.
-    // Splits both into significant words (3+ chars, not stopwords) and requires
-    // at least one word in common. Prevents Spotify's "best guess" false positives.
+    // Check if a result title is a plausible match for what we searched.
+    // Requires at least one significant word in common to prevent Spotify's
+    // "best guess" false positives when a song isn't available.
     const STOPWORDS = new Set(['the','a','an','in','on','at','to','for','of','and','or','but','is','it','be','me','my','you','we','he','she','they','just','not','so','if','by','as','with','from','up','do','did','was','are','has','had','will','no','can','its','our','out','his','her','now','new','all','one','two','feat','ft']);
     const sigWords = (s) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w));
     const titleMatches = (searchTitle, resultTitle) => {
-      if (hasNonAscii(searchTitle)) return true; // non-ASCII: can't reliably compare, trust the result
+      if (/[^\x00-\x7F]/.test(searchTitle)) return true; // non-ASCII: can't reliably compare, trust the result
       const qWords = sigWords(searchTitle);
       if (qWords.length === 0) return true; // too short to check
       const rWords = new Set(sigWords(resultTitle));
@@ -4496,31 +4494,6 @@ app.get('/api/analyze-mix', async (req, res) => {
         if (track && !titleMatches(title, track.name)) {
           log(`false positive rejected: searched "${title}", got "${track.name}"`);
           track = null;
-        }
-
-        // If no results and title has non-ASCII characters, try translating to English
-        if (!track && hasNonAscii(title) && process.env.GEMINI_API_KEY) {
-          try {
-            const { GoogleGenerativeAI } = require('@google/generative-ai');
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-            const result = await model.generateContent(
-              `Translate this song title to English for searching on Spotify. Return ONLY the translated title, nothing else: "${title}"`
-            );
-            const englishTitle = result.response.text().trim().replace(/^["']|["']$/g, '');
-            log(`translate "${title}" → "${englishTitle}"`);
-            if (englishTitle && englishTitle !== title) {
-              const translated = await searchSpotify(englishTitle, artist);
-              // Apply similarity check using translated title
-              if (translated && titleMatches(englishTitle, translated.name)) {
-                track = translated;
-              } else if (translated) {
-                log(`false positive rejected after translation: searched "${englishTitle}", got "${translated.name}"`);
-              }
-            }
-          } catch (e) {
-            log(`translation failed for "${title}": ${e.message}`);
-          }
         }
 
         if (track) {
