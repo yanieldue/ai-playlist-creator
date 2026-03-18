@@ -2405,6 +2405,30 @@ app.post('/api/admin/transfer-plan', async (req, res) => {
 });
 
 // Get user account info
+// Temporary admin endpoint — remove after use
+app.get('/api/admin/user-info', async (req, res) => {
+  const { email, secret } = req.query;
+  if (secret !== process.env.ADMIN_SECRET || !secret) return res.status(403).json({ error: 'Forbidden' });
+  if (!email) return res.status(400).json({ error: 'email required' });
+  try {
+    const user = await db.getUser(email.trim().toLowerCase());
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const playlists = await db.getUserPlaylists(email.trim().toLowerCase());
+    const allTracks = (playlists || []).flatMap(p => p.tracks || []);
+    const artistCounts = {};
+    allTracks.forEach(t => {
+      if (t.artist) artistCounts[t.artist] = (artistCounts[t.artist] || 0) + 1;
+    });
+    const topArtists = Object.entries(artistCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([artist, count]) => ({ artist, count }));
+    res.json({ user: { email: user.email, plan: user.plan, createdAt: user.createdAt }, playlistCount: (playlists || []).length, totalTracks: allTracks.length, topArtists });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/account/:email', async (req, res) => {
   try {
     const { email } = req.params;
