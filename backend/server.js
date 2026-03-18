@@ -5868,8 +5868,10 @@ Example response: [1, 2, 4, 5, 7, ...]`
         selectedTracks = selectedTracks.slice(0, songCount);
         console.log(`🎯 Returning ${selectedTracks.length} tracks`);
 
-        // Only take the early return if we have enough tracks — otherwise fall through to fallback
-        if (selectedTracks.length >= Math.min(songCount, 15)) {
+        // Only take the early return if we have enough tracks — otherwise fall through to fallback.
+        // When New Artists Only is active, always enter this block so the supplement can run
+        // (the primary pass may yield 0 songs if the user knows all artists in the pool).
+        if (selectedTracks.length >= Math.min(songCount, 15) || newArtistsOnly) {
           // Supplement with more songs if short of target.
           // Artist-first approach: fetch top songs by genre to get a pool of artists,
           // skip known artists up-front, then fetch songs per new artist.
