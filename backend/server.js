@@ -5218,11 +5218,11 @@ Respond ONLY with valid JSON:
 
     // Discover songs via SoundCharts — direct attribute-based query (no similarity tree)
     let soundChartsDiscoveredSongs = [];
+    const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
     if (process.env.SOUNDCHARTS_APP_ID) {
       const scQuery = buildSoundchartsQuery(genreData, newArtistsOnly, allowExplicit);
       const fetchCount = Math.min(songCount * 3, 200);
       // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
-      const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
       const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
       console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
       console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
