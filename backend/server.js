@@ -2406,6 +2406,26 @@ app.post('/api/admin/transfer-plan', async (req, res) => {
 
 // Get user account info
 // Temporary admin endpoint — remove after use
+app.get('/api/admin/clear-trending-cache', async (req, res) => {
+  const { secret } = req.query;
+  if (secret !== process.env.ADMIN_SECRET || !secret) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    if (usePostgres) {
+      const { Pool } = require('pg');
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL, ssl: { rejectUnauthorized: false } });
+      await pool.query('DELETE FROM trending_artists_cache');
+      await pool.end();
+    } else {
+      const Database = require('better-sqlite3');
+      const localDb = new Database('./playlist-creator.db');
+      localDb.prepare('DELETE FROM trending_artists_cache').run();
+    }
+    res.json({ ok: true, message: 'Trending cache cleared for all users' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/admin/user-info', async (req, res) => {
   const { email, secret } = req.query;
   if (secret !== process.env.ADMIN_SECRET || !secret) return res.status(403).json({ error: 'Forbidden' });
