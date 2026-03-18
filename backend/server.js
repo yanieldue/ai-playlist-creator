@@ -4499,6 +4499,7 @@ app.post('/api/generate-playlist', async (req, res) => {
 
     // Get user's listening history if newArtistsOnly is enabled
     let knownArtists = new Set();
+    let dbHistoryCount = 0; // tracks only app-generated playlist history (new-user signal)
     if (newArtistsOnly && platform === 'spotify') {
       try {
         console.log('Fetching user listening history to filter out known artists...');
@@ -4506,6 +4507,7 @@ app.post('/api/generate-playlist', async (req, res) => {
         // 1. Load artist history from our database (builds over time, unlimited)
         try {
           const artistHistory = await db.getArtistHistory(platformUserId);
+          dbHistoryCount = artistHistory.length;
           artistHistory.forEach(artist => {
             knownArtists.add(artist.artistName.toLowerCase());
           });
@@ -4585,6 +4587,7 @@ app.post('/api/generate-playlist', async (req, res) => {
         // 1. Load artist history from our database (builds over time, unlimited)
         try {
           const artistHistory = await db.getArtistHistory(platformUserId);
+          dbHistoryCount = artistHistory.length;
           artistHistory.forEach(artist => {
             knownArtists.add(artist.artistName.toLowerCase());
           });
@@ -5513,7 +5516,7 @@ Return ONLY valid JSON:
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
       // Returns true and mutates allTracks/seenTrackIds/seenSongSignatures if track passes all checks.
-      const validateAndAdd = (track, recommendedSong, platform) => {
+      const validateAndAdd = async (track, recommendedSong, platform) => {
         if (seenTrackIds.has(track.id)) {
           console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
           return false;
@@ -5570,10 +5573,14 @@ Return ONLY valid JSON:
             console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (known artist)`);
             return false;
           }
-          // Popularity fallback for new users with little history: skip mainstream artists
-          if (knownArtists.size < 20 && (track.popularity || 0) >= 50) {
-            console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (popularity ${track.popularity} >= 50, new user fallback)`);
-            return false;
+          // CareerStage fallback for new users with little app history: skip mainstream/superstar artists
+          if (dbHistoryCount < 20) {
+            const artistName = track.artists?.[0]?.name || track.artist;
+            const scArtist = await searchSoundChartsArtist(artistName);
+            if (scArtist?.careerStage === 'mainstream' || scArtist?.careerStage === 'superstar') {
+              console.log(`[NEW-ARTISTS] Skipping "${track.name}" by ${artistName} (careerStage: ${scArtist.careerStage}, new user fallback)`);
+              return false;
+            }
           }
         }
         const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
@@ -5684,7 +5691,7 @@ Return ONLY valid JSON:
               }
             }
 
-            if (!validateAndAdd(track, recommendedSong, 'spotify')) continue;
+            if (!await validateAndAdd(track, recommendedSong, 'spotify')) continue;
             if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Spotify tracks`); break; }
           }
         }
@@ -5756,7 +5763,7 @@ Return ONLY valid JSON:
             if (allTracks.length >= songCount) break;
             if (!found) { console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`); continue; }
 
-            if (!validateAndAdd(found.track, recommendedSong, 'apple')) continue;
+            if (!await validateAndAdd(found.track, recommendedSong, 'apple')) continue;
             if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`); break; }
           }
         }
