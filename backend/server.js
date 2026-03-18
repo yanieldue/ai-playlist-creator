@@ -4368,29 +4368,34 @@ async function parseMixTracklist(videoTitle, description) {
 }
 
 async function getYouTubeAudioUrl(youtubeUrl) {
-  let response;
-  try {
-    response = await axios.post('https://api.cobalt.tools/', {
-      url: youtubeUrl,
-      downloadMode: 'audio',
-      audioFormat: 'mp3',
-      filenameStyle: 'basic',
-    }, {
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      timeout: 20000,
-    });
-  } catch (err) {
-    const body = err.response?.data;
-    console.error('[cobalt] request failed:', err.response?.status, JSON.stringify(body));
-    throw new Error(`cobalt.tools error ${err.response?.status}: ${JSON.stringify(body)}`);
+  const videoId = extractYouTubeId(youtubeUrl);
+  if (!videoId) throw new Error('Invalid YouTube URL');
+
+  // Try multiple public Piped instances in case one is down
+  const pipedInstances = [
+    'https://pipedapi.kavin.rocks',
+    'https://piped-api.garudalinux.org',
+    'https://api.piped.yt',
+  ];
+
+  let lastError;
+  for (const instance of pipedInstances) {
+    try {
+      const response = await axios.get(`${instance}/streams/${videoId}`, { timeout: 15000 });
+      const audioStreams = response.data?.audioStreams;
+      if (!Array.isArray(audioStreams) || audioStreams.length === 0) continue;
+      // Pick highest bitrate stream
+      const best = audioStreams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+      if (best?.url) {
+        console.log(`[piped] got audio URL from ${instance}, bitrate: ${best.bitrate}`);
+        return best.url;
+      }
+    } catch (err) {
+      console.warn(`[piped] ${instance} failed: ${err.message}`);
+      lastError = err;
+    }
   }
-  console.log('[cobalt] response:', JSON.stringify(response.data));
-  const { status, url, urls } = response.data;
-  const audioUrl = url || (Array.isArray(urls) && urls[0]);
-  if ((status === 'stream' || status === 'redirect' || status === 'tunnel') && audioUrl) {
-    return audioUrl;
-  }
-  throw new Error(`cobalt.tools returned status: ${status} — ${JSON.stringify(response.data)}`);
+  throw new Error(`All Piped instances failed: ${lastError?.message}`);
 }
 
 async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
