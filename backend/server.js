@@ -4368,37 +4368,27 @@ async function parseMixTracklist(videoTitle, description) {
 }
 
 async function getYouTubeAudioUrl(youtubeUrl) {
-  // Try yt-dlp with iOS player client (bypasses bot detection better than default)
-  const attempts = [
-    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist',
-      '--extractor-args', 'youtube:player_client=ios', youtubeUrl]],
-    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist',
-      '--extractor-args', 'youtube:player_client=mweb', youtubeUrl]],
-    ['python3', ['-m', 'yt_dlp', '-f', 'bestaudio', '-g', '--no-playlist', youtubeUrl]],
-  ];
+  const videoId = extractYouTubeId(youtubeUrl);
+  if (!videoId) throw new Error('Invalid YouTube URL');
+  if (!process.env.YTSTREAM_API_KEY) throw new Error('YTSTREAM_API_KEY not set');
 
-  for (const [cmd, args] of attempts) {
-    try {
-      const url = await new Promise((resolve, reject) => {
-        const proc = spawn(cmd, args);
-        let out = '';
-        proc.stdout.on('data', d => { out += d.toString(); });
-        proc.stderr.on('data', d => console.warn('[yt-dlp stderr]', d.toString().trim()));
-        proc.on('close', code => {
-          const trimmed = out.trim().split('\n')[0];
-          if (code === 0 && trimmed) resolve(trimmed);
-          else reject(new Error(`yt-dlp exited ${code}`));
-        });
-        proc.on('error', err => reject(new Error(`yt-dlp spawn error: ${err.code}`)));
-        setTimeout(() => { proc.kill(); reject(new Error('yt-dlp timeout')); }, 30000);
-      });
-      console.log(`[yt-dlp] got audio URL with args: ${args.join(' ')}`);
-      return url;
-    } catch (err) {
-      console.warn(`[yt-dlp] attempt failed: ${err.message}`);
-    }
-  }
-  throw new Error('yt-dlp could not extract audio URL after all attempts');
+  const response = await axios.get('https://ytstream-download-youtube-videos.p.rapidapi.com/dl', {
+    params: { id: videoId },
+    headers: {
+      'X-RapidAPI-Key': process.env.YTSTREAM_API_KEY,
+      'X-RapidAPI-Host': 'ytstream-download-youtube-videos.p.rapidapi.com',
+    },
+    timeout: 15000,
+  });
+
+  const formats = response.data?.adaptiveFormats || [];
+  const audioFormats = formats.filter(f => f.mimeType?.startsWith('audio/'));
+  if (!audioFormats.length) throw new Error('No audio formats found in YTStream response');
+
+  // Pick highest bitrate audio stream
+  const best = audioFormats.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+  console.log(`[ytstream] using audio format itag=${best.itag} mimeType=${best.mimeType} bitrate=${best.bitrate}`);
+  return best.url;
 }
 
 async function extractAudioSegment(audioUrl, startSeconds, durationSeconds = 12) {
