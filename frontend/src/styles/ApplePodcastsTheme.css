@@ -796,6 +796,13 @@ body {
   pointer-events: none; /* let taps pass through transparent area */
 }
 
+.create-fab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: all;
+}
+
 .create-fab-btn {
   pointer-events: all;
   display: flex;
@@ -827,6 +834,14 @@ body {
 .create-fab-sparkle {
   font-size: 0.85rem;
   opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .create-fab-btn {
+    padding: 16px 32px;
+    font-size: 1.1rem;
+    border-radius: 28px;
+  }
 }
 
 /* Options menu that floats above the FAB */
