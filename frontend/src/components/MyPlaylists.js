@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
+import musicKitService from '../services/musicKit';
 import Icons from './Icons';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 import ErrorMessage from './ErrorMessage';
@@ -352,14 +353,23 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
         track.image
       );
 
-      // If thumbs down, also remove the track from the playlist
+      // If thumbs down, remove the track from the platform playlist
       if (newReaction === 'thumbsDown') {
-        await playlistService.updatePlaylist(
-          playlistId,
-          userId,
-          [],
-          [{ uri: track.uri }]
-        );
+        const playlist = playlists.find(p => p.playlistId === playlistId);
+        if (playlist?.platform === 'apple' && musicKitService.isAuthorized()) {
+          // Use MusicKit JS client-side — has broader permissions than server-side REST
+          try {
+            const trackIndex = playlist.tracks?.findIndex(t => t.id === track.id) ?? -1;
+            if (trackIndex !== -1) {
+              await musicKitService.removeTracksFromPlaylist(playlistId, [{ id: track.id, index: trackIndex }]);
+            }
+          } catch (mkErr) {
+            console.warn('[MusicKit] Track removal failed, falling back to server:', mkErr.message);
+            await playlistService.updatePlaylist(playlistId, userId, [], [{ uri: track.uri }]);
+          }
+        } else {
+          await playlistService.updatePlaylist(playlistId, userId, [], [{ uri: track.uri }]);
+        }
       }
 
       // Update local state instead of re-fetching to avoid page refresh
@@ -461,6 +471,19 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     if (!deletePlaylistData) return;
 
     setIsDeleting(true);
+
+    // For Apple Music playlists, try MusicKit JS deletion first (client-side auth
+    // has broader permissions than server-side REST which returns 401 on DELETE).
+    const playlist = playlists.find(p => p.playlistId === deletePlaylistData.playlistId);
+    if (playlist?.platform === 'apple' && musicKitService.isAuthorized()) {
+      try {
+        await musicKitService.deleteLibraryPlaylist(deletePlaylistData.playlistId);
+        console.log('[MusicKit] Deleted Apple Music playlist');
+      } catch (mkErr) {
+        console.warn('[MusicKit] Playlist deletion failed, server will retry:', mkErr.message);
+      }
+    }
+
     try {
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
       const url = `${apiUrl}/api/playlists/${encodeURIComponent(deletePlaylistData.playlistId)}?userId=${userId}`;

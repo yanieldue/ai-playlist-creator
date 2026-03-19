@@ -21,6 +21,7 @@ import Icons from './Icons';
 import ErrorMessage from './ErrorMessage';
 import ProductTour from './ProductTour';
 import MixAnalyzerModal from './MixAnalyzerModal';
+import musicKitService from '../services/musicKit';
 import '../styles/PlaylistGenerator.css';
 import '../styles/ApplePodcastsTheme.css';
 import '../styles/AccountModal.css';
@@ -492,6 +493,14 @@ const PlaylistGenerator = () => {
               console.log('PlaylistGenerator: Updating appleMusicUserId from backend:', accountInfo.appleMusicUserId);
               setAppleMusicUserId(accountInfo.appleMusicUserId);
               localStorage.setItem('appleMusicUserId', accountInfo.appleMusicUserId);
+            }
+
+            // Initialize MusicKit for Apple Music users so client-side playlist
+            // modifications (delete, track removal) can use music.api.music().
+            if (accountInfo.connectedPlatforms?.apple) {
+              playlistService.getAppleMusicDeveloperToken()
+                .then(token => musicKitService.initForExistingUser(token))
+                .catch(e => console.warn('MusicKit init failed:', e.message));
             }
 
             // Validate localStorage userIds against backend platform status
