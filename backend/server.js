@@ -4343,7 +4343,9 @@ async function scanWithACRCloud(youtubeUrl, onStatus, log = console.log) {
   const host        = process.env.ACRCLOUD_FS_HOST;
   const containerId = process.env.ACRCLOUD_CONTAINER_ID;
   const accessKey   = process.env.ACRCLOUD_ACCESS_KEY;
-  const auth        = { headers: { Authorization: `Bearer ${accessKey}` } };
+  const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
+  const basicToken  = Buffer.from(`${accessKey}:${accessSecret}`).toString('base64');
+  const auth        = { headers: { Authorization: `Basic ${basicToken}` } };
 
   // ── Submit URL ────────────────────────────────────────────────────────────
   const FormData = require('form-data');
