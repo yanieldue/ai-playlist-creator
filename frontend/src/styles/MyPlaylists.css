@@ -790,8 +790,7 @@
 }
 
 .track-lock-button:hover {
-  color: #ff9500;
-  background: rgba(255, 149, 0, 0.1);
+  opacity: 0.75;
 }
 
 .track-lock-button.locked,
@@ -801,8 +800,7 @@
 }
 
 .track-lock-button.locked:hover {
-  color: #c7c7cc !important;
-  background: rgba(0, 0, 0, 0.05);
+  opacity: 0.75;
 }
 
 :root.dark-mode .track-lock-button {
@@ -810,8 +808,7 @@
 }
 
 :root.dark-mode .track-lock-button:hover {
-  color: #ff9f0a;
-  background: rgba(255, 159, 10, 0.15);
+  opacity: 0.75;
 }
 
 :root.dark-mode .track-lock-button.locked,
@@ -821,8 +818,7 @@
 }
 
 :root.dark-mode .track-lock-button.locked:hover {
-  color: #48484a !important;
-  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.75;
 }
 
 .no-tracks {
@@ -1824,7 +1820,7 @@
 }
 
 :root.dark-mode .track-thumb-circle {
-  background: #3a3a3c;
+  background: #636366;
 }
 
 :root.dark-mode .track-exclude-button {
