@@ -8151,7 +8151,7 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     // Remove thumbed-down song from the platform playlist
     if (reaction === 'thumbsDown' && trackUri && playlist.playlistId) {
       try {
-        const reactionTokens = await db.getTokens(userId);
+        const reactionTokens = await db.getToken(userId);
         if (reactionTokens) {
           const platformService = new PlatformService();
           const reactionPlatform = platformService.getPlatform(userId);
