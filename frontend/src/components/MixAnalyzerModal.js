@@ -222,13 +222,6 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
                 </div>
               )}
 
-              {/* Unmatched songs note */}
-              {phase === 'done' && unmatched.length > 0 && (
-                <div className="mix-unmatched-note">
-                  {unmatched.length} song{unmatched.length !== 1 ? 's' : ''} not found on {platform === 'apple' ? 'Apple Music' : 'Spotify'}:{' '}
-                  {unmatched.map(t => t.title).join(', ')}
-                </div>
-              )}
             </div>
 
             {/* Footer actions */}
@@ -237,9 +230,17 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
                 <button className="mix-stop-btn" onClick={handleStop}>Stop & Review</button>
               )}
               {phase === 'done' && tracks.length > 0 && (
-                <button className="mix-create-btn" onClick={handleCreate}>
-                  Create Playlist · {tracks.length} songs
-                </button>
+                <>
+                  {totalExpected && unmatched.length > 0 && (
+                    <div className="mix-summary-note">
+                      We found {tracks.length} out of {totalExpected} songs on {platform === 'apple' ? 'Apple Music' : 'Spotify'}.{' '}
+                      <span className="mix-summary-unmatched">{unmatched.map(t => t.title).join(', ')} {unmatched.length === 1 ? 'was' : 'were'} not available.</span>
+                    </div>
+                  )}
+                  <button className="mix-create-btn" onClick={handleCreate}>
+                    Create Playlist · {tracks.length} songs
+                  </button>
+                </>
               )}
               {phase === 'done' && tracks.length === 0 && (
                 <div className="mix-empty-state">
