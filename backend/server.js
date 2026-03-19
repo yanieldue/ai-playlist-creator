@@ -2483,6 +2483,7 @@ app.get('/api/account/:email', async (req, res) => {
       appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
       plan: dbUser.plan || 'free',
       trialUsed: dbUser.trialUsed || false,
+      productTourCompleted: dbUser.productTourCompleted || false,
     });
   } catch (error) {
     console.error('Get account error:', error);

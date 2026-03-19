@@ -626,10 +626,21 @@ const PlaylistGenerator = () => {
       if (!newArtistsFetched) {
         const tourCompleted = localStorage.getItem('productTourCompleted');
         if (!tourCompleted) {
-          // Show tour after a brief delay to let the UI settle
-          setTimeout(() => {
-            setShowProductTour(true);
-          }, 1000);
+          // Check backend in case user completed tour on another device
+          const userEmail = localStorage.getItem('userEmail');
+          if (userEmail) {
+            playlistService.getAccountInfo(userEmail)
+              .then(accountInfo => {
+                if (accountInfo?.productTourCompleted) {
+                  localStorage.setItem('productTourCompleted', 'true');
+                } else {
+                  setTimeout(() => setShowProductTour(true), 1000);
+                }
+              })
+              .catch(() => setTimeout(() => setShowProductTour(true), 1000));
+          } else {
+            setTimeout(() => setShowProductTour(true), 1000);
+          }
         }
       }
     }
