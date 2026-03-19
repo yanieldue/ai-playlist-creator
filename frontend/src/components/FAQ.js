@@ -10,57 +10,67 @@ const FAQ = ({ onBack }) => {
     {
       id: 1,
       question: "How do I connect my music platform?",
-      answer: "Click on 'Account' in the menu, then select 'Connected Music Platforms'. Click the 'Connect' button next to Spotify or Apple Music and follow the steps to authorize the connection. We currently support Spotify and Apple Music, with more platforms coming in the future."
+      answer: "Tap 'Account' in the menu, then select 'Connected Music Platforms'. Tap 'Connect' next to Spotify or Apple Music and follow the steps to authorize. We currently support both platforms, with more coming in the future."
     },
     {
       id: 2,
       question: "How do I create a playlist?",
-      answer: "Go to 'Generate Playlist' and describe what kind of music you want in natural language. For example, 'upbeat 80s pop songs' or 'relaxing acoustic music for studying'. Our AI will generate a personalized playlist based on your description."
+      answer: "Tap the + button on the home screen to see three options: From Prompt (describe what you want in natural language), From Mix (paste a YouTube DJ mix URL), or From Artist (search for an artist and build a playlist around their sound)."
     },
     {
       id: 3,
-      question: "How do automatic playlist refreshes work?",
-      answer: "When you enable auto-refresh for a playlist, we'll automatically update it with new songs based on your chosen frequency (daily, weekly, or monthly). The playlist will maintain its vibe while introducing fresh tracks. You can configure this in the playlist edit settings."
+      question: "How does Create from Mix work?",
+      answer: "Paste a YouTube DJ mix URL and Fins will look for the tracklist in the video description and top comments. If a tracklist is found, it matches each song to your music platform and creates the playlist. This works best with mixes that include a tracklist. Identifying songs from audio alone is not yet supported, but we're working on it."
     },
     {
       id: 4,
-      question: "What happens if I disconnect a music platform?",
-      answer: "Disconnecting a platform will prevent new playlists from being created on that service, but your existing playlists will remain on the platform. You can reconnect at any time to resume playlist creation."
+      question: "How do automatic playlist refreshes work?",
+      answer: "When you enable auto-refresh for a playlist, it will automatically update with new songs at your chosen frequency (daily, weekly, or monthly). The playlist keeps its vibe while bringing in fresh tracks. You can configure this in the playlist edit settings."
     },
     {
       id: 5,
-      question: "How do I change my email or password?",
-      answer: "Go to 'Account' in the menu, then click on 'Email' or 'Password'. You'll need to confirm your current password to make changes for security purposes."
+      question: "What happens if I disconnect a music platform?",
+      answer: "Disconnecting a platform will prevent new playlists from being created on that service, but your existing playlists will remain on the platform. You can reconnect at any time to resume."
     },
     {
       id: 6,
-      question: "Can I refine playlists after they're created?",
-      answer: "Absolutely! Go to 'My Playlists', click on any playlist, and click 'Edit Playlist'. You can use the 'Refine Playlist' option to chat with our AI and adjust the vibe, add or remove genres, change tempo, and more."
+      question: "How do I change my email or password?",
+      answer: "Go to 'Account' in the menu, then tap 'Email' or 'Password'. You'll need to confirm your current password to make changes."
     },
     {
       id: 7,
-      question: "How do I remove songs from a playlist?",
-      answer: "In 'My Playlists', expand the playlist you want to edit, then click 'Edit Playlist'. You'll see checkboxes next to each song - select the ones you want to remove and click 'Remove Selected Songs'."
+      question: "Can I refine playlists after they're created?",
+      answer: "Yes. Go to 'My Playlists', tap a playlist, then tap 'Edit Playlist'. From there you can add refinement instructions to adjust the vibe, genres, tempo, and more. Refinements carry over to future auto-updates."
     },
     {
       id: 8,
-      question: "What is manual refresh and how does it work?",
-      answer: "Manual refresh lets you update your playlist with new songs whenever you want. Click 'Edit Playlist' on any playlist, go to the Manual Refresh section, specify how many new songs you want, and whether to only include new artists. The playlist will be updated immediately."
+      question: "How do I lock a song so it stays in my playlist?",
+      answer: "Open a playlist and tap the lock icon next to any track. Locked songs are kept during manual and auto-refreshes. Tap the lock again to unlock and let the song rotate out naturally."
     },
     {
       id: 9,
-      question: "Can I see my unfinished playlists?",
-      answer: "Yes! Unfinished playlists are drafts that haven't been finalized yet. You can find them in the 'Unfinished Playlists' section on the Generate Playlist page. You can continue editing them or finalize them to add them to your music platform."
+      question: "How do I remove songs from a playlist?",
+      answer: "In 'My Playlists', tap a playlist then tap 'Edit Playlist'. You'll see a remove button next to each song. You can also thumbs-down a song to remove it and avoid similar tracks in future updates."
     },
     {
       id: 10,
-      question: "How do I delete a playlist?",
-      answer: "In 'My Playlists', click the three-dot menu (⋮) in the top-right corner of any playlist card, then select 'Delete Playlist'. This will remove the playlist from our system, but if it's already on your music platform, you'll need to delete it from there separately."
+      question: "What is manual refresh and how does it work?",
+      answer: "Manual refresh updates your playlist with new songs on demand. Tap 'Edit Playlist' on any playlist, go to the Manual Refresh section, specify how many new songs you want, and the playlist updates immediately."
     },
     {
       id: 11,
+      question: "Can I see my unfinished playlists?",
+      answer: "Yes. Drafts that haven't been finalized yet appear in the 'Unfinished Playlists' section on the home screen. You can continue editing or finalize them to push to your music platform."
+    },
+    {
+      id: 12,
+      question: "How do I delete a playlist?",
+      answer: "In 'My Playlists', tap the three-dot menu on any playlist card and select 'Delete Playlist'. This removes it from Fins. If it's already on your music platform, you'll need to delete it there separately."
+    },
+    {
+      id: 13,
       question: "What settings can I customize?",
-      answer: "In the Settings page, you can enable/disable dark mode and set the default number of songs for new playlists. More customization options will be added in future updates!"
+      answer: "In Settings you can enable dark mode and set the default number of songs for new playlists. More options are coming in future updates."
     }
   ];
 

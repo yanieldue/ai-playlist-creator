@@ -207,16 +207,28 @@ const STEPS = [
   },
   {
     emoji: null,
-    title: 'Generate Playlists',
-    description: "Type what you want in natural language — artist names, genres, energy level, or time periods. Try: '30 upbeat pop songs by Taylor Swift and Dua Lipa from 2010–2020'.",
+    title: 'Generate from a Prompt',
+    description: "Describe what you want in natural language. Try artist names, genres, energy level, or time periods. For example: '30 upbeat pop songs by Taylor Swift and Dua Lipa from 2010 to 2020'.",
     diagram: <ChatInputDiagram />,
   },
   {
     emoji: null,
-    title: 'Discover Artists',
-    description: "Your Top Artists shows your most-played artists. Artists You Should Explore surfaces ones you haven't heard before and ones you haven't heard in a while. Tap any tile to instantly generate a playlist.",
+    title: 'Create from a Mix',
+    description: "Paste a YouTube DJ mix URL and Fins will pull the tracklist from the description or comments and find every song on your music platform. Great for discovering what was in a mix you loved.",
+    diagram: null,
+  },
+  {
+    emoji: null,
+    title: 'Create from an Artist',
+    description: "Search for any artist and generate a playlist built around their sound. Fins finds songs that match their style across your entire music library.",
     diagram: null,
     diagramComponent: ArtistsDiagram,
+  },
+  {
+    emoji: null,
+    title: 'Discover Artists',
+    description: "Your Top Artists shows your most-played artists. Artists You Should Explore surfaces ones you haven't listened to in a while or haven't tried yet. Tap any tile to instantly generate a playlist.",
+    diagram: null,
   },
   {
     emoji: null,
@@ -228,7 +240,7 @@ const STEPS = [
   {
     emoji: null,
     title: 'Import Your Playlists',
-    description: 'Already have playlists on Spotify or Apple Music? Tap Import to bring them into Fins and manage them with personalized refinements and auto-updates.',
+    description: 'Already have playlists on Spotify or Apple Music? Tap Import to bring them into Fins and manage them with refinements and auto-updates.',
     diagram: null,
     diagramComponent: ImportDiagram,
   },
@@ -241,21 +253,21 @@ const STEPS = [
   },
   {
     emoji: null,
-    title: 'Edit Your Playlists',
-    description: 'Click Edit Playlist to access settings, add refinement instructions, manually refresh with new songs, and manage auto-update scheduling.',
+    title: 'Edit and Lock Tracks',
+    description: 'Click Edit Playlist to manage your playlist. Lock any song to keep it from being removed during refreshes. Unlock it anytime to let it rotate out naturally.',
     diagram: null,
     diagramComponent: EditDiagram,
   },
   {
     emoji: null,
     title: 'Refine Your Playlists',
-    description: 'Add instructions to shape your playlist — change genres, adjust tempo, shift the mood, and more. Refinements carry over to future auto-updates.',
+    description: 'Add instructions to shape your playlist. Change genres, adjust tempo, shift the mood, and more. Refinements carry over to future auto-updates.',
     diagram: <RefineDiagram />,
   },
   {
     emoji: null,
-    title: 'Auto-Refresh & Manual Refresh',
-    description: 'Keep playlists fresh automatically — choose daily, weekly, or monthly updates at 5 AM in your local timezone. Or use Manual Refresh to add new songs right now.',
+    title: 'Auto-Refresh and Manual Refresh',
+    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates at 5 AM in your local timezone. Or use Manual Refresh to add new songs right now.',
     diagram: <AutoRefreshDiagram />,
   },
   {

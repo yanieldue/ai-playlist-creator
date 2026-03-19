@@ -4597,7 +4597,7 @@ app.get('/api/analyze-mix', async (req, res) => {
     }
 
     // No tracklist found anywhere
-    send({ type: 'error', message: "No tracklist found in this video's description. Identifying songs without a tracklist is a feature we're currently working on. For now, this only works with mixes that include a tracklist." });
+    send({ type: 'error', message: "No tracklist found in this video's description or comments. Song identification without a tracklist is not yet supported, but we're actively working on it." });
     log('no tracklist found, ending');
     return res.end();
 
