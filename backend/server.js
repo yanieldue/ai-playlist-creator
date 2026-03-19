@@ -7631,6 +7631,24 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       }
       const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
 
+      if (tracksToRemove && tracksToRemove.length > 0) {
+        // Apple Music doesn't support individual track deletion; use replace instead.
+        // Fetch live tracks (library IDs) and rebuild the list without the removed ones.
+        const urisToRemove = new Set(tracksToRemove.map(t => t.uri || t));
+        const liveTracks = await appleMusicApiInstance.getPlaylistTracks(appleTokens.access_token, playlistId);
+        const remainingIds = liveTracks
+          .filter(t => !urisToRemove.has(`apple:track:${t.id}`))
+          .map(t => t.id);
+        await appleMusicApiInstance.replacePlaylistTracks(appleTokens.access_token, playlistId, remainingIds);
+        console.log(`Removed ${tracksToRemove.length} track(s) from Apple Music playlist ${playlistId} via replace`);
+        // Keep the DB record in sync
+        if (playlistRecord) {
+          playlistRecord.trackUris = remainingIds.map(id => `apple:track:${id}`);
+          playlistRecord.trackCount = remainingIds.length;
+          await savePlaylist(emailUserId, playlistRecord);
+        }
+      }
+
       if (tracksToAdd && tracksToAdd.length > 0) {
         // Convert apple:track:ID URIs to plain IDs
         const trackIds = tracksToAdd.map(uri =>
@@ -7641,7 +7659,6 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
           console.log(`Added ${trackIds.length} tracks to Apple Music playlist ${playlistId}`);
         }
       }
-      // Note: Apple Music API does not support removing tracks from playlists
     } else {
       // ── Spotify update ──────────────────────────────────────────
       let platformUserId = userId;
@@ -8178,10 +8195,19 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
           const platformService = new PlatformService();
           const reactionPlatform = platformService.getPlatform(userId);
           if (reactionPlatform === 'apple') {
-            // Apple Music doesn't support individual track removal; use replace flow instead
-            // Build the remaining track URI list from in-app playlist state
-            const remainingUris = (playlist.trackUris || []).filter(u => u !== trackUri);
-            await platformService.replacePlaylistTracks(userId, playlist.playlistId, remainingUris, reactionTokens);
+            // Apple Music: fetch live tracks (library IDs) and replace without the disliked song.
+            // We can't rely on playlist.trackUris because it stores catalog IDs from creation time,
+            // while the trackUri from the frontend is a library ID — they don't match.
+            const liveTracks = await platformService.getPlaylistTracks(userId, playlist.playlistId, reactionTokens);
+            const remainingIds = liveTracks
+              .filter(t => `apple:track:${t.id}` !== trackUri)
+              .map(t => t.id);
+            const appleMusicApi = platformService.getAppleMusicApi(reactionTokens);
+            await appleMusicApi.replacePlaylistTracks(reactionTokens.access_token, playlist.playlistId, remainingIds);
+            // Keep playlist.trackUris in sync with the new state
+            playlist.trackUris = remainingIds.map(id => `apple:track:${id}`);
+            playlist.trackCount = remainingIds.length;
+            await savePlaylist(userId, playlist);
           } else {
             await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], reactionTokens);
           }
