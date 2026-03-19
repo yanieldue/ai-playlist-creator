@@ -283,7 +283,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
 
   const handleRemoveSelectedTracks = async (playlist) => {
     if (selectedTracksToRemove.size === 0) {
-      setError('Please select at least one track to remove');
+      setError('Please select at least one song to remove');
       return;
     }
 
@@ -301,9 +301,9 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
       await fetchPlaylists();
       setSelectedTracksToRemove(new Set());
       setEditingPlaylistId(null);
-      showToast(`Removed ${tracksToRemove.length} track(s) successfully!`, 'success');
+      showToast(`Removed ${tracksToRemove.length} song(s) successfully!`, 'success');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to remove tracks');
+      setError(err.response?.data?.error || 'Failed to remove songs');
       console.error(err);
     }
   };
@@ -325,9 +325,9 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
       await fetchPlaylists();
       showToast(`Removed "${track.name}" - won't show again`, 'success');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to exclude track');
+      setError(err.response?.data?.error || 'Failed to exclude song');
       console.error(err);
-      showToast('Failed to exclude track', 'error');
+      showToast('Failed to exclude song', 'error');
     }
   };
 
@@ -581,12 +581,12 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
 
     // Check if tracks are loaded
     if (!editOptionsPlaylist.tracks || editOptionsPlaylist.tracks.length === 0) {
-      setRefreshError('Could not load playlist tracks. Please try again or refresh the page.');
+      setRefreshError('Could not load playlist songs. Please try again or refresh the page.');
       return;
     }
 
     setRefreshing(true);
-    setRefreshingMessage('Generating new tracks...');
+    setRefreshingMessage('Generating new songs...');
     setRefreshError(null);
 
     try {
@@ -595,7 +595,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
       let currentTracks = editOptionsPlaylist.tracks;
       if (!currentTracks || currentTracks.length === 0) {
         try {
-          setRefreshingMessage('Fetching current playlist tracks...');
+          setRefreshingMessage('Fetching current playlist songs...');
           const tracksData = await playlistService.getPlaylistTracks(editOptionsPlaylist.playlistId, userId);
           currentTracks = tracksData.tracks;
         } catch (fetchErr) {
@@ -712,7 +712,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
           newTrackUris,
           currentTrackUris
         );
-        showToast(`Replaced ${currentTrackUris.length} tracks with ${newTrackUris.length} new ones!`, 'success');
+        showToast(`Replaced ${currentTrackUris.length} songs with ${newTrackUris.length} new ones!`, 'success');
       } else {
         // Append mode (both platforms), or Apple Music replace (API doesn't support removal)
         await playlistService.updatePlaylist(
@@ -722,8 +722,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
           []
         );
         const msg = isApple && manualRefreshMode === 'replace'
-          ? `Added ${newTrackUris.length} new tracks (Apple Music doesn't support removing tracks via API)`
-          : `Added ${newTrackUris.length} new tracks!`;
+          ? `Added ${newTrackUris.length} new songs (Apple Music doesn't support removing songs via API)`
+          : `Added ${newTrackUris.length} new songs!`;
         showToast(msg, 'success');
       }
 
@@ -967,7 +967,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                         </div>
                       ))
                     ) : (
-                      <p className="no-tracks">No tracks available</p>
+                      <p className="no-tracks">No songs available</p>
                     )}
                   </div>
                 </div>
@@ -1220,7 +1220,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
               {/* Shared Track Generation Settings Section */}
               <div className="modal-section">
-                <h3 className="section-title">Track Generation Settings</h3>
+                <h3 className="section-title">Song Generation Settings</h3>
                 <p className="section-description">Applied to auto-updates and main settings page</p>
 
                 <div className="form-group">

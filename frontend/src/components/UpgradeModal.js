@@ -8,7 +8,7 @@ const FEATURE_DESCRIPTIONS = {
   'Draft Playlists': 'Your unfinished playlists are saved automatically so you can come back and finish them anytime.',
   'Import Playlists': 'Import your existing Spotify or Apple Music playlists into the app to manage and auto-update them.',
   'Search': 'Search for any song or artist to use as inspiration when building your playlists.',
-  'Auto-Update': 'Schedule your playlists to refresh automatically — daily, weekly, or monthly — with fresh tracks.',
+  'Auto-Update': 'Schedule your playlists to refresh automatically — daily, weekly, or monthly — with fresh songs.',
   'Manual Refresh': 'Refresh any saved playlist on demand to get a new batch of songs whenever you want.',
   'Refinement Instructions': 'Save permanent instructions (e.g. "always avoid breakup songs") that apply to every future update.',
   'Dual Platform': 'Connect both Spotify and Apple Music at the same time to manage playlists across both services.',

@@ -15,7 +15,7 @@ const FREE_FEATURES = [
 
 const PAID_FEATURES = [
   { label: 'Unlimited generations', detail: 'Create as many playlists as you want' },
-  { label: 'Add More Songs', detail: 'Expand any playlist with fresh tracks anytime' },
+  { label: 'Add More Songs', detail: 'Expand any playlist with fresh songs anytime' },
   { label: 'Draft playlists', detail: 'Save unfinished playlists and come back later' },
   { label: 'Import playlists', detail: 'Bring in existing playlists from Spotify' },
   { label: 'Auto-update playlists', detail: 'Get new songs added daily, weekly, or monthly' },

@@ -30,14 +30,14 @@ function getGenreMessages(text) {
   if (t.includes('workout') || t.includes('gym') || t.includes('run') || t.includes('energy'))
     return ['Pumping up the energy...', 'Finding your rhythm...', 'Building momentum...'];
   if (t.includes('focus') || t.includes('study') || t.includes('work') || t.includes('concentrate'))
-    return ['Selecting focus-friendly tracks...', 'Building concentration vibes...', 'Finding the perfect flow...'];
+    return ['Selecting focus-friendly songs...', 'Building concentration vibes...', 'Finding the perfect flow...'];
   if (t.includes('party') || t.includes('dance') || t.includes('club'))
     return ['Turning up the heat...', 'Mixing the best drops...', 'Getting the crowd hyped...'];
   if (t.includes('love') || t.includes('romantic') || t.includes('date'))
     return ['Finding romantic melodies...', 'Crafting an intimate playlist...', 'Setting the mood...'];
   if (t.includes('sad') || t.includes('emotional') || t.includes('cry') || t.includes('breakup'))
-    return ['Gathering emotional tracks...', 'Finding cathartic songs...', 'Building an emotional journey...'];
-  return ['Discovering the perfect tracks...', 'Curating your playlist...', 'Blending songs harmoniously...', 'Building your soundtrack...'];
+    return ['Gathering emotional songs...', 'Finding cathartic songs...', 'Building an emotional journey...'];
+  return ['Discovering the perfect songs...', 'Curating your playlist...', 'Blending songs harmoniously...', 'Building your soundtrack...'];
 }
 
 export default function Generate() {
@@ -235,7 +235,7 @@ export default function Generate() {
         setGeneratedPlaylist(playlist);
         setPhase('tracks');
       } else {
-        setError('No tracks found. Please try a different prompt.');
+        setError('No songs found. Please try a different prompt.');
       }
       setSongCount(30);
       isGeneratingRef.current = false;
@@ -316,7 +316,7 @@ export default function Generate() {
     setChatLoading(true);
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
 
-    const msgs = ['Analyzing your request...', 'Finding the perfect tracks...', 'Curating your updated playlist...', 'Almost there...'];
+    const msgs = ['Analyzing your request...', 'Finding the perfect songs...', 'Curating your updated playlist...', 'Almost there...'];
     let i = 0;
     setRefineMessage(msgs[0]);
     refineIntervalRef.current = setInterval(() => {

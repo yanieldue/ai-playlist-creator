@@ -247,13 +247,13 @@ const STEPS = [
   {
     emoji: null,
     title: 'Like or Dislike Songs',
-    description: 'Thumbs up gets you more songs like that one. Thumbs down removes it and avoids similar tracks in future updates.',
+    description: 'Thumbs up gets you more songs like that one. Thumbs down removes it and avoids similar songs in future updates.',
     diagram: null,
     diagramComponent: LikeDislikeDiagram,
   },
   {
     emoji: null,
-    title: 'Edit and Lock Tracks',
+    title: 'Edit and Lock Songs',
     description: 'Click Edit Playlist to manage your playlist. Lock any song to keep it from being removed during refreshes. Unlock it anytime to let it rotate out naturally.',
     diagram: null,
     diagramComponent: EditDiagram,

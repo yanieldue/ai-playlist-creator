@@ -25,7 +25,7 @@ const FAQ = ({ onBack }) => {
     {
       id: 4,
       question: "How do automatic playlist refreshes work?",
-      answer: "When you enable auto-refresh for a playlist, it will automatically update with new songs at your chosen frequency (daily, weekly, or monthly). The playlist keeps its vibe while bringing in fresh tracks. You can configure this in the playlist edit settings."
+      answer: "When you enable auto-refresh for a playlist, it will automatically update with new songs at your chosen frequency (daily, weekly, or monthly). The playlist keeps its vibe while bringing in fresh songs. You can configure this in the playlist edit settings."
     },
     {
       id: 5,
@@ -45,12 +45,12 @@ const FAQ = ({ onBack }) => {
     {
       id: 8,
       question: "How do I lock a song so it stays in my playlist?",
-      answer: "Open a playlist and tap the lock icon next to any track. Locked songs are kept during manual and auto-refreshes. Tap the lock again to unlock and let the song rotate out naturally."
+      answer: "Open a playlist and tap the lock icon next to any song. Locked songs are kept during manual and auto-refreshes. Tap the lock again to unlock and let the song rotate out naturally."
     },
     {
       id: 9,
       question: "How do I remove songs from a playlist?",
-      answer: "In 'My Playlists', tap a playlist then tap 'Edit Playlist'. You'll see a remove button next to each song. You can also thumbs-down a song to remove it and avoid similar tracks in future updates."
+      answer: "In 'My Playlists', tap a playlist then tap 'Edit Playlist'. You'll see a remove button next to each song. You can also thumbs-down a song to remove it and avoid similar songs in future updates."
     },
     {
       id: 10,

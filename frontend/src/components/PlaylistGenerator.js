@@ -1004,7 +1004,7 @@ const PlaylistGenerator = () => {
       ],
       // Focus/Study
       focus: [
-        'Selecting focus-friendly tracks...',
+        'Selecting focus-friendly songs...',
         'Building concentration vibes...',
         'Crafting a productive atmosphere...',
         'Finding the perfect flow...',
@@ -1025,14 +1025,14 @@ const PlaylistGenerator = () => {
       ],
       // Sad/Emotional
       sad: [
-        'Gathering emotional tracks...',
+        'Gathering emotional songs...',
         'Finding cathartic songs...',
         'Building an emotional journey...',
         'Curating deep feelings...',
       ],
       // Default messages
       default: [
-        'Discovering the perfect tracks...',
+        'Discovering the perfect songs...',
         'Curating your playlist...',
         'Blending songs harmoniously...',
         'Building your soundtrack...',
@@ -1269,7 +1269,7 @@ const PlaylistGenerator = () => {
     };
 
     setGeneratedPlaylist(updatedPlaylist);
-    showToast('Track removed', 'success');
+    showToast('Song removed', 'success');
 
     // Auto-save updated draft to database
     try {
@@ -1301,7 +1301,7 @@ const PlaylistGenerator = () => {
     if (!generatedPlaylist) return;
 
     if (generatedPlaylist.tracks.length === 0) {
-      setError('Please keep at least one track in the playlist');
+      setError('Please keep at least one song in the playlist');
       return;
     }
 
@@ -1524,7 +1524,7 @@ const PlaylistGenerator = () => {
     // Refine loading messages
     const refineMessages = [
       'Analyzing your request...',
-      'Finding the perfect tracks...',
+      'Finding the perfect songs...',
       'Curating your updated playlist...',
       'Almost there...',
       'Putting the finishing touches...'
@@ -1651,7 +1651,7 @@ const PlaylistGenerator = () => {
 
           const lowerText = text.toLowerCase();
           if (lowerText.includes('recent') || lowerText.includes('new release') || lowerText.includes('latest')) return 'recent releases';
-          if (lowerText.includes('classic') || lowerText.includes('oldies') || lowerText.includes('throwback')) return 'classic tracks';
+          if (lowerText.includes('classic') || lowerText.includes('oldies') || lowerText.includes('throwback')) return 'classic songs';
           return null;
         };
 
@@ -1721,7 +1721,7 @@ const PlaylistGenerator = () => {
 
         // Add genre
         if (genre) {
-          parts.push(`${genre} tracks`);
+          parts.push(`${genre} songs`);
         }
 
         // Build artist string
@@ -1754,7 +1754,7 @@ const PlaylistGenerator = () => {
           } else if (lowerMessage.includes('more') || lowerMessage.includes('add')) {
             response = "Here's your updated playlist with the new additions.";
           } else if (lowerMessage.includes('replace') || lowerMessage.includes('swap')) {
-            response = "Done! I've swapped out those tracks.";
+            response = "Done! I've swapped out those songs.";
           } else {
             response = "Here's your updated playlist.";
           }
@@ -1968,7 +1968,7 @@ const PlaylistGenerator = () => {
 
   const handleModalNext = () => {
     if (generatedPlaylist.tracks.length === 0) {
-      setError('Please keep at least one track in the playlist');
+      setError('Please keep at least one song in the playlist');
       return;
     }
     setError('');
