@@ -4539,7 +4539,7 @@ app.get('/api/analyze-mix', async (req, res) => {
 
     // ── Step 2: Description parsing ──────────────────────────────────────────
     log(`video title="${videoTitle}" duration=${videoDuration}s`);
-    send({ type: 'status', message: 'Scanning description for tracklist...' });
+    send({ type: 'status', message: 'Looking for songs...' });
     const { tracks: tracklist, contextArtist } = await parseMixTracklist(videoTitle, videoDescription, log);
 
     if (tracklist.length > 0) {
@@ -4562,7 +4562,7 @@ app.get('/api/analyze-mix', async (req, res) => {
 
     // ── Step 3: Try top comments ─────────────────────────────────────────────
     if (process.env.YOUTUBE_API_KEY) {
-      send({ type: 'status', message: 'No tracklist in description — checking comments...' });
+      send({ type: 'status', message: 'Still looking...' });
       try {
         const commentsResp = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
           params: { videoId, part: 'snippet', order: 'relevance', maxResults: 20, key: process.env.YOUTUBE_API_KEY },
