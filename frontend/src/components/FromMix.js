@@ -252,8 +252,9 @@ export default function FromMix() {
             </div>
             <div className="generate-tips-card">
               <div className="generate-tips-title">How to use</div>
-              <div>• Only YouTube links are supported</div>
+              <div>• Only YouTube links are supported for now. More platforms coming soon.</div>
               <div style={{ marginTop: 4 }}>• Works best with mixes that include a tracklist in the description or comments</div>
+              <div style={{ marginTop: 4 }}>• Support for mixes without a tracklist is in the works</div>
             </div>
             {error && (
               <div className="generate-error-box" style={{ marginTop: 12 }}>
