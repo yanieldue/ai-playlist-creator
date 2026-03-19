@@ -4471,8 +4471,14 @@ app.get('/api/analyze-mix', async (req, res) => {
     // "best guess" false positives when a song isn't available.
     const STOPWORDS = new Set(['the','a','an','in','on','at','to','for','of','and','or','but','is','it','be','me','my','you','we','he','she','they','just','not','so','if','by','as','with','from','up','do','did','was','are','has','had','will','no','can','its','our','out','his','her','now','new','all','one','two','feat','ft']);
     const sigWords = (s) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w));
+    const hasNonAscii = (s) => /[^\x00-\x7F]/.test(s);
     const titleMatches = (searchTitle, resultTitle) => {
-      if (/[^\x00-\x7F]/.test(searchTitle)) return true; // non-ASCII: can't reliably compare, trust the result
+      if (hasNonAscii(searchTitle)) {
+        // For non-ASCII titles (Japanese, Korean, etc.), only accept if the result
+        // also contains non-ASCII characters — an English result for a Japanese
+        // search is always a wrong match.
+        return hasNonAscii(resultTitle);
+      }
       const qWords = sigWords(searchTitle);
       if (qWords.length === 0) return true; // too short to check
       const rWords = new Set(sigWords(resultTitle));
