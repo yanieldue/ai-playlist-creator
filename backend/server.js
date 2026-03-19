@@ -4560,7 +4560,43 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    // No tracklist found
+    // ── Step 3: Try top comments ─────────────────────────────────────────────
+    if (process.env.YOUTUBE_API_KEY) {
+      send({ type: 'status', message: 'No tracklist in description — checking comments...' });
+      try {
+        const commentsResp = await axios.get('https://www.googleapis.com/youtube/v3/commentThreads', {
+          params: { videoId, part: 'snippet', order: 'relevance', maxResults: 20, key: process.env.YOUTUBE_API_KEY },
+          timeout: 8000,
+        });
+        const comments = (commentsResp.data.items || [])
+          .map(item => item.snippet.topLevelComment.snippet.textDisplay)
+          .join('\n\n---\n\n');
+
+        if (comments.trim()) {
+          log(`fetched ${commentsResp.data.items?.length || 0} comments, parsing for tracklist`);
+          const { tracks: commentTracklist, contextArtist: commentContextArtist } = await parseMixTracklist(videoTitle, comments, log);
+
+          if (commentTracklist.length > 0) {
+            log(`tracklist found in comments: ${commentTracklist.length} tracks`);
+            if (commentContextArtist) {
+              commentTracklist.forEach(t => { if (!t.artist) t.artist = commentContextArtist; });
+            }
+            send({ type: 'source', method: 'description', total: commentTracklist.length });
+            for (const track of commentTracklist) {
+              if (closed) break;
+              await searchAndEmit(track.title, track.artist);
+            }
+            send({ type: 'done' });
+            return res.end();
+          }
+          log('no tracklist found in comments');
+        }
+      } catch (e) {
+        log(`comments fetch failed: ${e.message}`);
+      }
+    }
+
+    // No tracklist found anywhere
     send({ type: 'error', message: "No tracklist found in this video's description. Identifying songs without a tracklist is a feature we're currently working on. For now, this only works with mixes that include a tracklist." });
     log('no tracklist found, ending');
     return res.end();
