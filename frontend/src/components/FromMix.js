@@ -23,6 +23,8 @@ export default function FromMix() {
   const [statusMsg, setStatusMsg]     = useState('');
   const [progress, setProgress]       = useState(null);
   const [source, setSource]           = useState(null);
+  const [unmatched, setUnmatched]     = useState([]);
+  const [totalExpected, setTotalExpected] = useState(null);
   const [error, setError]             = useState('');
   const [toasts, setToasts]           = useState([]);
   const [editedName, setEditedName]   = useState('');
@@ -83,6 +85,8 @@ export default function FromMix() {
     setPhase('analyzing');
     setTracks([]);
     setRemovedIds(new Set());
+    setUnmatched([]);
+    setTotalExpected(null);
     setStatusMsg('Connecting...');
     setError('');
     setProgress(null);
@@ -107,6 +111,7 @@ export default function FromMix() {
           break;
         case 'source':
           setSource(data.method);
+          if (data.total) setTotalExpected(data.total);
           setStatusMsg(data.method === 'audio'
             ? 'No tracklist found — scanning audio for songs...'
             : `Found tracklist · ${data.total} songs`);
@@ -116,6 +121,7 @@ export default function FromMix() {
           setStatusMsg('');
           break;
         case 'unmatched':
+          setUnmatched(prev => [...prev, data]);
           break;
         case 'progress': {
           setProgress(data);
@@ -376,6 +382,12 @@ export default function FromMix() {
       {/* Tracks footer */}
       {phase === 'tracks' && visibleTracks.length > 0 && (
         <div className="generate-footer">
+          {totalExpected && unmatched.length > 0 && (
+            <div style={{ fontSize: '0.82rem', color: '#8e8e93', textAlign: 'center', marginBottom: 10, lineHeight: 1.4 }}>
+              We found {visibleTracks.length} out of {totalExpected} songs on {activePlatform === 'apple' ? 'Apple Music' : 'Spotify'}.{' '}
+              {unmatched.map(t => t.title).join(', ')} {unmatched.length === 1 ? 'was' : 'were'} not available.
+            </div>
+          )}
           <button className="generate-create-btn" onClick={handleCreate}>
             Create
           </button>
