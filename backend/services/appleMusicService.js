@@ -312,6 +312,7 @@ class AppleMusicService {
 
       return {
         id: track.id,
+        catalogId: catalogId || null,
         name: track.attributes.name,
         uri: `apple:track:${track.id}`,
         artists: [{
@@ -658,13 +659,14 @@ class AppleMusicService {
    * @param {Array<string>} trackIds - Array of track URIs or IDs
    */
   async replacePlaylistTracks(userToken, playlistId, trackIds) {
-    // Convert URIs to IDs if needed (strip apple:track: prefix)
+    // trackIds should be catalog IDs (numeric strings) to match the format used by addTracksToPlaylist.
+    // Strip apple:track: prefix if present, then strip library ID prefix (i.) to get the catalog ID.
     const ids = trackIds.map(track => {
-      if (typeof track === 'string' && track.startsWith('apple:track:')) {
-        return track.replace('apple:track:', '');
-      }
-      return track;
-    });
+      let id = typeof track === 'string' && track.startsWith('apple:track:')
+        ? track.replace('apple:track:', '')
+        : track;
+      return id;
+    }).filter(Boolean);
 
     await this.request(
       `/me/library/playlists/${playlistId}/tracks`,
@@ -674,7 +676,7 @@ class AppleMusicService {
         data: {
           data: ids.map(id => ({
             id,
-            type: 'library-songs'
+            type: 'songs'
           }))
         }
       }
