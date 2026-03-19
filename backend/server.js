@@ -4353,11 +4353,16 @@ async function scanWithACRCloud(youtubeUrl, onStatus, log = console.log) {
   form.append('data_type', 'platforms');
   form.append('url', youtubeUrl);
 
-  const submitResp = await axios.post(
-    `https://${host}/api/fs-containers/${containerId}/files`,
-    form,
-    { ...auth, headers: { ...auth.headers, ...form.getHeaders() } }
-  );
+  const submitUrl = `https://${host}/api/fs-containers/${containerId}/files`;
+  log(`ACRCloud POST ${submitUrl}`);
+  let submitResp;
+  try {
+    submitResp = await axios.post(submitUrl, form, { ...auth, headers: { ...auth.headers, ...form.getHeaders() } });
+  } catch (e) {
+    const body = JSON.stringify(e.response?.data);
+    log(`ACRCloud submit HTTP ${e.response?.status}: ${body}`);
+    throw new Error(`ACRCloud submit HTTP ${e.response?.status}: ${body}`);
+  }
 
   const fileId = submitResp.data?.data?.id || submitResp.data?.id;
   if (!fileId) throw new Error(`ACRCloud submit failed: ${JSON.stringify(submitResp.data)}`);
