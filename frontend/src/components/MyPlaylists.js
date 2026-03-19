@@ -959,7 +959,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 title="Unlike"
                               >
                                 <span className="track-thumb-circle">
-                                  <Icons.ThumbsUp size={14} color="white" />
+                                  <Icons.ThumbsUp size={16} color="white" />
                                 </span>
                               </button>
                             ) : (
@@ -978,7 +978,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             >
                               {(playlist.lockedTracks || []).includes(track.id) ? (
                                 <span className="track-thumb-circle">
-                                  <Icons.Lock size={14} color="white" />
+                                  <Icons.Lock size={16} color="white" />
                                 </span>
                               ) : (
                                 <Icons.Lock size={16} />
