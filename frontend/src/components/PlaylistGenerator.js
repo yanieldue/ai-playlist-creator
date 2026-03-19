@@ -468,6 +468,20 @@ const PlaylistGenerator = () => {
             localStorage.setItem('connectedPlatforms', JSON.stringify(accountInfo.connectedPlatforms));
             if (accountInfo.plan) localStorage.setItem('userPlan', accountInfo.plan);
 
+            // Sync settings from DB (so they work across devices)
+            if (accountInfo.allowExplicit !== undefined) {
+              localStorage.setItem('allowExplicit', JSON.stringify(accountInfo.allowExplicit));
+              setAllowExplicit(accountInfo.allowExplicit);
+            }
+            if (accountInfo.darkMode !== undefined) {
+              localStorage.setItem('darkMode', JSON.stringify(accountInfo.darkMode));
+              if (accountInfo.darkMode) {
+                document.documentElement.classList.add('dark-mode');
+              } else {
+                document.documentElement.classList.remove('dark-mode');
+              }
+            }
+
             // Update platform userIds from backend (source of truth)
             if (accountInfo.spotifyUserId) {
               console.log('PlaylistGenerator: Updating spotifyUserId from backend:', accountInfo.spotifyUserId);

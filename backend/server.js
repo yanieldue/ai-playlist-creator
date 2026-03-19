@@ -2484,6 +2484,8 @@ app.get('/api/account/:email', async (req, res) => {
       plan: dbUser.plan || 'free',
       trialUsed: dbUser.trialUsed || false,
       productTourCompleted: dbUser.productTourCompleted || false,
+      allowExplicit: dbUser.allowExplicit !== false,
+      darkMode: dbUser.darkMode || false,
     });
   } catch (error) {
     console.error('Get account error:', error);
