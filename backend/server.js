@@ -7194,28 +7194,25 @@ app.get('/api/playlists/:userId', async (req, res) => {
             const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
             const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
 
-            const tracksWithDetails = tracks.map(track => {
-              const trackId = track.id;
-              let reaction = null;
-              if (likedSongsMap.has(trackId)) {
-                reaction = 'thumbsUp';
-              } else if (dislikedSongsMap.has(trackId)) {
-                reaction = 'thumbsDown';
-              }
+            const tracksWithDetails = tracks
+              .filter(track => !dislikedSongsMap.has(track.id)) // hide disliked songs (can't remove via API)
+              .map(track => {
+                const trackId = track.id;
+                const reaction = likedSongsMap.has(trackId) ? 'thumbsUp' : null;
 
-              return {
-                id: trackId,
-                name: track.name,
-                artist: track.artists[0].name,
-                uri: track.uri,
-                album: track.album.name,
-                image: track.album.images?.[0]?.url || null,
-                externalUrl: track.url || null,
-                explicit: track.explicit,
-                platform: 'apple',
-                reaction: reaction
-              };
-            });
+                return {
+                  id: trackId,
+                  name: track.name,
+                  artist: track.artists[0].name,
+                  uri: track.uri,
+                  album: track.album.name,
+                  image: track.album.images?.[0]?.url || null,
+                  externalUrl: track.url || null,
+                  explicit: track.explicit,
+                  platform: 'apple',
+                  reaction: reaction
+                };
+              });
 
             return {
               ...playlist,
@@ -7630,24 +7627,6 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
         return res.status(500).json({ error: 'Apple Music service unavailable' });
       }
       const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
-
-      if (tracksToRemove && tracksToRemove.length > 0) {
-        // Apple Music doesn't support individual track deletion; use replace instead.
-        // Fetch live tracks (library IDs) and rebuild the list without the removed ones.
-        const urisToRemove = new Set(tracksToRemove.map(t => t.uri || t));
-        const liveTracks = await appleMusicApiInstance.getPlaylistTracks(appleTokens.access_token, playlistId);
-        const remainingIds = liveTracks
-          .filter(t => !urisToRemove.has(`apple:track:${t.id}`))
-          .map(t => t.id);
-        await appleMusicApiInstance.replacePlaylistTracks(appleTokens.access_token, playlistId, remainingIds);
-        console.log(`Removed ${tracksToRemove.length} track(s) from Apple Music playlist ${playlistId} via replace`);
-        // Keep the DB record in sync
-        if (playlistRecord) {
-          playlistRecord.trackUris = remainingIds.map(id => `apple:track:${id}`);
-          playlistRecord.trackCount = remainingIds.length;
-          await savePlaylist(emailUserId, playlistRecord);
-        }
-      }
 
       if (tracksToAdd && tracksToAdd.length > 0) {
         // Convert apple:track:ID URIs to plain IDs
@@ -8195,19 +8174,8 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
           const platformService = new PlatformService();
           const reactionPlatform = platformService.getPlatform(userId);
           if (reactionPlatform === 'apple') {
-            // Apple Music: fetch live tracks (library IDs) and replace without the disliked song.
-            // We can't rely on playlist.trackUris because it stores catalog IDs from creation time,
-            // while the trackUri from the frontend is a library ID — they don't match.
-            const liveTracks = await platformService.getPlaylistTracks(userId, playlist.playlistId, reactionTokens);
-            const remainingIds = liveTracks
-              .filter(t => `apple:track:${t.id}` !== trackUri)
-              .map(t => t.id);
-            const appleMusicApi = platformService.getAppleMusicApi(reactionTokens);
-            await appleMusicApi.replacePlaylistTracks(reactionTokens.access_token, playlist.playlistId, remainingIds);
-            // Keep playlist.trackUris in sync with the new state
-            playlist.trackUris = remainingIds.map(id => `apple:track:${id}`);
-            playlist.trackCount = remainingIds.length;
-            await savePlaylist(userId, playlist);
+            // Apple Music's REST API does not support removing individual tracks from library playlists.
+            // The song is hidden from our app view via dislikedSongs filtering in the playlist loader.
           } else {
             await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], reactionTokens);
           }
