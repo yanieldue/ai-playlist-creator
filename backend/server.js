@@ -6199,7 +6199,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 const pl = upa[upi];
                 if (!pl.songHistory) pl.songHistory = [];
                 pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
-                if (pl.songHistory.length > 200) pl.songHistory = pl.songHistory.slice(-200);
+                if (pl.songHistory.length > 500) pl.songHistory = pl.songHistory.slice(-500);
                 userPlaylists.set(userId, upa);
                 await savePlaylist(userId, pl);
                 console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
@@ -6691,7 +6691,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
           const pl = upa[upi];
           if (!pl.songHistory) pl.songHistory = [];
           pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
-          if (pl.songHistory.length > 200) pl.songHistory = pl.songHistory.slice(-200);
+          if (pl.songHistory.length > 500) pl.songHistory = pl.songHistory.slice(-500);
           userPlaylists.set(userId, upa);
           await savePlaylist(userId, pl);
           console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
