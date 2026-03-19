@@ -2662,7 +2662,7 @@ const PlaylistGenerator = () => {
                 className={`create-fab-btn${showCreateMenu ? ' active' : ''}`}
                 onClick={() => setShowCreateMenu(v => !v)}
               >
-                <Icons.Plus size={16} />
+                <Icons.Plus size={16} strokeWidth={3} />
                 Create
               </button>
               {errorInfo && (
