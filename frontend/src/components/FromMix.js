@@ -251,10 +251,9 @@ export default function FromMix() {
               <p>Paste a YouTube DJ mix link. We'll find every song.</p>
             </div>
             <div className="generate-tips-card">
-              <div className="generate-tips-title">How it works</div>
-              <div>• We scan the description for a tracklist first</div>
-              <div style={{ marginTop: 4 }}>• If no tracklist, we scan the audio to identify songs</div>
-              <div style={{ marginTop: 4 }}>• Audio scanning requires <em>AUDD_API_KEY</em> on the server</div>
+              <div className="generate-tips-title">How to use</div>
+              <div>• Only YouTube links are supported</div>
+              <div style={{ marginTop: 4 }}>• Works best with mixes that include a tracklist in the description or comments</div>
             </div>
             {error && (
               <div className="generate-error-box" style={{ marginTop: 12 }}>

@@ -138,7 +138,7 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
           <div className="mix-input-phase">
             <div className="mix-title">Create from Mix</div>
             <p className="mix-subtitle">
-              Paste a YouTube DJ mix link. We'll read the tracklist or scan the audio to find every song.
+              Paste a YouTube DJ mix link. Works best with mixes that include a tracklist in the description or comments.
             </p>
             <input
               type="url"
@@ -244,7 +244,7 @@ export default function MixAnalyzerModal({ isOpen, onClose, onTracksFound, userI
               )}
               {phase === 'done' && tracks.length === 0 && (
                 <div className="mix-empty-state">
-                  No songs could be identified. The mix may need <code>AUDD_API_KEY</code> and <code>yt-dlp</code> for audio scanning.
+                  No songs could be identified. This works best with mixes that include a tracklist in the description or comments.
                 </div>
               )}
             </div>
