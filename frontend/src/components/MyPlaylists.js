@@ -703,7 +703,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
         userId,
         platform,
         true, // allowExplicit
-        false,
         manualRefreshSongCount,
         excludeUris,
         editOptionsPlaylist.playlistId // Pass playlistId so backend can load song history
