@@ -4337,6 +4337,101 @@ function parseIsoDuration(iso) {
   return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
 }
 
+// Download and parse YouTube auto-generated subtitles into timestamped text segments
+async function getTranscript(youtubeUrl, log = console.log) {
+  const fs = require('fs');
+  const tmpBase = `/tmp/mix_${Date.now()}`;
+  const vttPath = `${tmpBase}.en.vtt`;
+
+  try {
+    await new Promise((resolve, reject) => {
+      const proc = spawn('python3', [
+        '-m', 'yt_dlp',
+        '--write-auto-sub',
+        '--skip-download',
+        '--sub-lang', 'en',
+        '--sub-format', 'vtt',
+        '--output', tmpBase,
+        '--quiet',
+        youtubeUrl,
+      ]);
+      proc.on('close', code => code === 0 ? resolve() : reject(new Error(`yt-dlp subs exited ${code}`)));
+      proc.on('error', err => reject(new Error(`yt-dlp spawn error: ${err.code}`)));
+      setTimeout(() => { proc.kill(); reject(new Error('yt-dlp subs timeout')); }, 30000);
+    });
+
+    if (!fs.existsSync(vttPath)) {
+      log('no subtitle file produced (video may have no auto-captions)');
+      return null;
+    }
+
+    const vtt = fs.readFileSync(vttPath, 'utf8');
+    try { fs.unlinkSync(vttPath); } catch {}
+
+    // Parse VTT into {time, text} segments, dropping music-only lines
+    const segments = [];
+    let currentTime = null;
+    let currentText = [];
+    for (const line of vtt.split('\n')) {
+      const timeMatch = line.match(/(\d{2}:\d{2}:\d{2}\.\d{3}) --> /);
+      if (timeMatch) {
+        if (currentTime !== null && currentText.length > 0) {
+          const text = currentText.join(' ').trim().replace(/<[^>]+>/g, '');
+          if (text && !/^[♪\s]+$/.test(text)) segments.push({ time: currentTime, text });
+        }
+        const [h, m, s] = timeMatch[1].split(':');
+        currentTime = +h * 3600 + +m * 60 + parseFloat(s);
+        currentText = [];
+      } else if (line.trim() && !/^(WEBVTT|Kind:|Language:)/.test(line) && !/^\d+$/.test(line.trim())) {
+        currentText.push(line.trim());
+      }
+    }
+
+    log(`transcript segments: ${segments.length}`);
+    return segments.length >= 5 ? segments : null;
+  } catch (e) {
+    log(`getTranscript failed: ${e.message}`);
+    return null;
+  }
+}
+
+// Identify songs from transcript lyrics using Claude
+async function identifySongsFromTranscript(segments, log = console.log) {
+  // Sample up to 300 segments evenly to stay within token limits
+  const step = Math.ceil(segments.length / 300);
+  const sampled = segments.filter((_, i) => i % step === 0);
+
+  const transcriptText = sampled
+    .map(s => `[${String(Math.floor(s.time / 60)).padStart(2, '0')}:${String(Math.floor(s.time % 60)).padStart(2, '0')}] ${s.text}`)
+    .join('\n');
+
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `This is a timestamped transcript from a DJ mix video. Based on the lyrics, identify each distinct song and approximately when it starts. Songs in a mix typically last 3–5 minutes each.
+
+Return ONLY a JSON array, no markdown:
+[{"title":"Song Title","artist":"Artist Name","start_time_seconds":0},...]
+
+Return [] if you cannot confidently identify any songs.
+
+Transcript:
+${transcriptText.slice(0, 6000)}`,
+      }],
+    });
+    const raw = resp.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    log(`transcript song identification: ${raw.slice(0, 200).replace(/\n/g, ' ')}`);
+    const songs = JSON.parse(raw);
+    return Array.isArray(songs) ? songs.filter(s => s.title) : [];
+  } catch (e) {
+    log(`identifySongsFromTranscript failed: ${e.message}`);
+    return [];
+  }
+}
+
 async function parseMixTracklist(videoTitle, description, log = console.log) {
   const combined = `${videoTitle || ''}\n\n${description || ''}`;
   log(`description length=${(description || '').length} preview="${(description || '').slice(0, 200).replace(/\n/g, ' ')}"`);
@@ -4584,7 +4679,26 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    // ── Step 3: Gemini video analysis fallback ───────────────────────────────
+    // ── Step 3: Transcript-based identification ──────────────────────────────
+    send({ type: 'status', message: 'No tracklist found — trying video transcript...' });
+    const transcriptSegments = await getTranscript(youtubeUrl, log);
+    if (transcriptSegments) {
+      send({ type: 'status', message: 'Transcript found — identifying songs from lyrics...' });
+      const transcriptTracks = await identifySongsFromTranscript(transcriptSegments, log);
+      if (transcriptTracks.length > 0) {
+        log(`transcript identified ${transcriptTracks.length} songs`);
+        send({ type: 'source', method: 'transcript', total: transcriptTracks.length });
+        for (const track of transcriptTracks) {
+          if (closed) break;
+          await searchAndEmit(track.title, track.artist);
+        }
+        send({ type: 'done' });
+        return res.end();
+      }
+      log('transcript found but no songs identified, falling back to Gemini');
+    }
+
+    // ── Step 4: Gemini video analysis fallback ───────────────────────────────
     send({ type: 'source', method: 'gemini', message: 'No tracklist found — using AI to identify songs...' });
 
     if (!process.env.GEMINI_API_KEY) {
