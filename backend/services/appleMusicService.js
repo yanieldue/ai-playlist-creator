@@ -335,6 +335,21 @@ class AppleMusicService {
   }
 
   /**
+   * Delete a library playlist entirely.
+   * @param {string} userToken - User's music token
+   * @param {string} playlistId - Library playlist ID
+   */
+  async deletePlaylist(userToken, playlistId) {
+    await this.request(
+      `/me/library/playlists/${playlistId}`,
+      userToken,
+      { method: 'DELETE' }
+    );
+    console.log(`✓ Deleted Apple Music playlist ${playlistId}`);
+    return { success: true };
+  }
+
+  /**
    * Remove specific tracks from a library playlist using the DELETE endpoint.
    * Apple Music identifies tracks to delete by their library ID and position index.
    * @param {string} userToken - User's music token

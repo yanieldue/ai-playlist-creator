@@ -8667,6 +8667,45 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
     userPlaylists.set(userId, userPlaylistHistory);
     await deletePlaylist(userId, playlistId);
 
+    // Also delete from the platform if it exists there
+    if (deletedPlaylist.platform === 'apple') {
+      try {
+        const emailUserId = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+        const applePlatformUserId = emailUserId ? await resolvePlatformUserId(emailUserId, 'apple') : null;
+        const appleTokens = applePlatformUserId ? await getUserTokens(applePlatformUserId) : null;
+        const appleMusicDevToken = generateAppleMusicToken();
+        if (appleTokens && appleMusicDevToken) {
+          const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
+          await appleMusicApiInstance.deletePlaylist(appleTokens.access_token, playlistId);
+          console.log(`Deleted Apple Music playlist ${playlistId} from user's library`);
+        }
+      } catch (platformErr) {
+        // Non-critical — playlist is already removed from Fins
+        console.log(`Could not delete Apple Music playlist from library: ${platformErr.message}`);
+      }
+    } else if (deletedPlaylist.platform === 'spotify' || !deletedPlaylist.platform) {
+      try {
+        const platformUserId = isEmailBasedUserId(userId)
+          ? await resolvePlatformUserId(userId, 'spotify')
+          : userId;
+        const tokens = platformUserId ? await getUserTokens(platformUserId) : null;
+        if (tokens) {
+          const userSpotifyApi = new SpotifyWebApi({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback'
+          });
+          userSpotifyApi.setAccessToken(tokens.access_token);
+          userSpotifyApi.setRefreshToken(tokens.refresh_token);
+          try { await userSpotifyApi.refreshAccessToken().then(d => userSpotifyApi.setAccessToken(d.body.access_token)); } catch {}
+          await userSpotifyApi.unfollowPlaylist(playlistId);
+          console.log(`Unfollowed Spotify playlist ${playlistId}`);
+        }
+      } catch (platformErr) {
+        console.log(`Could not unfollow Spotify playlist: ${platformErr.message}`);
+      }
+    }
+
     // Also remove from saved playlists if it exists there
     let savedPlaylists = userSavedPlaylists.get(userId) || [];
     savedPlaylists = savedPlaylists.filter(id => id !== playlistId);
