@@ -4337,76 +4337,6 @@ function parseIsoDuration(iso) {
   return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
 }
 
-// Submit a YouTube URL to ACRCloud File Scanning and poll for results.
-// Returns an array of {title, artist} or throws on failure.
-async function scanWithACRCloud(youtubeUrl, onStatus, log = console.log) {
-  const host        = process.env.ACRCLOUD_FS_HOST;
-  const containerId = process.env.ACRCLOUD_CONTAINER_ID;
-  const accessKey   = process.env.ACRCLOUD_ACCESS_KEY;
-  const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
-  const basicToken  = Buffer.from(`${accessKey}:${accessSecret}`).toString('base64');
-  const auth        = { headers: { Authorization: `Basic ${basicToken}` } };
-
-  // ── Submit URL ────────────────────────────────────────────────────────────
-  const FormData = require('form-data');
-  const form = new FormData();
-  form.append('data_type', 'platforms');
-  form.append('url', youtubeUrl);
-
-  const submitUrl = `https://${host}/api/fs-containers/${containerId}/files`;
-  log(`ACRCloud POST ${submitUrl}`);
-  let submitResp;
-  try {
-    submitResp = await axios.post(submitUrl, form, { ...auth, headers: { ...auth.headers, ...form.getHeaders() } });
-  } catch (e) {
-    const body = JSON.stringify(e.response?.data);
-    log(`ACRCloud submit HTTP ${e.response?.status}: ${body}`);
-    throw new Error(`ACRCloud submit HTTP ${e.response?.status}: ${body}`);
-  }
-
-  const fileId = submitResp.data?.data?.id || submitResp.data?.id;
-  if (!fileId) throw new Error(`ACRCloud submit failed: ${JSON.stringify(submitResp.data)}`);
-  log(`ACRCloud submitted file_id=${fileId}`);
-
-  // ── Poll for completion (up to ~10 min, every 15s) ────────────────────────
-  for (let i = 0; i < 40; i++) {
-    await new Promise(r => setTimeout(r, 15000));
-    if (onStatus) onStatus(`Scanning audio for songs... (${Math.round((i + 1) * 15 / 60)} min)`);
-
-    const pollResp = await axios.get(
-      `https://${host}/api/fs-containers/${containerId}/files/${fileId}`,
-      auth
-    );
-    const fileData = pollResp.data?.data;
-    const status   = fileData?.status;
-    log(`ACRCloud poll ${i + 1}: status=${status}`);
-
-    if (status === 'success' || status === 3) {
-      log(`ACRCloud raw result: ${JSON.stringify(fileData).slice(0, 400)}`);
-      const results = fileData.results || fileData.result || [];
-      const seen    = new Set();
-      const songs   = [];
-
-      for (const r of results) {
-        const music = r.metadata?.music?.[0];
-        if (!music || (music.score || 0) < 70) continue;
-        const key = `${music.title}|${music.artists?.[0]?.name || ''}`.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        songs.push({ title: music.title, artist: music.artists?.[0]?.name || '' });
-      }
-
-      log(`ACRCloud identified ${songs.length} unique songs`);
-      return songs;
-    }
-
-    if (status === 'error' || status === 4) {
-      throw new Error(`ACRCloud scan failed: ${JSON.stringify(fileData)}`);
-    }
-  }
-
-  throw new Error('ACRCloud scan timed out after 10 minutes');
-}
 
 async function parseMixTracklist(videoTitle, description, log = console.log) {
   const combined = `${videoTitle || ''}\n\n${description || ''}`;
@@ -4621,31 +4551,6 @@ app.get('/api/analyze-mix', async (req, res) => {
         log(`applied context artist "${contextArtist}" to tracks without an artist`);
       }
 
-      // If artists are still missing after contextArtist, use Gemini to fill them in
-      const missingArtists = tracklist.every(t => !t.artist);
-      if (missingArtists && process.env.GEMINI_API_KEY) {
-        send({ type: 'status', message: 'Tracklist found but no artists — using AI to identify artists...' });
-        try {
-          const { GoogleGenerativeAI } = require('@google/generative-ai');
-          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' }, { timeout: 180000 });
-          const keepalive = setInterval(() => { if (!closed) send({ type: 'status', message: 'Still identifying artists...' }); }, 15000);
-          const titleList = tracklist.map((t, i) => `${i + 1}. ${t.title}`).join('\n');
-          const result = await model.generateContent([
-            { fileData: { mimeType: 'video/mp4', fileUri: youtubeUrl } },
-            { text: `This video contains these songs:\n${titleList}\n\nFor each song, identify the artist. Return ONLY a JSON array matching the same order:\n[{"title":"...","artist":"..."},...]\nNo markdown, no explanation.` },
-          ]);
-          clearInterval(keepalive);
-          let raw = result.response.text().trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-          const filled = JSON.parse(raw);
-          if (Array.isArray(filled) && filled.length === tracklist.length) {
-            filled.forEach((t, i) => { if (t.artist) tracklist[i].artist = t.artist; });
-          }
-        } catch (e) {
-          log(`Gemini artist fill failed: ${e.message}`);
-        }
-      }
-
       send({ type: 'source', method: 'description', total: tracklist.length });
       for (const track of tracklist) {
         if (closed) break;
@@ -4655,90 +4560,10 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    // ── Step 3: ACRCloud audio fingerprinting ────────────────────────────────
-    if (process.env.ACRCLOUD_ACCESS_KEY && process.env.ACRCLOUD_FS_HOST && process.env.ACRCLOUD_CONTAINER_ID) {
-      send({ type: 'status', message: 'No tracklist found — scanning audio to identify songs...' });
-      try {
-        const acrTracks = await scanWithACRCloud(
-          youtubeUrl,
-          (msg) => { if (!closed) send({ type: 'status', message: msg }); },
-          log
-        );
-        if (acrTracks.length > 0) {
-          log(`ACRCloud found ${acrTracks.length} songs`);
-          send({ type: 'source', method: 'acr', total: acrTracks.length });
-          for (const track of acrTracks) {
-            if (closed) break;
-            await searchAndEmit(track.title, track.artist);
-          }
-          send({ type: 'done' });
-          return res.end();
-        }
-        log('ACRCloud returned no songs, falling back to Gemini');
-      } catch (e) {
-        log(`ACRCloud error: ${e.message}`);
-      }
-    }
-
-    // ── Step 4: Gemini video analysis fallback ───────────────────────────────
-    send({ type: 'source', method: 'gemini', message: 'No tracklist found — using AI to identify songs...' });
-
-    if (!process.env.GEMINI_API_KEY) {
-      send({ type: 'error', message: 'No tracklist found in the description. Add GEMINI_API_KEY to enable AI song identification for mixes without tracklistings.' });
-      return res.end();
-    }
-
-    send({ type: 'status', message: 'Analyzing video with Gemini AI... (this may take 30–60 seconds)' });
-
-    try {
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-3-pro-preview' }, { timeout: 180000 });
-
-      // Send keepalive pings every 15s so SSE connection stays alive
-      const keepalive = setInterval(() => {
-        if (!closed) send({ type: 'status', message: 'Still analyzing video...' });
-      }, 15000);
-
-      const result = await model.generateContent([
-        {
-          fileData: {
-            mimeType: 'video/mp4',
-            fileUri: youtubeUrl,
-          },
-        },
-        {
-          text: `List every song played in this DJ mix video. For each song provide the artist and title.
-Return ONLY a JSON array, no markdown, no explanation. Format:
-[{"title":"Song Title","artist":"Artist Name"},...]
-If you cannot identify any songs, return [].`,
-        },
-      ]);
-
-      clearInterval(keepalive);
-      let raw = result.response.text().trim()
-        .replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-      log(`Gemini response preview: ${raw.slice(0, 200).replace(/\n/g, ' ')}`);
-
-      const geminiTracks = JSON.parse(raw);
-      if (!Array.isArray(geminiTracks) || geminiTracks.length === 0) {
-        send({ type: 'error', message: 'Gemini could not identify any songs in this mix.' });
-        return res.end();
-      }
-
-      for (const track of geminiTracks) {
-        if (closed) break;
-        await searchAndEmit(track.title, track.artist);
-      }
-    } catch (e) {
-      log(`Gemini error: ${e.message}`);
-      send({ type: 'error', message: `AI analysis failed: ${e.message}` });
-      return res.end();
-    }
-
-    send({ type: 'done' });
-    log('DONE');
-    res.end();
+    // No tracklist found
+    send({ type: 'error', message: 'No tracklist found in the description. This mix can only be added if the video includes a tracklist.' });
+    log('no tracklist found, ending');
+    return res.end();
 
   } catch (err) {
     log(`fatal: ${err.message}`);
