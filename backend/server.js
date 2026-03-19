@@ -4422,7 +4422,7 @@ app.get('/api/analyze-mix', async (req, res) => {
 
     // ── Step 1: Get video metadata ───────────────────────────────────────────
     send({ type: 'status', message: 'Loading video info...' });
-    let videoTitle = '', videoDescription = '', videoDuration = 0;
+    let videoTitle = '', videoDescription = '', videoDuration = 0, videoChapters = [];
 
     // Primary: yt-dlp --dump-json (no API key needed, most reliable)
     let metaLoaded = false;
@@ -4444,6 +4444,7 @@ app.get('/api/analyze-mix', async (req, res) => {
       videoTitle       = meta.title || '';
       videoDescription = meta.description || '';
       videoDuration    = meta.duration || 0;
+      videoChapters    = meta.chapters || [];
       metaLoaded = true;
     } catch (e) {
       log(`yt-dlp metadata failed: ${e.message}`);
@@ -4561,6 +4562,27 @@ app.get('/api/analyze-mix', async (req, res) => {
       }
       send({ type: 'done' });
       return res.end();
+    }
+
+    // ── Step 2.5: Try chapters ───────────────────────────────────────────────
+    if (videoChapters.length > 0) {
+      log(`found ${videoChapters.length} chapters, parsing for tracklist`);
+      const chapterText = videoChapters.map(c => c.title).join('\n');
+      const { tracks: chapterTracklist, contextArtist: chapterContextArtist } = await parseMixTracklist(videoTitle, chapterText, log);
+      if (chapterTracklist.length > 0) {
+        log(`tracklist found in chapters: ${chapterTracklist.length} tracks`);
+        if (chapterContextArtist) {
+          chapterTracklist.forEach(t => { if (!t.artist) t.artist = chapterContextArtist; });
+        }
+        send({ type: 'source', method: 'description', total: chapterTracklist.length });
+        for (const track of chapterTracklist) {
+          if (closed) break;
+          await searchAndEmit(track.title, track.artist);
+        }
+        send({ type: 'done' });
+        return res.end();
+      }
+      log('no tracklist found in chapters');
     }
 
     // ── Step 3: Try top comments ─────────────────────────────────────────────
