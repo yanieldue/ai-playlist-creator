@@ -4337,6 +4337,70 @@ function parseIsoDuration(iso) {
   return (parseInt(m[1] || 0) * 3600) + (parseInt(m[2] || 0) * 60) + parseInt(m[3] || 0);
 }
 
+// Submit a YouTube URL to ACRCloud File Scanning and poll for results.
+// Returns an array of {title, artist} or throws on failure.
+async function scanWithACRCloud(youtubeUrl, onStatus, log = console.log) {
+  const host        = process.env.ACRCLOUD_FS_HOST;
+  const containerId = process.env.ACRCLOUD_CONTAINER_ID;
+  const accessKey   = process.env.ACRCLOUD_ACCESS_KEY;
+  const auth        = { headers: { Authorization: `Bearer ${accessKey}` } };
+
+  // ── Submit URL ────────────────────────────────────────────────────────────
+  const FormData = require('form-data');
+  const form = new FormData();
+  form.append('data_type', 'platforms');
+  form.append('url', youtubeUrl);
+
+  const submitResp = await axios.post(
+    `https://${host}/api/fs-containers/${containerId}/files`,
+    form,
+    { ...auth, headers: { ...auth.headers, ...form.getHeaders() } }
+  );
+
+  const fileId = submitResp.data?.data?.id || submitResp.data?.id;
+  if (!fileId) throw new Error(`ACRCloud submit failed: ${JSON.stringify(submitResp.data)}`);
+  log(`ACRCloud submitted file_id=${fileId}`);
+
+  // ── Poll for completion (up to ~10 min, every 15s) ────────────────────────
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 15000));
+    if (onStatus) onStatus(`Scanning audio for songs... (${Math.round((i + 1) * 15 / 60)} min)`);
+
+    const pollResp = await axios.get(
+      `https://${host}/api/fs-containers/${containerId}/files/${fileId}`,
+      auth
+    );
+    const fileData = pollResp.data?.data;
+    const status   = fileData?.status;
+    log(`ACRCloud poll ${i + 1}: status=${status}`);
+
+    if (status === 'success' || status === 3) {
+      log(`ACRCloud raw result: ${JSON.stringify(fileData).slice(0, 400)}`);
+      const results = fileData.results || fileData.result || [];
+      const seen    = new Set();
+      const songs   = [];
+
+      for (const r of results) {
+        const music = r.metadata?.music?.[0];
+        if (!music || (music.score || 0) < 70) continue;
+        const key = `${music.title}|${music.artists?.[0]?.name || ''}`.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        songs.push({ title: music.title, artist: music.artists?.[0]?.name || '' });
+      }
+
+      log(`ACRCloud identified ${songs.length} unique songs`);
+      return songs;
+    }
+
+    if (status === 'error' || status === 4) {
+      throw new Error(`ACRCloud scan failed: ${JSON.stringify(fileData)}`);
+    }
+  }
+
+  throw new Error('ACRCloud scan timed out after 10 minutes');
+}
+
 async function parseMixTracklist(videoTitle, description, log = console.log) {
   const combined = `${videoTitle || ''}\n\n${description || ''}`;
   log(`description length=${(description || '').length} preview="${(description || '').slice(0, 200).replace(/\n/g, ' ')}"`);
@@ -4584,7 +4648,32 @@ app.get('/api/analyze-mix', async (req, res) => {
       return res.end();
     }
 
-    // ── Step 3: Gemini video analysis fallback ───────────────────────────────
+    // ── Step 3: ACRCloud audio fingerprinting ────────────────────────────────
+    if (process.env.ACRCLOUD_ACCESS_KEY && process.env.ACRCLOUD_FS_HOST && process.env.ACRCLOUD_CONTAINER_ID) {
+      send({ type: 'status', message: 'No tracklist found — scanning audio to identify songs...' });
+      try {
+        const acrTracks = await scanWithACRCloud(
+          youtubeUrl,
+          (msg) => { if (!closed) send({ type: 'status', message: msg }); },
+          log
+        );
+        if (acrTracks.length > 0) {
+          log(`ACRCloud found ${acrTracks.length} songs`);
+          send({ type: 'source', method: 'acr', total: acrTracks.length });
+          for (const track of acrTracks) {
+            if (closed) break;
+            await searchAndEmit(track.title, track.artist);
+          }
+          send({ type: 'done' });
+          return res.end();
+        }
+        log('ACRCloud returned no songs, falling back to Gemini');
+      } catch (e) {
+        log(`ACRCloud error: ${e.message}`);
+      }
+    }
+
+    // ── Step 4: Gemini video analysis fallback ───────────────────────────────
     send({ type: 'source', method: 'gemini', message: 'No tracklist found — using AI to identify songs...' });
 
     if (!process.env.GEMINI_API_KEY) {
