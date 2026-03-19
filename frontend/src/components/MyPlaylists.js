@@ -1211,7 +1211,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       onClick={handleManualRefresh}
                       disabled={refreshing}
                       className="refresh-confirm-button"
-                      style={{ marginTop: '16px' }}
                     >
                       {refreshing ? 'Updating...' : 'Refresh Now'}
                     </button>
