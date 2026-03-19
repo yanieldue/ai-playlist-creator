@@ -335,6 +335,46 @@ class AppleMusicService {
   }
 
   /**
+   * Remove specific tracks from a library playlist using the DELETE endpoint.
+   * Apple Music identifies tracks to delete by their library ID and position index.
+   * @param {string} userToken - User's music token
+   * @param {string} playlistId - Library playlist ID
+   * @param {Array<string>} trackUrisToRemove - apple:track:{libraryId} URIs to remove
+   */
+  async deleteTracksFromPlaylist(userToken, playlistId, trackUrisToRemove) {
+    // Fetch live tracks to get library IDs and their positions
+    const liveTracks = await this.getPlaylistTracks(userToken, playlistId);
+
+    const uriSet = new Set(trackUrisToRemove);
+    const tracksToDelete = liveTracks
+      .map((track, index) => ({ track, index }))
+      .filter(({ track }) => uriSet.has(`apple:track:${track.id}`));
+
+    if (tracksToDelete.length === 0) {
+      console.log(`No matching tracks found to delete from playlist ${playlistId}`);
+      return { success: true, removed: 0 };
+    }
+
+    await this.request(
+      `/me/library/playlists/${playlistId}/tracks`,
+      userToken,
+      {
+        method: 'DELETE',
+        data: {
+          data: tracksToDelete.map(({ track, index }) => ({
+            id: track.id,
+            type: 'library-songs',
+            meta: { position: index }
+          }))
+        }
+      }
+    );
+
+    console.log(`✓ Deleted ${tracksToDelete.length} track(s) from playlist ${playlistId}`);
+    return { success: true, removed: tracksToDelete.length };
+  }
+
+  /**
    * Add tracks to a playlist
    * @param {string} userToken - User's music token
    * @param {string} playlistId - Playlist ID

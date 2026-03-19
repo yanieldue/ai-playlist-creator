@@ -7629,24 +7629,9 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
 
       if (tracksToRemove && tracksToRemove.length > 0) {
-        // Apple Music has no single-track delete endpoint.
-        // Fetch live tracks, filter out the ones to remove, then replace the full list.
-        // Use catalog IDs (from playParams) + type:'songs' — same format as addTracksToPlaylist.
-        const urisToRemove = new Set(tracksToRemove.map(t => t.uri || t));
-        const liveTracks = await appleMusicApiInstance.getPlaylistTracks(appleTokens.access_token, playlistId);
-        const remainingCatalogIds = liveTracks
-          .filter(t => !urisToRemove.has(`apple:track:${t.id}`))
-          .map(t => t.catalogId || t.id)
-          .filter(Boolean);
-        await appleMusicApiInstance.replacePlaylistTracks(appleTokens.access_token, playlistId, remainingCatalogIds);
-        console.log(`Removed ${tracksToRemove.length} track(s) from Apple Music playlist ${playlistId} via replace`);
-        if (playlistRecord) {
-          playlistRecord.trackUris = liveTracks
-            .filter(t => !urisToRemove.has(`apple:track:${t.id}`))
-            .map(t => `apple:track:${t.id}`);
-          playlistRecord.trackCount = playlistRecord.trackUris.length;
-          await savePlaylist(emailUserId, playlistRecord);
-        }
+        const urisToRemove = tracksToRemove.map(t => t.uri || t);
+        await appleMusicApiInstance.deleteTracksFromPlaylist(appleTokens.access_token, playlistId, urisToRemove);
+        console.log(`Removed ${tracksToRemove.length} track(s) from Apple Music playlist ${playlistId}`);
       }
 
       if (tracksToAdd && tracksToAdd.length > 0) {
@@ -8195,15 +8180,8 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
           const platformService = new PlatformService();
           const reactionPlatform = platformService.getPlatform(userId);
           if (reactionPlatform === 'apple') {
-            // Apple Music has no single-track delete; fetch live tracks and replace without this one.
-            // Use catalog IDs + type:'songs' — same format as addTracksToPlaylist (which works).
             const appleMusicApiReact = platformService.getAppleMusicApi(reactionTokens);
-            const liveTracks = await appleMusicApiReact.getPlaylistTracks(reactionTokens.access_token, playlist.playlistId);
-            const remainingCatalogIds = liveTracks
-              .filter(t => `apple:track:${t.id}` !== trackUri)
-              .map(t => t.catalogId || t.id)
-              .filter(Boolean);
-            await appleMusicApiReact.replacePlaylistTracks(reactionTokens.access_token, playlist.playlistId, remainingCatalogIds);
+            await appleMusicApiReact.deleteTracksFromPlaylist(reactionTokens.access_token, playlist.playlistId, [trackUri]);
           } else {
             await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], reactionTokens);
           }
