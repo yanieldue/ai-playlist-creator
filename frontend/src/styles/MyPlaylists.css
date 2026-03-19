@@ -793,15 +793,6 @@
   opacity: 0.75;
 }
 
-.track-lock-button.locked,
-.track-lock-button.locked:focus,
-.track-lock-button.locked:active {
-  color: #ff9500 !important;
-}
-
-.track-lock-button.locked:hover {
-  opacity: 0.75;
-}
 
 :root.dark-mode .track-lock-button {
   color: #aeaeb2;
@@ -811,15 +802,6 @@
   opacity: 0.75;
 }
 
-:root.dark-mode .track-lock-button.locked,
-:root.dark-mode .track-lock-button.locked:focus,
-:root.dark-mode .track-lock-button.locked:active {
-  color: #ff9f0a !important;
-}
-
-:root.dark-mode .track-lock-button.locked:hover {
-  opacity: 0.75;
-}
 
 .no-tracks {
   color: #8e8e93;
