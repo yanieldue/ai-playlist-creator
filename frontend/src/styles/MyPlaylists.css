@@ -781,7 +781,7 @@
   padding: 4px;
   background: none;
   border: none;
-  color: #c7c7cc;
+  color: #8e8e93;
   border-radius: 50%;
   cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease;
@@ -806,7 +806,7 @@
 }
 
 :root.dark-mode .track-lock-button {
-  color: #48484a;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .track-lock-button:hover {

@@ -602,12 +602,6 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     }
     if (!editOptionsPlaylist) return;
 
-    // Check if tracks are loaded
-    if (!editOptionsPlaylist.tracks || editOptionsPlaylist.tracks.length === 0) {
-      setRefreshError('Could not load playlist songs. Please try again or refresh the page.');
-      return;
-    }
-
     setRefreshing(true);
     setRefreshingMessage('Generating new songs...');
     setRefreshError(null);
@@ -983,7 +977,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               onClick={() => handleToggleLock(playlist.playlistId, track)}
                               title={(playlist.lockedTracks || []).includes(track.id) ? 'Unlock — song can be replaced on update' : 'Lock — keep this song on every update'}
                             >
-                              <Icons.Lock size={14} />
+                              <Icons.Lock size={16} />
                             </button>
                           </div>
                         </div>
