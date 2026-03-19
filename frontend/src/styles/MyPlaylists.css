@@ -724,8 +724,8 @@
 }
 
 .track-thumb-circle {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #1c1c1e;
   display: flex;
