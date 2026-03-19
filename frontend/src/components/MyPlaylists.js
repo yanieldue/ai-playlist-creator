@@ -942,16 +942,16 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             <div className="track-artist">{track.artist}</div>
                           </div>
                           <div className="track-actions">
-                            {/* Slot 1: thumbs up outline — hidden (space reserved) when any reaction is set */}
+                            {/* Slot 1: thumbs up outline — hidden (space reserved) when liked */}
                             <button
                               className="track-reaction-button"
                               onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
                               title="I like this! Add more songs like this"
-                              style={{ visibility: track.reaction ? 'hidden' : 'visible' }}
+                              style={{ visibility: track.reaction === 'thumbsUp' ? 'hidden' : 'visible' }}
                             >
                               <Icons.ThumbsUp size={16} />
                             </button>
-                            {/* Slot 2: thumbs up circle when liked, thumbs down outline/circle otherwise */}
+                            {/* Slot 2: thumbs up circle when liked, thumbs down outline otherwise */}
                             {track.reaction === 'thumbsUp' ? (
                               <button
                                 className="track-reaction-button"
@@ -968,13 +968,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
                                 title="Not for me. Exclude similar songs"
                               >
-                                {track.reaction === 'thumbsDown' ? (
-                                  <span className="track-thumb-circle">
-                                    <Icons.ThumbsDown size={16} color="white" />
-                                  </span>
-                                ) : (
-                                  <Icons.ThumbsDown size={16} />
-                                )}
+                                <Icons.ThumbsDown size={16} />
                               </button>
                             )}
                             <button
