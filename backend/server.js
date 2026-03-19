@@ -4344,7 +4344,7 @@ async function parseMixTracklist(videoTitle, description, log = console.log) {
   // Skip Claude call only if description is basically empty
   if ((description || '').trim().length < 20) {
     log('description too short, skipping tracklist parse');
-    return [];
+    return { tracks: [], contextArtist: null };
   }
 
   try {
@@ -4353,16 +4353,26 @@ async function parseMixTracklist(videoTitle, description, log = console.log) {
       max_tokens: 2000,
       messages: [{
         role: 'user',
-        content: `Extract the tracklist from this DJ mix. Return a JSON array of objects with "title" and "artist" fields. Return [] if no tracklist exists. Skip timestamps, track numbers, and non-song lines.\n\n${combined.slice(0, 7000)}\n\nReturn ONLY valid JSON. Example: [{"title":"Song Name","artist":"Artist Name"}]`
+        content: `Analyze this DJ mix description and extract:
+1. "tracks": a JSON array of {"title","artist"} for each song. Use "" for artist if unknown.
+2. "contextArtist": if the description, title, or credits make clear that all or most songs are by one artist (e.g. "All tracks by X", "X Official", channel name = artist, etc.), set this to that artist name. Otherwise null.
+
+Return ONLY valid JSON in this shape:
+{"tracks":[{"title":"...","artist":"..."}],"contextArtist":"Artist Name or null"}
+
+${combined.slice(0, 7000)}`
       }]
     });
     const raw = resp.content[0].text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'');
     log(`tracklist parsed: ${raw.slice(0, 400).replace(/\n/g, ' ')}`);
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(t => t.title) : [];
+    const tracks = Array.isArray(parsed.tracks) ? parsed.tracks.filter(t => t.title) : [];
+    const contextArtist = parsed.contextArtist || null;
+    if (contextArtist) log(`context artist detected: "${contextArtist}"`);
+    return { tracks, contextArtist };
   } catch (e) {
     log(`parseMixTracklist failed: ${e.message}`);
-    return [];
+    return { tracks: [], contextArtist: null };
   }
 }
 
@@ -4529,11 +4539,18 @@ app.get('/api/analyze-mix', async (req, res) => {
     // ── Step 2: Description parsing ──────────────────────────────────────────
     log(`video title="${videoTitle}" duration=${videoDuration}s`);
     send({ type: 'status', message: 'Scanning description for tracklist...' });
-    const tracklist = await parseMixTracklist(videoTitle, videoDescription, log);
+    const { tracks: tracklist, contextArtist } = await parseMixTracklist(videoTitle, videoDescription, log);
 
     if (tracklist.length > 0) {
       log(`tracklist found: ${tracklist.length} tracks`);
-      // If all tracks are missing artists, use Gemini to fill them in
+
+      // Apply contextArtist to tracks that have no individual artist
+      if (contextArtist) {
+        tracklist.forEach(t => { if (!t.artist) t.artist = contextArtist; });
+        log(`applied context artist "${contextArtist}" to tracks without an artist`);
+      }
+
+      // If artists are still missing after contextArtist, use Gemini to fill them in
       const missingArtists = tracklist.every(t => !t.artist);
       if (missingArtists && process.env.GEMINI_API_KEY) {
         send({ type: 'status', message: 'Tracklist found but no artists — using AI to identify artists...' });
