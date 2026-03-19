@@ -942,22 +942,27 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             <div className="track-artist">{track.artist}</div>
                           </div>
                           <div className="track-actions">
-                            {track.reaction !== 'thumbsDown' && (
+                            {/* Slot 1: thumbs up outline — hidden (space reserved) when any reaction is set */}
+                            <button
+                              className="track-reaction-button"
+                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
+                              title="I like this! Add more songs like this"
+                              style={{ visibility: track.reaction ? 'hidden' : 'visible' }}
+                            >
+                              <Icons.ThumbsUp size={16} />
+                            </button>
+                            {/* Slot 2: thumbs up circle when liked, thumbs down outline/circle otherwise */}
+                            {track.reaction === 'thumbsUp' ? (
                               <button
                                 className="track-reaction-button"
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                                title="I like this! Add more songs like this"
+                                title="Unlike"
                               >
-                                {track.reaction === 'thumbsUp' ? (
-                                  <span className="track-thumb-circle">
-                                    <Icons.ThumbsUp size={16} color="white" />
-                                  </span>
-                                ) : (
-                                  <Icons.ThumbsUp size={16} />
-                                )}
+                                <span className="track-thumb-circle">
+                                  <Icons.ThumbsUp size={16} color="white" />
+                                </span>
                               </button>
-                            )}
-                            {track.reaction !== 'thumbsUp' && (
+                            ) : (
                               <button
                                 className="track-reaction-button"
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
