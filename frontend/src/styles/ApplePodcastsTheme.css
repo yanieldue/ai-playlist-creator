@@ -108,6 +108,8 @@ body {
   border-radius: 50%;
   background: #000000;
   border: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -705,6 +707,8 @@ body {
   align-items: center;
   justify-content: center;
   border: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
   cursor: pointer;
   transition: transform 0.2s ease;
 }
