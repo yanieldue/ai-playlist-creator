@@ -263,7 +263,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     setOpenMenuId(null);
 
     if (action === 'delete') {
-      openDeleteModal(playlist.playlistId, playlist.playlistName);
+      openDeleteModal(playlist.playlistId, playlist.playlistName, playlist.platform);
     } else if (action === 'open') {
       const url = playlist.spotifyUrl;
       if (url) window.open(url, '_blank');
@@ -456,8 +456,8 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
     setActivePlatform(null);
   };
 
-  const openDeleteModal = (playlistId, playlistName) => {
-    setDeletePlaylistData({ playlistId, playlistName });
+  const openDeleteModal = (playlistId, playlistName, platform) => {
+    setDeletePlaylistData({ playlistId, playlistName, platform });
     setShowDeleteModal(true);
   };
 
@@ -966,7 +966,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               <button
                                 className="track-reaction-button"
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
-                                title="Not for me. Exclude similar songs"
+                                title={playlist.platform === 'apple' ? "Hide from Fins & exclude similar songs · Can't remove from Apple Music app (API limitation)" : "Not for me. Exclude similar songs"}
                               >
                                 <Icons.ThumbsDown size={16} />
                               </button>
@@ -1158,15 +1158,23 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   <div className="dropdown-content">
                     <div className="form-group">
                       <div
-                        className={`refresh-option-item ${manualRefreshMode === 'replace' ? 'active' : ''}`}
-                        onClick={() => setManualRefreshMode('replace')}
+                        className={`refresh-option-item ${manualRefreshMode === 'replace' ? 'active' : ''} ${editOptionsPlaylist?.platform === 'apple' ? 'option-apple-disabled' : ''}`}
+                        onClick={() => editOptionsPlaylist?.platform !== 'apple' && setManualRefreshMode('replace')}
                       >
                         <div className="option-checkbox">
-                          {manualRefreshMode === 'replace' && <span className="checkmark"><Icons.Check size={16} /></span>}
+                          {editOptionsPlaylist?.platform === 'apple'
+                            ? <Icons.Lock size={13} />
+                            : manualRefreshMode === 'replace' && <span className="checkmark"><Icons.Check size={16} /></span>
+                          }
                         </div>
                         <div className="option-content">
                           <span className="option-label">Replace All Songs</span>
-                          <span className="option-description">Remove old songs and add new ones</span>
+                          <span className="option-description">
+                            {editOptionsPlaylist?.platform === 'apple'
+                              ? <span>Not available for Apple Music. <a href="/faq" className="apple-limit-link">Learn more</a></span>
+                              : 'Remove old songs and add new ones'
+                            }
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1380,6 +1388,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
       <DeleteConfirmationModal
         isOpen={showDeleteModal}
         playlistName={deletePlaylistData?.playlistName}
+        isApple={deletePlaylistData?.platform === 'apple'}
         onConfirm={confirmDeletePlaylist}
         onCancel={closeDeleteModal}
         isDeleting={isDeleting}

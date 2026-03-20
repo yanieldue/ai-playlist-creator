@@ -53,11 +53,31 @@
 }
 
 .delete-confirmation-message {
-  margin: 0 0 24px 0;
+  margin: 0 0 12px 0;
   font-size: 16px;
   color: #666666;
   text-align: center;
   line-height: 1.5;
+}
+
+.delete-confirmation-apple-notice {
+  margin: 0 0 20px 0;
+  font-size: 13px;
+  color: #8e8e93;
+  text-align: center;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+}
+
+.delete-faq-link {
+  color: #007aff;
+  text-decoration: none;
+}
+
+.delete-faq-link:hover {
+  text-decoration: underline;
 }
 
 .delete-confirmation-message strong {
@@ -131,6 +151,11 @@
 
 :root.dark-mode .delete-confirmation-message {
   color: #a0a0a0;
+}
+
+:root.dark-mode .delete-confirmation-apple-notice {
+  background: rgba(255, 255, 255, 0.06);
+  color: #aeaeb2;
 }
 
 :root.dark-mode .delete-confirmation-message strong {

@@ -4,6 +4,7 @@ import '../styles/DeleteConfirmationModal.css';
 const DeleteConfirmationModal = ({
   isOpen,
   playlistName,
+  isApple = false,
   onConfirm,
   onCancel,
   isDeleting = false
@@ -17,6 +18,12 @@ const DeleteConfirmationModal = ({
         <p className="delete-confirmation-message">
           Are you sure you want to delete <strong>"{playlistName}"</strong>? This action cannot be undone.
         </p>
+        {isApple && (
+          <p className="delete-confirmation-apple-notice">
+            ⚠️ This will remove the playlist from Fins only. Due to Apple Music API limitations, it will remain in your Apple Music library.{' '}
+            <a href="/faq" className="delete-faq-link">Learn more</a>
+          </p>
+        )}
         <div className="delete-confirmation-actions">
           <button
             className="delete-confirmation-cancel"

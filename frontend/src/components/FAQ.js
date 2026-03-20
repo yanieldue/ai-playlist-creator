@@ -71,6 +71,11 @@ const FAQ = ({ onBack }) => {
       id: 13,
       question: "What settings can I customize?",
       answer: "In Settings you can enable dark mode and set the default number of songs for new playlists. More options are coming in future updates."
+    },
+    {
+      id: 14,
+      question: "Why are some features limited on Apple Music?",
+      answer: "Apple's Music API restricts what third-party apps can do with your library. Because of this, a few features work differently on Apple Music playlists:\n\n• Replace All Songs (Manual Refresh) — Apple Music doesn't allow removing songs via API, so only \"Add Songs\" mode is available. New songs are added on top of existing ones.\n\n• Thumbs Down — Tapping thumbs down hides the song from Fins and prevents similar songs in future updates, but it can't remove the song from your Apple Music library.\n\n• Delete Playlist — Deleting a playlist in Fins removes it from Fins only. The playlist stays in your Apple Music library and must be deleted there manually.\n\nWe're monitoring Apple's API and will unlock these features as soon as they become available."
     }
   ];
 

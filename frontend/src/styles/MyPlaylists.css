@@ -1382,6 +1382,36 @@
   color: #8e8e93;
 }
 
+.option-apple-disabled {
+  opacity: 0.6;
+  cursor: default;
+  pointer-events: none;
+}
+
+.option-apple-disabled .option-checkbox {
+  border-color: #c7c7cc;
+  background: #f2f2f7;
+}
+
+.apple-limit-link {
+  color: #007aff;
+  text-decoration: none;
+  pointer-events: all;
+}
+
+.apple-limit-link:hover {
+  text-decoration: underline;
+}
+
+:root.dark-mode .option-apple-disabled .option-checkbox {
+  border-color: #636366;
+  background: #3a3a3c;
+}
+
+:root.dark-mode .apple-limit-link {
+  color: #0a84ff;
+}
+
 /* 2-column grid for compact frequency picker */
 .option-items-grid {
   display: grid;
