@@ -1247,39 +1247,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 )}
               </div>
 
-              {/* Shared Track Generation Settings Section */}
-              <div className="modal-section">
-                <h3 className="section-title">Song Generation Settings</h3>
-                <p className="section-description">Applied to auto-updates and main settings page</p>
-
-                <div className="form-group">
-                  <label htmlFor="refresh-song-count">Number of Songs to Generate</label>
-                  <input
-                    type="number"
-                    id="refresh-song-count"
-                    min="5"
-                    max="50"
-                    value={refreshSongCount}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || val === null) {
-                        setRefreshSongCount('');
-                      } else {
-                        const num = parseInt(val, 10);
-                        if (!isNaN(num) && num > 0) {
-                          setRefreshSongCount(Math.min(Math.max(num, 5), 50));
-                        }
-                      }
-                    }}
-                    className="song-count-input-large"
-                  />
-                  <p className="form-help-text">
-                    Choose between 5 and 50 songs
-                  </p>
-                </div>
-
-              </div>
-
               {/* Auto-Update Settings Section */}
               <div className="modal-section">
                 <h3 className="section-title">Auto-Update Settings {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
@@ -1293,7 +1260,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 ) : (
                   <>
                     <div className="form-group">
-                      <label htmlFor="update-frequency">Auto-Update Frequency</label>
+                      <label htmlFor="update-frequency">Frequency</label>
                       {isPaid() ? (
                         <div className="option-items-grid">
                           {[
@@ -1339,6 +1306,30 @@ IMPORTANT: Pay close attention to the original request and description to unders
                         })()}
                       </p>
                     )}
+
+                    <div className="form-group" style={{ marginTop: 16 }}>
+                      <label htmlFor="refresh-song-count">Number of Songs to Generate</label>
+                      <input
+                        type="number"
+                        id="refresh-song-count"
+                        min="5"
+                        max="50"
+                        value={refreshSongCount}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || val === null) {
+                            setRefreshSongCount('');
+                          } else {
+                            const num = parseInt(val, 10);
+                            if (!isNaN(num) && num > 0) {
+                              setRefreshSongCount(Math.min(Math.max(num, 5), 50));
+                            }
+                          }
+                        }}
+                        className="song-count-input-large"
+                      />
+                      <p className="form-help-text">Choose between 5 and 50 songs</p>
+                    </div>
                   </>
                 )}
 
