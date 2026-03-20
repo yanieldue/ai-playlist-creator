@@ -280,13 +280,14 @@ export const playlistService = {
   },
 
   // Update playlist settings (auto-update frequency, mode, and privacy)
-  updatePlaylistSettings: async (playlistId, userId, updateFrequency, updateMode, isPublic, updateTime = null) => {
+  updatePlaylistSettings: async (playlistId, userId, updateFrequency, updateMode, isPublic, updateTime = null, songCount = null) => {
     const response = await api.put(`/api/playlists/${playlistId}/settings`, {
       userId,
       updateFrequency,
       updateMode,
       isPublic,
       updateTime,
+      songCount,
     });
     return response.data;
   },

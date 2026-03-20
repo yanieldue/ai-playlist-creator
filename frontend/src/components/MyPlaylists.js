@@ -583,7 +583,8 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
         tempUpdateFrequency,
         'replace',
         editOptionsPlaylist.isPublic !== false,
-        null
+        null,
+        refreshSongCount || 30
       );
 
       showToast('Settings updated successfully!', 'success');

@@ -7752,9 +7752,9 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
 app.put('/api/playlists/:playlistId/settings', async (req, res) => {
   try {
     const { playlistId } = req.params;
-    let { userId, updateFrequency, updateMode, isPublic, updateTime } = req.body;
+    let { userId, updateFrequency, updateMode, isPublic, updateTime, songCount } = req.body;
 
-    console.log('Update settings request:', { playlistId, userId, updateFrequency, updateMode, isPublic, updateTime });
+    console.log('Update settings request:', { playlistId, userId, updateFrequency, updateMode, isPublic, updateTime, songCount });
 
     // Get user's playlist history
     const userPlaylistHistory = userPlaylists.get(userId) || [];
@@ -7827,6 +7827,10 @@ app.put('/api/playlists/:playlistId/settings', async (req, res) => {
     // Update the playlist settings
     userPlaylistHistory[playlistIndex].updateFrequency = updateFrequency || 'never';
     userPlaylistHistory[playlistIndex].updateMode = 'replace';
+    if (songCount && songCount >= 5 && songCount <= 50) {
+      userPlaylistHistory[playlistIndex].requestedSongCount = songCount;
+      userPlaylistHistory[playlistIndex].trackCount = songCount;
+    }
     if (isPublic !== undefined) {
       userPlaylistHistory[playlistIndex].isPublic = isPublic;
     }
@@ -8771,22 +8775,25 @@ async function processPlaylistUpdate(userId, playlist) {
     try {
       console.log(`[AUTO-UPDATE] Calling generate-playlist for ${playlist.playlistName}...`);
       const PORT = process.env.PORT || 3001;
+      const isReplaceMode = playlist.updateMode === 'replace';
       const genResult = await axios.post(`http://localhost:${PORT}/api/generate-playlist`, {
         prompt,
         userId,
         platform: playlistPlatform,
         allowExplicit: true,
-        songCount: playlist.requestedSongCount || playlist.trackCount || 30,
+        songCount: playlist.requestedSongCount || 30,
         // In replace mode, don't exclude current tracks — they can be re-selected freely
         // (excluding them on a niche-genre playlist can starve the pool and return far fewer songs).
         // In append mode, exclude them to avoid duplicates.
-        excludeTrackUris: playlist.updateMode === 'replace'
+        excludeTrackUris: isReplaceMode
           ? (playlist.excludedSongs || []).map(s => s.uri || s).filter(Boolean)
           : [
               ...(playlist.trackUris || playlist.tracks.map(t => t.uri)).filter(Boolean),
               ...(playlist.excludedSongs || []).map(s => s.uri || s).filter(Boolean),
             ],
-        playlistId: playlist.playlistId,
+        // Don't pass playlistId in replace mode — song history would filter out previously-used
+        // songs, starving the pool after a few cycles. Replace mode should freely re-use any song.
+        playlistId: isReplaceMode ? undefined : playlist.playlistId,
         internalCall: true,
       }, { timeout: 180000 });
 
@@ -8806,8 +8813,9 @@ async function processPlaylistUpdate(userId, playlist) {
       if (playlist.updateMode === 'replace') {
         playlist.tracks = newTracksForRecord;
         playlist.trackUris = newUris;
-        // Preserve the requested count so future updates don't shrink if this run was short
-        playlist.trackCount = playlist.requestedSongCount || Math.max(playlist.trackCount || 0, newUris.length);
+        // Anchor to requestedSongCount (set when user saves settings). Fall back to the
+        // number actually returned — never carry forward an inflated append-mode count.
+        playlist.trackCount = playlist.requestedSongCount || newUris.length;
       } else {
         if (!playlist.tracks) playlist.tracks = [];
         if (!playlist.trackUris) playlist.trackUris = [];
