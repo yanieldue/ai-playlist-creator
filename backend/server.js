@@ -1607,6 +1607,43 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         } catch (err) { /* skip */ }
       }
       console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
+
+      // Phase 2b: if the pool is still small, go one level deeper — fetch similar artists
+      // of the similar artists. This helps niche playlists whose seed pool gets exhausted
+      // after several generations (e.g. a 8-artist underground genre with 90-song history).
+      const POOL_SMALL_THRESHOLD = 12;
+      const DEPTH2_MAX = 10;
+      if (allArtistInfos.length < POOL_SMALL_THRESHOLD) {
+        console.log(`🔍 Phase 2b: pool has ${allArtistInfos.length} artists — expanding with depth-2 similar artists...`);
+        const depth2Candidates = [];
+        for (const artistInfo of allArtistInfos) {
+          for (const name of (artistInfo.similarArtists || [])) {
+            if (seenNames.has(name.toLowerCase())) continue;
+            seenNames.add(name.toLowerCase());
+            depth2Candidates.push(name);
+            if (depth2Candidates.length >= DEPTH2_MAX * 3) break; // over-fetch to account for genre rejects
+          }
+          if (depth2Candidates.length >= DEPTH2_MAX * 3) break;
+        }
+
+        let depth2Added = 0;
+        for (const name of depth2Candidates) {
+          if (depth2Added >= DEPTH2_MAX) break;
+          try {
+            const info = await getSoundChartsArtistInfo(name);
+            if (!info?.uuid) continue;
+            const artistGenres = (info.genres || []).map(g => g.toLowerCase());
+            if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) continue;
+            if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasExactGenre(artistGenres, g))) continue;
+            allArtistInfos.push(info);
+            depth2Added++;
+          } catch (err) { /* skip */ }
+        }
+
+        if (depth2Added > 0) {
+          console.log(`🎨 Artist pool after depth-2 expansion: ${allArtistInfos.length} total (+${depth2Added} new artists)`);
+        }
+      }
     }
 
     // Phase 3: fetch songs.
