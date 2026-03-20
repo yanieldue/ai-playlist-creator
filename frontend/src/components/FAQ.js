@@ -1,9 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Icons from './Icons';
 import '../styles/FAQ.css';
 
 const FAQ = ({ onBack }) => {
   const [expandedFaqId, setExpandedFaqId] = useState(null);
+  const didAutoExpand = useRef(false);
+
+  useEffect(() => {
+    if (didAutoExpand.current) return;
+    const hash = window.location.hash; // e.g. "#faq-14"
+    if (!hash.startsWith('#faq-')) return;
+    const id = parseInt(hash.slice(5), 10);
+    if (!id) return;
+    didAutoExpand.current = true;
+    setExpandedFaqId(id);
+    setTimeout(() => {
+      const el = document.getElementById(`faq-${id}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }, []);
 
   // FAQ data
   const faqs = [
@@ -92,7 +107,7 @@ const FAQ = ({ onBack }) => {
       <div className="faq-content">
         <div className="faq-list">
           {faqs.map((faq) => (
-            <div key={faq.id} className="faq-item-wrapper">
+            <div key={faq.id} id={`faq-${faq.id}`} className="faq-item-wrapper">
               <button
                 className="faq-question-button"
                 onClick={() => toggleFaq(faq.id)}

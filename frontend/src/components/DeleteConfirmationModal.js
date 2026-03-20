@@ -21,7 +21,7 @@ const DeleteConfirmationModal = ({
         {isApple && (
           <p className="delete-confirmation-apple-notice">
             ⚠️ This will remove the playlist from Fins only. Due to Apple Music API limitations, it will remain in your Apple Music library.{' '}
-            <a href="/faq" className="delete-faq-link">Learn more</a>
+            <a href="/faq#faq-14" className="delete-faq-link">Learn more</a>
           </p>
         )}
         <div className="delete-confirmation-actions">

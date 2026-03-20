@@ -1171,7 +1171,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           <span className="option-label">Replace All Songs</span>
                           <span className="option-description">
                             {editOptionsPlaylist?.platform === 'apple'
-                              ? <span>Not available for Apple Music. <a href="/faq" className="apple-limit-link">Learn more</a></span>
+                              ? <span>Not available for Apple Music. <a href="/faq#faq-14" className="apple-limit-link">Learn more</a></span>
                               : 'Remove old songs and add new ones'
                             }
                           </span>
