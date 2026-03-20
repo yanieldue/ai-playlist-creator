@@ -8791,9 +8791,7 @@ async function processPlaylistUpdate(userId, playlist) {
               ...(playlist.trackUris || playlist.tracks.map(t => t.uri)).filter(Boolean),
               ...(playlist.excludedSongs || []).map(s => s.uri || s).filter(Boolean),
             ],
-        // Don't pass playlistId in replace mode — song history would filter out previously-used
-        // songs, starving the pool after a few cycles. Replace mode should freely re-use any song.
-        playlistId: isReplaceMode ? undefined : playlist.playlistId,
+        playlistId: playlist.playlistId,
         internalCall: true,
       }, { timeout: 180000 });
 
@@ -8831,8 +8829,8 @@ async function processPlaylistUpdate(userId, playlist) {
           ...playlist.songHistory,
           ...tracksForHistory.map(t => `${normalizeForHistory(t.name)}|||${t.artist.toLowerCase()}`)
         ];
-        if (playlist.songHistory.length > 200) {
-          playlist.songHistory = playlist.songHistory.slice(-200);
+        if (playlist.songHistory.length > 500) {
+          playlist.songHistory = playlist.songHistory.slice(-500);
         }
         console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
       }
