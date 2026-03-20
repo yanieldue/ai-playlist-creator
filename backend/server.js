@@ -8845,11 +8845,12 @@ async function processPlaylistUpdate(userId, playlist) {
             console.log(`[AUTO-UPDATE] Apple replace mode: replacing all tracks in ${playlist.playlistName}`);
             await appleMusicApiInstance.replacePlaylistTracks(appleTokens.access_token, playlist.playlistId, trackIds);
             console.log(`[AUTO-UPDATE] Successfully replaced tracks in Apple Music playlist ${playlist.playlistName}`);
+            tracksWereAdded = true;
           } else {
-            await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlist.playlistId, trackIds);
-            console.log(`[AUTO-UPDATE] Successfully appended ${trackIds.length} tracks to Apple Music playlist ${playlist.playlistName}`);
+            // Apple Music append mode in auto-update is intentionally skipped to prevent unbounded
+            // accumulation of tracks. Users can explicitly add songs via manual refresh ("Add Songs").
+            console.log(`[AUTO-UPDATE] Apple Music: skipping auto-append for ${playlist.playlistName} — use manual refresh to add songs`);
           }
-          tracksWereAdded = true;
           const newTracksForRecord = returnedTracksData.map(t => ({
             id: t.id || null,
             name: t.name,

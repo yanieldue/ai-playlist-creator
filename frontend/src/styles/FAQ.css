@@ -82,6 +82,14 @@
   animation: slideDown 0.2s ease;
 }
 
+.faq-answer p {
+  margin: 12px 0 0 0;
+}
+
+.faq-answer p:first-child {
+  margin-top: 0;
+}
+
 @keyframes slideDown {
   from {
     opacity: 0;

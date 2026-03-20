@@ -90,7 +90,15 @@ const FAQ = ({ onBack }) => {
     {
       id: 14,
       question: "Why are some features limited on Apple Music?",
-      answer: "Apple's Music API restricts what third-party apps can do with your library. Because of this, a few features work differently on Apple Music playlists:\n\n• Replace All Songs (Manual Refresh) — Apple Music doesn't allow removing songs via API, so only \"Add Songs\" mode is available. New songs are added on top of existing ones.\n\n• Thumbs Down — Tapping thumbs down hides the song from Fins and prevents similar songs in future updates, but it can't remove the song from your Apple Music library.\n\n• Delete Playlist — Deleting a playlist in Fins removes it from Fins only. The playlist stays in your Apple Music library and must be deleted there manually.\n\nWe're monitoring Apple's API and will unlock these features as soon as they become available."
+      answer: (
+        <div>
+          <p>Apple's Music API places certain restrictions on how third-party apps can interact with your library. As a result, some features in Fins behave differently when used with Apple Music playlists:</p>
+          <p><strong>Replace All Songs (Manual Refresh)</strong><br />Apple Music does not allow apps to remove songs via its API. Because of this, Fins only supports "Add Songs" mode, where new tracks are added on top of your existing playlist.</p>
+          <p><strong>Thumbs Down</strong><br />When you tap thumbs down, the song is hidden within Fins and helps improve future recommendations. However, it cannot be removed from your Apple Music library.</p>
+          <p><strong>Delete Playlist</strong><br />Deleting a playlist in Fins removes it from the app only. The playlist will remain in your Apple Music library and must be deleted there manually.</p>
+          <p>We continue to monitor updates to Apple's API and will enable additional functionality as soon as it becomes available.</p>
+        </div>
+      )
     }
   ];
 
