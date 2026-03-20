@@ -1285,52 +1285,61 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 <h3 className="section-title">Auto-Update Settings {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
                 <p className="section-description">Automatically refresh your playlist on a set schedule</p>
 
-                <div className="form-group">
-                  <label htmlFor="update-frequency">Auto-Update Frequency</label>
-                  {isPaid() ? (
-                    <div className="option-items-grid">
-                      {[
-                        { value: 'never', label: 'Never' },
-                        { value: 'daily', label: 'Daily' },
-                        { value: 'weekly', label: 'Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
-                      ].map(({ value, label }) => (
-                        <div
-                          key={value}
-                          className={`refresh-option-item option-item-compact ${tempUpdateFrequency === value ? 'active' : ''}`}
-                          onClick={() => setTempUpdateFrequency(value)}
-                        >
-                          <div className="option-checkbox">
-                            {tempUpdateFrequency === value && <span className="checkmark"><Icons.Check size={16} /></span>}
-                          </div>
-                          <span className="option-label">{label}</span>
+                {editOptionsPlaylist?.platform === 'apple' ? (
+                  <div className="apple-limit-notice">
+                    <Icons.Lock size={13} />
+                    <span>Auto-update is not available for Apple Music. Use manual refresh ("Add Songs") to add new tracks. <a href="/faq#faq-14" className="apple-limit-link">Learn more</a></span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="form-group">
+                      <label htmlFor="update-frequency">Auto-Update Frequency</label>
+                      {isPaid() ? (
+                        <div className="option-items-grid">
+                          {[
+                            { value: 'never', label: 'Never' },
+                            { value: 'daily', label: 'Daily' },
+                            { value: 'weekly', label: 'Weekly' },
+                            { value: 'monthly', label: 'Monthly' },
+                          ].map(({ value, label }) => (
+                            <div
+                              key={value}
+                              className={`refresh-option-item option-item-compact ${tempUpdateFrequency === value ? 'active' : ''}`}
+                              onClick={() => setTempUpdateFrequency(value)}
+                            >
+                              <div className="option-checkbox">
+                                {tempUpdateFrequency === value && <span className="checkmark"><Icons.Check size={16} /></span>}
+                              </div>
+                              <span className="option-label">{label}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <button
+                          className="upgrade-locked-row"
+                          onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
+                          <span className="upgrade-locked-badge">Upgrade</span>
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <button
-                      className="upgrade-locked-row"
-                      onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
-                      <span className="upgrade-locked-badge">Upgrade</span>
-                    </button>
-                  )}
-                </div>
 
-                {tempUpdateFrequency !== 'never' && (
-                  <p className="form-help-text" style={{ marginTop: 4 }}>
-                    {(() => {
-                      const now = new Date();
-                      const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-                      const dateNum = now.getDate();
-                      const dateSuffix = dateNum === 1 ? 'st' : dateNum === 2 ? 'nd' : dateNum === 3 ? 'rd' : 'th';
-                      if (tempUpdateFrequency === 'daily') return 'Refreshes every day at 5 AM';
-                      if (tempUpdateFrequency === 'weekly') return `Refreshes every ${dayName} at 5 AM`;
-                      if (tempUpdateFrequency === 'monthly') return `Refreshes on the ${dateNum}${dateSuffix} of each month at 5 AM`;
-                      return '';
-                    })()}
-                  </p>
+                    {tempUpdateFrequency !== 'never' && (
+                      <p className="form-help-text" style={{ marginTop: 4 }}>
+                        {(() => {
+                          const now = new Date();
+                          const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+                          const dateNum = now.getDate();
+                          const dateSuffix = dateNum === 1 ? 'st' : dateNum === 2 ? 'nd' : dateNum === 3 ? 'rd' : 'th';
+                          if (tempUpdateFrequency === 'daily') return 'Refreshes every day at 5 AM';
+                          if (tempUpdateFrequency === 'weekly') return `Refreshes every ${dayName} at 5 AM`;
+                          if (tempUpdateFrequency === 'monthly') return `Refreshes on the ${dateNum}${dateSuffix} of each month at 5 AM`;
+                          return '';
+                        })()}
+                      </p>
+                    )}
+                  </>
                 )}
 
               </div>
