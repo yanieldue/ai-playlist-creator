@@ -52,7 +52,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
 
   // Manual refresh settings (isolated - don't affect main settings)
   const [expandManualRefresh, setExpandManualRefresh] = useState(false);
-  const [manualRefreshMode, setManualRefreshMode] = useState('append');
+  const [manualRefreshMode, setManualRefreshMode] = useState(null);
   const [manualRefreshSongCount, setManualRefreshSongCount] = useState(30);
 
   // Track generation settings (shared - for auto-update and main settings page)
@@ -559,7 +559,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
   const openEditOptionsModal = (playlist) => {
     setEditOptionsPlaylist(playlist);
     setExpandManualRefresh(false);
-    setManualRefreshMode('append');
+    setManualRefreshMode(null);
     setManualRefreshSongCount(30);
     setRefreshSongCount(30);
     setTempUpdateFrequency(playlist.updateFrequency || 'never');
@@ -1196,7 +1196,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="manual-song-count">Number of Songs to {manualRefreshMode === 'append' ? 'Add' : 'Generate'}</label>
+                      <label htmlFor="manual-song-count">Number of Songs to {manualRefreshMode === 'replace' ? 'Generate' : 'Add'}</label>
                       <input
                         type="number"
                         id="manual-song-count"
@@ -1239,7 +1239,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
                     <button
                       onClick={handleManualRefresh}
-                      disabled={refreshing}
+                      disabled={refreshing || !manualRefreshMode}
                       className="refresh-confirm-button"
                     >
                       {refreshing ? 'Updating...' : 'Refresh Now'}
