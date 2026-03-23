@@ -4954,11 +4954,14 @@ app.post('/api/generate-playlist', async (req, res) => {
           }
         }
 
-        const trackArtists = storedPlaylist.tracks?.length > 0
-          ? [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
-          : [];
         if (desc) prompt += `\n\nPlaylist description: ${desc}`;
-        if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
+        // Only include key artists for AI-generated playlists (have originalPrompt).
+        // For imported playlists the stored tracks may have drifted from the true genre
+        // (e.g. bad auto-updates), so we rely on the description alone for anchoring.
+        if (storedPlaylist.originalPrompt && storedPlaylist.tracks?.length > 0) {
+          const trackArtists = [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5);
+          if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
+        }
 
         // Capture up to 10 existing songs as vibe check reference examples
         if (storedPlaylist.tracks?.length > 0) {
@@ -8968,11 +8971,13 @@ async function processPlaylistUpdate(userId, playlist) {
       prompt = `Generate songs similar to the playlist "${playlist.playlistName}"`;
     }
     const autoDesc = (playlist.description || '').trim();
-    const autoArtists = playlist.tracks?.length > 0
-      ? [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
-      : [];
     if (autoDesc) prompt += `\n\nPlaylist description: ${autoDesc}`;
-    if (autoArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${autoArtists.join(', ')}.`;
+    // Only include key artists for AI-generated playlists (have originalPrompt).
+    // Imported playlist tracks may have drifted from the true genre via bad auto-updates.
+    if (playlist.originalPrompt && playlist.tracks?.length > 0) {
+      const autoArtists = [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5);
+      if (autoArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${autoArtists.join(', ')}.`;
+    }
     console.log(`[AUTO-UPDATE] Prompt for "${playlist.playlistName}": "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
     if (!playlist.tracks) playlist.tracks = [];
 
