@@ -943,16 +943,16 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             <div className="track-artist">{track.artist}</div>
                           </div>
                           <div className="track-actions">
-                            {/* Slot 1: thumbs up outline — hidden (space reserved) when liked */}
+                            {/* Slot 1: X outline — hidden (space reserved) when liked */}
                             <button
                               className="track-reaction-button"
-                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                              title="I like this! Add more songs like this"
+                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
+                              title={playlist.platform === 'apple' ? "Hide from Fins & exclude similar songs · Can't remove from Apple Music app (API limitation)" : "Not for me. Exclude similar songs"}
                               style={{ visibility: track.reaction === 'thumbsUp' ? 'hidden' : 'visible' }}
                             >
-                              <Icons.Heart size={16} />
+                              <Icons.Close size={16} />
                             </button>
-                            {/* Slot 2: heart circle when liked, X outline otherwise */}
+                            {/* Slot 2: heart circle when liked, heart outline otherwise */}
                             {track.reaction === 'thumbsUp' ? (
                               <button
                                 className="track-reaction-button"
@@ -966,10 +966,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             ) : (
                               <button
                                 className="track-reaction-button"
-                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
-                                title={playlist.platform === 'apple' ? "Hide from Fins & exclude similar songs · Can't remove from Apple Music app (API limitation)" : "Not for me. Exclude similar songs"}
+                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
+                                title="I like this! Add more songs like this"
                               >
-                                <Icons.Close size={16} />
+                                <Icons.Heart size={16} />
                               </button>
                             )}
                             <button
