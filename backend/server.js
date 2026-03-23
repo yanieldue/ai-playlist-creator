@@ -4907,6 +4907,10 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
+    // Existing tracks from the stored playlist — used later in the vibe check as concrete
+    // reference examples so Claude can judge new candidates against real songs, not just labels.
+    let existingPlaylistTracks = [];
+
     // For refreshes/refinements: rebuild prompt from stored playlist data
     // BEFORE Claude extraction so genreData comes from the user's actual intent, not a
     // frontend-built track list that drifts every refresh. Always enrich with description
@@ -4955,6 +4959,11 @@ app.post('/api/generate-playlist', async (req, res) => {
           : [];
         if (desc) prompt += `\n\nPlaylist description: ${desc}`;
         if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
+
+        // Capture up to 10 existing songs as vibe check reference examples
+        if (storedPlaylist.tracks?.length > 0) {
+          existingPlaylistTracks = storedPlaylist.tracks.slice(0, 10).map(t => `"${t.name}" by ${t.artist}`);
+        }
 
         console.log(`[REFRESH] Rebuilt prompt for "${storedPlaylist.playlistName}": "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
       }
@@ -6187,7 +6196,7 @@ User's full request (including any refinements): "${prompt}"
 
 Constraints that every song must satisfy:
 ${constraintLines.map(l => `- ${l}`).join('\n')}
-
+${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (use as style reference — new songs should fit alongside these):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}` : ''}
 Songs to review:
 ${trackLines.join('\n')}
 
