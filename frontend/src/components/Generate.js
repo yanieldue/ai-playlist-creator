@@ -353,7 +353,6 @@ export default function Generate() {
         userId,
         activePlatform,
         allowExplicit,
-        false,
         newSongCount,
         [...excludedUris, ...lockedUris],
         generatedPlaylist.playlistId || generatedPlaylist.draftId
