@@ -2660,6 +2660,14 @@ const PlaylistGenerator = () => {
                       },
                     });
                   }}
+                  onGenerateNew={(prompt) => {
+                    navigate('/generate', {
+                      state: {
+                        initialPrompt: prompt,
+                        returnTab: 'playlists',
+                      },
+                    });
+                  }}
                 />
               </>
             )}

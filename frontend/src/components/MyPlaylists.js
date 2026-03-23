@@ -26,7 +26,7 @@ function isValidSpotifyTrackUri(uri) {
   return /^[0-9a-zA-Z]{22}$/.test(trackId);
 }
 
-const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist }) => {
+const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist, onGenerateNew }) => {
   const [playlists, setPlaylists] = useState(playlistsCache[userId] || []);
   const [loading, setLoading] = useState(!playlistsCache[userId]);
   const [error, setError] = useState('');
@@ -1352,19 +1352,40 @@ IMPORTANT: Pay close attention to the original request and description to unders
                   </button>
                 )}
 
-                {isPaid() && <div className="chat-input-container" onClick={() => onRefinePlaylist && onRefinePlaylist(editOptionsPlaylist)}>
-                  <input
-                    type="text"
-                    value=""
-                    readOnly
-                    placeholder="Refine your playlist!"
-                    className="chat-input"
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93' }}>
-                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
-                  </svg>
-                </div>}
+                {isPaid() && (
+                  editOptionsPlaylist?.platform === 'apple' ? (
+                    <div className="apple-limit-notice" style={{ marginTop: 8 }}>
+                      <Icons.Info size={13} />
+                      <span>
+                        Refinement isn't available for Apple Music — the API doesn't support replacing tracks.{' '}
+                        <button
+                          className="apple-limit-link"
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit', textDecoration: 'underline' }}
+                          onClick={() => {
+                            closeEditOptionsModal();
+                            onGenerateNew && onGenerateNew(editOptionsPlaylist?.originalPrompt || editOptionsPlaylist?.playlistName || '');
+                          }}
+                        >
+                          Generate a new playlist instead
+                        </button>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="chat-input-container" onClick={() => onRefinePlaylist && onRefinePlaylist(editOptionsPlaylist)}>
+                      <input
+                        type="text"
+                        value=""
+                        readOnly
+                        placeholder="Refine your playlist!"
+                        className="chat-input"
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <svg viewBox="0 0 24 24" style={{ width: '20px', height: '20px', fill: '#8e8e93' }}>
+                        <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>
+                      </svg>
+                    </div>
+                  )
+                )}
               </div>
             </div>
 
