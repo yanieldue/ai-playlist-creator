@@ -1242,7 +1242,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       disabled={refreshing || !manualRefreshMode}
                       className="refresh-confirm-button"
                     >
-                      {refreshing ? 'Updating...' : 'Refresh Now'}
+                      {refreshing ? 'Updating...' : 'Update Now'}
                     </button>
                   </div>
                 )}
