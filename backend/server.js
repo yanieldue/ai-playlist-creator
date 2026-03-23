@@ -9040,6 +9040,7 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
         const platformUserId = isEmailBasedUserId(userId)
           ? await resolvePlatformUserId(userId, 'spotify')
           : userId;
+        console.log(`[DELETE] Spotify unfollow — userId=${userId}, platformUserId=${platformUserId}, playlistId=${playlistId}`);
         const tokens = platformUserId ? await getUserTokens(platformUserId) : null;
         if (tokens) {
           const userSpotifyApi = new SpotifyWebApi({
@@ -9049,12 +9050,19 @@ app.delete('/api/playlists/:playlistId', async (req, res) => {
           });
           userSpotifyApi.setAccessToken(tokens.access_token);
           userSpotifyApi.setRefreshToken(tokens.refresh_token);
-          try { await userSpotifyApi.refreshAccessToken().then(d => userSpotifyApi.setAccessToken(d.body.access_token)); } catch {}
+          try {
+            const refreshData = await userSpotifyApi.refreshAccessToken();
+            userSpotifyApi.setAccessToken(refreshData.body.access_token);
+          } catch (refreshErr) {
+            console.warn(`[DELETE] Token refresh failed, using existing token: ${refreshErr.message}`);
+          }
           await userSpotifyApi.unfollowPlaylist(playlistId);
-          console.log(`Unfollowed Spotify playlist ${playlistId}`);
+          console.log(`[DELETE] Unfollowed Spotify playlist ${playlistId}`);
+        } else {
+          console.warn(`[DELETE] No tokens found for platformUserId=${platformUserId} — Spotify unfollow skipped`);
         }
       } catch (platformErr) {
-        console.log(`Could not unfollow Spotify playlist: ${platformErr.message}`);
+        console.error(`[DELETE] Could not unfollow Spotify playlist ${playlistId}: ${platformErr.message}`);
       }
     }
 
