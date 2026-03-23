@@ -550,7 +550,6 @@
   0%, 100% { outline-color: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,0.15); }
   50% { box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
 }
-:root.dark-mode .tour-diag-chat-bar,
 :root.dark-mode .tour-diag-playlist-row,
 :root.dark-mode .tour-diag-btn,
 :root.dark-mode .tour-diag-card,
@@ -560,6 +559,9 @@
 :root.dark-mode .tour-diag-tab-active,
 :root.dark-mode .tour-diag-artist-row {
   background: #2c2c2e;
+}
+:root.dark-mode .tour-diag-chat-bar {
+  background: #48484a;
 }
 :root.dark-mode .tour-diag-nav {
   background: #3a3a3c;
@@ -646,8 +648,8 @@
 }
 
 :root.dark-mode .tour-demo-chat-input {
-  background: #2c2c2e !important;
-  border: 1px solid #424245 !important;
+  background: #48484a !important;
+  border: 1px solid #636366 !important;
   border-radius: 20px !important;
   padding: 12px 16px !important;
   display: flex !important;
