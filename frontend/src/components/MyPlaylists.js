@@ -960,7 +960,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 title="Unlike"
                               >
                                 <span className="track-thumb-circle">
-                                  <Icons.Heart size={16} color="white" />
+                                  <Icons.Heart size={16} color="white" fill={true} />
                                 </span>
                               </button>
                             ) : (
