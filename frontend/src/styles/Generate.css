@@ -637,8 +637,8 @@
   color: #ffffff;
 }
 :root.dark-mode .generate-ai-bubble {
-  background: #1e2a3a;
-  color: #b3b3b3;
+  background: #3a3a3c;
+  color: #ffffff;
 }
 :root.dark-mode .generate-track-item {
   border-bottom-color: rgba(255, 255, 255, 0.06);
