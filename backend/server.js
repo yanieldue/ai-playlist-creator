@@ -6248,8 +6248,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
             return true;
           });
 
-          // Update song history so auto-update excludes these tracks too
-          if (playlistId && userId) {
+          // Update song history so future auto-updates exclude these tracks.
+          // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.
+          if (playlistId && userId && !internalCall) {
             try {
               const upa = userPlaylists.get(userId) || [];
               const upi = upa.findIndex(p => p.playlistId === playlistId);
@@ -6740,8 +6741,9 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     }
 
-    // Update song history so auto-update excludes these tracks too
-    if (playlistId && userId) {
+    // Update song history so future auto-updates exclude these tracks.
+    // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.
+    if (playlistId && userId && !internalCall) {
       try {
         const upa = userPlaylists.get(userId) || [];
         const upi = upa.findIndex(p => p.playlistId === playlistId);
@@ -8784,10 +8786,23 @@ async function processPlaylistUpdate(userId, playlist) {
   console.log(`[AUTO-UPDATE] Updating playlist: ${playlist.playlistName} (${playlist.playlistId})`);
   try {
     // Prompt is rebuilt from originalPrompt + stored refinements inside generate-playlist
-    // (same pre-flight logic as manual refresh). Just pass the originalPrompt as a fallback
-    // for imported playlists that have no stored originalPrompt — generate-playlist will use
-    // it as-is since there's nothing to restore.
-    const prompt = playlist.originalPrompt || `Generate songs similar to: ${playlist.playlistName}`;
+    // (same pre-flight logic as manual refresh). For imported playlists with no originalPrompt,
+    // build context from existing track artists so Claude knows the genre.
+    let prompt;
+    if (playlist.originalPrompt) {
+      prompt = playlist.originalPrompt;
+    } else {
+      // For imported playlists — build context from description and/or track artists.
+      const parts = [`Generate songs similar to the playlist "${playlist.playlistName}"`];
+      const desc = (playlist.description || '').trim();
+      if (desc) parts.push(`Description: ${desc}`);
+      const trackArtists = playlist.tracks?.length > 0
+        ? [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
+        : [];
+      if (trackArtists.length > 0) parts.push(`Key artists: ${trackArtists.join(', ')}`);
+      prompt = parts.join('. ');
+    }
+    console.log(`[AUTO-UPDATE] Prompt for "${playlist.playlistName}": "${prompt.substring(0, 120)}${prompt.length > 120 ? '...' : ''}"`);
     if (!playlist.tracks) playlist.tracks = [];
 
     // Resolve platform user ID

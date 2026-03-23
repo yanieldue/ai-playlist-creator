@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icons from './Icons';
 import Toast from './Toast';
+import { isWeeklyLimitActive, getWeeklyLimitResetDate, setWeeklyLimitResetsAt } from '../utils/plan';
 import '../styles/Generate.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -82,6 +83,12 @@ export default function FromMix() {
     const trimmed = url.trim();
     if (!trimmed) return;
 
+    if (isWeeklyLimitActive()) {
+      const resetDate = getWeeklyLimitResetDate();
+      setError(`You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations, or try again after ${resetDate}.`);
+      return;
+    }
+
     setPhase('analyzing');
     setTracks([]);
     setRemovedIds(new Set());
@@ -137,7 +144,13 @@ export default function FromMix() {
           es.close();
           break;
         case 'error':
-          setError(data.message);
+          if (data.code === 'WEEKLY_LIMIT_REACHED') {
+            if (data.resetsAt) setWeeklyLimitResetsAt(data.resetsAt);
+            const resetDate = getWeeklyLimitResetDate();
+            setError(`You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations${resetDate ? `, or try again after ${resetDate}` : ''}.`);
+          } else {
+            setError(data.message);
+          }
           setPhase('input');
           es.close();
           break;
