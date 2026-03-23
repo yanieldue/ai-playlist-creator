@@ -345,7 +345,7 @@ export default function FromMix() {
                 </div>
                 <div className="generate-track-actions">
                   <button className="generate-track-remove" onClick={() => removeTrack(track.id)} title="Remove">
-                    <Icons.MinusCircle size={20} />
+                    <Icons.Close size={20} />
                   </button>
                 </div>
               </div>

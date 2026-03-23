@@ -571,17 +571,14 @@ export default function Generate() {
                   </div>
                   <div className="generate-track-actions">
                     <button className="generate-track-remove" onClick={() => removeTrack(track.id)} title="Remove">
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                      <Icons.Close size={20} />
                     </button>
                     <button
                       className={`generate-track-keep ${lockedTrackIds.has(track.id) ? 'active' : ''}`}
                       onClick={() => toggleLock(track.id)}
                       title={lockedTrackIds.has(track.id) ? 'Unkeep' : 'Keep when refining'}
                     >
-                      {lockedTrackIds.has(track.id)
-                        ? <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-                        : <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                      }
+                      <Icons.Star size={18} fill={lockedTrackIds.has(track.id)} />
                     </button>
                   </div>
                 </div>
