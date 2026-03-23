@@ -5686,6 +5686,8 @@ Return ONLY valid JSON:
         const { storefront = 'us', appleMusicApi = null, platformSvc = null } = opts;
         const artistName = song.artistName || song.artist || '';
 
+        const fLabel = `"${song.name || song.track}" by ${artistName}`;
+
         if (platform === 'spotify') {
           // 1. ISRC
           if (song.isrc) {
@@ -5694,7 +5696,11 @@ Return ONLY valid JSON:
               new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
             ]);
             const items = r.body.tracks.items;
-            if (items.length > 0) return { track: items[0], usedExact: true };
+            if (items.length > 0) {
+              console.log(`🔑 [ISRC] ${fLabel}`);
+              return { track: items[0], usedExact: true };
+            }
+            console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
           }
           // 2. SC platform ID (pre-fetched)
           if (song.platformId) {
@@ -5702,7 +5708,10 @@ Return ONLY valid JSON:
               userSpotifyApi.getTrack(song.platformId),
               new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
             ]);
-            if (r.body?.id) return { track: r.body, usedExact: true };
+            if (r.body?.id) {
+              console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
+              return { track: r.body, usedExact: true };
+            }
           }
           // 3. Text search
           const r = await Promise.race([
@@ -5710,14 +5719,21 @@ Return ONLY valid JSON:
             new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
           ]);
           const items = r.body.tracks.items;
-          if (items.length === 0) return null;
+          if (items.length === 0) {
+            console.log(`❌ [TEXT-EMPTY] ${fLabel} — Spotify returned 0 results`);
+            return null;
+          }
           const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const reqNorm = norm(artistName);
           for (const t of items) {
             const fn = norm(t.artists?.[0]?.name);
-            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn))
+            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+              console.log(`🔍 [TEXT] ${fLabel}`);
               return { track: t, usedExact: false };
+            }
           }
+          const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
+          console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Spotify results: ${topResults}`);
           return null;
 
         } else if (platform === 'apple') {
@@ -5725,14 +5741,21 @@ Return ONLY valid JSON:
           if (song.isrc && appleMusicApi) {
             try {
               const result = await appleMusicApi.lookupByIsrc(song.isrc, storefront);
-              if (result) return { track: result, usedExact: true };
+              if (result) {
+                console.log(`🔑 [ISRC] ${fLabel}`);
+                return { track: result, usedExact: true };
+              }
+              console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
             } catch (_) { /* fall through */ }
           }
           // 2. SC platform ID (pre-fetched)
           if (song.platformId && appleMusicApi) {
             try {
               const result = await appleMusicApi.getTrack(song.platformId, storefront);
-              if (result) return { track: result, usedExact: true };
+              if (result) {
+                console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
+                return { track: result, usedExact: true };
+              }
             } catch (_) { /* fall through */ }
           }
           // 3. Text search
@@ -5744,9 +5767,14 @@ Return ONLY valid JSON:
               const fn = norm(t.artists?.[0]?.name || t.artist);
               const nameLower = (t.name || '').toLowerCase();
               if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
-              if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn))
+              if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+                console.log(`🔍 [TEXT] ${fLabel}`);
                 return { track: t, usedExact: false };
+              }
             }
+            const topResults = (results || []).slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name || t.artist}`).join(', ');
+            if (topResults) console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Apple Music results: ${topResults}`);
+            else console.log(`❌ [TEXT-EMPTY] ${fLabel} — Apple Music returned 0 results`);
           }
           return null;
         }
@@ -5833,6 +5861,8 @@ Return ONLY valid JSON:
 
         // Per-song Spotify lookup (runs in parallel within each batch)
         const findSpotifyTrack = async (recommendedSong) => {
+          const label = `"${recommendedSong.track}" by ${recommendedSong.artist}`;
+
           // 1st: ISRC exact match
           if (recommendedSong.isrc) {
             const result = await Promise.race([
@@ -5840,7 +5870,11 @@ Return ONLY valid JSON:
               new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
             ]);
             const items = result.body.tracks.items;
-            if (items.length > 0) return { track: items[0], usedExact: true };
+            if (items.length > 0) {
+              console.log(`🔑 [ISRC] ${label}`);
+              return { track: items[0], usedExact: true };
+            }
+            console.log(`⚠️  [ISRC-MISS] ${label} — ISRC ${recommendedSong.isrc} returned no results, trying fallback`);
           }
 
           // 2nd: direct Spotify ID from SC identifiers (pre-fetched in Phase A)
@@ -5850,7 +5884,7 @@ Return ONLY valid JSON:
               new Promise((_, reject) => setTimeout(() => reject(new Error('Track lookup timeout')), 5000))
             ]);
             if (result.body?.id) {
-              console.log(`🎯 SC identifiers match: "${recommendedSong.track}" by ${recommendedSong.artist} → ${recommendedSong.platformId}`);
+              console.log(`🎯 [SC-ID] ${label} → ${recommendedSong.platformId}`);
               return { track: result.body, usedExact: true };
             }
           }
@@ -5861,20 +5895,31 @@ Return ONLY valid JSON:
             new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), 5000))
           ]);
           const items = result.body.tracks.items;
-          if (items.length === 0) return null;
+          if (items.length === 0) {
+            console.log(`❌ [TEXT-EMPTY] ${label} — Spotify returned 0 results`);
+            return null;
+          }
 
           // Text search: find a track that matches the requested artist
           const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
           for (const t of items) {
             const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
             if (requestedArtistNorm.length < 6) {
-              if (foundArtistNorm === requestedArtistNorm) return { track: t, usedExact: false };
+              if (foundArtistNorm === requestedArtistNorm) {
+                console.log(`🔍 [TEXT] ${label}`);
+                return { track: t, usedExact: false };
+              }
             } else {
               if (foundArtistNorm === requestedArtistNorm ||
                   foundArtistNorm.startsWith(requestedArtistNorm) ||
-                  requestedArtistNorm.startsWith(foundArtistNorm)) return { track: t, usedExact: false };
+                  requestedArtistNorm.startsWith(foundArtistNorm)) {
+                console.log(`🔍 [TEXT] ${label}`);
+                return { track: t, usedExact: false };
+              }
             }
           }
+          const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
+          console.log(`❌ [TEXT-MISMATCH] ${label} — top Spotify results: ${topResults}`);
           return null;
         };
 
