@@ -4848,25 +4848,39 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // For refreshes/refinements: rebuild prompt from originalPrompt + stored refinements
+    // For refreshes/refinements: rebuild prompt from stored playlist data
     // BEFORE Claude extraction so genreData comes from the user's actual intent, not a
-    // frontend-built track list that drifts every refresh.
+    // frontend-built track list that drifts every refresh. Always enrich with description
+    // and top-5 artists so Claude has concrete genre anchors regardless of how sparse the
+    // original prompt is.
     if (playlistId && userId) {
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       const storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
-      if (storedPlaylist?.originalPrompt) {
-        const storedRefinements = [];
-        if (storedPlaylist.chatMessages?.length > 0) {
-          storedRefinements.push(...storedPlaylist.chatMessages.filter(m => m.role === 'user').map(m => m.content));
+      if (storedPlaylist) {
+        const storedRefinements = [
+          ...(storedPlaylist.chatMessages || []).filter(m => m.role === 'user').map(m => m.content),
+          ...(storedPlaylist.refinementInstructions || []),
+        ];
+
+        // Base: use originalPrompt for AI-generated playlists; name-based for imports
+        if (storedPlaylist.originalPrompt) {
+          prompt = storedPlaylist.originalPrompt;
+        } else {
+          prompt = `Generate songs similar to the playlist "${storedPlaylist.playlistName}"`;
         }
-        if (storedPlaylist.refinementInstructions?.length > 0) {
-          storedRefinements.push(...storedPlaylist.refinementInstructions);
-        }
-        prompt = storedPlaylist.originalPrompt;
         if (storedRefinements.length > 0) {
           prompt += `. Refinements: ${storedRefinements.join('. ')}`;
         }
-        console.log(`[REFRESH] Rebuilt prompt from stored data: "${prompt}"`);
+
+        // Always enrich with description and top-5 artists for concrete genre anchoring
+        const desc = (storedPlaylist.description || '').trim();
+        const trackArtists = storedPlaylist.tracks?.length > 0
+          ? [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
+          : [];
+        if (desc) prompt += `\n\nPlaylist description: ${desc}`;
+        if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
+
+        console.log(`[REFRESH] Rebuilt prompt for "${storedPlaylist.playlistName}": "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
       }
     }
 
@@ -8788,21 +8802,23 @@ async function processPlaylistUpdate(userId, playlist) {
     // Prompt is rebuilt from originalPrompt + stored refinements inside generate-playlist
     // (same pre-flight logic as manual refresh). For imported playlists with no originalPrompt,
     // build context from existing track artists so Claude knows the genre.
+    // Build prompt: originalPrompt for AI-generated playlists, name-based for imports.
+    // Always enrich with description and top-5 artists — the backend generate-playlist
+    // endpoint will also do this rebuild, but including it here ensures the correct
+    // playlist name surfaces in logs and any pre-flight checks.
     let prompt;
     if (playlist.originalPrompt) {
       prompt = playlist.originalPrompt;
     } else {
-      // For imported playlists — build context from description and/or track artists.
-      const parts = [`Generate songs similar to the playlist "${playlist.playlistName}"`];
-      const desc = (playlist.description || '').trim();
-      if (desc) parts.push(`Description: ${desc}`);
-      const trackArtists = playlist.tracks?.length > 0
-        ? [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
-        : [];
-      if (trackArtists.length > 0) parts.push(`Key artists: ${trackArtists.join(', ')}`);
-      prompt = parts.join('. ');
+      prompt = `Generate songs similar to the playlist "${playlist.playlistName}"`;
     }
-    console.log(`[AUTO-UPDATE] Prompt for "${playlist.playlistName}": "${prompt.substring(0, 120)}${prompt.length > 120 ? '...' : ''}"`);
+    const autoDesc = (playlist.description || '').trim();
+    const autoArtists = playlist.tracks?.length > 0
+      ? [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
+      : [];
+    if (autoDesc) prompt += `\n\nPlaylist description: ${autoDesc}`;
+    if (autoArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${autoArtists.join(', ')}.`;
+    console.log(`[AUTO-UPDATE] Prompt for "${playlist.playlistName}": "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
     if (!playlist.tracks) playlist.tracks = [];
 
     // Resolve platform user ID
