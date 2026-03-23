@@ -1664,6 +1664,12 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           const artistGenres = (info.genres || []).map(g => g.toLowerCase());
           if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) continue;
           if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasExactGenre(artistGenres, g))) continue;
+          // Same unknown-genre pool-overlap check as depth-1: if no genre data, require that
+          // at least one of this artist's similar artists overlaps with the known seed pool.
+          if (expectedGenres.length > 0 && artistGenres.length === 0) {
+            const theirSimilar = (info.similarArtists || []).map(n => n.toLowerCase());
+            if (!theirSimilar.some(n => seenNames.has(n))) continue;
+          }
           allArtistInfos.push(info);
           depth2Added++;
         } catch (err) { /* skip */ }
@@ -5889,6 +5895,31 @@ Return ONLY valid JSON:
         return true;
       };
 
+      // Retry wrapper and error formatter — shared by Spotify and Apple Music search loops.
+      // Defined here (outside the platform branch) so both branches can reference them.
+      const withSearchRetry = async (fn, label, maxRetries = 2) => {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            return await fn();
+          } catch (err) {
+            const isRateLimit = err?.statusCode === 429 || err?.message?.error?.status === 429;
+            if (isRateLimit && attempt < maxRetries) {
+              const delay = (attempt + 1) * 1500;
+              console.log(`⏳ Rate limited searching "${label}", retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+            throw err;
+          }
+        }
+      };
+      const formatSearchError = (err) => {
+        if (err?.statusCode) return `HTTP ${err.statusCode}`;
+        if (typeof err?.message === 'string') return err.message;
+        if (typeof err?.message === 'object') return JSON.stringify(err.message);
+        return String(err);
+      };
+
       if (platform === 'spotify') {
 
         // Per-song Spotify lookup (runs in parallel within each batch)
@@ -5953,32 +5984,6 @@ Return ONLY valid JSON:
           const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
           console.log(`❌ [TEXT-MISMATCH] ${label} — top Spotify results: ${topResults}`);
           return null;
-        };
-
-        // Retry wrapper for platform search calls — handles Spotify/Apple Music 429 rate limits
-        // that occur when multiple playlists run concurrently and saturate the API.
-        const withSearchRetry = async (fn, label, maxRetries = 2) => {
-          for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-              return await fn();
-            } catch (err) {
-              const isRateLimit = err?.statusCode === 429 || err?.message?.error?.status === 429;
-              if (isRateLimit && attempt < maxRetries) {
-                const delay = (attempt + 1) * 1500;
-                console.log(`⏳ Rate limited searching "${label}", retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
-                await new Promise(r => setTimeout(r, delay));
-                continue;
-              }
-              throw err;
-            }
-          }
-        };
-
-        const formatSearchError = (err) => {
-          if (err?.statusCode) return `HTTP ${err.statusCode}`;
-          if (typeof err?.message === 'string') return err.message;
-          if (typeof err?.message === 'object') return JSON.stringify(err.message);
-          return String(err);
         };
 
         // ── Phase B: batched parallel Spotify lookups ──
