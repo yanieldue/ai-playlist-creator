@@ -1513,6 +1513,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
     // Phase 1: resolve seed artist infos
     const seedInfos = [];
+    const genreInconsistentSeedNames = new Set(); // seeds whose SC genres contradict Claude's extraction
     for (const artistName of artists) {
       let confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
       if (confirmedUuid === 'INVALID') {
@@ -1588,7 +1589,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           return sNorms.some(sg => claudeNorms.some(cg => sg === cg || sg.startsWith(cg) || cg.startsWith(sg)));
         });
         const droppedSeeds = seedInfos.filter(s => s.genres?.length > 0 && !consistentSeeds.includes(s));
-        droppedSeeds.forEach(s => console.log(`⚠️  Dropping "${s.name}" genres [${s.genres.join(', ')}] from genre filter — inconsistent with Claude's extraction [${claudeGenres.join(', ')}]`));
+        droppedSeeds.forEach(s => {
+          console.log(`⚠️  Dropping "${s.name}" genres [${s.genres.join(', ')}] from genre filter — inconsistent with Claude's extraction [${claudeGenres.join(', ')}]`);
+          genreInconsistentSeedNames.add(s.name.toLowerCase());
+        });
         seedActualGenres = [...new Set(consistentSeeds.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
       } else {
         seedActualGenres = [...new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
@@ -1747,7 +1751,13 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
     // 3b: direct artist songs for artists not represented in top_songs results
     const representedArtists = new Set(songs.map(s => s.artistName.toLowerCase()));
-    const unrepresented = allArtistInfos.filter(a => !representedArtists.has(a.name.toLowerCase()));
+    const unrepresented = allArtistInfos.filter(a =>
+      !representedArtists.has(a.name.toLowerCase()) &&
+      !genreInconsistentSeedNames.has(a.name.toLowerCase())
+    );
+    if (genreInconsistentSeedNames.size > 0) {
+      console.log(`⛔ Skipping songs from genre-inconsistent seeds: ${[...genreInconsistentSeedNames].join(', ')}`);
+    }
     const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
     for (const artistInfo of unrepresented) {
       try {
@@ -4960,10 +4970,10 @@ app.post('/api/generate-playlist', async (req, res) => {
         }
 
         if (desc) prompt += `\n\nPlaylist description: ${desc}`;
-        // Only include key artists for AI-generated playlists (have originalPrompt).
-        // For imported playlists the stored tracks may have drifted from the true genre
-        // (e.g. bad auto-updates), so we rely on the description alone for anchoring.
-        if (storedPlaylist.originalPrompt && storedPlaylist.tracks?.length > 0) {
+        // Always include key artists — they help Claude find similar artists on SoundCharts.
+        // If their SC genres contradict the description, the genre-inconsistency check will
+        // exclude their songs from the candidate pool downstream.
+        if (storedPlaylist.tracks?.length > 0) {
           const trackArtists = [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5);
           if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
         }
@@ -8979,9 +8989,10 @@ async function processPlaylistUpdate(userId, playlist) {
       prompt = `Generate songs similar to the playlist "${playlist.playlistName}"`;
     }
     if (autoDesc) prompt += `\n\nPlaylist description: ${autoDesc}`;
-    // Only include key artists for AI-generated playlists (have originalPrompt).
-    // Imported playlist tracks may have drifted from the true genre via bad auto-updates.
-    if (playlist.originalPrompt && playlist.tracks?.length > 0) {
+    // Always include key artists — they help Claude find similar artists on SoundCharts.
+    // If their SC genres contradict the description, the genre-inconsistency check will
+    // exclude their songs from the candidate pool downstream.
+    if (playlist.tracks?.length > 0) {
       const autoArtists = [...new Set(playlist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5);
       if (autoArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${autoArtists.join(', ')}.`;
     }
