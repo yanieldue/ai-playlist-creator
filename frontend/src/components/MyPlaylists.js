@@ -960,7 +960,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 title="Unlike"
                               >
                                 <span className="track-thumb-circle">
-                                  <Icons.Heart size={16} color="white" fill={true} />
+                                  <Icons.Heart size={14} color="white" fill={true} />
                                 </span>
                               </button>
                             ) : (
@@ -969,7 +969,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
                                 title="I like this! Add more songs like this"
                               >
-                                <Icons.Heart size={16} />
+                                <Icons.Heart size={14} />
                               </button>
                             )}
                             <button
