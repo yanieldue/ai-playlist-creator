@@ -192,6 +192,19 @@ export const playlistService = {
     return response.data;
   },
 
+  // Apply a refinement result to an existing playlist (replaces tracks + updates stored record)
+  applyRefinement: async (playlistId, userId, tracks, trackUris, chatMessages, excludedSongs, draftId) => {
+    const response = await api.post(`/api/playlists/${playlistId}/apply-refinement`, {
+      userId,
+      tracks,
+      trackUris,
+      chatMessages,
+      excludedSongs,
+      draftId,
+    });
+    return response.data;
+  },
+
   // Update playlist (add/remove tracks)
   updatePlaylist: async (playlistId, userId, tracksToAdd, tracksToRemove) => {
     const response = await api.post(`/api/playlists/${playlistId}/update`, {

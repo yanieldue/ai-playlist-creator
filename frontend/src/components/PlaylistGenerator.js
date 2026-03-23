@@ -2071,25 +2071,41 @@ const PlaylistGenerator = () => {
     try {
       // Use all remaining tracks (user removed unwanted ones with minus button)
       const trackUris = generatedPlaylist.tracks.map(track => track.uri);
-
-      // Pass the original prompt, chat history, and excluded songs for storage
-      const promptToStore = generatedPlaylist.originalPrompt || editedPlaylistName.trim();
       const chatMessagesToStore = chatMessages || [];
       const excludedSongsToStore = generatedPlaylist.excludedSongs || [];
 
-      // Send email userId — backend resolves to the correct platform userId itself
-      const result = await playlistService.createPlaylist(
-        userId,
-        editedPlaylistName.trim(),
-        editedDescription.trim(),
-        trackUris,
-        updateFrequency,
-        updateMode,
-        isPublic,
-        promptToStore,
-        chatMessagesToStore,
-        excludedSongsToStore
-      );
+      // If generatedPlaylist.playlistId is a real platform playlist ID (not a draft-* key),
+      // this is a refinement of an existing playlist — update it in-place instead of creating new.
+      const existingPlaylistId = generatedPlaylist.playlistId;
+      const isRefinementOfExisting = existingPlaylistId && !existingPlaylistId.startsWith('draft-');
+
+      let result;
+      if (isRefinementOfExisting) {
+        result = await playlistService.applyRefinement(
+          existingPlaylistId,
+          userId,
+          generatedPlaylist.tracks,
+          trackUris,
+          chatMessagesToStore,
+          excludedSongsToStore,
+          generatedPlaylist.draftId
+        );
+      } else {
+        // Pass the original prompt, chat history, and excluded songs for storage
+        const promptToStore = generatedPlaylist.originalPrompt || editedPlaylistName.trim();
+        result = await playlistService.createPlaylist(
+          userId,
+          editedPlaylistName.trim(),
+          editedDescription.trim(),
+          trackUris,
+          updateFrequency,
+          updateMode,
+          isPublic,
+          promptToStore,
+          chatMessagesToStore,
+          excludedSongsToStore
+        );
+      }
 
       if (result.success) {
         const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
@@ -2101,10 +2117,12 @@ const PlaylistGenerator = () => {
           update_frequency: updateFrequency,
           is_public: isPublic,
           refinement_count: chatMessages.filter(m => m.role === 'user').length,
+          is_refinement: isRefinementOfExisting,
         });
 
-        // Delete draft from database if it has a draftId
-        if (generatedPlaylist.draftId) {
+        // Delete draft from database (for new playlists the backend handles it via applyRefinement;
+        // for create flow we delete it here explicitly if one exists)
+        if (!isRefinementOfExisting && generatedPlaylist.draftId) {
           try {
             await playlistService.deleteDraft(userId, generatedPlaylist.draftId);
             console.log('Deleted draft from database');
@@ -2132,9 +2150,12 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
+        const successMsg = isRefinementOfExisting
+          ? `Your playlist has been updated! Open your ${platformName} app to see the changes.`
+          : `Your playlist has been created! Open your ${platformName} app to view it in your library.`;
         setCreationResult({
           success: true,
-          message: `Your playlist has been created! Open your ${platformName} app to view it in your library.`,
+          message: successMsg,
           playlistName: savedPlaylistName,
         });
       }

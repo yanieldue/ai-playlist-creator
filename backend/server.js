@@ -1629,7 +1629,19 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         return artistGenres.some(ag => normalizeGenre(ag) === tNorm);
       };
 
-      for (const simName of similarNames) {
+      // If every seed that carries SC genre data is genre-inconsistent (e.g. all seeds
+      // resolved to metal artists for an R&B playlist), the entire traversal graph is
+      // poisoned.  Skip expansion so no-genre depth-1/2 artists (Blutzeugen Official, etc.)
+      // can't sneak through the unknown-genre pool-overlap check.  The supplement flow will
+      // find correct artists using Claude's genre extraction instead.
+      const genreBearingSeeds = seedInfos.filter(s => s.genres?.length > 0);
+      const allGenreBearingInconsistent =
+        genreBearingSeeds.length > 0 &&
+        genreBearingSeeds.every(s => genreInconsistentSeedNames.has(s.name.toLowerCase()));
+      if (allGenreBearingInconsistent) {
+        console.log(`⛔ Every genre-bearing seed is genre-inconsistent — skipping SC graph traversal entirely. Supplement flow will find correct artists.`);
+        allArtistInfos = [];
+      } else for (const simName of similarNames) {
         try {
           const simInfo = await getSoundChartsArtistInfo(simName);
           if (!simInfo?.uuid) continue;
@@ -7967,6 +7979,120 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       error: 'Failed to update playlist',
       details: error.message
     });
+  }
+});
+
+// Apply a refinement result to an existing playlist:
+// replaces Spotify/Apple tracks in-place and updates the stored record.
+// Called when the user refines an existing playlist from MyPlaylists and clicks "Create".
+app.post('/api/playlists/:playlistId/apply-refinement', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    let { userId, tracks, trackUris, chatMessages, excludedSongs, draftId } = req.body;
+
+    if (!userId || !tracks || !trackUris) {
+      return res.status(400).json({ error: 'Missing required fields: userId, tracks, trackUris' });
+    }
+
+    console.log(`[APPLY-REFINEMENT] Applying refinement to playlist ${playlistId} for user ${userId} — ${trackUris.length} new tracks`);
+
+    // Resolve to platform userId
+    const emailUserId = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    const userPlaylistsArray = userPlaylists.get(emailUserId || userId) || [];
+    const storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    const platform = storedPlaylist?.platform || 'spotify';
+    const isApple = platform === 'apple';
+
+    if (isApple) {
+      let applePlatformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        applePlatformUserId = await resolvePlatformUserId(userId, 'apple');
+        if (!applePlatformUserId) return res.status(404).json({ error: 'Apple Music not connected' });
+      }
+      const appleTokens = await getUserTokens(applePlatformUserId);
+      if (!appleTokens) return res.status(401).json({ error: 'Apple Music not authenticated' });
+      const appleMusicDevToken = generateAppleMusicToken();
+      if (!appleMusicDevToken) return res.status(500).json({ error: 'Apple Music service unavailable' });
+      const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
+      // Apple Music doesn't support track removal — add new tracks to playlist
+      const trackIds = trackUris
+        .map(uri => typeof uri === 'string' && uri.startsWith('apple:track:') ? uri.replace('apple:track:', '') : uri)
+        .filter(Boolean);
+      if (trackIds.length > 0) {
+        await appleMusicApiInstance.addTracksToPlaylist(appleTokens.access_token, playlistId, trackIds);
+        console.log(`[APPLY-REFINEMENT] Added ${trackIds.length} tracks to Apple Music playlist`);
+      }
+    } else {
+      // Spotify: replace all tracks
+      let platformUserId = userId;
+      if (isEmailBasedUserId(userId)) {
+        platformUserId = await resolvePlatformUserId(userId, 'spotify');
+        if (!platformUserId) return res.status(404).json({ error: 'Spotify not connected' });
+      }
+      const tokens = await getUserTokens(platformUserId);
+      if (!tokens) return res.status(401).json({ error: 'Spotify not authenticated' });
+
+      const userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+        redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback',
+      });
+      userSpotifyApi.setAccessToken(tokens.access_token);
+      userSpotifyApi.setRefreshToken(tokens.refresh_token);
+      try {
+        const data = await userSpotifyApi.refreshAccessToken();
+        userSpotifyApi.setAccessToken(data.body.access_token);
+      } catch (_) {}
+
+      const validUris = trackUris.filter(isValidSpotifyTrackUri);
+      if (validUris.length > 0) {
+        await userSpotifyApi.replaceTracksInPlaylist(playlistId, validUris);
+        console.log(`[APPLY-REFINEMENT] Replaced tracks in Spotify playlist — ${validUris.length} tracks`);
+      }
+    }
+
+    // Update the stored playlist record with new track data, chat messages, etc.
+    const resolvedUserId = emailUserId || userId;
+    const upa = userPlaylists.get(resolvedUserId) || [];
+    const idx = upa.findIndex(p => p.playlistId === playlistId);
+    if (idx !== -1) {
+      const now = new Date().toISOString();
+      upa[idx] = {
+        ...upa[idx],
+        tracks: tracks,
+        trackUris: trackUris,
+        trackCount: tracks.length,
+        chatMessages: chatMessages || upa[idx].chatMessages || [],
+        excludedSongs: excludedSongs || upa[idx].excludedSongs || [],
+        updatedAt: now,
+        lastUpdated: now,
+      };
+      userPlaylists.set(resolvedUserId, upa);
+      await savePlaylist(resolvedUserId, upa[idx]);
+      console.log(`[APPLY-REFINEMENT] Updated stored record for playlist ${playlistId}`);
+    } else {
+      console.warn(`[APPLY-REFINEMENT] Playlist ${playlistId} not found in stored records — track data not persisted`);
+    }
+
+    // Delete the draft (fire-and-forget)
+    if (draftId && draftId.startsWith('draft-')) {
+      try {
+        const resolvedId = resolvedUserId;
+        const upa2 = userPlaylists.get(resolvedId) || [];
+        const filtered = upa2.filter(p => p.playlistId !== draftId);
+        userPlaylists.set(resolvedId, filtered);
+        await db.deletePlaylist(resolvedId, draftId);
+        console.log(`[APPLY-REFINEMENT] Deleted draft ${draftId}`);
+      } catch (draftErr) {
+        console.warn(`[APPLY-REFINEMENT] Failed to delete draft ${draftId}: ${draftErr.message}`);
+      }
+    }
+
+    res.json({ success: true, platform, playlistName: storedPlaylist?.playlistName });
+  } catch (error) {
+    console.error('[APPLY-REFINEMENT] Error:', error);
+    res.status(500).json({ error: 'Failed to apply refinement', details: error.message });
   }
 });
 
