@@ -4925,18 +4925,7 @@ app.post('/api/generate-playlist', async (req, res) => {
           ...(storedPlaylist.refinementInstructions || []),
         ];
 
-        // Base: use originalPrompt for AI-generated playlists; description-only for imports
-        // (avoid injecting the playlist name for imports — it can mislead genre extraction)
-        if (storedPlaylist.originalPrompt) {
-          prompt = storedPlaylist.originalPrompt;
-        } else {
-          prompt = `Generate a playlist`;
-        }
-        if (storedRefinements.length > 0) {
-          prompt += `. Refinements: ${storedRefinements.join('. ')}`;
-        }
-
-        // Always enrich with description and top-5 artists for concrete genre anchoring
+        // Resolve description first — needed to decide whether to include the playlist name
         let desc = (storedPlaylist.description || '').trim();
 
         // If stored description is empty, re-fetch live from Spotify and persist it
@@ -4953,6 +4942,21 @@ app.post('/api/generate-playlist', async (req, res) => {
           } catch (descErr) {
             console.log(`[REFRESH] Could not fetch live Spotify description: ${descErr.message}`);
           }
+        }
+
+        // Base prompt: use originalPrompt for AI-generated playlists.
+        // For imports: skip the name when a description is available (the name can bias
+        // genre extraction, e.g. "Kings & Sinners" → metal). Fall back to name only
+        // when there is no description to anchor on.
+        if (storedPlaylist.originalPrompt) {
+          prompt = storedPlaylist.originalPrompt;
+        } else if (desc) {
+          prompt = `Generate a playlist`;
+        } else {
+          prompt = `Generate songs similar to the playlist "${storedPlaylist.playlistName}"`;
+        }
+        if (storedRefinements.length > 0) {
+          prompt += `. Refinements: ${storedRefinements.join('. ')}`;
         }
 
         if (desc) prompt += `\n\nPlaylist description: ${desc}`;
@@ -8965,13 +8969,15 @@ async function processPlaylistUpdate(userId, playlist) {
     // Always enrich with description and top-5 artists — the backend generate-playlist
     // endpoint will also do this rebuild, but including it here ensures the correct
     // playlist name surfaces in logs and any pre-flight checks.
+    const autoDesc = (playlist.description || '').trim();
     let prompt;
     if (playlist.originalPrompt) {
       prompt = playlist.originalPrompt;
-    } else {
+    } else if (autoDesc) {
       prompt = `Generate a playlist`;
+    } else {
+      prompt = `Generate songs similar to the playlist "${playlist.playlistName}"`;
     }
-    const autoDesc = (playlist.description || '').trim();
     if (autoDesc) prompt += `\n\nPlaylist description: ${autoDesc}`;
     // Only include key artists for AI-generated playlists (have originalPrompt).
     // Imported playlist tracks may have drifted from the true genre via bad auto-updates.
