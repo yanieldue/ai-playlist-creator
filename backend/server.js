@@ -4925,11 +4925,12 @@ app.post('/api/generate-playlist', async (req, res) => {
           ...(storedPlaylist.refinementInstructions || []),
         ];
 
-        // Base: use originalPrompt for AI-generated playlists; name-based for imports
+        // Base: use originalPrompt for AI-generated playlists; description-only for imports
+        // (avoid injecting the playlist name for imports — it can mislead genre extraction)
         if (storedPlaylist.originalPrompt) {
           prompt = storedPlaylist.originalPrompt;
         } else {
-          prompt = `Generate songs similar to the playlist "${storedPlaylist.playlistName}"`;
+          prompt = `Generate a playlist`;
         }
         if (storedRefinements.length > 0) {
           prompt += `. Refinements: ${storedRefinements.join('. ')}`;
@@ -8968,7 +8969,7 @@ async function processPlaylistUpdate(userId, playlist) {
     if (playlist.originalPrompt) {
       prompt = playlist.originalPrompt;
     } else {
-      prompt = `Generate songs similar to the playlist "${playlist.playlistName}"`;
+      prompt = `Generate a playlist`;
     }
     const autoDesc = (playlist.description || '').trim();
     if (autoDesc) prompt += `\n\nPlaylist description: ${autoDesc}`;
