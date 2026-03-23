@@ -2157,6 +2157,7 @@ const PlaylistGenerator = () => {
           success: true,
           message: successMsg,
           playlistName: savedPlaylistName,
+          isUpdate: isRefinementOfExisting,
         });
       }
     } catch (err) {
@@ -3536,7 +3537,7 @@ const PlaylistGenerator = () => {
             <div className="generating-chat-modal-overlay" onClick={() => setCreationResult(null)}>
               <div className="generating-chat-modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="generating-chat-header">
-                  <h2>{creationResult.success ? 'Playlist Created' : 'Something went wrong'}</h2>
+                  <h2>{creationResult.success ? (creationResult.isUpdate ? 'Playlist Updated' : 'Playlist Created') : 'Something went wrong'}</h2>
                   <button onClick={() => setCreationResult(null)} className="close-modal-button">×</button>
                 </div>
                 <div className="generating-chat-body">
