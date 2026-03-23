@@ -1115,9 +1115,31 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // suggestedSeedArtists = Claude's inferred seeds from overall playlist context
   // Always include requestedArtists first (they're the explicit ask), then fill with
   // suggestedSeedArtists. Never let suggestedSeedArtists silently replace requestedArtists.
+  //
+  // Fuzzy-dedup: drop any suggestedSeed that is within edit distance 2 of a requestedArtist.
+  // This catches Claude misspellings like "Harmonic" when the playlist has "Harmanic" — a
+  // misspelled seed resolves to a completely different SC artist and pollutes the pool.
+  const _normArtist = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const _editDist = (a, b) => {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) =>
+      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= m; i++)
+      for (let j = 1; j <= n; j++)
+        dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    return dp[m][n];
+  };
+  const _reqNorms = requestedArtists.map(_normArtist);
+  const filteredSeeds = suggestedSeeds.filter(seed => {
+    const sn = _normArtist(seed);
+    const tooClose = _reqNorms.some(r => r !== sn && _editDist(r, sn) <= 2);
+    if (tooClose) console.log(`🔇 Dropping suggestedSeed "${seed}" — likely misspelling of a requestedArtist`);
+    return !tooClose;
+  });
   const seedArtists = isExclusive
     ? requestedArtists
-    : [...new Set([...requestedArtists, ...suggestedSeeds])];
+    : [...new Set([...requestedArtists, ...filteredSeeds])];
 
   // Strategy selection:
   // - exclusive mode → artist_songs (only those specific artists)
@@ -1589,11 +1611,21 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
 
           // 1. Must include the expected genre (e.g. r&b) — prevents genre drift.
-          // Exception: if the artist has NO genre tags at all (common for long_tail/underground
-          // artists on SoundCharts), don't skip — missing metadata ≠ wrong genre.
           if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
             console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
             continue;
+          }
+          // 1b. If the artist has NO genre data, check whether their own SC similar artists
+          // overlap with our seed pool. A legitimate underground artist in this genre will
+          // usually have similar artists that include seeds we already know; a completely
+          // unrelated artist (wrong SC match, different genre) won't.
+          if (expectedGenres.length > 0 && artistGenres.length === 0) {
+            const theirSimilar = (simInfo.similarArtists || []).map(n => n.toLowerCase());
+            const hasPoolOverlap = theirSimilar.some(n => seenNames.has(n));
+            if (!hasPoolOverlap) {
+              console.log(`⏭️  Skipping "${simInfo.name}" — no genre data and no similar-artist overlap with seed pool`);
+              continue;
+            }
           }
           // 2. If seed has no contrasting genres, reject similar artists that do —
           //    e.g. seed is pure pop → reject rock artists. Uses exact match so
