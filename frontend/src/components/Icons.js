@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader, FiEye, FiEyeOff, FiMinusCircle, FiHeadphones, FiLink, FiClipboard, FiPlus } from 'react-icons/fi';
+import { FiSettings, FiHome, FiBook, FiUser, FiLogOut, FiMusic, FiMic, FiEdit2, FiZap, FiCheck, FiRefreshCw, FiX, FiInfo, FiSend, FiList, FiChevronLeft, FiChevronRight, FiChevronDown, FiThumbsUp, FiThumbsDown, FiLock, FiLoader, FiEye, FiEyeOff, FiMinusCircle, FiHeadphones, FiLink, FiClipboard, FiPlus, FiHeart, FiStar } from 'react-icons/fi';
 
 // Icon components - using Feather Icons from react-icons
 const Icons = {
@@ -73,6 +73,14 @@ const Icons = {
 
   ChevronRight: ({ size = 24, color = 'currentColor' }) => (
     <FiChevronRight size={size} color={color} />
+  ),
+
+  Heart: ({ size = 24, color = 'currentColor', fill = false }) => (
+    <FiHeart size={size} color={color} style={{ fill: fill ? color : 'none' }} />
+  ),
+
+  Star: ({ size = 24, color = 'currentColor', fill = false }) => (
+    <FiStar size={size} color={color} style={{ fill: fill ? color : 'none' }} />
   ),
 
   ThumbsUp: ({ size = 24, color = 'currentColor', fill = false, strokeColor }) => (

@@ -115,9 +115,9 @@ const SongReactions = ({ userId, onBack, showToast }) => {
                 >
                   <span className={`reactions-thumb-circle${removing === song.id ? ' reactions-thumb-circle--loading' : ''}`}>
                     {activeSection === 'liked' ? (
-                      <Icons.ThumbsUp size={20} color="white" />
+                      <Icons.Heart size={20} color="white" />
                     ) : (
-                      <Icons.ThumbsDown size={20} color="white" />
+                      <Icons.Close size={20} color="white" />
                     )}
                   </span>
                 </button>

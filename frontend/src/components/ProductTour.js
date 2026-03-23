@@ -140,8 +140,8 @@ const LikeDislikeDiagram = ({ trackImages = {} }) => (
               <div className="track-artist" style={{ fontSize: 11 }}>{track.artist}</div>
             </div>
             <div className={track.highlight ? 'tour-diag-highlight' : ''} style={{ display: 'flex', gap: 6, borderRadius: 8, padding: '2px 4px' }}>
-              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsUp size={14} /></button>
-              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.ThumbsDown size={14} /></button>
+              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.Heart size={14} /></button>
+              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.Close size={14} /></button>
             </div>
           </div>
         );

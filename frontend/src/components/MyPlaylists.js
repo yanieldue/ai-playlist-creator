@@ -950,9 +950,9 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               title="I like this! Add more songs like this"
                               style={{ visibility: track.reaction === 'thumbsUp' ? 'hidden' : 'visible' }}
                             >
-                              <Icons.ThumbsUp size={16} />
+                              <Icons.Heart size={16} />
                             </button>
-                            {/* Slot 2: thumbs up circle when liked, thumbs down outline otherwise */}
+                            {/* Slot 2: heart circle when liked, X outline otherwise */}
                             {track.reaction === 'thumbsUp' ? (
                               <button
                                 className="track-reaction-button"
@@ -960,7 +960,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 title="Unlike"
                               >
                                 <span className="track-thumb-circle">
-                                  <Icons.ThumbsUp size={16} color="white" />
+                                  <Icons.Heart size={16} color="white" />
                                 </span>
                               </button>
                             ) : (
@@ -969,7 +969,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                                 onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
                                 title={playlist.platform === 'apple' ? "Hide from Fins & exclude similar songs · Can't remove from Apple Music app (API limitation)" : "Not for me. Exclude similar songs"}
                               >
-                                <Icons.ThumbsDown size={16} />
+                                <Icons.Close size={16} />
                               </button>
                             )}
                             <button
@@ -979,10 +979,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             >
                               {(playlist.lockedTracks || []).includes(track.id) ? (
                                 <span className="track-thumb-circle">
-                                  <Icons.Lock size={16} color="white" />
+                                  <Icons.Star size={16} color="white" fill={true} />
                                 </span>
                               ) : (
-                                <Icons.Lock size={16} />
+                                <Icons.Star size={16} />
                               )}
                             </button>
                           </div>
