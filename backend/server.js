@@ -1570,9 +1570,30 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       // reliable than Claude's extraction for underground/niche artists Claude may not know.
       // Fall back to Claude's extracted genre (from soundchartsFilters) only when seeds have
       // no genre metadata at all.
-      const seedActualGenres = [...new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
+      //
+      // Guard: if Claude has a clear genre extraction, exclude any seed whose SC genres have
+      // zero overlap with Claude's genres — this prevents a single mislabeled SC artist (e.g.
+      // a trap-soul artist tagged as electro/techno) from poisoning the entire genre filter.
       const genreFilter = soundchartsFilters.find(f => f.type === 'songGenres');
       const claudeGenres = (genreFilter?.data?.values || []).map(g => g.toLowerCase());
+      const normalizeGenreEarly = g => g.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const claudeNorms = claudeGenres.map(normalizeGenreEarly);
+
+      let seedActualGenres;
+      if (claudeNorms.length > 0) {
+        // Only include genres from seeds that have at least one genre overlapping with Claude's
+        const consistentSeeds = seedInfos.filter(s => {
+          if (!s.genres || s.genres.length === 0) return false; // no SC genre data — neutral
+          const sNorms = s.genres.map(g => normalizeGenreEarly(g));
+          return sNorms.some(sg => claudeNorms.some(cg => sg === cg || sg.startsWith(cg) || cg.startsWith(sg)));
+        });
+        const droppedSeeds = seedInfos.filter(s => s.genres?.length > 0 && !consistentSeeds.includes(s));
+        droppedSeeds.forEach(s => console.log(`⚠️  Dropping "${s.name}" genres [${s.genres.join(', ')}] from genre filter — inconsistent with Claude's extraction [${claudeGenres.join(', ')}]`));
+        seedActualGenres = [...new Set(consistentSeeds.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
+      } else {
+        seedActualGenres = [...new Set(seedInfos.flatMap(s => (s.genres || []).map(g => g.toLowerCase())))];
+      }
+
       const expectedGenres = seedActualGenres.length > 0 ? seedActualGenres : claudeGenres;
       if (seedActualGenres.length > 0) {
         console.log(`🎯 Similar-artist genre filter: using seed genres [${seedActualGenres.join(', ')}] (not Claude's extraction)`);
