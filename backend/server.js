@@ -5878,15 +5878,41 @@ Return ONLY valid JSON:
           return null;
         };
 
+        // Retry wrapper for platform search calls — handles Spotify/Apple Music 429 rate limits
+        // that occur when multiple playlists run concurrently and saturate the API.
+        const withSearchRetry = async (fn, label, maxRetries = 2) => {
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              return await fn();
+            } catch (err) {
+              const isRateLimit = err?.statusCode === 429 || err?.message?.error?.status === 429;
+              if (isRateLimit && attempt < maxRetries) {
+                const delay = (attempt + 1) * 1500;
+                console.log(`⏳ Rate limited searching "${label}", retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+              }
+              throw err;
+            }
+          }
+        };
+
+        const formatSearchError = (err) => {
+          if (err?.statusCode) return `HTTP ${err.statusCode}`;
+          if (typeof err?.message === 'string') return err.message;
+          if (typeof err?.message === 'object') return JSON.stringify(err.message);
+          return String(err);
+        };
+
         // ── Phase B: batched parallel Spotify lookups ──
         for (let i = 0; i < recommendedTracks.length && allTracks.length < songCount; i += BATCH_SIZE) {
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
-              const found = await findSpotifyTrack(recommendedSong);
+              const found = await withSearchRetry(() => findSpotifyTrack(recommendedSong), recommendedSong.track);
               return { recommendedSong, found };
             } catch (err) {
-              console.log(`Error searching for "${recommendedSong.track}": ${err.message}`);
+              console.log(`Error searching for "${recommendedSong.track}": ${formatSearchError(err)}`);
               return { recommendedSong, found: null };
             }
           }));
@@ -5969,10 +5995,10 @@ Return ONLY valid JSON:
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
-              const found = await findAppleTrack(recommendedSong);
+              const found = await withSearchRetry(() => findAppleTrack(recommendedSong), recommendedSong.track);
               return { recommendedSong, found };
             } catch (err) {
-              console.log(`Error searching for "${recommendedSong.track}": ${err.message}`);
+              console.log(`Error searching for "${recommendedSong.track}": ${formatSearchError(err)}`);
               return { recommendedSong, found: null };
             }
           }));
