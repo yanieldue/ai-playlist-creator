@@ -4911,7 +4911,24 @@ app.post('/api/generate-playlist', async (req, res) => {
         }
 
         // Always enrich with description and top-5 artists for concrete genre anchoring
-        const desc = (storedPlaylist.description || '').trim();
+        let desc = (storedPlaylist.description || '').trim();
+
+        // If stored description is empty, re-fetch live from Spotify and persist it
+        if (!desc && platform === 'spotify' && userSpotifyApi && playlistId) {
+          try {
+            const livePlaylist = await userSpotifyApi.getPlaylist(playlistId, { fields: 'description' });
+            const liveDesc = (livePlaylist.body.description || '').trim();
+            if (liveDesc) {
+              desc = liveDesc;
+              storedPlaylist.description = liveDesc;
+              db.savePlaylist(userId, storedPlaylist.playlistId, storedPlaylist).catch(() => {});
+              console.log(`[REFRESH] Fetched live Spotify description for "${storedPlaylist.playlistName}": "${liveDesc}"`);
+            }
+          } catch (descErr) {
+            console.log(`[REFRESH] Could not fetch live Spotify description: ${descErr.message}`);
+          }
+        }
+
         const trackArtists = storedPlaylist.tracks?.length > 0
           ? [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5)
           : [];
