@@ -5234,7 +5234,8 @@ Respond ONLY with valid JSON in this format:
   "bpmConstraint": { "min": BPM integer or null, "max": BPM integer or null },
   "mood": "positive" | "neutral" | "melancholic" | null,
   "energyTarget": "low" | "medium" | "high" | null,
-  "energyProgression": "ramp_up" | "ramp_down" | null
+  "energyProgression": "ramp_up" | "ramp_down" | null,
+  "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null
 }
 
 EXTRACTION GUIDELINES:
@@ -5336,8 +5337,8 @@ LANGUAGE (culturalContext.language):
 AUDIENCE / SAFETY (contextClues.audience):
 - "christian", "church", "worship", "faith", "gospel": audience: ["christian"]
 - "youth retreat", "youth group", "youth event": audience: ["christian", "youth"]
-- "family", "kids", "children", "all ages": audience: ["family"]
-- "clean", "no explicit", "safe": audience: ["clean"]
+- "family", "kids", "children", "all ages", "family friendly", "family-friendly": audience: ["family"]
+- "clean", "no explicit", "safe for kids", "safe for work", "no bad words", "no curse words", "no swearing", "no profanity", "pg", "pg-13", "radio edit", "radio friendly", "radio-friendly": audience: ["clean"]
 - "youth", "teenagers": audience: ["youth"]
 - If multiple apply, include all. If none apply → []
 
@@ -5384,6 +5385,14 @@ ENERGY PROGRESSION:
 - "build from chill to hype", "start slow end hype", "warm up then peak", "gradually get more intense", "starts mellow builds to hype" → energyProgression: "ramp_up"
 - "start hype wind down", "peak at start then chill", "high energy then relaxing" → energyProgression: "ramp_down"
 - All other cases → null
+
+MULTI-PHASE DETECTION:
+If the prompt describes a journey through 2–4 clearly distinct moods or energy levels (indicated by "→", "then", "followed by", "starting with...ending with", "morning...afternoon...night", etc.), set phases:
+- Each phase: label (short name), energy ("low"|"medium"|"high"), mood ("positive"|"neutral"|"melancholic"|null), fraction (share of total tracks — must sum to 1.0)
+- "morning warm-up → focus mode → evening wind-down" → phases: [{"label":"morning","energy":"medium","mood":"positive","fraction":0.33},{"label":"focus","energy":"low","mood":"neutral","fraction":0.34},{"label":"wind-down","energy":"low","mood":"melancholic","fraction":0.33}]
+- "chill then hype party" → phases: [{"label":"chill","energy":"low","mood":"neutral","fraction":0.4},{"label":"hype","energy":"high","mood":"positive","fraction":0.6}]
+- Only set when there are EXPLICIT, CLEAR transition signals. Gradual ramps (use energyProgression instead) and general variety do NOT qualify.
+- If no multi-phase pattern → phases: null
 
 Use null, [], or false for any feature not mentioned.
 
@@ -5444,6 +5453,7 @@ DO NOT include any text outside the JSON.`
       mood: null,
       energyTarget: null,
       energyProgression: null,
+      phases: null,
     };
     try {
       let genreText = genreExtractionResponse.content[0].text.trim();
@@ -5460,6 +5470,48 @@ DO NOT include any text outside the JSON.`
     }
 
     console.log('Extracted genre data:', genreData);
+
+    // ── Prompt-level clean override ───────────────────────────────────────────
+    // If the prompt or extracted audience signals clean/family/safe content,
+    // force allowExplicit=false regardless of account setting. One explicit track
+    // breaks trust for these use cases — this must be a hard zero-exception filter.
+    const _promptLowerClean = prompt.toLowerCase();
+    const _audienceClean = genreData.contextClues?.audience || [];
+    const _cleanSignals = [
+      'clean', 'no explicit', 'no bad words', 'no curse', 'no swear', 'no profan',
+      'safe for kids', 'safe for work', 'family friendly', 'family-friendly',
+      'radio edit', 'radio friendly', 'radio-friendly', 'pg-13', ' pg ', 'church',
+      'kids playlist', 'children', 'all ages',
+    ];
+    const _promptHasCleanSignal = _cleanSignals.some(s => _promptLowerClean.includes(s));
+    const _audienceHasCleanSignal = _audienceClean.some(a =>
+      ['clean', 'family', 'christian', 'youth'].includes(a.toLowerCase())
+    );
+    if (_promptHasCleanSignal || _audienceHasCleanSignal) {
+      if (allowExplicit) {
+        console.log(`🔒 Prompt-level clean override: forcing allowExplicit=false (audience=${JSON.stringify(_audienceClean)}, promptMatch=${_promptHasCleanSignal})`);
+      }
+      allowExplicit = false;
+    }
+
+    // ── Event mode detection ──────────────────────────────────────────────────
+    // Weddings, receptions, galas etc. need recognizable, crowd-friendly songs.
+    // Enforce: Spotify popularity ≥ 70 AND default era 2005–now (unless overridden).
+    const _ucForEvent = (genreData.contextClues?.useCase || '').toLowerCase();
+    const _eventKeywords = ['wedding', 'reception', 'gala', 'banquet', 'prom', 'quinceanera', 'quinceañera', 'graduation party', 'birthday party', 'bar mitzvah', 'bat mitzvah', 'bat-mitzvah'];
+    const _isEventMode = _eventKeywords.some(k => _ucForEvent.includes(k)) ||
+                         _eventKeywords.some(k => _promptLowerClean.includes(k));
+    if (_isEventMode) {
+      if (genreData.trackConstraints.popularity.min === null || genreData.trackConstraints.popularity.min === undefined) {
+        genreData.trackConstraints.popularity.min = 70;
+        console.log('🎉 Event mode: setting popularity floor to 70');
+      }
+      if (!genreData.era.yearRange.min && !genreData.era.yearRange.max && !genreData.era.decade) {
+        genreData.era.yearRange.min = 2005;
+        genreData.era.yearRange.max = new Date().getFullYear();
+        console.log(`🎉 Event mode: default era range ${genreData.era.yearRange.min}–${genreData.era.yearRange.max}`);
+      }
+    }
 
     // Apply AI-extracted song count from prompt (replaces regex approach).
     // If the prompt implies a count, it overrides the options-menu value.
@@ -5921,18 +5973,55 @@ Respond ONLY with valid JSON:
     // Discover songs via SoundCharts — direct attribute-based query (no similarity tree)
     let soundChartsDiscoveredSongs = [];
     const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+    const _phases = Array.isArray(genreData.phases) && genreData.phases.length >= 2 ? genreData.phases : null;
+
     if (process.env.SOUNDCHARTS_APP_ID) {
-      const scQuery = buildSoundchartsQuery(genreData, allowExplicit);
-      const fetchCount = Math.min(songCount * 3, 200);
-      // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
-      const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
-      console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
-      console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
-      try {
-        soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded);
-        console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
-      } catch (scErr) {
-        console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
+      if (_phases) {
+        // ── Multi-phase: run a separate SC query per phase with phase-specific energy/mood ──
+        console.log(`🎭 Multi-phase playlist: ${_phases.map(p => `"${p.label}" (${p.energy})`).join(' → ')}`);
+        for (const phase of _phases) {
+          const phaseGenreData = {
+            ...genreData,
+            energyTarget: phase.energy || genreData.energyTarget,
+            mood: phase.mood !== undefined ? phase.mood : genreData.mood,
+            phases: null, // prevent recursion
+          };
+          // Remove contradictory label-based energy signals so energyTarget takes over
+          if (phase.energy) {
+            phaseGenreData.atmosphere = (genreData.atmosphere || []).filter(a => {
+              const a2 = a.toLowerCase();
+              if (phase.energy === 'high') return !['calm', 'peaceful', 'sleep', 'mellow', 'lofi', 'chill'].some(w => a2.includes(w));
+              if (phase.energy === 'low')  return !['hype', 'energetic', 'pump', 'intense', 'aggressive'].some(w => a2.includes(w));
+              return true;
+            });
+          }
+          const phaseQuery = buildSoundchartsQuery(phaseGenreData, allowExplicit);
+          const phaseTarget = Math.max(1, Math.round(songCount * phase.fraction));
+          const phaseFetch = Math.min(phaseTarget * 4, 120);
+          console.log(`  Phase "${phase.label}": fetching ${phaseFetch} candidates (target ${phaseTarget})`);
+          try {
+            const phaseSongs = await executeSoundChartsStrategy(phaseQuery, phaseFetch, confirmedArtistUuids, 0);
+            phaseSongs.forEach(s => { s._phaseLabel = phase.label; s._phaseIndex = _phases.indexOf(phase); });
+            soundChartsDiscoveredSongs.push(...phaseSongs);
+            console.log(`  ✓ Phase "${phase.label}": ${phaseSongs.length} songs`);
+          } catch (phaseErr) {
+            console.log(`  ⚠️  Phase "${phase.label}" SC query failed: ${phaseErr.message}`);
+          }
+        }
+        console.log(`✓ Multi-phase SoundCharts total: ${soundChartsDiscoveredSongs.length} songs`);
+      } else {
+        const scQuery = buildSoundchartsQuery(genreData, allowExplicit);
+        const fetchCount = Math.min(songCount * 3, 200);
+        // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
+        const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
+        console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
+        console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
+        try {
+          soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded);
+          console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
+        } catch (scErr) {
+          console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
+        }
       }
     } else {
       console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
@@ -5967,7 +6056,9 @@ Respond ONLY with valid JSON:
         isrc: scSong.isrc || null,
         uuid: scSong.uuid || null,
         releaseDate: scSong.releaseDate || null,
-        source: 'soundcharts'
+        source: 'soundcharts',
+        _phaseLabel: scSong._phaseLabel || null,
+        _phaseIndex: scSong._phaseIndex ?? null,
       }));
 
     console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts (${soundChartsDiscoveredSongs.length - recommendedTracks.length} pre-filtered by era)`);
@@ -6266,6 +6357,10 @@ Return ONLY valid JSON:
           console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
           return false;
         }
+        if (_isEventMode && track.popularity !== undefined && track.popularity < 70) {
+          console.log(`[EVENT] Skipping low-popularity track: "${track.name}" (${track.popularity})`);
+          return false;
+        }
         if (eraMin || eraMax) {
           const isCompilation = track.album?.album_type === 'compilation';
           const spotifyYear = track.album?.release_date ? parseInt(track.album.release_date.substring(0, 4)) : null;
@@ -6314,7 +6409,9 @@ Return ONLY valid JSON:
           ...track,
           artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
           image: track.album?.images?.[0]?.url || null,
-          externalUrl
+          externalUrl,
+          _phaseLabel: recommendedSong._phaseLabel || null,
+          _phaseIndex: recommendedSong._phaseIndex ?? null,
         });
         console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
         return true;
@@ -7042,17 +7139,61 @@ Example response: [1, 2, 4, 5, 7, ...]`
     }
 
 
+    // ── Scoring: rank tracks by requested-artist match + popularity alignment ─
+    // Only re-sorts when there's a meaningful signal (requested artists, event mode,
+    // or underground pref). For all other playlists the SC stream-rank order stands.
+    const _reqArtistNorms = new Set(
+      (genreData.artistConstraints?.requestedArtists || []).map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''))
+    );
+    const _popPref = genreData.trackConstraints?.popularity?.preference;
+    const _needsScoring = _reqArtistNorms.size > 0 || _popPref === 'underground' || _isEventMode;
+    if (_needsScoring && tracksForSelection.length > 0) {
+      tracksForSelection.sort((a, b) => {
+        const scoreTrack = (t) => {
+          let s = 0;
+          const an = (t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (_reqArtistNorms.has(an)) s += 100; // requested artist always surfaces first
+          const pop = t.popularity !== undefined ? t.popularity : 50;
+          if (_popPref === 'underground') s += Math.max(0, 40 - pop) * 0.5; // reward low popularity
+          else if (_isEventMode)          s += Math.max(0, pop - 60) * 0.4; // reward high popularity
+          return s;
+        };
+        return scoreTrack(b) - scoreTrack(a);
+      });
+      console.log(`📊 Tracks re-scored (requestedArtists=${_reqArtistNorms.size}, eventMode=${_isEventMode}, underground=${_popPref === 'underground'})`);
+    }
+
     // SoundCharts already ranked songs by streams — take the top N directly.
     // Request 20% more if vibe check will run (it may trim some tracks).
     const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground';
-    const selectionTarget = hasVibeRequirements ? Math.ceil(songCount * 1.2) : songCount;
-    let selectedTracks = tracksForSelection.slice(0, selectionTarget);
-    console.log(`📋 Using top ${selectedTracks.length} tracks (${hasVibeRequirements ? 'vibe check will run' : 'no vibe check needed'})`);
+    const selectionTarget = hasVibeRequirements && !_phases ? Math.ceil(songCount * 1.2) : songCount;
+
+    // Multi-phase: select proportionally from each phase's track pool
+    let selectedTracks;
+    if (_phases) {
+      const byPhase = new Map(_phases.map(p => [p.label, []]));
+      tracksForSelection.forEach(t => {
+        if (t._phaseLabel && byPhase.has(t._phaseLabel)) byPhase.get(t._phaseLabel).push(t);
+      });
+      selectedTracks = [];
+      for (const phase of _phases) {
+        const phaseTracks = byPhase.get(phase.label) || [];
+        const phaseTarget = Math.max(1, Math.round(songCount * phase.fraction));
+        selectedTracks.push(...phaseTracks.slice(0, phaseTarget));
+        console.log(`📊 Phase "${phase.label}": ${Math.min(phaseTracks.length, phaseTarget)}/${phaseTarget} tracks selected`);
+      }
+      console.log(`📋 Multi-phase total: ${selectedTracks.length} tracks across ${_phases.length} phases`);
+    } else {
+      selectedTracks = tracksForSelection.slice(0, selectionTarget);
+      console.log(`📋 Using top ${selectedTracks.length} tracks (${hasVibeRequirements ? 'vibe check will run' : 'no vibe check needed'})`);
+    }
 
     // Step 4: VIBE CHECK - Review the selected tracks for coherence
     // This addresses the #1 complaint: AI missing the "vibe" even when genres match
     // Also filters out mainstream artists when underground preference is detected
-    if (selectedTracks.length > 0 && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground')) {
+    // Skipped for multi-phase playlists — each phase was already fetched with phase-specific
+    // energy/mood filters, so a single-vibe check would incorrectly remove cross-phase tracks.
+    if (selectedTracks.length > 0 && !_phases && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground')) {
       console.log('Running vibe check on selected tracks...');
 
       // Build use-case and audience hard constraint rules for the vibe check
@@ -7440,10 +7581,45 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       console.log('[FORCE-INCLUDE] Skipped due to error:', forceIncludeErr.message);
     }
 
+    // ── Multi-phase transition smoothing ────────────────────────────────────────
+    // Reorder the 2-3 tracks around each phase boundary so energy shifts gradually
+    // rather than cutting abruptly. A single Haiku call handles all boundaries.
+    if (_phases && selectedTracks.length >= _phases.length * 2) {
+      try {
+        const phaseDesc = _phases.map(p => `"${p.label}" (${p.energy} energy${p.mood ? ', ' + p.mood : ''})`).join(' → ');
+        const trackList = selectedTracks.map((t, i) =>
+          `${i + 1}. "${t.name}" by ${t.artist} [phase: ${t._phaseLabel || 'unknown'}]`
+        ).join('\n');
+        const smoothRes = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 600,
+          temperature: 0,
+          messages: [{
+            role: 'user',
+            content: `Multi-phase playlist: ${phaseDesc}\n\nTrack list:\n${trackList}\n\nReorder to smooth energy transitions between phases:\n- Keep all same-phase tracks grouped together (never mix phases)\n- At each phase boundary, reorder the last 2 tracks of the outgoing phase and first 2 tracks of the incoming phase so energy shifts gradually (bridge tracks at end of phase A blend toward phase B energy, entry tracks at start of phase B start softer)\n\nReturn ONLY a JSON array of 1-based track numbers in the new order.`
+          }]
+        });
+        const smoothText = smoothRes.content[0].text.trim()
+          .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+        const smoothMatch = smoothText.match(/\[[\d,\s]+\]/);
+        if (smoothMatch) {
+          const order = JSON.parse(smoothMatch[0]);
+          const reordered = order.map(idx => selectedTracks[idx - 1]).filter(Boolean);
+          if (reordered.length >= Math.ceil(selectedTracks.length * 0.8)) {
+            selectedTracks = reordered;
+            console.log(`🌊 Phase transitions smoothed across ${_phases.length - 1} boundaries`);
+          }
+        }
+      } catch (smoothErr) {
+        console.log('[PHASE-SMOOTH] Transition smoothing skipped:', smoothErr.message);
+      }
+    }
+
     // ── Energy progression sequencing ──────────────────────────────────────────
     // For "build from chill → hype" or "peak then wind down" prompts, ask Claude
     // to reorder the final tracks by energy. Uses Haiku for speed.
-    if (genreData.energyProgression && selectedTracks.length >= 4) {
+    // Skipped for multi-phase — transition smoothing above handles sequencing.
+    if (genreData.energyProgression && !_phases && selectedTracks.length >= 4) {
       try {
         const direction = genreData.energyProgression === 'ramp_up'
           ? 'low to high energy (chill/mellow first, intense/hype last)'
