@@ -545,10 +545,11 @@
 }
 :root.dark-mode .tour-diag-highlight {
   outline-color: #ffffff;
+  animation: tourPulseDark 1.8s ease-in-out infinite;
 }
-:root.dark-mode @keyframes tourPulse {
+@keyframes tourPulseDark {
   0%, 100% { outline-color: #fff; box-shadow: 0 0 0 0 rgba(255,255,255,0.15); }
-  50% { box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
+  50% { outline-color: #fff; box-shadow: 0 0 0 4px rgba(255,255,255,0.12); }
 }
 :root.dark-mode .tour-diag-playlist-row,
 :root.dark-mode .tour-diag-btn,
