@@ -2251,6 +2251,14 @@ const userSavedPlaylists = loadSavedPlaylists();
 
 // Routes
 
+// Check if email is already registered (used on signup form before showing password field)
+app.post('/api/check-email', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+  const existing = await db.getUser(email.trim().toLowerCase());
+  res.json({ exists: !!existing });
+});
+
 // User Signup
 app.post('/api/signup', async (req, res) => {
   console.log('📱 Signup request received:', { email: req.body.email, platform: req.body.platform });

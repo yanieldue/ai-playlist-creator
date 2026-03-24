@@ -93,6 +93,12 @@ export const playlistService = {
     return response.data;
   },
 
+  // Check if email is already registered
+  checkEmail: async (email) => {
+    const response = await api.post('/api/check-email', { email: email.trim().toLowerCase() });
+    return response.data;
+  },
+
   // User signup
   signup: async (email, password, platform) => {
     const response = await api.post('/api/signup', {

@@ -92,7 +92,21 @@ const SignupForm = ({ onSignupComplete }) => {
     setError('');
     if (!email.trim()) { setError('Please enter your email address'); return; }
     if (!validateEmail(email)) { setError('Please enter a valid email address'); return; }
-    if (!showPassword) { setShowPassword(true); return; }
+    if (!showPassword) {
+      if (!isLoginMode) {
+        try {
+          setLoading(true);
+          const { exists } = await playlistService.checkEmail(email);
+          if (exists) { setError('An account with this email already exists. Try logging in instead.'); return; }
+        } catch (e) {
+          // non-blocking — let signup proceed if check fails
+        } finally {
+          setLoading(false);
+        }
+      }
+      setShowPassword(true);
+      return;
+    }
     if (!password) { setError('Please enter a password'); return; }
     if (!isLoginMode && password.length < 6) { setError('Password must be at least 6 characters long'); return; }
     if (!isLoginMode && !confirmPassword) { setError('Please confirm your password'); return; }
@@ -212,7 +226,7 @@ const SignupForm = ({ onSignupComplete }) => {
       <div className={`auth-landing${isFormOpen ? ' auth-landing--hidden' : ''}`}>
         <div className="auth-hero">
           <h1 className="auth-hero-title">Your playlist,<br />your vibe.</h1>
-          <p className="auth-hero-sub">Playlists that actually know your taste</p>
+          <p className="auth-hero-sub">Playlists that actually fit your taste</p>
         </div>
 
         <div className="auth-landing-actions">
