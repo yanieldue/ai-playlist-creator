@@ -85,7 +85,7 @@ app.use(express.json({ limit: '10mb' })); // Increase limit for Apple Music toke
 // Normalise FRONTEND_URL once — ensures it always has a protocol so redirects
 // don't turn into relative paths (e.g. "tryfins.com" → "https://tryfins.com")
 const FRONTEND_URL = (() => {
-  const raw = FRONTEND_URL;
+  const raw = process.env.FRONTEND_URL || 'http://localhost:3000';
   return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
 })();
 
