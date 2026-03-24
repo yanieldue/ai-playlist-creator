@@ -82,6 +82,13 @@ app.use(cors({
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' })); // Increase limit for Apple Music tokens
 
+// Normalise FRONTEND_URL once — ensures it always has a protocol so redirects
+// don't turn into relative paths (e.g. "tryfins.com" → "https://tryfins.com")
+const FRONTEND_URL = (() => {
+  const raw = FRONTEND_URL;
+  return /^https?:\/\//.test(raw) ? raw : `https://${raw}`;
+})();
+
 // Initialize Spotify API
 const spotifyApi = new SpotifyWebApi({
   clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -2362,7 +2369,7 @@ app.post('/api/forgot-password', async (req, res) => {
     await db.createResetToken(normalizedEmail, resetToken, expiresAt);
 
     // Create reset link
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
 
     // Send email
     try {
@@ -3140,12 +3147,12 @@ app.get('/callback', async (req, res) => {
     }
 
     // Redirect back to frontend with email-based userId (not platform-specific)
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userEmail}&spotifyUserId=${spotifyPlatformUserId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
+    const redirectUrl = `${FRONTEND_URL}?userId=${userEmail}&spotifyUserId=${spotifyPlatformUserId}&email=${encodeURIComponent(userEmail)}&success=true&spotify=connected`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {
     console.error('Error getting tokens:', error);
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}?error=auth_failed`);
+    res.redirect(`${FRONTEND_URL}?error=auth_failed`);
   }
 });
 
@@ -3188,11 +3195,11 @@ app.all('/apple-callback', async (req, res) => {
 
     if (error) {
       console.error('Apple Music OAuth error:', error);
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}?error=${error}`);
+      return res.redirect(`${FRONTEND_URL}?error=${error}`);
     }
 
     if (!code) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}?error=missing_code`);
+      return res.redirect(`${FRONTEND_URL}?error=missing_code`);
     }
 
     const userEmail = state || '';
@@ -3279,12 +3286,12 @@ app.all('/apple-callback', async (req, res) => {
 
     // Redirect back to frontend with userId, email, and success flag
     // Use appleMusicUserId parameter so frontend knows to store it
-    const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}?userId=${userEmail}&appleMusicUserId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&apple=connected`;
+    const redirectUrl = `${FRONTEND_URL}?userId=${userEmail}&appleMusicUserId=${userId}&email=${encodeURIComponent(userEmail)}&success=true&apple=connected`;
     console.log('Redirecting to:', redirectUrl);
     res.redirect(redirectUrl);
   } catch (error) {
     console.error('Error in Apple Music callback:', error);
-    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}?error=apple_auth_failed&message=${encodeURIComponent(error.message)}`);
+    res.redirect(`${FRONTEND_URL}?error=apple_auth_failed&message=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -9666,8 +9673,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       await db.updateStripeCustomer(email, stripeCustomerId);
     }
 
-    let frontendUrl = process.env.FRONTEND_URL || 'https://tryfins.com';
-    if (!frontendUrl.startsWith('http')) frontendUrl = 'https://' + frontendUrl;
+    const frontendUrl = FRONTEND_URL;
 
     const sessionParams = {
       mode: 'subscription',
@@ -9778,8 +9784,7 @@ app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
 
     console.log(`[BILLING-PORTAL] Creating portal session for ${email}, customer: ${stripeCustomerId}`);
     const stripe = getStripe();
-    let frontendUrl = process.env.FRONTEND_URL || 'https://tryfins.com';
-    if (!frontendUrl.startsWith('http')) frontendUrl = 'https://' + frontendUrl;
+    const frontendUrl = FRONTEND_URL;
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
       return_url: `${frontendUrl}/`,
