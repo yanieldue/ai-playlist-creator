@@ -220,7 +220,7 @@ const STEPS = [
   {
     emoji: null,
     title: 'Create from an Artist',
-    description: "Search for any artist and generate a playlist built around their sound. Fins finds songs that match their style across your entire music library.",
+    description: "Tap any of your top artists to instantly generate a playlist of songs similar to their style. Fins finds tracks that match their vibe across your entire music library.",
     diagram: null,
     diagramComponent: ArtistsDiagram,
   },
