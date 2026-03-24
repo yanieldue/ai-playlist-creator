@@ -4682,7 +4682,7 @@ app.get('/api/analyze-mix', async (req, res) => {
     const STOPWORDS = new Set(['the','a','an','in','on','at','to','for','of','and','or','but','is','it','be','me','my','you','we','he','she','they','just','not','so','if','by','as','with','from','up','do','did','was','are','has','had','will','no','can','its','our','out','his','her','now','new','all','one','two','feat','ft']);
     const sigWords = (s) => s.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !STOPWORDS.has(w));
     const hasNonAscii = (s) => /[^\x00-\x7F]/.test(s);
-    const titleMatches = (searchTitle, resultTitle) => {
+    const titleMatches = (searchTitle, resultTitle, artistKnown) => {
       if (hasNonAscii(searchTitle)) {
         // For non-ASCII titles (Japanese, Korean, etc.), only accept if the result
         // also contains non-ASCII characters — an English result for a Japanese
@@ -4691,8 +4691,22 @@ app.get('/api/analyze-mix', async (req, res) => {
       }
       const qWords = sigWords(searchTitle);
       if (qWords.length === 0) return true; // too short to check
-      const rWords = new Set(sigWords(resultTitle));
-      return qWords.some(w => rWords.has(w));
+      const rWords = sigWords(resultTitle);
+      const rWordSet = new Set(rWords);
+
+      if (!artistKnown) {
+        // Without an artist, Spotify returns its "best guess" even when the exact
+        // song isn't in its catalog. Require strict bidirectional word match:
+        // every significant word in the search must appear in the result AND
+        // vice versa. This rejects "similar title, different song" false positives
+        // (e.g. "Snow Beneath My Breath" → "The snow melted beneath my breath").
+        const qWordSet = new Set(qWords);
+        return qWords.every(w => rWordSet.has(w)) && rWords.every(w => qWordSet.has(w));
+      }
+
+      // Artist is known — one significant word overlap is enough since the artist
+      // field already anchors the search to the right song.
+      return qWords.some(w => rWordSet.has(w));
     };
 
     const searchSpotify = async (title, artist) => {
@@ -4707,7 +4721,7 @@ app.get('/api/analyze-mix', async (req, res) => {
         let track = await searchSpotify(title, artist);
 
         // Reject false positives: if result title shares no significant words with search title, discard it
-        if (track && !titleMatches(title, track.name)) {
+        if (track && !titleMatches(title, track.name, !!artist)) {
           log(`false positive rejected: searched "${title}", got "${track.name}"`);
           track = null;
         }
