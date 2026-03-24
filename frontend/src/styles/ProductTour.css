@@ -540,8 +540,8 @@
 
 /* Dark mode */
 :root.dark-mode .tour-diagram {
-  background: #1c1c1e;
-  border-color: #3a3a3c;
+  background: #2c2c2e;
+  border-color: #48484a;
 }
 :root.dark-mode .tour-diag-highlight {
   outline-color: #ffffff;
@@ -561,7 +561,17 @@
   background: #2c2c2e;
 }
 :root.dark-mode .tour-diag-chat-bar {
-  background: #48484a;
+  background: #636366;
+}
+:root.dark-mode .tour-diagram .chat-input-wrapper {
+  background: #636366;
+}
+:root.dark-mode .tour-diagram .chat-input-wrapper input {
+  background: transparent;
+  color: #ffffff;
+}
+:root.dark-mode .tour-diagram .chat-input-wrapper input::placeholder {
+  color: #d1d1d6;
 }
 :root.dark-mode .tour-diag-nav {
   background: #3a3a3c;
