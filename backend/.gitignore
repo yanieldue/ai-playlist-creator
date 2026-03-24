@@ -3,3 +3,4 @@ node_modules/
 .tokens.json
 .playlists.json
 .users.json
+cache/

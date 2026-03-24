@@ -9212,52 +9212,77 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Featured artists for login page background — uses app credentials, no user auth needed
-const featuredArtistsCache = { data: null, expiresAt: 0 };
+// Featured artists for login page background.
+// Refreshes monthly from Spotify's Global Top 50 playlist.
+// Persisted to disk so restarts don't trigger unnecessary re-fetches.
+const FEATURED_CACHE_FILE = path.join(__dirname, 'cache', 'featured-artists.json');
+const FEATURED_CACHE_TTL  = 30 * 24 * 60 * 60 * 1000; // 30 days
+const featuredArtistsMemCache = { data: null, expiresAt: 0 };
+
 app.get('/api/featured-artists', async (req, res) => {
   try {
-    if (featuredArtistsCache.data && Date.now() < featuredArtistsCache.expiresAt) {
-      return res.json(featuredArtistsCache.data);
+    // 1. Memory cache (same process, fastest)
+    if (featuredArtistsMemCache.data && Date.now() < featuredArtistsMemCache.expiresAt) {
+      return res.json(featuredArtistsMemCache.data);
     }
+    // 2. File cache (survives server restarts, valid for 30 days)
+    try {
+      const raw = fs.readFileSync(FEATURED_CACHE_FILE, 'utf8');
+      const { artists, cachedAt } = JSON.parse(raw);
+      if (artists?.length > 0 && Date.now() - cachedAt < FEATURED_CACHE_TTL) {
+        const payload = { artists };
+        featuredArtistsMemCache.data = payload;
+        featuredArtistsMemCache.expiresAt = cachedAt + FEATURED_CACHE_TTL;
+        console.log(`[featured-artists] Serving from file cache (age: ${Math.round((Date.now() - cachedAt) / 86400000)}d)`);
+        return res.json(payload);
+      }
+    } catch (e) { /* cache file missing or corrupt — fetch fresh */ }
+
+    // 3. Fetch live from Spotify Global Top 50
+    console.log('[featured-artists] Cache expired or missing — fetching from Spotify Global Top 50...');
     const ccData = await spotifyApi.clientCredentialsGrant();
     const appSp = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     });
     appSp.setAccessToken(ccData.body.access_token);
-    const artistIds = [
-      '1Xyo4u8uXC1ZmMpatF05PJ', // The Weeknd
-      '3TVXtAsR1Inumwj472S9r4', // Drake
-      '06HL4z0CvFAxyc27GXpf02', // Taylor Swift
-      '7tYKF4w9nC0nq9CsPZTHyP', // SZA
-      '2YZyLoL8N0Wb9xBt1NhZWg', // Kendrick Lamar
-      '6qqNVTkY8uBg9cP3Jd7DAH', // Billie Eilish
-      '4q3ewBCX7sLwd24euuV69X', // Bad Bunny
-      '5cj0lLjcoR7YOSnhnX0Po5', // Doja Cat
-      '246dkjvS1zLTtiykXe5h60', // Post Malone
-      '0du5cEVh5yTK9QJze8zA0C', // Bruno Mars
-      '1uNFoZAHBGtllmzznpCI3s', // Justin Bieber
-      '6eUKZXaKkcviH0Ku9w2n3V', // Ed Sheeran
-      '4dpARuHxo51G3z768sgnrY', // Adele
-      '7dGJo4pcD2V6oG8kP0tJRR', // Eminem
-      '66CXWjxzNUsdJxJ2JdwvnR', // Ariana Grande
-      '6KImCVD70vtIoJWnq6nqn1', // Harry Styles
-      '4V8LLVI7W4KW41PnDMb4yO', // Tyler, the Creator
-      '1McMsnEElThX1knmY4oliG', // Olivia Rodrigo
-      '00FQb4jTyendYWaN8pK0wa', // Lana Del Rey
-      '2h93pZq0e7k5yf4dywlkpM', // Frank Ocean
-      '3Nrfpe0tUJi4K4DXYWgMUX', // J. Cole
-    ];
-    const result = await appSp.getArtists(artistIds);
-    const artists = (result.body.artists || [])
+
+    // Pull the 50 tracks and collect unique lead artist IDs (up to 21)
+    const playlistRes = await appSp.getPlaylistTracks('37i9dQZEVXbMDoHDwVN2tF', { limit: 50 });
+    const tracks = playlistRes.body.items || [];
+    const seen = new Set();
+    const artistIds = [];
+    for (const item of tracks) {
+      const id = item.track?.artists?.[0]?.id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        artistIds.push(id);
+        if (artistIds.length === 21) break;
+      }
+    }
+
+    // Batch-fetch full artist objects (needed for high-res images)
+    const artistsRes = await appSp.getArtists(artistIds);
+    const artists = (artistsRes.body.artists || [])
       .filter(a => a?.images?.[0])
       .map(a => ({ name: a.name, image: a.images[0].url }));
+
+    console.log(`[featured-artists] Fetched ${artists.length} artists from Global Top 50`);
     const payload = { artists };
-    featuredArtistsCache.data = payload;
-    featuredArtistsCache.expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24h cache
+
+    // Persist to memory + file
+    featuredArtistsMemCache.data = payload;
+    featuredArtistsMemCache.expiresAt = Date.now() + FEATURED_CACHE_TTL;
+    try {
+      fs.mkdirSync(path.dirname(FEATURED_CACHE_FILE), { recursive: true });
+      fs.writeFileSync(FEATURED_CACHE_FILE, JSON.stringify({ artists, cachedAt: Date.now() }));
+    } catch (e) { console.log('[featured-artists] Could not write cache file:', e.message); }
+
     res.json(payload);
   } catch (err) {
-    console.log('Featured artists fetch failed:', err.message);
+    console.log('[featured-artists] Fetch failed:', err.message);
+    // Return stale memory cache rather than empty on error
+    if (featuredArtistsMemCache.data) return res.json(featuredArtistsMemCache.data);
     res.json({ artists: [] });
   }
 });
