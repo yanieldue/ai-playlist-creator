@@ -32,6 +32,13 @@ const SignupForm = ({ onSignupComplete }) => {
   const isLoginMode = mode === 'login';
   const isFormOpen = mode !== 'landing';
 
+  // Lock body scroll for the duration of the auth page
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   useEffect(() => {
     playlistService.getFeaturedArtists()
       .then(data => setBgArtists(data.artists || []))
