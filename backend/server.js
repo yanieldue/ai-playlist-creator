@@ -7982,6 +7982,81 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
   }
 });
 
+// Rename a playlist (updates DB + platform)
+app.put('/api/playlists/:playlistId/rename', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { userId, newName } = req.body;
+
+    if (!userId || !newName?.trim()) {
+      return res.status(400).json({ error: 'userId and newName are required' });
+    }
+
+    const trimmedName = newName.trim();
+    const emailUserId = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    const resolvedUserId = emailUserId || userId;
+    const upa = userPlaylists.get(resolvedUserId) || [];
+    const idx = upa.findIndex(p => p.playlistId === playlistId);
+    if (idx === -1) return res.status(404).json({ error: 'Playlist not found' });
+
+    const playlist = upa[idx];
+    const platform = playlist.platform || 'spotify';
+
+    // Update on platform
+    if (platform === 'apple') {
+      try {
+        const applePlatformUserId = isEmailBasedUserId(userId)
+          ? await resolvePlatformUserId(userId, 'apple')
+          : userId;
+        const appleTokens = applePlatformUserId ? await getUserTokens(applePlatformUserId) : null;
+        if (appleTokens) {
+          const appleMusicDevToken = generateAppleMusicToken();
+          const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
+          await appleMusicApiInstance.renamePlaylist(appleTokens.access_token, playlistId, trimmedName);
+          console.log(`[RENAME] Renamed Apple Music playlist ${playlistId} to "${trimmedName}"`);
+        }
+      } catch (platformErr) {
+        console.warn(`[RENAME] Could not rename Apple Music playlist: ${platformErr.message}`);
+      }
+    } else {
+      try {
+        const platformUserId = isEmailBasedUserId(userId)
+          ? await resolvePlatformUserId(userId, 'spotify')
+          : userId;
+        const tokens = platformUserId ? await getUserTokens(platformUserId) : null;
+        if (tokens) {
+          const userSpotifyApi = new SpotifyWebApi({
+            clientId: process.env.SPOTIFY_CLIENT_ID,
+            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback',
+          });
+          userSpotifyApi.setAccessToken(tokens.access_token);
+          userSpotifyApi.setRefreshToken(tokens.refresh_token);
+          try {
+            const d = await userSpotifyApi.refreshAccessToken();
+            userSpotifyApi.setAccessToken(d.body.access_token);
+          } catch (_) {}
+          await userSpotifyApi.changePlaylistDetails(playlistId, { name: trimmedName });
+          console.log(`[RENAME] Renamed Spotify playlist ${playlistId} to "${trimmedName}"`);
+        }
+      } catch (platformErr) {
+        console.warn(`[RENAME] Could not rename Spotify playlist: ${platformErr.message}`);
+      }
+    }
+
+    // Update stored record
+    upa[idx] = { ...upa[idx], playlistName: trimmedName };
+    userPlaylists.set(resolvedUserId, upa);
+    await savePlaylist(resolvedUserId, upa[idx]);
+    console.log(`[RENAME] Updated stored record for playlist ${playlistId}`);
+
+    res.json({ success: true, playlistName: trimmedName });
+  } catch (error) {
+    console.error('[RENAME] Error:', error);
+    res.status(500).json({ error: 'Failed to rename playlist', details: error.message });
+  }
+});
+
 // Apply a refinement result to an existing playlist:
 // replaces Spotify/Apple tracks in-place and updates the stored record.
 // Called when the user refines an existing playlist from MyPlaylists and clicks "Create".
