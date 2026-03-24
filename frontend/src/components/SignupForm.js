@@ -17,6 +17,13 @@ const EyeOn = () => (
   </svg>
 );
 
+const BackArrow = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+    strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
 const SignupForm = ({ onSignupComplete }) => {
   const [mode, setMode] = useState('landing'); // 'landing' | 'login' | 'signup'
   const [email, setEmail] = useState('');
@@ -24,20 +31,23 @@ const SignupForm = ({ onSignupComplete }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [bgArtists, setBgArtists] = useState([]);
 
   const emailRef = useRef(null);
   const isLoginMode = mode === 'login';
   const isFormOpen = mode !== 'landing';
 
-  // Lock body scroll for the duration of the auth page
+  // Lock body scroll on landing; allow scroll on form pages (keyboard safe)
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
+    if (!isFormOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isFormOpen]);
 
   useEffect(() => {
     playlistService.getFeaturedArtists()
@@ -45,17 +55,14 @@ const SignupForm = ({ onSignupComplete }) => {
       .catch(() => {});
   }, []);
 
-  // Focus email field after sheet slides up
+  // Focus email on form open
   useEffect(() => {
     if (isFormOpen) {
-      const t = setTimeout(() => emailRef.current?.focus(), 380);
+      const t = setTimeout(() => emailRef.current?.focus(), 80);
       return () => clearTimeout(t);
     }
   }, [isFormOpen]);
 
-  // Distribute artists across 3 columns, interleaved.
-  // Middle column is reversed so it visually scrolls opposite (all columns use
-  // the same upward CSS animation — reversed images create a downward look).
   const columns = useMemo(() => {
     const cols = [[], [], []];
     bgArtists.forEach((a, i) => cols[i % 3].push(a));
@@ -67,6 +74,7 @@ const SignupForm = ({ onSignupComplete }) => {
     setMode(loginMode ? 'login' : 'signup');
     setError('');
     setShowPassword(false);
+    setPasswordVisible(false);
     setPassword('');
     setConfirmPassword('');
     setEmail('');
@@ -76,12 +84,14 @@ const SignupForm = ({ onSignupComplete }) => {
     setMode('landing');
     setError('');
     setShowPassword(false);
+    setPasswordVisible(false);
   };
 
   const toggleMode = () => {
     setMode(isLoginMode ? 'signup' : 'login');
     setError('');
     setShowPassword(false);
+    setPasswordVisible(false);
     setPassword('');
     setConfirmPassword('');
   };
@@ -99,7 +109,7 @@ const SignupForm = ({ onSignupComplete }) => {
           const { exists } = await playlistService.checkEmail(email);
           if (exists) { setError('An account with this email already exists. Try logging in instead.'); return; }
         } catch (e) {
-          // non-blocking — let signup proceed if check fails
+          // non-blocking
         } finally {
           setLoading(false);
         }
@@ -198,9 +208,91 @@ const SignupForm = ({ onSignupComplete }) => {
     </button>
   );
 
+  // ── Form page (clean, no mosaic) ────────────────────────────────────────────
+  if (isFormOpen) {
+    return (
+      <div className="auth-page">
+        <header className="auth-page-header">
+          <button className="auth-page-back" onClick={closeForm} aria-label="Back">
+            <BackArrow />
+          </button>
+          <div className="auth-brand auth-brand--centered">
+            <img src="/fins_logo.png" alt="Fins" className="auth-brand-logo" />
+            <span className="auth-brand-name">Fins</span>
+          </div>
+        </header>
+
+        <div className="auth-page-content">
+          <h2 className="auth-page-title">
+            {isLoginMode ? 'Log in' : 'Create account'}
+          </h2>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <div className="auth-form">
+            <input
+              ref={emailRef}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
+              placeholder="name@email.com"
+              className="auth-input"
+            />
+
+            {showPassword && (
+              <>
+                <div className="auth-input-wrapper">
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
+                    placeholder={isLoginMode ? 'Enter your password' : 'Create a password'}
+                    className="auth-input"
+                    autoFocus
+                  />
+                  <PasswordToggle />
+                </div>
+
+                {!isLoginMode && (
+                  <div className="auth-input-wrapper">
+                    <input
+                      type={passwordVisible ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
+                      placeholder="Confirm your password"
+                      className="auth-input"
+                    />
+                    <PasswordToggle />
+                  </div>
+                )}
+              </>
+            )}
+
+            <button onClick={handleContinue} className="auth-cta auth-cta--primary auth-cta--submit" disabled={loading}>
+              {loading ? 'Loading...' : showPassword ? (isLoginMode ? 'Log in' : 'Sign up') : 'Continue'}
+            </button>
+
+            {isLoginMode && showPassword && (
+              <button onClick={() => window.location.href = '/forgot-password'} className="auth-link-btn" type="button">
+                Forgot password?
+              </button>
+            )}
+
+            <button onClick={toggleMode} className="auth-toggle" type="button">
+              {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Landing page (with artist mosaic) ───────────────────────────────────────
   return (
     <div className="auth-container">
-      {/* Artist mosaic background */}
       {bgArtists.length > 0 && (
         <div className="auth-bg" aria-hidden="true">
           {columns.map((col, ci) => (
@@ -214,7 +306,6 @@ const SignupForm = ({ onSignupComplete }) => {
       )}
       <div className="auth-overlay" aria-hidden="true" />
 
-      {/* Fins brand — always visible, even when form is open */}
       <header className="auth-header">
         <div className="auth-brand">
           <img src="/fins_logo.png" alt="Fins" className="auth-brand-logo" />
@@ -222,96 +313,17 @@ const SignupForm = ({ onSignupComplete }) => {
         </div>
       </header>
 
-      {/* Landing page (hero + buttons) */}
-      <div className={`auth-landing${isFormOpen ? ' auth-landing--hidden' : ''}`}>
+      <div className="auth-landing">
         <div className="auth-hero">
           <h1 className="auth-hero-title">Your playlist,<br />your vibe.</h1>
           <p className="auth-hero-sub">Playlists that actually fit your taste</p>
         </div>
-
         <div className="auth-landing-actions">
           <button className="auth-cta auth-cta--primary" onClick={() => openForm(false)}>
             Sign up for free
           </button>
           <button className="auth-cta auth-cta--secondary" onClick={() => openForm(true)}>
             Log in
-          </button>
-        </div>
-      </div>
-
-      {/* Backdrop tap-to-close (desktop) */}
-      {isFormOpen && <div className="auth-sheet-backdrop" onClick={closeForm} />}
-
-      {/* Form bottom sheet */}
-      <div className={`auth-sheet${isFormOpen ? ' auth-sheet--open' : ''}`}>
-        <div className="auth-sheet-handle" />
-        <button className="auth-sheet-back" onClick={closeForm} aria-label="Close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        <h2 className="auth-sheet-title">
-          {isLoginMode ? 'Log in' : 'Create account'}
-        </h2>
-
-        {error && <div className="auth-error">{error}</div>}
-
-        <div className="auth-form">
-          <input
-            ref={emailRef}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
-            placeholder="name@email.com"
-            className="auth-input"
-          />
-
-          {showPassword && (
-            <>
-              <div className="auth-input-wrapper">
-                <input
-                  type={passwordVisible ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
-                  placeholder={isLoginMode ? 'Enter your password' : 'Create a password'}
-                  className="auth-input"
-                  autoFocus
-                />
-                <PasswordToggle />
-              </div>
-
-              {!isLoginMode && (
-                <div className="auth-input-wrapper">
-                  <input
-                    type={passwordVisible ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    onKeyPress={(e) => { if (e.key === 'Enter') handleContinue(); }}
-                    placeholder="Confirm your password"
-                    className="auth-input"
-                  />
-                  <PasswordToggle />
-                </div>
-              )}
-            </>
-          )}
-
-          <button onClick={handleContinue} className="auth-cta auth-cta--primary auth-cta--submit" disabled={loading}>
-            {loading ? 'Loading...' : showPassword ? (isLoginMode ? 'Log in' : 'Sign up') : 'Continue with email'}
-          </button>
-
-          {isLoginMode && showPassword && (
-            <button onClick={() => window.location.href = '/forgot-password'} className="auth-link-btn" type="button">
-              Forgot password?
-            </button>
-          )}
-
-          <button onClick={toggleMode} className="auth-toggle" type="button">
-            {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Log in'}
           </button>
         </div>
       </div>

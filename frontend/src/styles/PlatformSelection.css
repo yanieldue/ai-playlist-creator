@@ -1,11 +1,6 @@
 /* Platform Selection — platform-specific styles only.
-   Base layout (auth-container, auth-bg, auth-sheet, auth-cta, etc.)
+   Base layout (auth-page, auth-cta, auth-input, etc.)
    comes from SignupForm.css which is imported first. */
-
-.ps-sheet {
-  /* Extra bottom padding so note text clears safe area */
-  padding-bottom: 48px;
-}
 
 .ps-subtitle {
   font-size: 15px;

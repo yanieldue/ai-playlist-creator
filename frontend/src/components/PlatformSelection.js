@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import ConfirmModal from './ConfirmModal';
@@ -8,34 +8,9 @@ import '../styles/PlatformSelection.css';
 const PlatformSelection = ({ email, authToken, onComplete }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [connectedPlatforms, setConnectedPlatforms] = useState({
-    spotify: false,
-    apple: false
-  });
-  const [isConnecting, setIsConnecting] = useState(null); // 'spotify' or 'apple' while connecting
-  const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
-  const [bgArtists, setBgArtists] = useState([]);
-
-  // Lock body scroll
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
-
-  // Fetch artist background
-  useEffect(() => {
-    playlistService.getFeaturedArtists()
-      .then(data => setBgArtists(data.artists || []))
-      .catch(() => {});
-  }, []);
-
-  const columns = useMemo(() => {
-    const cols = [[], [], []];
-    bgArtists.forEach((a, i) => cols[i % 3].push(a));
-    cols[1] = [...cols[1]].reverse();
-    return cols;
-  }, [bgArtists]);
+  const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
+  const [isConnecting, setIsConnecting] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => {
     const fetchConnectedPlatforms = async () => {
@@ -76,11 +51,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
       setConfirmModal({
         title: 'Switch to Spotify?',
         message: 'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible.',
-        onConfirm: () => {
-          setConfirmModal(null);
-          localStorage.removeItem('appleMusicUserId');
-          proceedConnectSpotify();
-        },
+        onConfirm: () => { setConfirmModal(null); localStorage.removeItem('appleMusicUserId'); proceedConnectSpotify(); },
       });
       return;
     }
@@ -93,12 +64,8 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     try {
       const userEmail = email || localStorage.getItem('userEmail');
       const authData = await playlistService.getSpotifyAuthUrl(userEmail);
-      if (authData && authData.url) {
-        window.location.href = authData.url;
-      } else {
-        setError('Failed to get Spotify authorization URL');
-        setIsConnecting(null);
-      }
+      if (authData?.url) { window.location.href = authData.url; }
+      else { setError('Failed to get Spotify authorization URL'); setIsConnecting(null); }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to connect to Spotify');
       setIsConnecting(null);
@@ -110,11 +77,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
       setConfirmModal({
         title: 'Switch to Apple Music?',
         message: 'Connecting Apple Music will disconnect your Spotify account. Your Spotify playlists will no longer be accessible.',
-        onConfirm: () => {
-          setConfirmModal(null);
-          localStorage.removeItem('spotifyUserId');
-          proceedConnectApple();
-        },
+        onConfirm: () => { setConfirmModal(null); localStorage.removeItem('spotifyUserId'); proceedConnectApple(); },
       });
       return;
     }
@@ -160,7 +123,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
       }
       if (connectedPlatforms.spotify) {
         const authData = await playlistService.getSpotifyAuthUrl(emailToUse);
-        if (authData && authData.url) { window.location.href = authData.url; return; }
+        if (authData?.url) { window.location.href = authData.url; return; }
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to complete signup');
@@ -182,39 +145,21 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
         onCancel={() => setConfirmModal(null)}
       />
 
-      <div className="auth-container">
-        {/* Artist mosaic background */}
-        {bgArtists.length > 0 && (
-          <div className="auth-bg" aria-hidden="true">
-            {columns.map((col, ci) => (
-              <div key={ci} className={`auth-bg-col auth-bg-col-${ci}`}>
-                {[...col, ...col, ...col].map((artist, i) => (
-                  <img key={i} src={artist.image} alt="" className="auth-bg-img" draggable={false} />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="auth-overlay" aria-hidden="true" />
-
-        {/* Fins brand */}
-        <header className="auth-header">
-          <div className="auth-brand">
+      <div className="auth-page">
+        <header className="auth-page-header">
+          <div className="auth-brand auth-brand--centered">
             <img src="/fins_logo.png" alt="Fins" className="auth-brand-logo" />
             <span className="auth-brand-name">Fins</span>
           </div>
         </header>
 
-        {/* Platform sheet — always open */}
-        <div className="auth-sheet auth-sheet--open ps-sheet">
-          <div className="auth-sheet-handle" />
-          <h2 className="auth-sheet-title">Connect your music</h2>
+        <div className="auth-page-content">
+          <h2 className="auth-page-title">Connect your music</h2>
           <p className="ps-subtitle">Choose which platform to use with Fins</p>
 
           {error && <div className="auth-error">{error}</div>}
 
           <div className="ps-options">
-            {/* Spotify */}
             <div className={`ps-option${connectedPlatforms.spotify ? ' ps-option--connected' : ''}`}>
               <img src="/spotify-logo.png" alt="Spotify" className="ps-platform-logo" />
               <span className="ps-platform-name">Spotify</span>
@@ -231,7 +176,6 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
               )}
             </div>
 
-            {/* Apple Music */}
             <div className={`ps-option${connectedPlatforms.apple ? ' ps-option--connected' : ''}`}>
               <img src="/apple-music-logo.png" alt="Apple Music" className="ps-platform-logo" />
               <span className="ps-platform-name">Apple Music</span>
