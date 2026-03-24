@@ -1,18 +1,15 @@
-/* Auth Screen — artist mosaic background + floating card */
+/* Auth Screen — Netflix/Spotify-style landing + bottom sheet form */
 
 .auth-container {
   position: relative;
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 100dvh;
   background: #0a0a0a;
   overflow: hidden;
-  padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
 }
 
-/* ── Background grid ───────────────────────────────────── */
+/* ── Background grid ─────────────────────────────────────── */
 
 .auth-bg {
   position: absolute;
@@ -31,13 +28,8 @@
   will-change: transform;
 }
 
-.auth-bg-col.scroll-up {
-  animation: bgScrollUp 32s linear infinite;
-}
-
-.auth-bg-col.scroll-down {
-  animation: bgScrollDown 38s linear infinite;
-}
+.auth-bg-col.scroll-up   { animation: bgScrollUp   32s linear infinite; }
+.auth-bg-col.scroll-down { animation: bgScrollDown  38s linear infinite; }
 
 .auth-bg-img {
   width: 100%;
@@ -51,82 +43,227 @@
   from { transform: translateY(0); }
   to   { transform: translateY(-33.333%); }
 }
-
 @keyframes bgScrollDown {
   from { transform: translateY(-33.333%); }
   to   { transform: translateY(0); }
 }
 
-/* ── Dark overlay ──────────────────────────────────────── */
+/* ── Overlay ─────────────────────────────────────────────── */
 
 .auth-overlay {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 70% at 50% 50%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.55) 100%),
-    linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.2) 60%, rgba(0,0,0,0.6) 100%);
+    radial-gradient(ellipse 90% 65% at 50% 45%, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.52) 100%),
+    linear-gradient(to bottom,
+      rgba(0,0,0,0.65) 0%,
+      rgba(0,0,0,0.15) 30%,
+      rgba(0,0,0,0.15) 65%,
+      rgba(0,0,0,0.80) 100%
+    );
   pointer-events: none;
 }
 
-/* ── Card ──────────────────────────────────────────────── */
+/* ── Landing page ────────────────────────────────────────── */
 
-.auth-card {
+.auth-landing {
   position: relative;
   z-index: 10;
-  width: 100%;
-  max-width: 380px;
-  background: rgba(12, 12, 12, 0.82);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
-  padding: 40px 32px 36px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 24px 52px;
+  transition: opacity 0.25s ease;
+}
+
+.auth-landing--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Fins brand — top left */
+.auth-header {
+  padding-top: 52px;
+  flex-shrink: 0;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-brand-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.auth-brand-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.2px;
+}
+
+/* Big headline — centered vertically */
+.auth-hero {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 12px;
 }
 
-/* ── Logo ──────────────────────────────────────────────── */
+.auth-hero-title {
+  font-size: 46px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.08;
+  letter-spacing: -1.5px;
+  margin: 0 0 16px;
+}
 
-.auth-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
+.auth-hero-sub {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Pill buttons — pinned to bottom */
+.auth-landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* ── Shared CTA button styles ────────────────────────────── */
+
+.auth-cta {
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 500px;
+  cursor: pointer;
+  transition: opacity 0.18s ease, transform 0.14s ease;
+  font-family: inherit;
+  letter-spacing: -0.1px;
+}
+
+.auth-cta--primary {
+  background: #ffffff;
+  color: #000000;
+}
+
+.auth-cta--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+}
+
+.auth-cta:hover:not(:disabled) {
+  opacity: 0.86;
+  transform: translateY(-1px);
+}
+.auth-cta:active:not(:disabled) { transform: translateY(0); }
+.auth-cta:disabled { opacity: 0.38; cursor: not-allowed; }
+
+/* ── Bottom sheet ────────────────────────────────────────── */
+
+.auth-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: #111111;
+  border-radius: 20px 20px 0 0;
+  padding: 12px 24px 44px;
+  transform: translateY(100%);
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.auth-sheet--open {
+  transform: translateY(0);
+}
+
+/* Drag handle */
+.auth-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  margin: 0 auto 12px;
+  flex-shrink: 0;
+}
+
+/* Back / close button */
+.auth-sheet-back {
+  background: none;
+  border: none;
+  padding: 6px 6px 6px 0;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.5);
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 24px;
-  overflow: hidden;
+  margin-bottom: 4px;
+  transition: color 0.18s;
 }
+.auth-sheet-back:hover { color: #ffffff; }
 
-.auth-logo-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 14px;
-}
-
-/* ── Title & Subtitle ──────────────────────────────────── */
-
-.auth-title {
+/* Sheet title */
+.auth-sheet-title {
   font-size: 26px;
   font-weight: 700;
   color: #ffffff;
-  margin: 0 0 8px;
-  text-align: center;
-  letter-spacing: -0.3px;
+  margin: 0 0 24px;
+  letter-spacing: -0.4px;
 }
 
-.auth-subtitle {
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.5);
-  margin: 0 0 28px;
-  text-align: center;
-  line-height: 1.4;
+/* Desktop: bottom sheet → floating card */
+@media (min-width: 600px) {
+  .auth-sheet {
+    left: 50%;
+    right: auto;
+    width: 440px;
+    transform: translateX(-50%) translateY(calc(100% + 48px));
+    border-radius: 20px;
+    bottom: 48px;
+  }
+  .auth-sheet--open {
+    transform: translateX(-50%) translateY(0);
+  }
+  .auth-hero-title {
+    font-size: 58px;
+  }
 }
 
-/* ── Error ─────────────────────────────────────────────── */
+/* ── Sheet backdrop (desktop tap-to-close) ───────────────── */
+
+.auth-sheet-backdrop {
+  display: none;
+}
+@media (min-width: 600px) {
+  .auth-sheet-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    background: rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ── Form fields ─────────────────────────────────────────── */
 
 .auth-error {
   width: 100%;
@@ -141,51 +278,39 @@
   box-sizing: border-box;
 }
 
-/* ── Form ──────────────────────────────────────────────── */
-
 .auth-form {
-  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-/* ── Inputs ────────────────────────────────────────────── */
-
 .auth-input {
   width: 100%;
   padding: 15px 18px;
   font-size: 16px;
-  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   font-family: inherit;
   box-sizing: border-box;
-  animation: authSlideIn 0.25s ease;
+  animation: authSlideIn 0.22s ease;
 }
 
 .auth-input:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
 }
 
-.auth-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-/* ── Password wrapper ──────────────────────────────────── */
+.auth-input::placeholder { color: rgba(255, 255, 255, 0.28); }
 
 .auth-input-wrapper {
   position: relative;
   width: 100%;
 }
-
-.auth-input-wrapper .auth-input {
-  padding-right: 48px;
-}
+.auth-input-wrapper .auth-input { padding-right: 48px; }
 
 .auth-password-toggle {
   position: absolute;
@@ -196,119 +321,55 @@
   border: none;
   padding: 4px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  transition: color 0.18s;
 }
+.auth-password-toggle:hover { color: rgba(255, 255, 255, 0.8); }
+.auth-password-toggle svg { width: 18px; height: 18px; }
 
-.auth-password-toggle:hover {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.auth-password-toggle svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* ── CTA button ────────────────────────────────────────── */
-
-.auth-cta {
-  width: 100%;
-  padding: 15px 18px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #000000;
-  background: #ffffff;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: opacity 0.2s ease, transform 0.15s ease;
-  font-family: inherit;
+/* Submit button inside sheet (full width, primary pill) */
+.auth-cta--submit {
   margin-top: 4px;
+  border-radius: 500px;
 }
-
-.auth-cta:hover:not(:disabled) {
-  opacity: 0.88;
-  transform: translateY(-1px);
-}
-
-.auth-cta:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.auth-cta:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ── Secondary links ───────────────────────────────────── */
 
 .auth-link-btn {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.38);
   font-size: 14px;
   cursor: pointer;
   padding: 4px 0;
   font-family: inherit;
   text-align: center;
-  transition: color 0.2s;
+  transition: color 0.18s;
 }
-
-.auth-link-btn:hover {
-  color: rgba(255, 255, 255, 0.85);
-}
+.auth-link-btn:hover { color: rgba(255, 255, 255, 0.8); }
 
 .auth-toggle {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.38);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   padding: 8px 0 0;
   font-family: inherit;
   text-align: center;
-  transition: color 0.2s;
+  transition: color 0.18s;
   margin-top: 2px;
 }
+.auth-toggle:hover { color: rgba(255, 255, 255, 0.8); }
 
-.auth-toggle:hover {
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* ── Animation ─────────────────────────────────────────── */
+/* ── Animation ───────────────────────────────────────────── */
 
 @keyframes authSlideIn {
-  from { opacity: 0; transform: translateY(-8px); }
+  from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Dark mode (no-op — card is always dark now) ───────── */
+/* ── Dark mode (no-op — always dark) ────────────────────── */
 :root.dark-mode .auth-container { background: #0a0a0a; }
-
-/* ── Mobile ────────────────────────────────────────────── */
-
-@media (max-width: 480px) {
-  .auth-container {
-    padding: 16px;
-    align-items: center;
-  }
-
-  .auth-card {
-    padding: 32px 24px 28px;
-    border-radius: 20px;
-  }
-
-  .auth-logo {
-    width: 52px;
-    height: 52px;
-    margin-bottom: 20px;
-  }
-
-  .auth-title {
-    font-size: 22px;
-  }
-}
