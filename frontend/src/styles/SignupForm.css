@@ -6,6 +6,12 @@
   background: #0a0a0a;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.auth-container--ready {
+  opacity: 1;
 }
 
 /* ── Background grid ─────────────────────────────────────── */

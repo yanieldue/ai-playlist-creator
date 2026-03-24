@@ -34,6 +34,7 @@ const SignupForm = ({ onSignupComplete }) => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [bgArtists, setBgArtists] = useState([]);
+  const [landingReady, setLandingReady] = useState(false);
 
   const emailRef = useRef(null);
   const isLoginMode = mode === 'login';
@@ -50,9 +51,32 @@ const SignupForm = ({ onSignupComplete }) => {
   }, [isFormOpen]);
 
   useEffect(() => {
+    let servedFromCache = false;
+
+    // Serve cached artists instantly so images start loading on first paint
+    try {
+      const cached = JSON.parse(localStorage.getItem('featuredArtists') || 'null');
+      if (cached?.artists?.length > 0) {
+        setBgArtists(cached.artists);
+        setLandingReady(true);
+        servedFromCache = true;
+      }
+    } catch (e) {}
+
+    // Fetch fresh in background; update cache for next visit.
+    // If we already showed cached artists, don't update state — avoids
+    // re-rendering the image columns which would restart the scroll animation.
     playlistService.getFeaturedArtists()
-      .then(data => setBgArtists(data.artists || []))
-      .catch(() => {});
+      .then(data => {
+        if (data.artists?.length > 0) {
+          try { localStorage.setItem('featuredArtists', JSON.stringify({ artists: data.artists })); } catch (e) {}
+          if (!servedFromCache) {
+            setBgArtists(data.artists);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLandingReady(true));
   }, []);
 
   // Focus email on form open
@@ -292,7 +316,7 @@ const SignupForm = ({ onSignupComplete }) => {
 
   // ── Landing page (with artist mosaic) ───────────────────────────────────────
   return (
-    <div className="auth-container">
+    <div className={`auth-container${landingReady ? ' auth-container--ready' : ''}`}>
       {bgArtists.length > 0 && (
         <div className="auth-bg" aria-hidden="true">
           {columns.map((col, ci) => (
