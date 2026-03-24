@@ -564,14 +564,14 @@
   background: #636366;
 }
 :root.dark-mode .tour-diagram .chat-input-wrapper {
-  background: #636366;
+  background: #636366 !important;
 }
 :root.dark-mode .tour-diagram .chat-input-wrapper input {
-  background: transparent;
-  color: #ffffff;
+  background: transparent !important;
+  color: #ffffff !important;
 }
 :root.dark-mode .tour-diagram .chat-input-wrapper input::placeholder {
-  color: #d1d1d6;
+  color: #d1d1d6 !important;
 }
 :root.dark-mode .tour-diag-nav {
   background: #3a3a3c;
