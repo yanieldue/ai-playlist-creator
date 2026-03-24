@@ -7141,12 +7141,23 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
     // ── Fix 2: Force-include 1-2 songs from each explicitly requested artist ──
     // If the user named specific artists in their prompt but none of their songs
     // survived the pool/vibe-check pipeline, inject them now.
+    // Platform-aware: uses Spotify catalog for Spotify users, Apple Music catalog for Apple users.
     try {
       const requestedArtists = (genreData.artistConstraints?.requestedArtists || [])
         .filter(a => a && typeof a === 'string');
 
-      if (requestedArtists.length > 0 && appSpotify) {
+      const canForceInclude = requestedArtists.length > 0 &&
+        (platform !== 'apple' ? !!appSpotify : !!AppleMusicService);
+
+      if (canForceInclude) {
         const normalizeArtist = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Apple Music search service (only needed for apple platform)
+        let appleMusicApiForForce = null;
+        if (platform === 'apple') {
+          const devToken = generateAppleMusicToken();
+          if (devToken) appleMusicApiForForce = new AppleMusicService(devToken);
+        }
 
         // Build a set of artist names already in the playlist
         const presentArtists = new Set(
@@ -7162,29 +7173,48 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
 
           console.log(`[FORCE-INCLUDE] "${artistName}" not in playlist — searching for top track`);
           try {
-            const searchResult = await appSpotify.searchTracks(`artist:${artistName}`, { limit: 10, market: 'US' });
-            const candidates = searchResult?.tracks?.items || [];
+            let match = null;
 
-            // Find first track whose primary artist name matches closely
-            const match = candidates.find(track => {
-              const primaryArtist = normalizeArtist(track.artists?.[0]?.name || '');
-              return primaryArtist === normName ||
-                primaryArtist.includes(normName) ||
-                normName.includes(primaryArtist);
-            });
+            if (platform === 'apple' && appleMusicApiForForce) {
+              // Apple Music: search by artist name, pick first result that matches artist
+              const storefront = tokens?.storefront || 'us';
+              const candidates = await appleMusicApiForForce.searchTracks(`${artistName}`, storefront, 10);
+              match = candidates.find(track => {
+                const primaryArtist = normalizeArtist(track.artists?.[0]?.name || '');
+                return primaryArtist === normName ||
+                  primaryArtist.includes(normName) ||
+                  normName.includes(primaryArtist);
+              });
+            } else if (appSpotify) {
+              // Spotify: use artist: filter for precision
+              const searchResult = await appSpotify.searchTracks(`artist:${artistName}`, { limit: 10, market: 'US' });
+              const candidates = searchResult?.tracks?.items || [];
+              match = candidates.find(track => {
+                const primaryArtist = normalizeArtist(track.artists?.[0]?.name || '');
+                return primaryArtist === normName ||
+                  primaryArtist.includes(normName) ||
+                  normName.includes(primaryArtist);
+              });
+            }
 
             if (match && !existingIds.has(match.id)) {
-              const injectTrack = {
+              const injectTrack = platform === 'apple' ? {
+                id: match.id,
+                name: match.name,
+                artist: match.artists?.[0]?.name || artistName,
+                album: match.album?.name || '',
+                uri: match.uri, // already 'apple:track:...'
+                source: 'force_include',
+              } : {
                 id: match.id,
                 name: match.name,
                 artist: match.artists.map(a => a.name).join(', '),
                 album: match.album?.name || '',
-                uri: match.uri,
+                uri: match.uri, // 'spotify:track:...'
                 popularity: match.popularity,
                 source: 'force_include',
               };
               if (selectedTracks.length >= targetCount) {
-                // Replace last track (least important slot)
                 selectedTracks[selectedTracks.length - 1] = injectTrack;
                 console.log(`[FORCE-INCLUDE] Replaced last track with "${match.name}" by ${injectTrack.artist}`);
               } else {
