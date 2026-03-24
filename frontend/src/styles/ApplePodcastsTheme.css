@@ -883,6 +883,7 @@ body {
   width: 32px;
   text-align: center;
   flex-shrink: 0;
+  color: #1c1c1e;
 }
 
 .create-fab-option-text {
@@ -924,6 +925,10 @@ body {
 
 :root.dark-mode .create-fab-option {
   border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+:root.dark-mode .create-fab-option-icon {
+  color: #ffffff;
 }
 
 :root.dark-mode .create-fab-option-label {
