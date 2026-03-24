@@ -261,7 +261,7 @@ const STEPS = [
   {
     emoji: null,
     title: 'Auto-Refresh and Manual Refresh',
-    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates at 5 AM in your local timezone. Or use Manual Refresh to add new songs right now.',
+    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates at 5 AM in your local timezone. Or use Update Now to add new songs right now.',
     diagram: <AutoRefreshDiagram />,
   },
   {
