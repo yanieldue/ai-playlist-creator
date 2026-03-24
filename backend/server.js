@@ -795,7 +795,7 @@ async function getSoundChartsArtistInfoByUuid(uuid, displayName) {
   };
 }
 
-async function searchSoundChartsSong(title, artist) {
+async function searchSoundChartsSong(title, artist, preferredGenres = null, spotifyIsrc = null, appSpotify = null, confirmedSpotifyArtistId = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return null;
@@ -821,6 +821,21 @@ async function searchSoundChartsSong(title, artist) {
       const artistsNorm = (song.artists || []).map(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, ''));
       return creditNorm === artistNorm || artistsNorm.some(n => n === artistNorm || n.startsWith(artistNorm) || artistNorm.startsWith(n));
     });
+
+    // If we have a Spotify ISRC, try exact ISRC match first — works across name ambiguity
+    if (spotifyIsrc) {
+      const isrcMatch = (response.data?.items || []).find(s =>
+        (s.isrc?.value || s.isrc) === spotifyIsrc
+      );
+      if (isrcMatch) {
+        const artistUuid = isrcMatch.artists?.[0]?.uuid || null;
+        const artistName = isrcMatch.artists?.[0]?.name || isrcMatch.creditName;
+        console.log(`✓ SoundCharts ISRC match: "${isrcMatch.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → UUID ${artistUuid}`);
+        const result = { songUuid: isrcMatch.uuid, artistUuid, artistName };
+        setSCCache(cacheKey, result);
+        return result;
+      }
+    }
 
     let match = findArtistMatch(response.data?.items || []);
 
@@ -871,6 +886,13 @@ async function searchSoundChartsSong(title, artist) {
         a => a.name.toLowerCase() === artist.toLowerCase()
       );
       const titleNorm = title.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const prefNorms = (preferredGenres || []).map(g => g.toLowerCase());
+
+      // Collect ALL candidates that have a matching song, then prefer the one
+      // whose SC genres overlap with the caller's genre hint (e.g. "trap soul")
+      // so we don't grab a genre-homonymous artist (e.g. an electro "Keffer"
+      // instead of the R&B "Keffer") just because it appears first in results.
+      const songMatches = []; // { candidate, songMatch, genres }
       for (const candidate of candidates) {
         await throttleSoundCharts();
         const songs = await getSoundChartsArtistSongs(candidate.uuid, 50);
@@ -879,11 +901,55 @@ async function searchSoundChartsSong(title, artist) {
           return sNorm === titleNorm || sNorm.startsWith(titleNorm) || titleNorm.startsWith(sNorm);
         });
         if (songMatch) {
-          console.log(`✓ SoundCharts artist-fallback: "${candidate.name}" has "${songMatch.name}" → UUID ${candidate.uuid}`);
-          const result = { songUuid: songMatch.uuid, artistUuid: candidate.uuid, artistName: candidate.name };
+          const artistInfo = await getSoundChartsArtistInfoByUuid(candidate.uuid, candidate.name).catch(() => null);
+          const genres = (artistInfo?.genres || []).map(g => g.toLowerCase());
+          const songIsrc = songMatch.isrc?.value || songMatch.isrc || null;
+          songMatches.push({ candidate, songMatch, genres, songIsrc });
+        }
+      }
+
+      if (songMatches.length > 0) {
+        // Priority 0: Spotify artist ID match — strongest signal when multiple SC artists share a name.
+        // For each candidate's song, look up its Spotify track via SC identifiers and compare artist IDs.
+        if (appSpotify && confirmedSpotifyArtistId) {
+          for (const m of songMatches) {
+            try {
+              const spotifyTrackId = await getSoundChartsSongPlatformId(m.songMatch.uuid, 'spotify');
+              if (spotifyTrackId) {
+                const trackRes = await appSpotify.getTrack(spotifyTrackId);
+                const artistIdOnTrack = trackRes.body.artists?.[0]?.id;
+                if (artistIdOnTrack === confirmedSpotifyArtistId) {
+                  console.log(`✓ SoundCharts artist-fallback: Spotify ID match → "${m.candidate.name}" (${confirmedSpotifyArtistId}) — UUID ${m.candidate.uuid}`);
+                  const result = { songUuid: m.songMatch.uuid, artistUuid: m.candidate.uuid, artistName: m.candidate.name };
+                  setSCCache(cacheKey, result);
+                  return result;
+                }
+              }
+            } catch (e) { /* fall through to lower priority */ }
+          }
+        }
+
+        // Priority 1: ISRC exact match — same song across platforms, no ambiguity
+        const isrcPick = spotifyIsrc ? songMatches.find(m => m.songIsrc === spotifyIsrc) : null;
+        if (isrcPick) {
+          console.log(`✓ SoundCharts artist-fallback: ISRC match → "${isrcPick.candidate.name}" (ISRC: ${spotifyIsrc}) — UUID ${isrcPick.candidate.uuid}`);
+          const result = { songUuid: isrcPick.songMatch.uuid, artistUuid: isrcPick.candidate.uuid, artistName: isrcPick.candidate.name };
           setSCCache(cacheKey, result);
           return result;
         }
+        // Priority 2: genre preference
+        const pick = prefNorms.length > 0
+          ? (songMatches.find(m => m.genres.some(g => prefNorms.some(p => g.includes(p) || p.includes(g)))) || songMatches[0])
+          : songMatches[0];
+        if (songMatches.length > 1) {
+          const others = songMatches.filter(m => m !== pick).map(m => `"${m.candidate.name}" [${m.genres.slice(0,2).join(',')||'no genre'}]`).join(', ');
+          console.log(`✓ SoundCharts artist-fallback: picked "${pick.candidate.name}" [${pick.genres.slice(0,2).join(',')||'no genre'}] over ${others} (genre preference: [${prefNorms.slice(0,3).join(',')}])`);
+        } else {
+          console.log(`✓ SoundCharts artist-fallback: "${pick.candidate.name}" has "${pick.songMatch.name}" → UUID ${pick.candidate.uuid}`);
+        }
+        const result = { songUuid: pick.songMatch.uuid, artistUuid: pick.candidate.uuid, artistName: pick.candidate.name };
+        setSCCache(cacheKey, result);
+        return result;
       }
       console.log(`🔍 SoundCharts song search: artist-fallback found no match among ${candidates.length} "${artist}" candidates`);
     } catch (fbErr) {
@@ -5283,23 +5349,15 @@ DO NOT include any text outside the JSON.`
     const referenceSongs0 = genreData.referenceSongs || [];
     if (referenceSongs0.length > 0 && process.env.SOUNDCHARTS_APP_ID) {
       console.log(`🎯 Looking up ${referenceSongs0.length} reference song(s) on SoundCharts to confirm artist identity...`);
+      // Genre hints help pick the right artist when multiple SC artists share the same name
+      const refSongGenreHints = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])].filter(Boolean).map(g => g.toLowerCase());
+      const confirmedSongUuids = {}; // { artistNameLower: songUuid } — kept for Spotify QA below
       for (const refSong of referenceSongs0) {
-        // SoundCharts UUID confirmation (existing)
-        try {
-          const result = await searchSoundChartsSong(refSong.title, refSong.artist);
-          if (result?.artistUuid) {
-            confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
-            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}`);
-          } else {
-            console.log(`⚠ Could not confirm "${refSong.artist}" via song "${refSong.title}" — will fall back to name search`);
-          }
-        } catch (refErr) {
-          console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
-        }
-
-        // Spotify artist ID confirmation (new) — find the exact Spotify artist behind this reference song.
-        // Storing the ID lets us later verify song matches by ID, not just name string,
-        // catching cases like two different artists sharing the name "Dante".
+        // Step A: Spotify search first — get confirmed artist ID and ISRC before touching SoundCharts.
+        // Having these upfront lets SC artist-candidate selection validate by Spotify ID (strongest signal),
+        // preventing wrong-artist disambiguation (e.g. two SC artists both named "Keffer").
+        let refSpotifyIsrc = null;
+        let refSpotifyArtistId = null;
         if (appSpotify) {
           try {
             const q = `track:${refSong.title.replace(/'/g, '')} artist:${refSong.artist}`;
@@ -5309,11 +5367,65 @@ DO NOT include any text outside the JSON.`
             const match = tracks.find(t =>
               (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') === artistNorm
             );
-            if (match?.artists?.[0]?.id) {
-              confirmedSpotifyArtistIds[refSong.artist.toLowerCase()] = match.artists[0].id;
-              console.log(`✓ Confirmed Spotify artist ID for "${refSong.artist}": ${match.artists[0].id}`);
+            if (match) {
+              if (match.artists?.[0]?.id) {
+                refSpotifyArtistId = match.artists[0].id;
+                confirmedSpotifyArtistIds[refSong.artist.toLowerCase()] = refSpotifyArtistId;
+                console.log(`✓ Confirmed Spotify artist ID for "${refSong.artist}": ${refSpotifyArtistId}`);
+              }
+              if (match.external_ids?.isrc) {
+                refSpotifyIsrc = match.external_ids.isrc;
+                console.log(`✓ Spotify ISRC for "${refSong.title}": ${refSpotifyIsrc}`);
+              }
             }
-          } catch (err) { /* ignore — song matching will fall back to name check */ }
+          } catch (err) { /* ignore — SC search will fall back to name/genre matching */ }
+        }
+
+        // Step B: SoundCharts UUID confirmation, armed with Spotify ISRC and artist ID.
+        // The SC function will use these to pick the right artist when multiple SC profiles share a name.
+        try {
+          const result = await searchSoundChartsSong(
+            refSong.title, refSong.artist,
+            refSongGenreHints.length > 0 ? refSongGenreHints : null,
+            refSpotifyIsrc,
+            appSpotify,
+            refSpotifyArtistId
+          );
+          if (result?.artistUuid) {
+            confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
+            if (result.songUuid) confirmedSongUuids[refSong.artist.toLowerCase()] = result.songUuid;
+            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}`);
+          } else {
+            console.log(`⚠ Could not confirm "${refSong.artist}" via song "${refSong.title}" — will fall back to name search`);
+          }
+        } catch (refErr) {
+          console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
+        }
+
+        // Step C: Spotify QA — safety net to catch any remaining SC/Spotify mismatches.
+        // If SC's song still maps to the wrong Spotify artist (e.g. wrong Keffer profile),
+        // mark NOSIMILAR so we keep the SC songs but skip its similar-artist graph.
+        const scUuid = confirmedArtistUuids[refSong.artist.toLowerCase()];
+        const scSongUuid = confirmedSongUuids[refSong.artist.toLowerCase()];
+        if (scUuid && refSpotifyArtistId && scSongUuid && appSpotify && process.env.SOUNDCHARTS_APP_ID) {
+          try {
+            const scSpotifyTrackId = await getSoundChartsSongPlatformId(scSongUuid, 'spotify');
+            if (scSpotifyTrackId) {
+              const trackRes = await appSpotify.getTrack(scSpotifyTrackId);
+              const scMappedSpotifyArtistId = trackRes.body.artists?.[0]?.id;
+              if (scMappedSpotifyArtistId && scMappedSpotifyArtistId !== refSpotifyArtistId) {
+                console.log(`⚠️  SC/Spotify artist mismatch for "${refSong.artist}": SC song maps to Spotify artist ${scMappedSpotifyArtistId} but reference song is by ${refSpotifyArtistId} — marking NOSIMILAR to skip wrong similar artists`);
+                const existing = confirmedArtistUuids[refSong.artist.toLowerCase()];
+                if (existing && existing !== 'INVALID' && !String(existing).startsWith('NOSIMILAR:')) {
+                  confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
+                }
+              } else if (scMappedSpotifyArtistId) {
+                console.log(`✓ Spotify QA passed for "${refSong.artist}": SC song maps to correct Spotify artist ${scMappedSpotifyArtistId}`);
+              }
+            }
+          } catch (qaErr) {
+            console.log(`⚠️  Spotify QA check failed for "${refSong.artist}": ${qaErr.message} — keeping SC UUID`);
+          }
         }
       }
     }
@@ -5371,15 +5483,19 @@ DO NOT include any text outside the JSON.`
                 const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
                 const items = searchRes.body.artists?.items || [];
                 const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
-                if (!match?.genres?.length) continue;
-                spotifyGenres = match.genres.map(g => g.toLowerCase());
+                if (match?.genres?.length) spotifyGenres = match.genres.map(g => g.toLowerCase());
+                // No continue — still run the SC vs Claude check even if Spotify has no genre data
               }
-              if (!spotifyGenres.length) continue;
               const scIsElectroOnly = scGenres.some(g => ELECTRO.some(e => g.includes(e)))
                                    && !scGenres.some(g => RNB_HH.some(r => g.includes(r)));
-              const spotifyIsRnbHh  = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
-              if (scIsElectroOnly && spotifyIsRnbHh) {
-                console.log(`⚠️  "${artistName}" SC genre mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs Spotify=[${spotifyGenres.slice(0,2).join(',')}] — keeping UUID for song fetch, using Spotify genres, dropping SC similar artists`);
+              // When Spotify has no genre data for an obscure artist, fall back to Claude's
+              // genre extraction as the tiebreaker (e.g. "Trap Soul" prompt → claudeIsRnbHh=true).
+              const spotifyIsRnbHh = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
+              const allClaudeGenres = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])].map(g => (g || '').toLowerCase());
+              const claudeIsRnbHh = allClaudeGenres.some(g => RNB_HH.some(r => g.includes(r)));
+              if (scIsElectroOnly && (spotifyIsRnbHh || claudeIsRnbHh)) {
+                const mismatchSource = spotifyIsRnbHh ? `Spotify=[${spotifyGenres.slice(0,2).join(',')}]` : `Claude=[${allClaudeGenres.slice(0,2).join(',')}]`;
+                console.log(`⚠️  "${artistName}" SC genre mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs ${mismatchSource} — keeping UUID for song fetch, dropping SC similar artists`);
                 // Don't invalidate UUID — we confirmed the right artist via reference song.
                 // Mark as NOSIMILAR so executeSoundChartsStrategy fetches songs but skips their
                 // wrong-genre SC similar artists and genres when building the artist pool.
@@ -7979,81 +8095,6 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       error: 'Failed to update playlist',
       details: error.message
     });
-  }
-});
-
-// Rename a playlist (updates DB + platform)
-app.put('/api/playlists/:playlistId/rename', async (req, res) => {
-  try {
-    const { playlistId } = req.params;
-    const { userId, newName } = req.body;
-
-    if (!userId || !newName?.trim()) {
-      return res.status(400).json({ error: 'userId and newName are required' });
-    }
-
-    const trimmedName = newName.trim();
-    const emailUserId = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
-    const resolvedUserId = emailUserId || userId;
-    const upa = userPlaylists.get(resolvedUserId) || [];
-    const idx = upa.findIndex(p => p.playlistId === playlistId);
-    if (idx === -1) return res.status(404).json({ error: 'Playlist not found' });
-
-    const playlist = upa[idx];
-    const platform = playlist.platform || 'spotify';
-
-    // Update on platform
-    if (platform === 'apple') {
-      try {
-        const applePlatformUserId = isEmailBasedUserId(userId)
-          ? await resolvePlatformUserId(userId, 'apple')
-          : userId;
-        const appleTokens = applePlatformUserId ? await getUserTokens(applePlatformUserId) : null;
-        if (appleTokens) {
-          const appleMusicDevToken = generateAppleMusicToken();
-          const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
-          await appleMusicApiInstance.renamePlaylist(appleTokens.access_token, playlistId, trimmedName);
-          console.log(`[RENAME] Renamed Apple Music playlist ${playlistId} to "${trimmedName}"`);
-        }
-      } catch (platformErr) {
-        console.warn(`[RENAME] Could not rename Apple Music playlist: ${platformErr.message}`);
-      }
-    } else {
-      try {
-        const platformUserId = isEmailBasedUserId(userId)
-          ? await resolvePlatformUserId(userId, 'spotify')
-          : userId;
-        const tokens = platformUserId ? await getUserTokens(platformUserId) : null;
-        if (tokens) {
-          const userSpotifyApi = new SpotifyWebApi({
-            clientId: process.env.SPOTIFY_CLIENT_ID,
-            clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-            redirectUri: process.env.SPOTIFY_REDIRECT_URI || 'http://127.0.0.1:3001/callback',
-          });
-          userSpotifyApi.setAccessToken(tokens.access_token);
-          userSpotifyApi.setRefreshToken(tokens.refresh_token);
-          try {
-            const d = await userSpotifyApi.refreshAccessToken();
-            userSpotifyApi.setAccessToken(d.body.access_token);
-          } catch (_) {}
-          await userSpotifyApi.changePlaylistDetails(playlistId, { name: trimmedName });
-          console.log(`[RENAME] Renamed Spotify playlist ${playlistId} to "${trimmedName}"`);
-        }
-      } catch (platformErr) {
-        console.warn(`[RENAME] Could not rename Spotify playlist: ${platformErr.message}`);
-      }
-    }
-
-    // Update stored record
-    upa[idx] = { ...upa[idx], playlistName: trimmedName };
-    userPlaylists.set(resolvedUserId, upa);
-    await savePlaylist(resolvedUserId, upa[idx]);
-    console.log(`[RENAME] Updated stored record for playlist ${playlistId}`);
-
-    res.json({ success: true, playlistName: trimmedName });
-  } catch (error) {
-    console.error('[RENAME] Error:', error);
-    res.status(500).json({ error: 'Failed to rename playlist', details: error.message });
   }
 });
 

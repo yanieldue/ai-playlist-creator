@@ -334,24 +334,6 @@ class AppleMusicService {
     });
   }
 
-  /**
-   * Delete a library playlist entirely.
-   * @param {string} userToken - User's music token
-   * @param {string} playlistId - Library playlist ID
-   */
-  async renamePlaylist(userToken, playlistId, newName) {
-    await this.request(
-      `/me/library/playlists/${playlistId}`,
-      userToken,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ attributes: { name: newName } }),
-      }
-    );
-    console.log(`✓ Renamed Apple Music playlist ${playlistId} to "${newName}"`);
-    return { success: true };
-  }
-
   async deletePlaylist(userToken, playlistId) {
     await this.request(
       `/me/library/playlists/${playlistId}`,

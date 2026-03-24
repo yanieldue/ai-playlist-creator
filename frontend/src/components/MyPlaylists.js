@@ -45,9 +45,7 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist, onGenerateNe
   // Edit options modal (unified modal with refresh and settings)
   const [showEditOptionsModal, setShowEditOptionsModal] = useState(false);
   const [editOptionsPlaylist, setEditOptionsPlaylist] = useState(null);
-  const [editingModalName, setEditingModalName] = useState(false);
-  const [modalNameValue, setModalNameValue] = useState('');
-  const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
+const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingMessage, setRefreshingMessage] = useState('Updating your playlist...');
   const [refreshError, setRefreshError] = useState(null);
@@ -576,25 +574,6 @@ const MyPlaylists = ({ userId, onBack, showToast, onRefinePlaylist, onGenerateNe
     setShowEditOptionsModal(false);
     setEditOptionsPlaylist(null);
     setEditingModalName(false);
-  };
-
-  const handleSavePlaylistName = async () => {
-    const trimmed = modalNameValue.trim();
-    if (!trimmed || trimmed === editOptionsPlaylist.playlistName) {
-      setEditingModalName(false);
-      return;
-    }
-    try {
-      await playlistService.renamePlaylist(editOptionsPlaylist.playlistId, userId, trimmed);
-      setPlaylists(prev => prev.map(p =>
-        p.playlistId === editOptionsPlaylist.playlistId ? { ...p, playlistName: trimmed } : p
-      ));
-      setEditOptionsPlaylist(prev => ({ ...prev, playlistName: trimmed }));
-      setEditingModalName(false);
-      showToast('Playlist renamed successfully', 'success');
-    } catch (err) {
-      showToast('Failed to rename playlist', 'error');
-    }
   };
 
   const handleSaveSettings = async () => {
@@ -1160,31 +1139,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
         <div className="modal-overlay" onClick={closeEditOptionsModal}>
           <div className="modal-content refresh-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              {editingModalName ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                  <input
-                    className="chat-input"
-                    value={modalNameValue}
-                    onChange={e => setModalNameValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleSavePlaylistName(); if (e.key === 'Escape') setEditingModalName(false); }}
-                    autoFocus
-                    style={{ flex: 1, fontSize: 15, padding: '6px 10px' }}
-                  />
-                  <button onClick={handleSavePlaylistName} className="generate-button" style={{ padding: '6px 14px', fontSize: 13, marginTop: 0 }}>Save</button>
-                  <button onClick={() => setEditingModalName(false)} className="cancel-button" style={{ padding: '6px 14px', fontSize: 13 }}>Cancel</button>
-                </div>
-              ) : (
-                <h2 style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  Edit "{editOptionsPlaylist.playlistName}"
-                  <button
-                    onClick={() => { setModalNameValue(editOptionsPlaylist.playlistName); setEditingModalName(true); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'inherit', opacity: 0.5, display: 'flex', alignItems: 'center' }}
-                    title="Rename playlist"
-                  >
-                    <Icons.Edit size={14} />
-                  </button>
-                </h2>
-              )}
+              <h2>Edit "{editOptionsPlaylist.playlistName}"</h2>
               <button onClick={closeEditOptionsModal} className="close-modal-button">
                 ×
               </button>

@@ -192,12 +192,6 @@ export const playlistService = {
     return response.data;
   },
 
-  // Rename a playlist (updates DB + platform)
-  renamePlaylist: async (playlistId, userId, newName) => {
-    const response = await api.put(`/api/playlists/${playlistId}/rename`, { userId, newName });
-    return response.data;
-  },
-
   // Apply a refinement result to an existing playlist (replaces tracks + updates stored record)
   applyRefinement: async (playlistId, userId, tracks, trackUris, chatMessages, excludedSongs, draftId) => {
     const response = await api.post(`/api/playlists/${playlistId}/apply-refinement`, {
