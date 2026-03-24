@@ -9245,8 +9245,8 @@ app.get('/api/featured-artists', async (req, res) => {
       }
     } catch (e) { /* cache file missing or corrupt — fetch fresh */ }
 
-    // 3. Fetch live from Spotify Global Top 50
-    console.log('[featured-artists] Cache expired or missing — fetching from Spotify Global Top 50...');
+    // 3. Fetch live from Spotify
+    console.log('[featured-artists] Cache expired or missing — fetching from Spotify...');
     const ccData = await spotifyApi.clientCredentialsGrant();
     const appSp = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
@@ -9254,9 +9254,29 @@ app.get('/api/featured-artists', async (req, res) => {
     });
     appSp.setAccessToken(ccData.body.access_token);
 
-    // Pull the 50 tracks and collect unique lead artist IDs (up to 21)
-    const playlistRes = await appSp.getPlaylistTracks('37i9dQZEVXbMDoHDwVN2tF', { limit: 50 });
-    const tracks = playlistRes.body.items || [];
+    // Try several well-known public playlists in order until one works
+    const CANDIDATE_PLAYLISTS = [
+      '37i9dQZEVXbMDoHDwVN2tF', // Today's Top Hits
+      '37i9dQZEVXbNG5zvRrkjzn', // Global Top 50
+      '37i9dQZF1DXcBWIGoYBM5M', // Hot Hits USA
+      '37i9dQZF1DX0XUsuxWHRQd', // RapCaviar
+    ];
+
+    let tracks = [];
+    for (const plId of CANDIDATE_PLAYLISTS) {
+      try {
+        const playlistRes = await appSp.getPlaylistTracks(plId, { limit: 50, market: 'US' });
+        tracks = playlistRes.body.items || [];
+        if (tracks.length > 0) {
+          console.log(`[featured-artists] Got ${tracks.length} tracks from playlist ${plId}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`[featured-artists] Playlist ${plId} failed: ${e.message}`);
+      }
+    }
+
+    // Collect unique lead artist IDs (up to 21)
     const seen = new Set();
     const artistIds = [];
     for (const item of tracks) {
@@ -9268,13 +9288,54 @@ app.get('/api/featured-artists', async (req, res) => {
       }
     }
 
+    // Fallback: well-known artist IDs so the background is never empty
+    const FALLBACK_IDS = [
+      '06HL4z0CvFAxyc27GXpf02', // Taylor Swift
+      '3TVXtAsR1Inumwj472S9r4', // Drake
+      '1uNFoZAHBGtllmzznpCI3s', // Justin Bieber
+      '6eUKZXaKkcviH0Ku9w2n3V', // Ed Sheeran
+      '4q3ewBCX7sLwd24euuV69X', // Bad Bunny
+      '1McMsnEElThX1knmY4oliG', // Olivia Rodrigo
+      '246dkjvS1zLTtiykXe5h60', // Post Malone
+      '5K4W6rqBFWDnAN6FQUkS6x', // Kanye West
+      '7dGJo4pcD2V6oG8kP0tJRR', // Eminem
+      '4dpARuHxo51G3z768sgnrY', // Adele
+      '0du5cEVh5yTK9QJze8zA0C', // Bruno Mars
+      '0C8ZW7ezQVs4URX5aX7Kqx', // Selena Gomez
+      '3Nrfpe0tUJi4K4DXYWgMUX', // BTS
+      '1Xyo4u8uXC1ZmMpatF05PJ', // The Weeknd
+      '6jJ0s89eD6GaHleKKya26X', // Peso Pluma
+      '7jVv8c5Fj3E9VhNjxT4snq', // Lil Nas X
+      '66CXWjxzNUsdJxJ2JdwvnR', // Ariana Grande
+      '5he5w2lnU9x7JFhnwcekXX', // Rihanna
+      '7CajNmpBOzvAGYd6v7Q6y6', // Chris Brown
+      '2h93pZq0e7k5yf4dywlkpM', // Khalid
+      '0hCNtLu0JehylgoiP8L4Gh', // Nicki Minaj
+    ];
+
+    if (artistIds.length < 12) {
+      console.log('[featured-artists] Too few artists from playlists, using fallback IDs');
+      const fallbackRes = await appSp.getArtists(FALLBACK_IDS);
+      const fallbackArtists = (fallbackRes.body.artists || [])
+        .filter(a => a?.images?.[0])
+        .map(a => ({ name: a.name, image: a.images[0].url }));
+      const payload = { artists: fallbackArtists };
+      featuredArtistsMemCache.data = payload;
+      featuredArtistsMemCache.expiresAt = Date.now() + FEATURED_CACHE_TTL;
+      try {
+        fs.mkdirSync(path.dirname(FEATURED_CACHE_FILE), { recursive: true });
+        fs.writeFileSync(FEATURED_CACHE_FILE, JSON.stringify({ artists: fallbackArtists, cachedAt: Date.now() }));
+      } catch (e) { console.log('[featured-artists] Could not write cache file:', e.message); }
+      return res.json(payload);
+    }
+
     // Batch-fetch full artist objects (needed for high-res images)
     const artistsRes = await appSp.getArtists(artistIds);
     const artists = (artistsRes.body.artists || [])
       .filter(a => a?.images?.[0])
       .map(a => ({ name: a.name, image: a.images[0].url }));
 
-    console.log(`[featured-artists] Fetched ${artists.length} artists from Global Top 50`);
+    console.log(`[featured-artists] Fetched ${artists.length} artists`);
     const payload = { artists };
 
     // Persist to memory + file
