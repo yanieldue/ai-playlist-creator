@@ -46,9 +46,13 @@ const SignupForm = ({ onSignupComplete }) => {
     }
   }, [isFormOpen]);
 
+  // Distribute artists across 3 columns, interleaved.
+  // Middle column is reversed so it visually scrolls opposite (all columns use
+  // the same upward CSS animation — reversed images create a downward look).
   const columns = useMemo(() => {
     const cols = [[], [], []];
     bgArtists.forEach((a, i) => cols[i % 3].push(a));
+    cols[1] = [...cols[1]].reverse();
     return cols;
   }, [bgArtists]);
 
@@ -179,7 +183,7 @@ const SignupForm = ({ onSignupComplete }) => {
       {bgArtists.length > 0 && (
         <div className="auth-bg" aria-hidden="true">
           {columns.map((col, ci) => (
-            <div key={ci} className={`auth-bg-col ${ci % 2 === 1 ? 'scroll-down' : 'scroll-up'}`}>
+            <div key={ci} className={`auth-bg-col auth-bg-col-${ci}`}>
               {[...col, ...col, ...col].map((artist, i) => (
                 <img key={i} src={artist.image} alt="" className="auth-bg-img" draggable={false} />
               ))}

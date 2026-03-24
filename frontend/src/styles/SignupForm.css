@@ -24,12 +24,14 @@
 .auth-bg-col {
   display: flex;
   flex-direction: column;
-  gap: 3px;
   will-change: transform;
+  /* All columns animate the same direction — no scroll-from-negative-offset flash */
+  animation: bgScrollUp 30s linear infinite;
 }
 
-.auth-bg-col.scroll-up   { animation: bgScrollUp   32s linear infinite; }
-.auth-bg-col.scroll-down { animation: bgScrollDown  38s linear infinite; }
+/* Stagger speed and start position per column so they feel independent */
+.auth-bg-col-1 { animation-duration: 38s; animation-delay: -14s; }
+.auth-bg-col-2 { animation-duration: 34s; animation-delay:  -7s; }
 
 .auth-bg-img {
   width: 100%;
@@ -37,15 +39,15 @@
   object-fit: cover;
   display: block;
   flex-shrink: 0;
+  /* margin-bottom instead of flex gap so each image occupies a uniform
+     (width + 3px) unit — makes (total_height / 3) divide exactly at the
+     repetition boundary and the loop point is perfectly seamless */
+  margin-bottom: 3px;
 }
 
 @keyframes bgScrollUp {
   from { transform: translateY(0); }
   to   { transform: translateY(-33.333%); }
-}
-@keyframes bgScrollDown {
-  from { transform: translateY(-33.333%); }
-  to   { transform: translateY(0); }
 }
 
 /* ── Overlay ─────────────────────────────────────────────── */
