@@ -5777,6 +5777,94 @@ Respond ONLY with valid JSON:
       }
     }
 
+    // Step 0.6: Enrich suggestedSeedArtists with Spotify's co-listen-based related artists.
+    // Claude's suggestedSeedArtists are genre-adjacent guesses; Spotify's related artists are
+    // derived from actual listening behavior, giving far more accurate vibe matches.
+    // (e.g. Frank Ocean → Syd, Kevin Abstract, Brent Faiyaz — not Playboi Carti)
+    //
+    // Runs whenever requestedArtists are present and we're not in exclusive mode.
+    // Always replaces Claude's guesses with Spotify data when available.
+    if (appSpotify &&
+        genreData.artistConstraints.requestedArtists?.length > 0 &&
+        !genreData.artistConstraints.exclusiveMode) {
+      try {
+        const reqArtists = genreData.artistConstraints.requestedArtists;
+        const reqNormsSet = new Set(reqArtists.map(a => a.toLowerCase()));
+        const allRelated = []; // { name, popularity, sourceArtist }
+
+        for (const artistName of reqArtists) {
+          let artistId = confirmedSpotifyArtistIds[artistName.toLowerCase()];
+
+          // If we don't have a confirmed ID from step 0.3, search for it now
+          if (!artistId) {
+            try {
+              const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
+              const items = searchRes.body?.artists?.items || [];
+              const normName = artistName.toLowerCase();
+              const exactMatch = items.find(a => a.name.toLowerCase() === normName);
+              const bestMatch = exactMatch || items[0];
+              if (bestMatch) {
+                artistId = bestMatch.id;
+                console.log(`[SPOTIFY-RELATED] Found artist ID for "${artistName}": ${artistId}`);
+              }
+            } catch (searchErr) {
+              console.log(`[SPOTIFY-RELATED] Artist search failed for "${artistName}": ${searchErr.message}`);
+            }
+          }
+
+          if (!artistId) continue;
+
+          try {
+            const relatedRes = await appSpotify.getArtistRelatedArtists(artistId);
+            const related = relatedRes.body?.artists || [];
+            // Filter out the requestedArtists themselves (no circular seeds)
+            const filtered = related.filter(a => !reqNormsSet.has(a.name.toLowerCase()));
+            // Sort by Spotify popularity descending, take top 6 per seed artist
+            const top6 = filtered
+              .sort((a, b) => b.popularity - a.popularity)
+              .slice(0, 6)
+              .map(a => ({ name: a.name, popularity: a.popularity, sourceArtist: artistName }));
+            allRelated.push(...top6);
+            console.log(`[SPOTIFY-RELATED] "${artistName}" → [${top6.map(a => a.name).join(', ')}]`);
+          } catch (relErr) {
+            console.log(`[SPOTIFY-RELATED] getArtistRelatedArtists failed for "${artistName}": ${relErr.message}`);
+          }
+        }
+
+        if (allRelated.length > 0) {
+          // Deduplicate by name, preserving highest-popularity occurrence.
+          // Also intersect with SoundCharts similar artists when both are available —
+          // overlap = strong signal that the artist genuinely fits the vibe.
+          const scSimilar = new Set(
+            (genreData.artistConstraints.similarArtists || []).map(a => a.toLowerCase())
+          );
+          const hasSCData = scSimilar.size > 0;
+
+          const seen = new Map(); // nameLower → { name, popularity }
+          for (const r of allRelated) {
+            const k = r.name.toLowerCase();
+            if (!seen.has(k) || r.popularity > seen.get(k).popularity) {
+              seen.set(k, r);
+            }
+          }
+
+          // Rank: SC-confirmed artists first (intersection), then by Spotify popularity
+          const ranked = [...seen.values()].sort((a, b) => {
+            const aInSC = hasSCData && scSimilar.has(a.name.toLowerCase()) ? 1 : 0;
+            const bInSC = hasSCData && scSimilar.has(b.name.toLowerCase()) ? 1 : 0;
+            if (bInSC !== aInSC) return bInSC - aInSC; // SC-confirmed first
+            return b.popularity - a.popularity;
+          });
+
+          const finalSeeds = ranked.slice(0, 10).map(r => r.name);
+          genreData.artistConstraints.suggestedSeedArtists = finalSeeds;
+          console.log(`✅ [SPOTIFY-RELATED] Replaced suggestedSeedArtists with co-listen data: [${finalSeeds.join(', ')}]`);
+        }
+      } catch (relatedErr) {
+        console.log('[SPOTIFY-RELATED] Enrichment failed, keeping Claude seeds:', relatedErr.message);
+      }
+    }
+
     // Load existing playlist data if playlistId is provided (for refinements/refreshes)
     let existingPlaylistData = null;
     if (playlistId && userId) {
