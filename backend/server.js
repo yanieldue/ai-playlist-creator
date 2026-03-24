@@ -5215,6 +5215,7 @@ Respond ONLY with valid JSON in this format:
     "artistType": "solo/band/any" or null,
     "excludeFeatures": boolean,
     "requestedArtists": ["exact artist names mentioned in prompt"] or [],
+    "excludedArtists": ["artist names the user explicitly wants excluded"] or [],
     "exclusiveMode": boolean (true if user wants ONLY these specific artists, false for "similar vibe" mix),
     "suggestedSeedArtists": ["3-5 well-known artists that exemplify the requested genre/mood - REQUIRED if no requestedArtists"] or []
   },
@@ -5369,10 +5370,19 @@ BPM CONSTRAINTS:
 - If no explicit BPM number mentioned → bpmConstraint: { min: null, max: null }
 
 MOOD (emotional valence — separate from energy):
-- "happy", "uplifting", "feel-good", "positive", "welcoming", "café", "bright", "cheerful", "healing", "hopeful", "good vibes" → mood: "positive"
-- "sad", "melancholic", "heartbreak", "crying", "emotional", "heavy", "gloomy", "dark emotions" → mood: "melancholic"
+- "happy", "uplifting", "feel-good", "positive", "welcoming", "café", "bright", "cheerful", "healing", "hopeful", "good vibes", "triumphant", "euphoric", "everything works out", "happy ending", "movie ending", "breakthrough", "cathartic release" → mood: "positive"
+- "emotional but uplifting", "bittersweet but hopeful", "emotional climax that resolves well" → mood: "positive"
+- "sad", "melancholic", "heartbreak", "crying", "heavy", "gloomy", "dark emotions", "heartache", "longing" → mood: "melancholic"
+- IMPORTANT: "emotional" alone is NOT melancholic — it is intensity, not valence. Only use "melancholic" when the context is clearly sad/negative.
 - "chill", "background", "ambient", "focus", "study", "neutral", "calm" (without emotional context) → mood: "neutral"
+- "emotional" without clear positive/negative context → null (let atmosphere and genre determine the tone)
 - If genuinely ambiguous → null
+
+EXCLUDED ARTISTS:
+- "no [artist name]", "nothing by [artist]", "avoid [artist]", "don't include [artist]", "[artist]-free" → excludedArtists: [artist names]
+- "no mainstream hits", "no chart toppers", "no radio songs", "avoid popular songs", "underground only", "deep cuts only", "no famous songs" → set trackConstraints.popularity.preference: "underground" AND trackConstraints.popularity.max: 60
+- "no [artist] but similar sound/vibe" → add [artist] to excludedArtists (include the artist names, not just the preference)
+- If multiple exclusions mentioned, include all artist names
 
 ENERGY TARGET:
 - "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
@@ -5382,8 +5392,9 @@ ENERGY TARGET:
 - If unclear → null
 
 ENERGY PROGRESSION:
-- "build from chill to hype", "start slow end hype", "warm up then peak", "gradually get more intense", "starts mellow builds to hype" → energyProgression: "ramp_up"
-- "start hype wind down", "peak at start then chill", "high energy then relaxing" → energyProgression: "ramp_down"
+- "build from chill to hype", "start slow end hype", "warm up then peak", "gradually get more intense", "starts mellow builds to hype", "gradual energy increase", "gradually increasing", "pacing", "build up", "energy curve", "ramp up" → energyProgression: "ramp_up"
+- Running/workout context with "gradual", "build", "pacing", "warm up" → energyProgression: "ramp_up"
+- "start hype wind down", "peak at start then chill", "high energy then relaxing", "cool down", "energy ramp down" → energyProgression: "ramp_down"
 - All other cases → null
 
 MULTI-PHASE DETECTION:
@@ -5435,6 +5446,7 @@ DO NOT include any text outside the JSON.`
         artistType: null,
         excludeFeatures: false,
         requestedArtists: [],
+        excludedArtists: [],
         exclusiveMode: false
       },
       productionStyle: {
@@ -6353,6 +6365,16 @@ Return ONLY valid JSON:
             return false;
           }
         }
+        // Excluded artists check — hard filter for "no [artist]" constraints
+        const _excludedArtistNorms = (genreData.artistConstraints?.excludedArtists || [])
+          .map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''));
+        if (_excludedArtistNorms.length > 0) {
+          const trackArtistNorm = (track.artists?.[0]?.name || track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (_excludedArtistNorms.some(ex => trackArtistNorm === ex || trackArtistNorm.includes(ex) || ex.includes(trackArtistNorm))) {
+            console.log(`[EXCLUDE] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (excluded artist)`);
+            return false;
+          }
+        }
         if (!allowExplicit && track.explicit) {
           console.log(`Skipping explicit track: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
           return false;
@@ -7245,6 +7267,24 @@ Example response: [1, 2, 4, 5, 7, ...]`
         _vibeHardRules.push('POSITIVE MOOD — HARD RULE: REMOVE sad, melancholic, gloomy, or somber tracks. This playlist should feel pleasant and uplifting. "Calm" does NOT mean "sad" — only keep tracks that feel warm, neutral-to-positive, or happy. Phoebe Bridgers, Sufjan Stevens, and similar artists known for sadness should be removed unless the specific song is clearly upbeat.');
       } else if (_mood === 'melancholic') {
         _vibeHardRules.push('MELANCHOLIC MOOD — HARD RULE: REMOVE hype, aggressive, or party-energy tracks. Keep emotionally resonant, introspective, or bittersweet songs. Avoid angry or toxic energy — sad and peaceful, not sad and hostile.');
+      }
+
+      // Excluded artists — vibe check reinforces the hard filter in validateAndAdd
+      const _excludedInVibe = genreData.artistConstraints?.excludedArtists || [];
+      if (_excludedInVibe.length > 0) {
+        _vibeHardRules.push(`EXCLUDED ARTISTS — HARD RULE: The user explicitly banned the following artists: ${_excludedInVibe.join(', ')}. REMOVE any track by these artists or any track that is directly associated with them (e.g. collab tracks, features). No exceptions.`);
+      }
+
+      // "No mainstream" / underground preference
+      if (_popPref === 'underground' || genreData.trackConstraints?.popularity?.max <= 60) {
+        _vibeHardRules.push('NO MAINSTREAM HITS — HARD RULE: The user explicitly requested underground/deep cuts only. REMOVE any artist with radio hits, chart success, major label backing, or household-name recognition. Travis Scott, Kanye West, Drake, The Weeknd, Rihanna, Ariana Grande, and similar mainstream acts must be REMOVED even if their sound matches the genre. Only keep artists who are genuinely underground, indie, or niche.');
+      }
+
+      // Cohesion / smooth-transitions request
+      const _wantsCohesion = genreData.discoveryBalance?.preference === 'cohesive' ||
+        ['no skips', 'smooth transition', 'consistent vibe', 'walks away', 'walk away', 'background music', 'no jarring', 'no whiplash'].some(s => _promptLower.includes(s));
+      if (_wantsCohesion) {
+        _vibeHardRules.push('COHESION — HARD RULE: This playlist must feel like one continuous listening experience. REMOVE any track that would create an abrupt tonal shift — mismatched genres (e.g. industrial electronic next to indie-pop), extreme energy jumps (e.g. ambient drone then trap banger), or artists whose overall sonic identity is clearly out of place with the rest of the playlist. If a track belongs to a completely different sonic world than 80% of the others, cut it.');
       }
 
       // Audience safety constraints
