@@ -68,12 +68,12 @@
 /* ── Landing page ────────────────────────────────────────── */
 
 .auth-landing {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 10;
-  min-height: 100vh;
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   padding: 0 24px 52px;
   transition: opacity 0.25s ease;
 }
@@ -83,10 +83,12 @@
   pointer-events: none;
 }
 
-/* Fins brand — top left */
+/* Fins brand — always visible, sits above the landing + form layers */
 .auth-header {
-  padding-top: 52px;
-  flex-shrink: 0;
+  position: absolute;
+  top: 48px;
+  left: 24px;
+  z-index: 25;
 }
 
 .auth-brand {
@@ -109,7 +111,7 @@
   letter-spacing: -0.2px;
 }
 
-/* Big headline — centered vertically */
+/* Big headline — centered in the available space above the buttons */
 .auth-hero {
   flex: 1;
   display: flex;
@@ -117,7 +119,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 0 12px;
+  padding: 80px 12px 0; /* top padding clears the brand header */
 }
 
 .auth-hero-title {
@@ -231,7 +233,7 @@
   letter-spacing: -0.4px;
 }
 
-/* Desktop: bottom sheet → floating card */
+/* Desktop: bottom sheet → floating card, buttons match sheet width */
 @media (min-width: 600px) {
   .auth-sheet {
     left: 50%;
@@ -246,6 +248,11 @@
   }
   .auth-hero-title {
     font-size: 58px;
+  }
+  .auth-landing-actions {
+    max-width: 440px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 

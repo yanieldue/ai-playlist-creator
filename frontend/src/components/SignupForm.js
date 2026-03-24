@@ -200,18 +200,19 @@ const SignupForm = ({ onSignupComplete }) => {
       )}
       <div className="auth-overlay" aria-hidden="true" />
 
-      {/* Landing page */}
-      <div className={`auth-landing${isFormOpen ? ' auth-landing--hidden' : ''}`}>
-        <header className="auth-header">
-          <div className="auth-brand">
-            <img src="/fins_logo.png" alt="Fins" className="auth-brand-logo" />
-            <span className="auth-brand-name">Fins</span>
-          </div>
-        </header>
+      {/* Fins brand — always visible, even when form is open */}
+      <header className="auth-header">
+        <div className="auth-brand">
+          <img src="/fins_logo.png" alt="Fins" className="auth-brand-logo" />
+          <span className="auth-brand-name">Fins</span>
+        </div>
+      </header>
 
+      {/* Landing page (hero + buttons) */}
+      <div className={`auth-landing${isFormOpen ? ' auth-landing--hidden' : ''}`}>
         <div className="auth-hero">
           <h1 className="auth-hero-title">Your playlist,<br />your vibe.</h1>
-          <p className="auth-hero-sub">AI-generated playlists built around your taste</p>
+          <p className="auth-hero-sub">Playlists that actually know your taste</p>
         </div>
 
         <div className="auth-landing-actions">
