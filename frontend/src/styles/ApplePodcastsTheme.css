@@ -314,6 +314,16 @@ body {
   color: #ffffff;
 }
 
+/* Fade in home sections together when loading completes */
+.home-sections-ready {
+  animation: homeSectionsIn 0.25s ease forwards;
+}
+
+@keyframes homeSectionsIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .home-content .horizontal-scroll-section {
   padding: 0 0 0 16px;
 }
@@ -454,6 +464,12 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.artist-card-image img.img-loaded {
+  opacity: 1;
 }
 
 /* Plus sign overlay */
@@ -541,6 +557,12 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.draft-card-image img.img-loaded {
+  opacity: 1;
 }
 
 .draft-card-placeholder {
@@ -2122,6 +2144,10 @@ body {
 
 :root.dark-mode .artist-card-apple {
   color: #ffffff;
+}
+
+:root.dark-mode .artist-card-image {
+  background: #2c2c2e;
 }
 
 :root.dark-mode .artist-card-name {

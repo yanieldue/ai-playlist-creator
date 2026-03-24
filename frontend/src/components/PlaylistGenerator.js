@@ -2552,7 +2552,7 @@ const PlaylistGenerator = () => {
                   </div>
                 ) : (
                   /* All home content renders at once */
-                  <>
+                  <div className="home-sections-ready">
                     {/* Draft Playlists - paid only */}
                     {isPaid() && draftPlaylists.length > 0 && (
                       <div className="unfinished-playlists-section">
@@ -2575,7 +2575,7 @@ const PlaylistGenerator = () => {
                               >
                                 <div className="draft-card-image">
                                   {firstTrackImage ? (
-                                    <img src={firstTrackImage} alt={draft.playlistName} />
+                                    <img src={firstTrackImage} alt={draft.playlistName} onLoad={(e) => e.target.classList.add('img-loaded')} />
                                   ) : (
                                     <div className="draft-card-placeholder">
                                       <Icons.Playlist size={40} />
@@ -2622,6 +2622,7 @@ const PlaylistGenerator = () => {
                                   <img
                                     src={artist.image}
                                     alt={artist.name}
+                                    onLoad={(e) => e.target.classList.add('img-loaded')}
                                     onError={(e) => {
                                       e.target.style.display = 'none';
                                       e.target.nextSibling.style.display = 'flex';
@@ -2639,7 +2640,7 @@ const PlaylistGenerator = () => {
                       </div>
                     )}
 
-                  </>
+                  </div>
                 )}
               </div>
             )}
