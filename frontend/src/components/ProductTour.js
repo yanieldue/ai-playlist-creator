@@ -33,9 +33,9 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 const ArtistsDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px', overflowX: 'hidden' }}>
-      <div className="tour-diag-highlight" style={{ borderRadius: 12, display: 'flex', gap: 10, padding: '8px' }}>
+      <div className="tour-diag-highlight" style={{ borderRadius: 12, display: 'flex', gap: 10, padding: '8px', overflow: 'hidden' }}>
         {DIAGRAM_ARTIST_NAMES.map(name => (
-          <div key={name} className="artist-card-apple" style={{ width: 70, minWidth: 70, cursor: 'default' }}>
+          <div key={name} className="artist-card-apple" style={{ flex: '1 1 0', minWidth: 0, cursor: 'default' }}>
             <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {artistImages[name]
                 ? <img src={artistImages[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
