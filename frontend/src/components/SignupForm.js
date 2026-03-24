@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import playlistService from '../services/api';
 import Icons from './Icons';
 import '../styles/SignupForm.css';
@@ -13,6 +13,20 @@ const SignupForm = ({ onSignupComplete }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(true);
+  const [bgArtists, setBgArtists] = useState([]);
+
+  useEffect(() => {
+    playlistService.getFeaturedArtists()
+      .then(data => setBgArtists(data.artists || []))
+      .catch(() => {});
+  }, []);
+
+  // Distribute artists across 3 columns, interleaved for visual variety
+  const columns = useMemo(() => {
+    const cols = [[], [], []];
+    bgArtists.forEach((a, i) => cols[i % 3].push(a));
+    return cols;
+  }, [bgArtists]);
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -192,6 +206,24 @@ const SignupForm = ({ onSignupComplete }) => {
 
   return (
     <div className="auth-container">
+      {bgArtists.length > 0 && (
+        <div className="auth-bg" aria-hidden="true">
+          {columns.map((col, ci) => (
+            <div key={ci} className={`auth-bg-col ${ci % 2 === 1 ? 'scroll-down' : 'scroll-up'}`}>
+              {[...col, ...col, ...col].map((artist, i) => (
+                <img
+                  key={i}
+                  src={artist.image}
+                  alt=""
+                  className="auth-bg-img"
+                  draggable={false}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="auth-overlay" aria-hidden="true" />
       <div className="auth-card">
         <div className="auth-logo">
           <img src="/fins_logo.png" alt="Fins" className="auth-logo-img" />

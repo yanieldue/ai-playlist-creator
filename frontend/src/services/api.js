@@ -258,6 +258,12 @@ export const playlistService = {
     return response.data;
   },
 
+  // Featured artists for login page background
+  getFeaturedArtists: async () => {
+    const response = await api.get('/api/featured-artists');
+    return response.data;
+  },
+
   // Get user's Spotify playlists for import
   // Platform-agnostic get playlists (works with both Spotify and Apple Music)
   getPlatformPlaylists: async (userId) => {
