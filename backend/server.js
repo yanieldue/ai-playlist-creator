@@ -9284,7 +9284,7 @@ app.get('/api/featured-artists', async (req, res) => {
       if (id && !seen.has(id)) {
         seen.add(id);
         artistIds.push(id);
-        if (artistIds.length === 21) break;
+        if (artistIds.length === 30) break;
       }
     }
 
