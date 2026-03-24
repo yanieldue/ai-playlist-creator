@@ -1267,6 +1267,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   const STRONG_ENERGY_MIN = 0.72; // matches 'energetic'/'hype'/'workout' threshold
   const STRONG_CALM_MAX   = 0.40; // matches 'calm'/'sleep' threshold
 
+  const energyTarget = genreData.energyTarget || null;
+
   const featureRanges = {};
   for (const label of moodLabels) {
     const features = SOUNDCHARTS_AUDIO_FEATURE_MAP[label];
@@ -1280,7 +1282,14 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
 
   for (const [feature, range] of Object.entries(featureRanges)) {
     if (range.min !== undefined && range.max !== undefined && range.min > range.max) {
-      console.log(`⚠️  Skipping contradictory ${feature} filter (min ${range.min} > max ${range.max})`);
+      // Contradictory energy signals (e.g. "chill but kinda hype") → use medium band
+      // instead of skipping entirely, so we don't lose all filtering for that feature.
+      if (feature === 'energy' && energyTarget !== 'low' && energyTarget !== 'high') {
+        console.log(`⚡ Contradictory energy signals → falling back to medium band (0.38–0.68)`);
+        filters.push({ type: 'energy', data: { min: 0.38, max: 0.68 } });
+      } else {
+        console.log(`⚠️  Skipping contradictory ${feature} filter (min ${range.min} > max ${range.max})`);
+      }
       continue;
     }
     if (strategy === 'artist_songs') {
@@ -1297,6 +1306,53 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     if (range.max !== undefined) filterData.max = range.max;
     filters.push({ type: feature, data: filterData });
     console.log(`🎛️  SoundCharts audio filter: ${feature} ${JSON.stringify(filterData)}${strategy === 'artist_songs' ? ' [strong signal]' : ''}`);
+  }
+
+  // Hard BPM constraint — overrides any label-derived tempo filter
+  const bpmMin = genreData.bpmConstraint?.min;
+  const bpmMax = genreData.bpmConstraint?.max;
+  if (bpmMin || bpmMax) {
+    // Remove any existing tempo filter added by the label-based pass above
+    const tempoIdx = filters.findIndex(f => f.type === 'tempo');
+    if (tempoIdx !== -1) filters.splice(tempoIdx, 1);
+    const tempoData = {};
+    if (bpmMin) tempoData.min = bpmMin;
+    if (bpmMax) tempoData.max = bpmMax;
+    filters.push({ type: 'tempo', data: tempoData });
+    console.log(`🎵 Hard BPM constraint: ${JSON.stringify(tempoData)}`);
+  }
+
+  // Energy target — maps "low"/"medium"/"high" to an energy range.
+  // Only applies when a label-derived energy range hasn't already been set,
+  // or when the label-derived range is contradictory (min > max was skipped).
+  if (energyTarget) {
+    const energyIdx = filters.findIndex(f => f.type === 'energy');
+    if (energyIdx === -1) {
+      // No energy filter was set — add one based on the target
+      const energyRanges = { low: { max: 0.42 }, medium: { min: 0.38, max: 0.68 }, high: { min: 0.72 } };
+      const er = energyRanges[energyTarget];
+      if (er) {
+        filters.push({ type: 'energy', data: er });
+        console.log(`⚡ Energy target "${energyTarget}": ${JSON.stringify(er)}`);
+      }
+    }
+    // If an energy filter already exists (from label pass), leave it — it's more specific
+  }
+
+  // Mood → valence filter (positive = high valence, melancholic = low valence)
+  const mood = genreData.mood;
+  if (mood) {
+    const valenceIdx = filters.findIndex(f => f.type === 'valence');
+    if (valenceIdx === -1) {
+      if (mood === 'positive') {
+        filters.push({ type: 'valence', data: { min: 0.45 } });
+        console.log(`😊 Mood "positive": valence ≥ 0.45`);
+      } else if (mood === 'melancholic') {
+        filters.push({ type: 'valence', data: { max: 0.45 } });
+        console.log(`😔 Mood "melancholic": valence ≤ 0.45`);
+      }
+      // neutral: no valence filter
+    }
   }
 
   // Language filter
@@ -5174,7 +5230,11 @@ Respond ONLY with valid JSON in this format:
     "preference": "cohesive/varied/unexpected" or null
   },
   "songCount": integer (5-100) or null,
-  "referenceSongs": [{ "title": "song title", "artist": "artist name" }] or []
+  "referenceSongs": [{ "title": "song title", "artist": "artist name" }] or [],
+  "bpmConstraint": { "min": BPM integer or null, "max": BPM integer or null },
+  "mood": "positive" | "neutral" | "melancholic" | null,
+  "energyTarget": "low" | "medium" | "high" | null,
+  "energyProgression": "ramp_up" | "ramp_down" | null
 }
 
 EXTRACTION GUIDELINES:
@@ -5301,6 +5361,30 @@ Examples (no reference tracks):
 - "2000s rock hits" → suggestedSeedArtists: ["Linkin Park", "Green Day", "Fall Out Boy", "My Chemical Romance"]
 Choose artists that match the popularity level implied (mainstream vs underground).
 
+BPM CONSTRAINTS:
+- "over 150 BPM", "songs above 140 BPM", "fast tempo only": bpmConstraint.min = that number
+- "under 100 BPM", "slow songs only": bpmConstraint.max = that number
+- "between 120 and 140 BPM": bpmConstraint.min = 120, bpmConstraint.max = 140
+- If no explicit BPM number mentioned → bpmConstraint: { min: null, max: null }
+
+MOOD (emotional valence — separate from energy):
+- "happy", "uplifting", "feel-good", "positive", "welcoming", "café", "bright", "cheerful", "healing", "hopeful", "good vibes" → mood: "positive"
+- "sad", "melancholic", "heartbreak", "crying", "emotional", "heavy", "gloomy", "dark emotions" → mood: "melancholic"
+- "chill", "background", "ambient", "focus", "study", "neutral", "calm" (without emotional context) → mood: "neutral"
+- If genuinely ambiguous → null
+
+ENERGY TARGET:
+- "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
+- "high energy", "hype", "intense", "loud", "fast", "pump up", "hard" → energyTarget: "high"
+- "kinda hype but chill", "chill but energizing", "mid-energy", "not too slow not too fast", "background but engaging", "light energy" → energyTarget: "medium"
+- If conflicting signals are present (both chill and hype), use "medium" rather than picking one
+- If unclear → null
+
+ENERGY PROGRESSION:
+- "build from chill to hype", "start slow end hype", "warm up then peak", "gradually get more intense", "starts mellow builds to hype" → energyProgression: "ramp_up"
+- "start hype wind down", "peak at start then chill", "high energy then relaxing" → energyProgression: "ramp_down"
+- All other cases → null
+
 Use null, [], or false for any feature not mentioned.
 
 DO NOT include any text outside the JSON.`
@@ -5355,7 +5439,11 @@ DO NOT include any text outside the JSON.`
       discoveryBalance: {
         preference: null
       },
-      songCount: null
+      songCount: null,
+      bpmConstraint: { min: null, max: null },
+      mood: null,
+      energyTarget: null,
+      energyProgression: null,
     };
     try {
       let genreText = genreExtractionResponse.content[0].text.trim();
@@ -6907,6 +6995,29 @@ Example response: [1, 2, 4, 5, 7, ...]`
         _vibeHardRules.push('NO LOUD/DISTRACTING SONGS — HARD RULE: REMOVE any high-energy, heavy, or intense tracks.');
       }
 
+      // Hard BPM constraint
+      const _bpmMin = genreData.bpmConstraint?.min;
+      const _bpmMax = genreData.bpmConstraint?.max;
+      if (_bpmMin || _bpmMax) {
+        const bpmDesc = _bpmMin && _bpmMax
+          ? `between ${_bpmMin} and ${_bpmMax} BPM`
+          : _bpmMin ? `above ${_bpmMin} BPM` : `below ${_bpmMax} BPM`;
+        _vibeHardRules.push(`BPM CONSTRAINT — HARD RULE: The user explicitly requested songs ${bpmDesc}. REMOVE any track that sounds significantly slower or faster than this range. Use your knowledge of typical BPM ranges per genre: EDM/techno ~128-150+, fast hip-hop ~90-100+, ballads ~60-80, etc.`);
+      }
+
+      // Explicit content
+      if (!allowExplicit) {
+        _vibeHardRules.push('CLEAN/EXPLICIT — HARD RULE: REMOVE any track with explicit language, profanity, or mature content. No exceptions — the user has requested clean music only.');
+      }
+
+      // Mood / valence constraints
+      const _mood = genreData.mood;
+      if (_mood === 'positive') {
+        _vibeHardRules.push('POSITIVE MOOD — HARD RULE: REMOVE sad, melancholic, gloomy, or somber tracks. This playlist should feel pleasant and uplifting. "Calm" does NOT mean "sad" — only keep tracks that feel warm, neutral-to-positive, or happy. Phoebe Bridgers, Sufjan Stevens, and similar artists known for sadness should be removed unless the specific song is clearly upbeat.');
+      } else if (_mood === 'melancholic') {
+        _vibeHardRules.push('MELANCHOLIC MOOD — HARD RULE: REMOVE hype, aggressive, or party-energy tracks. Keep emotionally resonant, introspective, or bittersweet songs. Avoid angry or toxic energy — sad and peaceful, not sad and hostile.');
+      }
+
       // Audience safety constraints
       const _isChristian = _audience.includes('christian') || _promptLower.includes('christian') || _promptLower.includes('church') || _promptLower.includes('worship') || _promptLower.includes('gospel');
       const _isFamily    = _audience.includes('family') || _audience.includes('clean') || _promptLower.includes('family') || _promptLower.includes('kids') || _promptLower.includes('children');
@@ -7164,7 +7275,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
           selectedTracks.map(t => normalizeArtist(t.artist || ''))
         );
 
-        const targetCount = genreData.playlistConstraints?.trackCount || 20;
+        const targetCount = genreData.songCount || songCount || 20;
         const existingIds = new Set(selectedTracks.map(t => t.id).filter(Boolean));
 
         for (const artistName of requestedArtists) {
@@ -7195,6 +7306,12 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
                   primaryArtist.includes(normName) ||
                   normName.includes(primaryArtist);
               });
+            }
+
+            // Skip explicit tracks if user wants clean content
+            if (match && !allowExplicit && match.explicit) {
+              console.log(`[FORCE-INCLUDE] Skipping explicit track "${match.name}" (clean mode)`);
+              match = null;
             }
 
             if (match && !existingIds.has(match.id)) {
@@ -7233,6 +7350,42 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     } catch (forceIncludeErr) {
       console.log('[FORCE-INCLUDE] Skipped due to error:', forceIncludeErr.message);
+    }
+
+    // ── Energy progression sequencing ──────────────────────────────────────────
+    // For "build from chill → hype" or "peak then wind down" prompts, ask Claude
+    // to reorder the final tracks by energy. Uses Haiku for speed.
+    if (genreData.energyProgression && selectedTracks.length >= 4) {
+      try {
+        const direction = genreData.energyProgression === 'ramp_up'
+          ? 'low to high energy (chill/mellow first, intense/hype last)'
+          : 'high to low energy (intense/hype first, chill/mellow last)';
+        const trackList = selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n');
+        const seqResponse = await anthropic.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+          temperature: 0,
+          messages: [{
+            role: 'user',
+            content: `Reorder these playlist tracks from ${direction}. Return ONLY a JSON array of the 1-based original track numbers in the new order. No explanation.\n\n${trackList}`
+          }]
+        });
+        const seqText = seqResponse.content[0].text.trim()
+          .replace(/^```json\n?/, '').replace(/\n?```$/, '');
+        const seqMatch = seqText.match(/\[[\d,\s]+\]/);
+        if (seqMatch) {
+          const order = JSON.parse(seqMatch[0]);
+          const reordered = order
+            .map(idx => selectedTracks[idx - 1])
+            .filter(Boolean);
+          if (reordered.length >= Math.ceil(selectedTracks.length * 0.8)) {
+            selectedTracks = reordered;
+            console.log(`🎚️ Sequenced tracks ${genreData.energyProgression}: ${direction}`);
+          }
+        }
+      } catch (seqErr) {
+        console.log('[SEQUENCING] Skipped due to error:', seqErr.message);
+      }
     }
 
     // Track artists from generated playlist to database for future filtering
