@@ -1258,35 +1258,45 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     console.log(`🎭 SoundCharts mood filter: [${scMoods.join(', ')}]`);
   }
 
-  // Audio feature filters — only applied when using top_songs (no seed artists).
-  // With seed artists the artist graph already constrains the sound; stacking audio
-  // feature ranges on top would shrink the pool too aggressively.
-  if (strategy === 'top_songs') {
-    // Merge feature ranges from all matched labels, taking the most permissive overlap
-    // (highest min, lowest max) so we don't over-filter on conflicting signals.
-    const featureRanges = {};
-    for (const label of moodLabels) {
-      const features = SOUNDCHARTS_AUDIO_FEATURE_MAP[label];
-      if (!features) continue;
-      for (const [feature, range] of Object.entries(features)) {
-        if (!featureRanges[feature]) featureRanges[feature] = {};
-        if (range.min !== undefined) featureRanges[feature].min = Math.max(featureRanges[feature].min ?? 0, range.min);
-        if (range.max !== undefined) featureRanges[feature].max = Math.min(featureRanges[feature].max ?? 9999, range.max);
-      }
-    }
+  // Audio feature filters.
+  // For top_songs: apply all matched audio feature ranges.
+  // For artist_songs: the artist graph already constrains genre/sound, so only pass through
+  // STRONG energy or tempo constraints (e.g. gym = high energy, sleep = very calm).
+  // Weaker signals (valence, danceability, acousticness) are skipped for artist_songs to
+  // avoid over-shrinking the pool.
+  const STRONG_ENERGY_MIN = 0.72; // matches 'energetic'/'hype'/'workout' threshold
+  const STRONG_CALM_MAX   = 0.40; // matches 'calm'/'sleep' threshold
 
-    // Skip any feature where min > max (contradictory signals, e.g. "energetic" + "chill")
-    for (const [feature, range] of Object.entries(featureRanges)) {
-      if (range.min !== undefined && range.max !== undefined && range.min > range.max) {
-        console.log(`⚠️  Skipping contradictory ${feature} filter (min ${range.min} > max ${range.max})`);
-        continue;
-      }
-      const filterData = {};
-      if (range.min !== undefined) filterData.min = range.min;
-      if (range.max !== undefined) filterData.max = range.max;
-      filters.push({ type: feature, data: filterData });
-      console.log(`🎛️  SoundCharts audio filter: ${feature} ${JSON.stringify(filterData)}`);
+  const featureRanges = {};
+  for (const label of moodLabels) {
+    const features = SOUNDCHARTS_AUDIO_FEATURE_MAP[label];
+    if (!features) continue;
+    for (const [feature, range] of Object.entries(features)) {
+      if (!featureRanges[feature]) featureRanges[feature] = {};
+      if (range.min !== undefined) featureRanges[feature].min = Math.max(featureRanges[feature].min ?? 0, range.min);
+      if (range.max !== undefined) featureRanges[feature].max = Math.min(featureRanges[feature].max ?? 9999, range.max);
     }
+  }
+
+  for (const [feature, range] of Object.entries(featureRanges)) {
+    if (range.min !== undefined && range.max !== undefined && range.min > range.max) {
+      console.log(`⚠️  Skipping contradictory ${feature} filter (min ${range.min} > max ${range.max})`);
+      continue;
+    }
+    if (strategy === 'artist_songs') {
+      if (feature === 'energy') {
+        const isStrongHigh = range.min !== undefined && range.min >= STRONG_ENERGY_MIN;
+        const isStrongLow  = range.max !== undefined && range.max <= STRONG_CALM_MAX;
+        if (!isStrongHigh && !isStrongLow) continue; // weak energy signal — skip
+      } else if (feature !== 'tempo') {
+        continue; // skip valence/danceability/acousticness etc for artist_songs
+      }
+    }
+    const filterData = {};
+    if (range.min !== undefined) filterData.min = range.min;
+    if (range.max !== undefined) filterData.max = range.max;
+    filters.push({ type: feature, data: filterData });
+    console.log(`🎛️  SoundCharts audio filter: ${feature} ${JSON.stringify(filterData)}${strategy === 'artist_songs' ? ' [strong signal]' : ''}`);
   }
 
   // Language filter
@@ -1349,6 +1359,9 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // Artist career stage filter — maps popularity preference to career stage
   const popPref = genreData.trackConstraints?.popularity?.preference;
   const popMax = genreData.trackConstraints?.popularity?.max;
+  const _useCaseLower = (genreData.contextClues?.useCase || '').toLowerCase();
+  const isPartyContext = _useCaseLower.includes('party') || _useCaseLower.includes('social') ||
+                         _useCaseLower.includes('dancing') || _useCaseLower.includes('club');
   if (popPref === 'underground' || (popMax !== null && popMax !== undefined && popMax <= 40)) {
     filters.push({ type: 'artistCareerStages', data: { values: ['long_tail', 'developing'], operator: 'in' } });
     console.log(`🎤 SoundCharts career stage filter: underground (long_tail, developing)`);
@@ -1357,6 +1370,10 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
              genreData.trackConstraints?.popularity?.min >= 70)) {
     filters.push({ type: 'artistCareerStages', data: { values: ['mainstream', 'superstar'], operator: 'in' } });
     console.log(`🎤 SoundCharts career stage filter: mainstream/superstar`);
+  } else if (isPartyContext) {
+    // Party/social playlists need recognizable songs everyone knows — boost toward mainstream
+    filters.push({ type: 'artistCareerStages', data: { values: ['mainstream', 'superstar', 'developing'], operator: 'in' } });
+    console.log(`🎉 SoundCharts career stage filter: party context → mainstream/superstar/developing`);
   }
 
   // Liveness filter — if user excluded live versions, filter them out at source
@@ -5126,7 +5143,8 @@ Respond ONLY with valid JSON in this format:
     "language": { "prefer": ["list of preferred languages, e.g. 'Spanish', 'Korean'"], "exclude": ["list of excluded languages"] }
   },
   "contextClues": {
-    "useCase": "intended use or null",
+    "useCase": "intended use or null (e.g. gym, study, party, driving, sleep, focus, church, retreat)",
+    "audience": ["christian", "family", "youth", "clean"] or [],
     "avoidances": ["what NOT to include"]
   },
   "trackConstraints": {
@@ -5255,6 +5273,14 @@ LANGUAGE (culturalContext.language):
 - "French music" → prefer: ["French"], exclude: []
 - If no language is implied → prefer: [], exclude: []
 
+AUDIENCE / SAFETY (contextClues.audience):
+- "christian", "church", "worship", "faith", "gospel": audience: ["christian"]
+- "youth retreat", "youth group", "youth event": audience: ["christian", "youth"]
+- "family", "kids", "children", "all ages": audience: ["family"]
+- "clean", "no explicit", "safe": audience: ["clean"]
+- "youth", "teenagers": audience: ["youth"]
+- If multiple apply, include all. If none apply → []
+
 REFERENCE SONGS:
 If the user mentions a specific song title + artist (e.g. "songs like Take It Slow by Dante", "similar to Need My Baby by Reo Xander"), extract them into referenceSongs. These are used to confirm the correct artist identity.
 - "songs like Take It Slow by Dante" → referenceSongs: [{ "title": "Take It Slow", "artist": "Dante" }]
@@ -5301,6 +5327,7 @@ DO NOT include any text outside the JSON.`
       },
       contextClues: {
         useCase: null,
+        audience: [],
         avoidances: []
       },
       trackConstraints: {
@@ -6852,6 +6879,44 @@ Example response: [1, 2, 4, 5, 7, ...]`
     if (selectedTracks.length > 0 && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground')) {
       console.log('Running vibe check on selected tracks...');
 
+      // Build use-case and audience hard constraint rules for the vibe check
+      const _uc = (genreData.contextClues.useCase || '').toLowerCase();
+      const _audience = genreData.contextClues.audience || [];
+      const _promptLower = prompt.toLowerCase();
+      const _avoidances = genreData.contextClues.avoidances || [];
+      const _vibeHardRules = [];
+
+      // Use-case energy constraints
+      if (_uc.includes('gym') || _uc.includes('workout') || _uc.includes('exercise') || _uc.includes('training')) {
+        _vibeHardRules.push('GYM/WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must feel pump-up and high energy. If it sounds like a breakup song, a late-night vibe, or could play at a funeral, cut it immediately. Think: does this make you want to sprint? If no, cut it.');
+      }
+      if (_uc.includes('study') || _uc.includes('focus') || _uc.includes('work') || _uc.includes('cod') || _uc.includes('concentration')) {
+        _vibeHardRules.push('STUDY/FOCUS — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting songs. No heavy bass drops, intense rap verses, or anything that would pull attention away from deep work. Only calm, background-friendly music that blends into the background.');
+      }
+      if (_uc.includes('sleep') || _uc.includes('bedtime') || _uc.includes('rest') || _uc.includes('wind down')) {
+        _vibeHardRules.push('SLEEP/REST — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake. Only the most soothing, minimal, ultra-calm tracks.');
+      }
+      if (_uc.includes('party') || _uc.includes('dancing') || _uc.includes('club') || _uc.includes('social')) {
+        _vibeHardRules.push('PARTY/DANCE — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be something people can dance or sing along to at a party. No ballads, no introspective slow jams.');
+      }
+      // Explicit user avoidances
+      if (_avoidances.some(a => a.toLowerCase().includes('slow')) || _promptLower.includes('no slow')) {
+        _vibeHardRules.push('NO SLOW SONGS — HARD RULE: The user explicitly said no slow songs. REMOVE any track that is slow, mellow, or would be classified as a ballad.');
+      }
+      if (_avoidances.some(a => a.toLowerCase().includes('loud')) || _avoidances.some(a => a.toLowerCase().includes('distracting'))) {
+        _vibeHardRules.push('NO LOUD/DISTRACTING SONGS — HARD RULE: REMOVE any high-energy, heavy, or intense tracks.');
+      }
+
+      // Audience safety constraints
+      const _isChristian = _audience.includes('christian') || _promptLower.includes('christian') || _promptLower.includes('church') || _promptLower.includes('worship') || _promptLower.includes('gospel');
+      const _isFamily    = _audience.includes('family') || _audience.includes('clean') || _promptLower.includes('family') || _promptLower.includes('kids') || _promptLower.includes('children');
+      const _isYouth     = _audience.includes('youth') || _promptLower.includes('youth retreat') || _promptLower.includes('youth group');
+      if (_isChristian) {
+        _vibeHardRules.push('CHRISTIAN/RELIGIOUS CONTEXT — HARD RULE: ONLY keep explicitly Christian, worship, gospel, or faith-based music. REMOVE all secular artists — even if the music sounds "positive" or "uplifting," secular pop/rock/hip-hop does NOT belong here. Artists like TobyMac, Crowder, Lauren Daigle, Chris Tomlin, Hillsong, Lecrae are appropriate. Artists like Three Days Grace, Falling In Reverse, Imagine Dragons, or any secular act must be REMOVED.');
+      } else if (_isFamily || _isYouth) {
+        _vibeHardRules.push('CLEAN/FAMILY/YOUTH CONTEXT — HARD RULE: REMOVE any songs or artists associated with dark themes, aggression, sexual content, explicit language, or inappropriate messaging. Keep it positive and safe for all ages.');
+      }
+
       const vibeCheckPrompt = `You are reviewing a playlist to ensure it has a COHERENT VIBE and emotional atmosphere.
 
 Original user request: "${prompt}"
@@ -6863,7 +6928,10 @@ REQUIRED VIBE/CONTEXT:
 - Era/decade: ${genreData.era.decade || 'not specified'}
 - Avoid: ${genreData.contextClues.avoidances.join('; ') || 'nothing'}
 - Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: STRICTLY remove ALL mainstream/radio/chart artists' : ''}
-
+${_vibeHardRules.length > 0 ? `
+⚠️  HARD CONSTRAINTS (non-negotiable — enforce these BEFORE anything else):
+${_vibeHardRules.map(r => `• ${r}`).join('\n')}
+` : ''}
 Selected tracks:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist || 'Unknown Artist'}`).join('\n')}
 
@@ -6895,7 +6963,7 @@ Respond ONLY with valid JSON:
   "keepIndices": [list of indices (1-based) of songs that DO fit the vibe and should be kept]
 }
 
-Be EXTREMELY strict about vibe coherence, especially for underground preference. When in doubt, REMOVE the track.
+Be EXTREMELY strict about vibe coherence, especially for underground preference and any hard constraints listed above. When in doubt, REMOVE the track.
 
 DO NOT include any text outside the JSON.`;
 
@@ -7068,6 +7136,73 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     } else {
       console.log('Skipping vibe check (no specific atmosphere/context requirements)');
+    }
+
+    // ── Fix 2: Force-include 1-2 songs from each explicitly requested artist ──
+    // If the user named specific artists in their prompt but none of their songs
+    // survived the pool/vibe-check pipeline, inject them now.
+    try {
+      const requestedArtists = (genreData.artistConstraints?.requestedArtists || [])
+        .filter(a => a && typeof a === 'string');
+
+      if (requestedArtists.length > 0 && appSpotify) {
+        const normalizeArtist = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+        // Build a set of artist names already in the playlist
+        const presentArtists = new Set(
+          selectedTracks.map(t => normalizeArtist(t.artist || ''))
+        );
+
+        const targetCount = genreData.playlistConstraints?.trackCount || 20;
+        const existingIds = new Set(selectedTracks.map(t => t.id).filter(Boolean));
+
+        for (const artistName of requestedArtists) {
+          const normName = normalizeArtist(artistName);
+          if (presentArtists.has(normName)) continue; // already represented
+
+          console.log(`[FORCE-INCLUDE] "${artistName}" not in playlist — searching for top track`);
+          try {
+            const searchResult = await appSpotify.searchTracks(`artist:${artistName}`, { limit: 10, market: 'US' });
+            const candidates = searchResult?.tracks?.items || [];
+
+            // Find first track whose primary artist name matches closely
+            const match = candidates.find(track => {
+              const primaryArtist = normalizeArtist(track.artists?.[0]?.name || '');
+              return primaryArtist === normName ||
+                primaryArtist.includes(normName) ||
+                normName.includes(primaryArtist);
+            });
+
+            if (match && !existingIds.has(match.id)) {
+              const injectTrack = {
+                id: match.id,
+                name: match.name,
+                artist: match.artists.map(a => a.name).join(', '),
+                album: match.album?.name || '',
+                uri: match.uri,
+                popularity: match.popularity,
+                source: 'force_include',
+              };
+              if (selectedTracks.length >= targetCount) {
+                // Replace last track (least important slot)
+                selectedTracks[selectedTracks.length - 1] = injectTrack;
+                console.log(`[FORCE-INCLUDE] Replaced last track with "${match.name}" by ${injectTrack.artist}`);
+              } else {
+                selectedTracks.push(injectTrack);
+                console.log(`[FORCE-INCLUDE] Appended "${match.name}" by ${injectTrack.artist}`);
+              }
+              existingIds.add(match.id);
+              presentArtists.add(normName);
+            } else {
+              console.log(`[FORCE-INCLUDE] No suitable match found for "${artistName}"`);
+            }
+          } catch (forceErr) {
+            console.log(`[FORCE-INCLUDE] Search failed for "${artistName}":`, forceErr.message);
+          }
+        }
+      }
+    } catch (forceIncludeErr) {
+      console.log('[FORCE-INCLUDE] Skipped due to error:', forceIncludeErr.message);
     }
 
     // Track artists from generated playlist to database for future filtering
