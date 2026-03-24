@@ -131,7 +131,7 @@ const LikeDislikeDiagram = ({ trackImages = {} }) => (
       {DIAGRAM_TRACKS.map(track => {
         const key = `${track.name}|${track.artist}`;
         return (
-          <div key={track.name} className="track-item" style={{ background: 'var(--bg-secondary, #f2f2f7)', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div key={track.name} className="tour-diag-track-row" style={{ borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 36, height: 36, borderRadius: 4, background: '#d1d1d6', flexShrink: 0, overflow: 'hidden' }}>
               {trackImages[key] && <img src={trackImages[key]} alt={track.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
             </div>
