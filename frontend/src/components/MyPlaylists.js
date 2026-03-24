@@ -558,8 +558,6 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   // Unified edit options modal handlers
   const openEditOptionsModal = (playlist) => {
     setEditOptionsPlaylist(playlist);
-    setEditingModalName(false);
-    setModalNameValue(playlist.playlistName || '');
     setExpandManualRefresh(false);
     setManualRefreshMode(null);
     setManualRefreshSongCount(30);
@@ -573,7 +571,6 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const closeEditOptionsModal = () => {
     setShowEditOptionsModal(false);
     setEditOptionsPlaylist(null);
-    setEditingModalName(false);
   };
 
   const handleSaveSettings = async () => {
