@@ -869,12 +869,25 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
     }
 
     if (match) {
-      const artistUuid = match.artists?.[0]?.uuid || null;
-      const artistName = match.artists?.[0]?.name || match.creditName;
-      console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}`);
-      const result = { songUuid: match.uuid, artistUuid, artistName };
-      setSCCache(cacheKey, result);
-      return result;
+      // When multiple SC artists share a name (e.g. two "Keffer" profiles), the title search
+      // returns whichever one SC ranks first — which may be the wrong one. If we have a
+      // confirmed Spotify ISRC, validate the match against it before committing.
+      // ISRC mismatch (or match has no ISRC while we have one) means wrong artist — fall through
+      // to the artist-candidate fallback which has Spotify-ID-based disambiguation (Priority 0).
+      const matchIsrc = match.isrc?.value || match.isrc || null;
+      const isrcConflict = spotifyIsrc && matchIsrc && matchIsrc !== spotifyIsrc;
+      const isrcUnverifiable = spotifyIsrc && !matchIsrc && confirmedSpotifyArtistId;
+      if (isrcConflict || isrcUnverifiable) {
+        console.log(`⚠️  SoundCharts title match for "${title}" by "${match.artists?.[0]?.name || match.creditName}" has ISRC ${matchIsrc || '(none)'} but Spotify says ${spotifyIsrc} — falling through to artist-candidate fallback to resolve ambiguity`);
+        match = null; // fall through to artist-candidate fallback below
+      } else {
+        const artistUuid = match.artists?.[0]?.uuid || null;
+        const artistName = match.artists?.[0]?.name || match.creditName;
+        console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}`);
+        const result = { songUuid: match.uuid, artistUuid, artistName };
+        setSCCache(cacheKey, result);
+        return result;
+      }
     }
 
     // Log what artists were returned to help diagnose misses
