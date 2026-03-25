@@ -5350,7 +5350,7 @@ Respond ONLY with valid JSON in this format:
   "energyTarget": "low" | "medium" | "high" | null,
   "energyProgression": "ramp_up" | "ramp_down" | null,
   "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null,
-  "genreAccessibility": "newcomer" | "enthusiast" | null
+  "genreAccessibility": "newcomer" | "curious" | "enthusiast" | null
 }
 
 EXTRACTION GUIDELINES:
@@ -5542,11 +5542,15 @@ EXCLUDED ARTISTS:
 - ABBREVIATIONS & NICKNAMES: Resolve common abbreviations to full artist names. Examples: "TS" or "T.S." → "Taylor Swift", "TSwift" → "Taylor Swift", "Ye" → "Kanye West", "Bey" → "Beyoncé", "Jay" or "Hov" → "Jay-Z", "Drizzy" → "Drake", "Weezy" → "Lil Wayne"
 - PRODUCER EXCLUSIONS: "no Jack Antonoff songs", "no Max Martin production" → add those names to excludedArtists (the filter will match on artist name; note this won't filter by producer but will log the intent)
 - CRITICAL: When the user says "no [name]", always try to resolve [name] to the most likely well-known artist before adding to excludedArtists
-- IMPLICIT EXCLUSION — "what else" / "what other" / "discover beyond" phrases: When the user signals they want to DISCOVER BEYOND a named artist, add that artist to both suggestedSeedArtists (for genre/taste anchoring) AND excludedArtists (to keep their songs out of the output). The artist is a taste reference, not a fill target.
-  * "I only listen to The Weeknd, what else is good?" → suggestedSeedArtists: ["The Weeknd", ...adjacent], excludedArtists: ["The Weeknd"]
-  * "massive Radiohead fan, what should I listen to?" → suggestedSeedArtists: ["Radiohead", ...], excludedArtists: ["Radiohead"]
-  * "I grew up on Taylor Swift, what else should I check out?" → suggestedSeedArtists: ["Taylor Swift", ...], excludedArtists: ["Taylor Swift"]
-  * Trigger phrases: "what else", "what other [genre/artists]", "I only listen to X", "X fan looking for more", "similar to X but not X", "besides X", "beyond X"
+- IMPLICIT EXCLUSION — "expand beyond" phrases: When the user signals they want to DISCOVER BEYOND a named artist (not get more of them), add that artist to both suggestedSeedArtists (for genre/taste anchoring) AND excludedArtists (to keep their songs out of the output).
+  TRIGGER — the exclusion fires ONLY when the phrasing signals escape/expansion, NOT when it signals "more of the same":
+  ✓ EXCLUDE: "what else", "what other X should I listen to", "I only listen to X, what else?", "besides X", "beyond X", "other than X", "expand beyond X", "I've only ever listened to X"
+  ✗ DO NOT EXCLUDE: "more like X", "give me more X", "similar to X", "songs like X", "I love X, give me more", "in the style of X", "X vibes", "artists like X"
+  The test: does the user want to hear LESS of the named artist (escape) or find MORE of the same style (seed)? Only exclude on escape phrasing.
+  * "I only listen to The Weeknd, what else is good?" → suggestedSeedArtists: ["The Weeknd", ...adjacent], excludedArtists: ["The Weeknd"] (escape)
+  * "massive Radiohead fan, what should I listen to?" → suggestedSeedArtists: ["Radiohead", ...], excludedArtists: ["Radiohead"] (escape)
+  * "I love The Weeknd, give me more like him" → requestedArtists: ["The Weeknd"], excludedArtists: [] (more-of, NO exclusion)
+  * "songs similar to The Weeknd" → requestedArtists: ["The Weeknd"], excludedArtists: [] (seed request, NO exclusion)
 
 ENERGY TARGET:
 - "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
@@ -5574,15 +5578,18 @@ RULE: If the user is describing a SPLIT or TRANSITION between distinct moods/ene
 - If no multi-phase pattern → phases: null
 
 GENRE ACCESSIBILITY (genreAccessibility):
-- "just getting into X", "never listened to X", "ease me in", "good starting point for X", "where do I start with X", "I'm new to X", "jazz for beginners", "beginner [genre]" → genreAccessibility: "newcomer"
-- "deep cuts", "deep dive", "I know all the classics", "show me obscure", "advanced [genre]", "I've been listening for years", "non-obvious picks" → genreAccessibility: "enthusiast"
-- When genreAccessibility: "newcomer" — choose suggestedSeedArtists that are widely loved, melodic, and approachable. Avoid intimidating, complex, or historically important-but-dense works. Examples:
-  * Jazz newcomer: Norah Jones, Chet Baker (vocal), Diana Krall, Kind of Blue-era Miles Davis, Melody Gardot — NOT bebop Charlie Parker, Oscar Peterson, or free jazz Coltrane
-  * Classical newcomer: Ludovico Einaudi, Max Richter, Hans Zimmer, Yann Tiersen — NOT 12-tone serialism or dense symphonies
-  * Metal newcomer: Linkin Park, Foo Fighters, System of a Down, early Metallica — NOT black metal or death metal
-  * Country newcomer: Kacey Musgraves, Chris Stapleton, Zac Brown Band — NOT deep honky-tonk or old-time country
+- "just getting into X", "never listened to X", "ease me in", "good starting point for X", "where do I start with X", "I'm new to X", "jazz for beginners", "beginner [genre]", "never heard X before" → genreAccessibility: "newcomer"
+- "I've heard some X and want to explore more", "getting deeper into X", "I've listened to a bit of X", "know the basics but want more", "heard a few X artists and loved it", "getting into X lately" → genreAccessibility: "curious"
+- "deep cuts", "deep dive", "I know all the classics", "show me obscure", "advanced [genre]", "I've been listening for years", "non-obvious picks", "I know all the hits" → genreAccessibility: "enthusiast"
+- When genreAccessibility: "newcomer" — choose suggestedSeedArtists that are widely loved, melodic, and approachable for that SPECIFIC genre. "Accessible" means different things per genre:
+  * Jazz: Norah Jones, Chet Baker (vocal), Diana Krall, Kind of Blue-era Miles Davis, Melody Gardot — NOT bebop Charlie Parker, Oscar Peterson, or free jazz Coltrane
+  * Classical: Ludovico Einaudi, Max Richter, Hans Zimmer, Yann Tiersen — NOT 12-tone serialism, dense operas, or avant-garde works
+  * Metal: Linkin Park, Foo Fighters, System of a Down, Metallica's Black Album — NOT black metal, death metal, or grindcore
+  * Country: Kacey Musgraves, Chris Stapleton, Zac Brown Band — NOT deep honky-tonk or old-time fiddle country
+  * Electronic: Daft Punk, Bonobo, Caribou, Röyksopp — NOT techno, noise, or academic electroacoustic
+- When genreAccessibility: "curious" — mix well-known entry points with one tier deeper: non-obvious picks from the same artist, acclaimed albums the casual fan hasn't reached, and 2-3 artists who are one step more niche than the obvious names
 - When genreAccessibility: "enthusiast" — prefer deep cuts, obscure artists, and non-obvious picks that a long-time fan hasn't heard
-- If no newcomer/enthusiast signal → null
+- If no accessibility signal → null
 
 Use null, [], or false for any feature not mentioned.
 
@@ -7676,7 +7683,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
     // SoundCharts already ranked songs by streams — take the top N directly.
     // Request 20% more if vibe check will run (it may trim some tracks).
-    const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground';
+    const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer';
     const selectionTarget = hasVibeRequirements && !_phases ? Math.ceil(songCount * 1.2) : songCount;
 
     // Multi-phase: select proportionally from each phase's track pool
@@ -7736,7 +7743,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
     // Also filters out mainstream artists when underground preference is detected
     // Skipped for multi-phase playlists — each phase was already fetched with phase-specific
     // energy/mood filters, so a single-vibe check would incorrectly remove cross-phase tracks.
-    if (selectedTracks.length > 0 && !_phases && (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground')) {
+    if (selectedTracks.length > 0 && !_phases && hasVibeRequirements) {
       console.log('Running vibe check on selected tracks...');
 
       // Build use-case and audience hard constraint rules for the vibe check
