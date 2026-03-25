@@ -1540,8 +1540,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   const popPref = genreData.trackConstraints?.popularity?.preference;
   const popMax = genreData.trackConstraints?.popularity?.max;
   const _useCaseLower = (genreData.contextClues?.useCase || '').toLowerCase();
-  const isPartyContext = _useCaseLower.includes('party') || _useCaseLower.includes('social') ||
-                         _useCaseLower.includes('dancing') || _useCaseLower.includes('club');
+  const isPartyContext = _useCaseLower === 'party';
   if (popPref === 'underground' || (popMax !== null && popMax !== undefined && popMax <= 40)) {
     filters.push({ type: 'artistCareerStages', data: { values: ['long_tail', 'developing'], operator: 'in' } });
     console.log(`🎤 SoundCharts career stage filter: underground (long_tail, developing)`);
@@ -5393,7 +5392,7 @@ Respond ONLY with valid JSON in this format:
     "language": { "prefer": ["list of preferred languages, e.g. 'Spanish', 'Korean'"], "exclude": ["list of excluded languages"] }
   },
   "contextClues": {
-    "useCase": "intended use or null (e.g. gym, study, party, driving, sleep, focus, church, retreat)",
+    "useCase": "canonical activity/context — MUST be one of: party | workout | focus | chill | sleep | summer | heartbreak | background | morning | null. Never invent new values. Map semantically using these examples: party (pregame, hype, banger, turn up, going out, club, dance, night out, bar, tailgate) | workout (gym, run, running, exercise, training, cardio, lifting) | focus (study, deep work, coding, concentration, homework, productivity) | chill (relax, winding down, lazy, easy listening, background, drive, road trip) | sleep (bedtime, falling asleep, wind down, nap, meditation) | summer (beach, sunny, warm, pool, tropical, vacation, july, august) | heartbreak (sad, breakup, crying, missing someone, emotional) | background (dinner, cooking, hosting, ambient, gathering, friends over) | morning (waking up, commute, getting ready, start the day). If genuinely ambiguous between two categories, return null — falling through to genre/mood is better than a wrong useCase.",
     "audience": ["christian", "family", "youth", "clean"] or [],
     "avoidances": ["what NOT to include"]
   },
@@ -5533,14 +5532,17 @@ SONG COUNT:
 
 USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
 When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
-- "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "cleaning", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
-- "work out", "gym", "run", "running", "exercise" → mood: "positive", energyTarget: "high", useCase: "gym"
-- "study", "focus", "deep work", "coding" → mood: "neutral", energyTarget: "low", useCase: "study"
-- "drive", "road trip", "long drive" → mood: "positive", energyTarget: "medium", useCase: "driving"
-- "sleep", "wind down", "bedtime", "relax before bed" → mood: "neutral", energyTarget: "low", useCase: "sleep"
-- "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "cooking"
-- "dinner party", "gathering", "friends over", "people coming over" → mood: "positive", energyTarget: "medium", useCase: "party"
-- "morning routine", "getting ready", "start the day" → mood: "positive", energyTarget: "medium", useCase: "morning"
+- "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "party", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
+- "pregame", "hype playlist", "banger", "going out tonight", "turn up", "night out" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party"
+- "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout"
+- "study", "focus", "deep work", "coding", "concentration", "homework" → mood: "neutral", energyTarget: "low", useCase: "focus"
+- "drive", "road trip", "long drive", "commute" → mood: "positive", energyTarget: "medium", useCase: "chill"
+- "relax", "chill out", "wind down after work", "easy listening", "lazy Sunday" → mood: "positive", energyTarget: "low", useCase: "chill"
+- "sleep", "wind down before bed", "bedtime", "falling asleep" → mood: "neutral", energyTarget: "low", useCase: "sleep"
+- "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "background"
+- "dinner party", "gathering", "friends over", "people coming over", "hosting" → mood: "positive", energyTarget: "medium", useCase: "background"
+- "morning routine", "getting ready", "start the day", "waking up" → mood: "positive", energyTarget: "medium", useCase: "morning"
+- "breakup", "heartbreak", "sad playlist", "crying", "missing someone", "feeling low" → mood: "melancholic", energyTarget: "low", useCase: "heartbreak"
 - "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
   NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
@@ -7878,20 +7880,20 @@ Example response: [1, 2, 4, 5, 7, ...]`
       const _avoidances = genreData.contextClues.avoidances || [];
       const _vibeHardRules = [];
 
-      // Use-case energy constraints
-      if (_uc.includes('gym') || _uc.includes('workout') || _uc.includes('exercise') || _uc.includes('training')) {
-        _vibeHardRules.push('GYM/WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must feel pump-up and high energy. If it sounds like a breakup song, a late-night vibe, or could play at a funeral, cut it immediately. Think: does this make you want to sprint? If no, cut it.');
+      // Use-case hard constraint rules — useCase values are canonical (see extraction schema)
+      if (_uc === 'workout') {
+        _vibeHardRules.push('WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must feel pump-up and high energy. If it sounds like a breakup song, a late-night vibe, or could play at a funeral, cut it immediately. Think: does this make you want to sprint? If no, cut it.');
       }
-      if (_uc.includes('study') || _uc.includes('focus') || _uc.includes('work') || _uc.includes('cod') || _uc.includes('concentration')) {
-        _vibeHardRules.push('STUDY/FOCUS — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting songs. No heavy bass drops, intense rap verses, or anything that would pull attention away from deep work. Only calm, background-friendly music that blends into the background.');
+      if (_uc === 'focus') {
+        _vibeHardRules.push('FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting songs. No heavy bass drops, intense rap verses, or anything that would pull attention away from deep work. Only calm, background-friendly music that blends into the background.');
       }
-      if (_uc.includes('sleep') || _uc.includes('bedtime') || _uc.includes('rest') || _uc.includes('wind down')) {
-        _vibeHardRules.push('SLEEP/REST — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake. Only the most soothing, minimal, ultra-calm tracks.');
+      if (_uc === 'sleep') {
+        _vibeHardRules.push('SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake. Only the most soothing, minimal, ultra-calm tracks.');
       }
-      if (_uc.includes('party') || _uc.includes('dancing') || _uc.includes('club') || _uc.includes('social') || _uc.includes('pregame') || _uc.includes('pump') || _uc.includes('hype')) {
-        _vibeHardRules.push('PARTY/DANCE/PREGAME — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be high-energy and something people can move to. No ballads, no introspective slow jams, no emotionally heavy songs. Slow Kanye (e.g. "30 Hours"), Sia ballads (e.g. "1+1"), Lady Gaga film covers, Camila Cabello slow cuts — all WRONG for this context. If you would not play it to hype up a crowd, remove it.');
+      if (_uc === 'party') {
+        _vibeHardRules.push('PARTY/PREGAME — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be high-energy and something people can move to. No ballads, no introspective slow jams, no emotionally heavy songs. Slow Kanye (e.g. "30 Hours"), Sia ballads (e.g. "1+1"), Lady Gaga film covers, Camila Cabello slow cuts — all WRONG for this context. If you would not play it to hype up a crowd, remove it.');
       }
-      if (_uc.includes('summer')) {
+      if (_uc === 'summer') {
         _vibeHardRules.push('SUMMER VIBES — HARD RULE: This playlist is for warm, bright, carefree summer energy. REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy — regardless of season. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "All I Want" (Olivia Rodrigo), "Slut! (Taylor\'s Version)", "2AM" (SZA), "All This Madness" (Sam Smith) — all WRONG for this context. Every track should feel like it belongs on a beach or a summer road trip.');
       }
       // Explicit user avoidances
