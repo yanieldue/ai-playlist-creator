@@ -5898,14 +5898,19 @@ DO NOT include any text outside the JSON.`
                 console.log(`✓ Spotify QA passed for "${refSong.artist}": SC song maps to correct Spotify artist ${scMappedSpotifyArtistId}`);
               }
             } else {
-              // SC artist has no Spotify track mapping — likely the wrong artist profile
-              // (e.g. an electronic artist with the same name who isn't on Spotify).
-              // Mark NOSIMILAR so we skip their genre/similar data but still attempt to
-              // fetch their songs (which will mostly 404 on Spotify, harmless).
-              console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping — SC artist likely wrong profile, marking NOSIMILAR`);
-              const existing = confirmedArtistUuids[refSong.artist.toLowerCase()];
-              if (existing && existing !== 'INVALID' && !String(existing).startsWith('NOSIMILAR:')) {
-                confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
+              // SC song has no Spotify mapping.
+              // Only mark NOSIMILAR when the artist has NO confirmed Spotify presence.
+              // If we already found them on Spotify (refSpotifyArtistId confirmed), the missing
+              // SC→Spotify link is just a SC data gap, not a wrong-artist match (Keffer case).
+              const hasSpotifyArtistConfirmed = !!confirmedSpotifyArtistIds[refSong.artist.toLowerCase()];
+              if (!hasSpotifyArtistConfirmed) {
+                console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping — SC artist likely wrong profile, marking NOSIMILAR`);
+                const existing = confirmedArtistUuids[refSong.artist.toLowerCase()];
+                if (existing && existing !== 'INVALID' && !String(existing).startsWith('NOSIMILAR:')) {
+                  confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
+                }
+              } else {
+                console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping but Spotify artist confirmed — SC data gap, keeping artist UUID`);
               }
             }
           } catch (qaErr) {
@@ -6507,6 +6512,110 @@ Return ONLY valid JSON:
     // Scale batch size with song count so Phase B lookup time stays roughly constant
     const BATCH_SIZE = Math.min(Math.max(10, Math.ceil(songCount / 3)), 25);
 
+    // ── Shared platform track finder — used by main, supplement, and fallback loops ──
+    // Defined here (outside the recommendedTracks>0 guard) so the top-songs fallback
+    // can also use it even when the main SC artist pool returned 0 songs.
+    // Tries (1) ISRC, (2) pre-fetched platform ID, (3) text search.
+    // Returns { track, usedExact } or null. Safe to run in parallel (read-only).
+    const findTrackOnPlatform = async (song, opts = {}) => {
+      const { storefront = 'us', appleMusicApi = null, platformSvc = null } = opts;
+      const artistName = song.artistName || song.artist || '';
+
+      const fLabel = `"${song.name || song.track}" by ${artistName}`;
+
+      if (platform === 'spotify') {
+        // 1. ISRC
+        if (song.isrc) {
+          const r = await Promise.race([
+            userSpotifyApi.searchTracks(`isrc:${song.isrc}`, { limit: 5 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+          ]);
+          const items = r.body.tracks.items;
+          if (items.length > 0) {
+            console.log(`🔑 [ISRC] ${fLabel}`);
+            return { track: items[0], usedExact: true };
+          }
+          console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
+        }
+        // 2. SC platform ID (pre-fetched)
+        if (song.platformId) {
+          const r = await Promise.race([
+            userSpotifyApi.getTrack(song.platformId),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+          ]);
+          if (r.body?.id) {
+            console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
+            return { track: r.body, usedExact: true };
+          }
+        }
+        // 3. Text search
+        const r = await Promise.race([
+          userSpotifyApi.searchTracks(`track:${song.name} artist:${artistName}`, { limit: 5 }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+        ]);
+        const items = r.body.tracks.items;
+        if (items.length === 0) {
+          console.log(`❌ [TEXT-EMPTY] ${fLabel} — Spotify returned 0 results`);
+          return null;
+        }
+        const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const reqNorm = norm(artistName);
+        for (const t of items) {
+          const fn = norm(t.artists?.[0]?.name);
+          if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+            console.log(`🔍 [TEXT] ${fLabel}`);
+            return { track: t, usedExact: false };
+          }
+        }
+        const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
+        console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Spotify results: ${topResults}`);
+        return null;
+
+      } else if (platform === 'apple') {
+        // 1. ISRC
+        if (song.isrc && appleMusicApi) {
+          try {
+            const result = await appleMusicApi.lookupByIsrc(song.isrc, storefront);
+            if (result) {
+              console.log(`🔑 [ISRC] ${fLabel}`);
+              return { track: result, usedExact: true };
+            }
+            console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
+          } catch (_) { /* fall through */ }
+        }
+        // 2. SC platform ID (pre-fetched)
+        if (song.platformId && appleMusicApi) {
+          try {
+            const result = await appleMusicApi.getTrack(song.platformId, storefront);
+            if (result) {
+              console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
+              return { track: result, usedExact: true };
+            }
+          } catch (_) { /* fall through */ }
+        }
+        // 3. Text search
+        if (platformSvc) {
+          const results = await platformSvc.searchTracks(platformUserId, `${song.name} ${artistName}`, tokens, storefront, 5);
+          const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const reqNorm = norm(artistName);
+          for (const t of (results || [])) {
+            const fn = norm(t.artists?.[0]?.name || t.artist);
+            const nameLower = (t.name || '').toLowerCase();
+            if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
+            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+              console.log(`🔍 [TEXT] ${fLabel}`);
+              return { track: t, usedExact: false };
+            }
+          }
+          const topResults = (results || []).slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name || t.artist}`).join(', ');
+          if (topResults) console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Apple Music results: ${topResults}`);
+          else console.log(`❌ [TEXT-EMPTY] ${fLabel} — Apple Music returned 0 results`);
+        }
+        return null;
+      }
+      return null;
+    };
+
     // If we have songs from SoundCharts, search for them on the user's platform
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
@@ -6532,108 +6641,6 @@ Return ONLY valid JSON:
           console.log(`🔍 [Phase A] Got platform IDs for ${found}/${songsNeedingId.length} songs`);
         }
       }
-
-      // ── Shared platform track finder — used by main, supplement, and fallback loops ──
-      // Tries (1) ISRC, (2) pre-fetched platform ID, (3) text search.
-      // Returns { track, usedExact } or null. Safe to run in parallel (read-only).
-      const findTrackOnPlatform = async (song, opts = {}) => {
-        const { storefront = 'us', appleMusicApi = null, platformSvc = null } = opts;
-        const artistName = song.artistName || song.artist || '';
-
-        const fLabel = `"${song.name || song.track}" by ${artistName}`;
-
-        if (platform === 'spotify') {
-          // 1. ISRC
-          if (song.isrc) {
-            const r = await Promise.race([
-              userSpotifyApi.searchTracks(`isrc:${song.isrc}`, { limit: 5 }),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-            ]);
-            const items = r.body.tracks.items;
-            if (items.length > 0) {
-              console.log(`🔑 [ISRC] ${fLabel}`);
-              return { track: items[0], usedExact: true };
-            }
-            console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
-          }
-          // 2. SC platform ID (pre-fetched)
-          if (song.platformId) {
-            const r = await Promise.race([
-              userSpotifyApi.getTrack(song.platformId),
-              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-            ]);
-            if (r.body?.id) {
-              console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
-              return { track: r.body, usedExact: true };
-            }
-          }
-          // 3. Text search
-          const r = await Promise.race([
-            userSpotifyApi.searchTracks(`track:${song.name} artist:${artistName}`, { limit: 5 }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-          ]);
-          const items = r.body.tracks.items;
-          if (items.length === 0) {
-            console.log(`❌ [TEXT-EMPTY] ${fLabel} — Spotify returned 0 results`);
-            return null;
-          }
-          const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const reqNorm = norm(artistName);
-          for (const t of items) {
-            const fn = norm(t.artists?.[0]?.name);
-            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
-              console.log(`🔍 [TEXT] ${fLabel}`);
-              return { track: t, usedExact: false };
-            }
-          }
-          const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
-          console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Spotify results: ${topResults}`);
-          return null;
-
-        } else if (platform === 'apple') {
-          // 1. ISRC
-          if (song.isrc && appleMusicApi) {
-            try {
-              const result = await appleMusicApi.lookupByIsrc(song.isrc, storefront);
-              if (result) {
-                console.log(`🔑 [ISRC] ${fLabel}`);
-                return { track: result, usedExact: true };
-              }
-              console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
-            } catch (_) { /* fall through */ }
-          }
-          // 2. SC platform ID (pre-fetched)
-          if (song.platformId && appleMusicApi) {
-            try {
-              const result = await appleMusicApi.getTrack(song.platformId, storefront);
-              if (result) {
-                console.log(`🎯 [SC-ID] ${fLabel} → ${song.platformId}`);
-                return { track: result, usedExact: true };
-              }
-            } catch (_) { /* fall through */ }
-          }
-          // 3. Text search
-          if (platformSvc) {
-            const results = await platformSvc.searchTracks(platformUserId, `${song.name} ${artistName}`, tokens, storefront, 5);
-            const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            const reqNorm = norm(artistName);
-            for (const t of (results || [])) {
-              const fn = norm(t.artists?.[0]?.name || t.artist);
-              const nameLower = (t.name || '').toLowerCase();
-              if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
-              if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
-                console.log(`🔍 [TEXT] ${fLabel}`);
-                return { track: t, usedExact: false };
-              }
-            }
-            const topResults = (results || []).slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name || t.artist}`).join(', ');
-            if (topResults) console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Apple Music results: ${topResults}`);
-            else console.log(`❌ [TEXT-EMPTY] ${fLabel} — Apple Music returned 0 results`);
-          }
-          return null;
-        }
-        return null;
-      };
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
       // Returns true and mutates allTracks/seenTrackIds/seenSongSignatures if track passes all checks.
@@ -8990,6 +8997,12 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
       }
       const appleMusicApiInstance = new AppleMusicService(appleMusicDevToken);
 
+      // Guard: never destructively remove tracks when there are no new tracks to add.
+      if ((!tracksToAdd || tracksToAdd.length === 0) && tracksToRemove && tracksToRemove.length > 0) {
+        console.log(`⚠️  [UPDATE-GUARD] Skipping removal of ${tracksToRemove.length} tracks (Apple Music) — no new tracks to add. Aborting update.`);
+        return res.json({ success: true, skipped: true, reason: 'no_tracks_to_add' });
+      }
+
       if (tracksToRemove && tracksToRemove.length > 0) {
         const urisToRemove = tracksToRemove.map(t => t.uri || t);
         await appleMusicApiInstance.deleteTracksFromPlaylist(appleTokens.access_token, playlistId, urisToRemove);
@@ -9039,6 +9052,13 @@ app.post('/api/playlists/:playlistId/update', async (req, res) => {
         await db.updateAccessToken(platformUserId, newAccessToken);
       } catch (refreshError) {
         console.log('Token refresh failed or not needed:', refreshError.message);
+      }
+
+      // Guard: never destructively remove tracks when there are no new tracks to add.
+      // This prevents a bad auto-update from wiping a playlist when 0 songs were generated.
+      if ((!tracksToAdd || tracksToAdd.length === 0) && tracksToRemove && tracksToRemove.length > 0) {
+        console.log(`⚠️  [UPDATE-GUARD] Skipping removal of ${tracksToRemove.length} tracks — no new tracks to add. Aborting update.`);
+        return res.json({ success: true, skipped: true, reason: 'no_tracks_to_add' });
       }
 
       // If we're both removing and adding tracks, use replace API for better performance
