@@ -5602,8 +5602,8 @@ DO NOT include any text outside the JSON.`
             'celebratory', 'celebrating', "let's celebrate", 'celebration', 'party mode',
             'just got promoted', 'got promoted', 'got the job', 'new job', 'graduation',
             'main character', 'on top of the world', 'we did it', 'i did it',
-            'feel like the main', 'feel amazing', 'best day', 'incredible news',
-            'excited', 'so excited', 'winning',
+            'feel like the main', 'best day', 'incredible news',
+            'so excited', 'winning', 'nailed it', 'killed it', 'finally', 'i got in',
           ],
           genre: 'pop', subgenre: null, mood: 'positive', energy: 'high',
           seeds: ['Dua Lipa', 'Lizzo', 'Harry Styles', 'Doja Cat'] },
@@ -5671,11 +5671,11 @@ DO NOT include any text outside the JSON.`
       /\bof\s+all\s+time\b/i,                                  // "top 5 rap songs of all time"
       /\bgoat\b/i,
       /\ball[- ]time\s+(?:best|greatest|classic|top|hit)\b/i,
-      /\bgreatest\b.{0,40}\bever\b/i,                          // "greatest pop songs ever"
-      /\bbest\b.{0,40}\bever\b/i,
-      /\b(?:saddest|happiest|hardest|biggest|dopest|illest|rarest|craziest)\b.{0,30}\bever\b/i, // "saddest songs ever"
+      /\bgreatest\b.{0,60}\bever\b/i,                          // "greatest pop songs ever"
+      /\bbest\b.{0,60}\bever\b/i,
+      /\b(?:saddest|happiest|hardest|biggest|dopest|illest|rarest|craziest)\b.{0,60}\bever\b/i, // "saddest songs ever"
       /\b\d+\s+greatest\b/i,
-      /\btop\s+\d+\b.{0,40}\b(?:of\s+all\s+time|ever)\b/i,   // "top 5 rap songs of all time"
+      /\btop\s+\d+\b.{0,60}\b(?:of\s+all\s+time|ever)\b/i,   // "top 5 rap songs of all time"
       /\bclassics?\s+everyone\s+knows\b/i,
       /\bmost\s+(?:legendary|famous|iconic|celebrated|classic)\b/i, // "most legendary"
       /\buniversally?\s+(?:known|loved|recognized)\b/i,
