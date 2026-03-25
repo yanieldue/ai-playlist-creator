@@ -5659,9 +5659,18 @@ DO NOT include any text outside the JSON.`
     // "best ever", "GOAT", "top N of all time" → sort final pool by Spotify popularity DESC
     // so the most-streamed/recognised tracks surface first.
     const _superlativePatterns = [
-      /\bbest\s+ever\b/i, /\bgreatest\s+of\s+all\s+time\b/i, /\bgoat\b/i,
-      /\ball[- ]time\s+best\b/i, /\ball[- ]time\s+greatest\b/i,
+      /\bbest\s+ever\b/i,
+      /\bgreatest\s+of\s+all\s+time\b/i,
+      /\bbest\s+of\s+all\s+time\b/i,
+      /\bgoat\b/i,
+      /\ball[- ]time\s+(?:best|greatest|classic|top|hit)\b/i, // "all-time classics"
+      /\bgreatest\b.{0,30}\bever\b/i,                         // "greatest pop songs ever"
+      /\bbest\b.{0,30}\bever\b/i,                              // "best songs ever"
+      /\b\d+\s+greatest\b/i,                                   // "5 greatest..."
       /\btop\s+\d+\s+(?:of\s+all\s+time|ever)\b/i,
+      /\bclassics?\s+everyone\s+knows\b/i,                     // "classics everyone knows"
+      /\bmost\s+iconic\b/i,
+      /\buniversally?\s+(?:known|loved|recognized)\b/i,
     ];
     const _isSuperlativeMode = _superlativePatterns.some(r => r.test(prompt));
     if (_isSuperlativeMode) {
@@ -6624,13 +6633,21 @@ Return ONLY valid JSON:
             return false;
           }
         }
-        // Excluded artists check — hard filter for "no [artist]" constraints
+        // Excluded artists check — hard filter for "no [artist]" constraints.
+        // Checks ALL credited artists on the track, not just the primary, so featured
+        // appearances (e.g. "Song (feat. Phoebe Bridgers)") are also caught.
         const _excludedArtistNorms = (genreData.artistConstraints?.excludedArtists || [])
           .map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''));
         if (_excludedArtistNorms.length > 0) {
-          const trackArtistNorm = (track.artists?.[0]?.name || track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (_excludedArtistNorms.some(ex => trackArtistNorm === ex || trackArtistNorm.includes(ex) || ex.includes(trackArtistNorm))) {
-            console.log(`[EXCLUDE] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (excluded artist)`);
+          const _allTrackArtistNorms = [
+            ...(track.artists || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')),
+            (track.artist || '').toLowerCase().replace(/[^a-z0-9]/g, ''),
+          ].filter(Boolean);
+          const _matchedEx = _excludedArtistNorms.find(ex =>
+            _allTrackArtistNorms.some(norm => norm === ex || norm.includes(ex) || ex.includes(norm))
+          );
+          if (_matchedEx) {
+            console.log(`[EXCLUDE] Skipping "${track.name}" by ${track.artists?.map(a=>a.name).join(', ') || track.artist} (excluded: ${_matchedEx})`);
             return false;
           }
         }
@@ -7932,8 +7949,12 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
     if (_finalExcludedNorms.length > 0) {
       const beforeSweep = selectedTracks.length;
       selectedTracks = selectedTracks.filter(t => {
-        const norm = (t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        return !_finalExcludedNorms.some(ex => norm === ex || norm.includes(ex) || ex.includes(norm));
+        // Check all credited artists, not just primary
+        const _norms = [
+          ...(t.artists || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '')),
+          (t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, ''),
+        ].filter(Boolean);
+        return !_finalExcludedNorms.some(ex => _norms.some(n => n === ex || n.includes(ex) || ex.includes(n)));
       });
       const removed = beforeSweep - selectedTracks.length;
       if (removed > 0) {
