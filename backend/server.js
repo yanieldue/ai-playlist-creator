@@ -7340,7 +7340,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
               const supplementGenreData = {
                 primaryGenre: genreData.primaryGenre,
-                atmosphere: [],          // relaxed — no atmosphere/theme filter
+                atmosphere: [],          // relaxed — no SC atmosphere/theme filter (mood + energy still enforced)
                 era: genreData.era,
                 mood: genreData.mood,              // inherit — energy/mood are non-negotiable
                 energyTarget: genreData.energyTarget,
