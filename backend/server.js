@@ -101,6 +101,10 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
 
+// Cache: artist name (lowercase) → array of known aliases/side-projects/supergroups
+// Persists for the server lifetime so the same artist never hits Claude twice.
+const _artistAliasCache = new Map();
+
 // Configure SendGrid for email
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
@@ -1234,6 +1238,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
         if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
       }
     }
+    // Drift diagnostic: log genre resolution so we can spot mismatches (e.g. neo-soul → r&b when SC has no neo-soul top-songs)
+    console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → scGenre=${scGenre || '(none — no SC mapping)'}`);
     if (scGenre) filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
   }
 
@@ -1395,6 +1401,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     const subLower = genreData.subgenre.toLowerCase().trim();
     const scSubgenre = SOUNDCHARTS_SUBGENRE_MAP[subLower] ||
       Object.entries(SOUNDCHARTS_SUBGENRE_MAP).find(([k]) => subLower.includes(k) || k.includes(subLower))?.[1];
+    // Drift diagnostic: log subgenre resolution (critical for neo-soul — maps to 'neo soul' subgenre filter on top of r&b genre)
+    console.log(`🎸 SC subgenre resolution: subgenre="${genreData.subgenre}" → scSubgenre=${scSubgenre || '(none — no SC mapping)'}`);
     if (scSubgenre) {
       filters.push({ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } });
       console.log(`🎸 SoundCharts subgenre filter: ${scSubgenre}`);
@@ -5572,6 +5580,62 @@ DO NOT include any text outside the JSON.`
       allowExplicit = false;
     }
 
+    // ── Emotional state → genre fallback ─────────────────────────────────────
+    // When Claude left primaryGenre/seeds/mood null but the prompt describes an
+    // emotional state, fill in safe defaults so the SC query has something to work with.
+    // Only fills fields that Claude left empty — never overrides explicit extractions.
+    {
+      const _EMOTIONAL_GENRE_MAP = [
+        { patterns: ['numb', 'empty', 'hollow', 'disconnected', 'zoned out', 'feeling nothing', 'feel nothing'],
+          genre: 'indie', subgenre: 'indie folk', mood: 'melancholic', energy: 'low',
+          seeds: ['Phoebe Bridgers', 'The National', 'Bon Iver', 'Big Thief'] },
+        { patterns: ['anxious', 'stressed', 'stress', 'spiraling', 'spiralling', 'in my head', 'overwhelmed'],
+          genre: 'ambient', subgenre: 'lo-fi', mood: 'neutral', energy: 'low',
+          seeds: ['Nils Frahm', 'Brian Eno', 'Floating Points', 'Uyama Hiroto'] },
+        { patterns: ['nostalgic', 'nostalgia', 'reminiscing', 'reminisce', 'throwback', 'back in the day', 'old times'],
+          genre: null, subgenre: null, mood: null, energy: null,  // era comes from context; just flag
+          seeds: [] },
+        { patterns: ['angry', 'frustrated', 'rage', 'need to vent', 'so pissed', 'pissed off', 'so mad'],
+          genre: 'alternative', subgenre: null, mood: 'neutral', energy: 'high',
+          seeds: ['Paramore', 'Linkin Park', 'Bring Me The Horizon', 'Grandson'] },
+        { patterns: ['celebratory', 'celebrating', 'let\'s celebrate', 'celebration', 'party mode'],
+          genre: 'pop', subgenre: null, mood: 'positive', energy: 'high',
+          seeds: ['Dua Lipa', 'Lizzo', 'Harry Styles', 'Doja Cat'] },
+        { patterns: ['heartbroken', 'broken heart', 'just got dumped', 'he left me', 'she left me', 'breakup playlist'],
+          genre: 'indie', subgenre: 'indie folk', mood: 'melancholic', energy: 'low',
+          seeds: ['Phoebe Bridgers', 'Gracie Abrams', 'boygenius', 'Julien Baker'] },
+      ];
+      const _emoPromptLower = prompt.toLowerCase();
+      for (const entry of _EMOTIONAL_GENRE_MAP) {
+        if (entry.patterns.some(p => _emoPromptLower.includes(p))) {
+          const fills = [];
+          if (!genreData.primaryGenre && entry.genre) {
+            genreData.primaryGenre = entry.genre; fills.push(`primaryGenre="${entry.genre}"`);
+          }
+          if (!genreData.subgenre && entry.subgenre) {
+            genreData.subgenre = entry.subgenre; fills.push(`subgenre="${entry.subgenre}"`);
+          }
+          if (!genreData.mood && entry.mood) {
+            genreData.mood = entry.mood; fills.push(`mood="${entry.mood}"`);
+          }
+          if (!genreData.energyTarget && entry.energy) {
+            genreData.energyTarget = entry.energy; fills.push(`energyTarget="${entry.energy}"`);
+          }
+          const existingSeeds = genreData.artistConstraints?.suggestedSeedArtists || [];
+          const requestedArtists = genreData.artistConstraints?.requestedArtists || [];
+          if (existingSeeds.length === 0 && requestedArtists.length === 0 && entry.seeds.length > 0) {
+            if (!genreData.artistConstraints) genreData.artistConstraints = {};
+            genreData.artistConstraints.suggestedSeedArtists = entry.seeds;
+            fills.push(`seeds=[${entry.seeds.join(', ')}]`);
+          }
+          if (fills.length > 0) {
+            console.log(`🎭 Emotional state fallback (pattern match): ${fills.join(', ')}`);
+          }
+          break; // first match wins
+        }
+      }
+    }
+
     // ── Event mode detection ──────────────────────────────────────────────────
     // Weddings, receptions, galas etc. need recognizable, crowd-friendly songs.
     // Enforce: Spotify popularity ≥ 70 AND default era 2005–now (unless overridden).
@@ -5589,6 +5653,19 @@ DO NOT include any text outside the JSON.`
         genreData.era.yearRange.max = new Date().getFullYear();
         console.log(`🎉 Event mode: default era range ${genreData.era.yearRange.min}–${genreData.era.yearRange.max}`);
       }
+    }
+
+    // ── Superlative mode detection ────────────────────────────────────────────
+    // "best ever", "GOAT", "top N of all time" → sort final pool by Spotify popularity DESC
+    // so the most-streamed/recognised tracks surface first.
+    const _superlativePatterns = [
+      /\bbest\s+ever\b/i, /\bgreatest\s+of\s+all\s+time\b/i, /\bgoat\b/i,
+      /\ball[- ]time\s+best\b/i, /\ball[- ]time\s+greatest\b/i,
+      /\btop\s+\d+\s+(?:of\s+all\s+time|ever)\b/i,
+    ];
+    const _isSuperlativeMode = _superlativePatterns.some(r => r.test(prompt));
+    if (_isSuperlativeMode) {
+      console.log('🏆 Superlative mode: will sort final pool by Spotify popularity DESC');
     }
 
     // ── Contradiction detection ────────────────────────────────────────────────
@@ -5652,6 +5729,50 @@ DO NOT include any text outside the JSON.`
       console.log(`AI extracted song count from prompt: ${songCount}`);
     } else {
       console.log(`Using provided song count: ${songCount}`);
+    }
+
+    // ── Artist alias expansion for exclusions ─────────────────────────────────
+    // When the user excludes an artist, also block their known side projects,
+    // supergroups, and aliases (e.g. "Phoebe Bridgers" → also block "boygenius").
+    // We call Claude once per artist and cache the result for the server lifetime.
+    const _rawExcluded = genreData.artistConstraints?.excludedArtists || [];
+    if (_rawExcluded.length > 0) {
+      const _toExpand = _rawExcluded.filter(a => !_artistAliasCache.has(a.toLowerCase()));
+      if (_toExpand.length > 0) {
+        try {
+          const _aliasResp = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: `For each artist below, list all known aliases, stage names, side projects, and supergroups they are a primary member of. Return ONLY a JSON object mapping each artist name to an array of strings. Include the original name as the first element. If none exist, return an empty array for that key.\n\nArtists: ${JSON.stringify(_toExpand)}\n\nDO NOT include any text outside the JSON.`
+            }]
+          });
+          let _aliasText = _aliasResp.content[0].text.trim();
+          if (_aliasText.startsWith('```')) _aliasText = _aliasText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+          const _aliasMap = JSON.parse(_aliasText);
+          for (const artist of _toExpand) {
+            const aliases = Array.isArray(_aliasMap[artist]) ? _aliasMap[artist] : [];
+            _artistAliasCache.set(artist.toLowerCase(), aliases);
+            if (aliases.length > 0) {
+              console.log(`[ALIAS] "${artist}" → [${aliases.join(', ')}]`);
+            }
+          }
+        } catch (err) {
+          console.log(`[ALIAS] Alias expansion failed: ${err.message} — using raw names only`);
+          for (const artist of _toExpand) _artistAliasCache.set(artist.toLowerCase(), [artist]);
+        }
+      }
+      // Merge all cached aliases back into excludedArtists (dedup)
+      const _expandedExclusions = new Set(_rawExcluded.map(a => a.toLowerCase()));
+      for (const artist of _rawExcluded) {
+        const aliases = _artistAliasCache.get(artist.toLowerCase()) || [];
+        for (const alias of aliases) _expandedExclusions.add(alias.toLowerCase());
+      }
+      genreData.artistConstraints.excludedArtists = [..._expandedExclusions];
+      if (genreData.artistConstraints.excludedArtists.length > _rawExcluded.length) {
+        console.log(`[ALIAS] Exclusion list expanded: ${_rawExcluded.join(', ')} → ${genreData.artistConstraints.excludedArtists.join(', ')}`);
+      }
     }
 
     // Step 0.3: Look up reference songs FIRST to confirm artist identity before any name-based lookups.
@@ -6545,6 +6666,15 @@ Return ONLY valid JSON:
             return false;
           }
         }
+        // Hard-filter sped-up/slowed/nightcore variants — almost never desired in a curated playlist
+        {
+          const _badVariants = ['sped up', 'speed up', 'slowed', 'nightcore', 'sped-up'];
+          const _tnl = track.name.toLowerCase();
+          if (_badVariants.some(v => _tnl.includes(v))) {
+            console.log(`[VERSION] Skipping unwanted variant: "${track.name}"`);
+            return false;
+          }
+        }
         const normalizedName = normalizeTrackName(track.name);
         const songSignature = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}:${normalizedName}`;
         if (seenSongSignatures.has(songSignature) && !isUniqueVariation(track.name)) {
@@ -7306,7 +7436,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
       (genreData.artistConstraints?.requestedArtists || []).map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''))
     );
     const _popPref = genreData.trackConstraints?.popularity?.preference;
-    const _needsScoring = _reqArtistNorms.size > 0 || _popPref === 'underground' || _isEventMode;
+    const _needsScoring = _reqArtistNorms.size > 0 || _popPref === 'underground' || _isEventMode || _isSuperlativeMode;
     if (_needsScoring && tracksForSelection.length > 0) {
       tracksForSelection.sort((a, b) => {
         const scoreTrack = (t) => {
@@ -7314,13 +7444,14 @@ Example response: [1, 2, 4, 5, 7, ...]`
           const an = (t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           if (_reqArtistNorms.has(an)) s += 100; // requested artist always surfaces first
           const pop = t.popularity !== undefined ? t.popularity : 50;
-          if (_popPref === 'underground') s += Math.max(0, 40 - pop) * 0.5; // reward low popularity
-          else if (_isEventMode)          s += Math.max(0, pop - 60) * 0.4; // reward high popularity
+          if (_isSuperlativeMode)        s += pop * 1.5;                     // "best ever" → rank by popularity
+          else if (_popPref === 'underground') s += Math.max(0, 40 - pop) * 0.5;
+          else if (_isEventMode)          s += Math.max(0, pop - 60) * 0.4;
           return s;
         };
         return scoreTrack(b) - scoreTrack(a);
       });
-      console.log(`📊 Tracks re-scored (requestedArtists=${_reqArtistNorms.size}, eventMode=${_isEventMode}, underground=${_popPref === 'underground'})`);
+      console.log(`📊 Tracks re-scored (requestedArtists=${_reqArtistNorms.size}, eventMode=${_isEventMode}, underground=${_popPref === 'underground'}, superlative=${_isSuperlativeMode})`);
     }
 
     // SoundCharts already ranked songs by streams — take the top N directly.
