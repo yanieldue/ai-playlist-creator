@@ -5349,7 +5349,8 @@ Respond ONLY with valid JSON in this format:
   "mood": "positive" | "neutral" | "melancholic" | null,
   "energyTarget": "low" | "medium" | "high" | null,
   "energyProgression": "ramp_up" | "ramp_down" | null,
-  "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null
+  "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null,
+  "genreAccessibility": "newcomer" | "enthusiast" | null
 }
 
 EXTRACTION GUIDELINES:
@@ -5520,6 +5521,19 @@ MOOD (emotional valence — separate from energy):
 - "emotional" without clear positive/negative context → null (let atmosphere and genre determine the tone)
 - If genuinely ambiguous → null
 
+STATED REQUEST vs. CONTEXTUAL CLUES — ALWAYS honor the stated desire:
+When the user describes a desired mood, season, or context that conflicts with their real-world situation, deliver what they ASKED FOR — the real-world detail explains WHY, not WHAT.
+- "It's freezing but I need a summer playlist" → summer vibes (positive mood, warm, upbeat). "Freezing" is the motivation, not the instruction.
+- "I'm stressed, I just want something happy" → happy and uplifting, NOT stressed or anxious music
+- "Dark and rainy but I want to feel like it's summer" → bright, carefree, warm-weather energy
+- "Nothing like [current season] — give me [other season] vibes" → deliver the requested season
+STATED SEASON signal: when the user names a season as a DESIRED state, set mood/atmosphere accordingly:
+- "summer playlist", "summer vibes", "need summer music" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"]
+- "cozy winter vibes" → mood: "neutral", energyTarget: "low", atmosphere: ["warm", "intimate", "introspective"]
+- "spring energy" → mood: "positive", energyTarget: "medium", atmosphere: ["fresh", "hopeful", "bright"]
+- "fall/autumn vibes" → mood: "neutral", energyTarget: "low", atmosphere: ["warm", "nostalgic", "cozy"]
+NEVER match music to the environmental context when the user is explicitly escaping it.
+
 EXCLUDED ARTISTS:
 - "no [artist name]", "nothing by [artist]", "avoid [artist]", "don't include [artist]", "[artist]-free" → excludedArtists: [artist names]
 - "no mainstream hits", "no chart toppers", "no radio songs", "avoid popular songs", "underground only", "deep cuts only", "no famous songs" → set trackConstraints.popularity.preference: "underground" AND trackConstraints.popularity.max: 60
@@ -5528,6 +5542,11 @@ EXCLUDED ARTISTS:
 - ABBREVIATIONS & NICKNAMES: Resolve common abbreviations to full artist names. Examples: "TS" or "T.S." → "Taylor Swift", "TSwift" → "Taylor Swift", "Ye" → "Kanye West", "Bey" → "Beyoncé", "Jay" or "Hov" → "Jay-Z", "Drizzy" → "Drake", "Weezy" → "Lil Wayne"
 - PRODUCER EXCLUSIONS: "no Jack Antonoff songs", "no Max Martin production" → add those names to excludedArtists (the filter will match on artist name; note this won't filter by producer but will log the intent)
 - CRITICAL: When the user says "no [name]", always try to resolve [name] to the most likely well-known artist before adding to excludedArtists
+- IMPLICIT EXCLUSION — "what else" / "what other" / "discover beyond" phrases: When the user signals they want to DISCOVER BEYOND a named artist, add that artist to both suggestedSeedArtists (for genre/taste anchoring) AND excludedArtists (to keep their songs out of the output). The artist is a taste reference, not a fill target.
+  * "I only listen to The Weeknd, what else is good?" → suggestedSeedArtists: ["The Weeknd", ...adjacent], excludedArtists: ["The Weeknd"]
+  * "massive Radiohead fan, what should I listen to?" → suggestedSeedArtists: ["Radiohead", ...], excludedArtists: ["Radiohead"]
+  * "I grew up on Taylor Swift, what else should I check out?" → suggestedSeedArtists: ["Taylor Swift", ...], excludedArtists: ["Taylor Swift"]
+  * Trigger phrases: "what else", "what other [genre/artists]", "I only listen to X", "X fan looking for more", "similar to X but not X", "besides X", "beyond X"
 
 ENERGY TARGET:
 - "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
@@ -5553,6 +5572,17 @@ RULE: If the user is describing a SPLIT or TRANSITION between distinct moods/ene
 - "morning warm-up → focus mode → evening wind-down" → phases: [{"label":"morning","energy":"medium","mood":"positive","fraction":0.33},{"label":"focus","energy":"low","mood":"neutral","fraction":0.34},{"label":"wind-down","energy":"low","mood":"melancholic","fraction":0.33}]
 - "build from chill to hype" (gradual, no clear split) → energyProgression: "ramp_up", phases: null
 - If no multi-phase pattern → phases: null
+
+GENRE ACCESSIBILITY (genreAccessibility):
+- "just getting into X", "never listened to X", "ease me in", "good starting point for X", "where do I start with X", "I'm new to X", "jazz for beginners", "beginner [genre]" → genreAccessibility: "newcomer"
+- "deep cuts", "deep dive", "I know all the classics", "show me obscure", "advanced [genre]", "I've been listening for years", "non-obvious picks" → genreAccessibility: "enthusiast"
+- When genreAccessibility: "newcomer" — choose suggestedSeedArtists that are widely loved, melodic, and approachable. Avoid intimidating, complex, or historically important-but-dense works. Examples:
+  * Jazz newcomer: Norah Jones, Chet Baker (vocal), Diana Krall, Kind of Blue-era Miles Davis, Melody Gardot — NOT bebop Charlie Parker, Oscar Peterson, or free jazz Coltrane
+  * Classical newcomer: Ludovico Einaudi, Max Richter, Hans Zimmer, Yann Tiersen — NOT 12-tone serialism or dense symphonies
+  * Metal newcomer: Linkin Park, Foo Fighters, System of a Down, early Metallica — NOT black metal or death metal
+  * Country newcomer: Kacey Musgraves, Chris Stapleton, Zac Brown Band — NOT deep honky-tonk or old-time country
+- When genreAccessibility: "enthusiast" — prefer deep cuts, obscure artists, and non-obvious picks that a long-time fan hasn't heard
+- If no newcomer/enthusiast signal → null
 
 Use null, [], or false for any feature not mentioned.
 
@@ -5616,6 +5646,7 @@ DO NOT include any text outside the JSON.`
       energyTarget: null,
       energyProgression: null,
       phases: null,
+      genreAccessibility: null,
     };
     try {
       let genreText = genreExtractionResponse.content[0].text.trim();
@@ -7788,6 +7819,11 @@ Example response: [1, 2, 4, 5, 7, ...]`
         _vibeHardRules.push('CLEAN/FAMILY/YOUTH CONTEXT — HARD RULE: REMOVE any songs or artists associated with dark themes, aggression, sexual content, explicit language, or inappropriate messaging. Keep it positive and safe for all ages.');
       }
 
+      // Genre accessibility — newcomer
+      if (genreData.genreAccessibility === 'newcomer') {
+        _vibeHardRules.push(`GENRE NEWCOMER — HARD RULE: The user is new to this genre and asked to be eased in. REMOVE any artist or track that requires genre expertise to appreciate: avant-garde works, dense bebop, free jazz, atonal classical, extreme metal subgenres, or anything that would intimidate a first-time listener. Keep only approachable, melodic, widely-loved entry-point tracks.`);
+      }
+
       const vibeCheckPrompt = `You are reviewing a playlist to ensure it has a COHERENT VIBE and emotional atmosphere.
 
 Original user request: "${prompt}"
@@ -7799,6 +7835,7 @@ REQUIRED VIBE/CONTEXT:
 - Era/decade: ${genreData.era.decade || 'not specified'}
 - Avoid: ${genreData.contextClues.avoidances.join('; ') || 'nothing'}
 - Popularity preference: ${genreData.trackConstraints.popularity.preference || 'not specified'}${genreData.trackConstraints.popularity.preference === 'underground' ? ' ← CRITICAL: STRICTLY remove ALL mainstream/radio/chart artists' : ''}
+- Genre accessibility: ${genreData.genreAccessibility || 'not specified'}
 ${_vibeHardRules.length > 0 ? `
 ⚠️  HARD CONSTRAINTS (non-negotiable — enforce these BEFORE anything else):
 ${_vibeHardRules.map(r => `• ${r}`).join('\n')}
