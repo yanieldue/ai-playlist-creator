@@ -7888,11 +7888,11 @@ Example response: [1, 2, 4, 5, 7, ...]`
       if (_uc.includes('sleep') || _uc.includes('bedtime') || _uc.includes('rest') || _uc.includes('wind down')) {
         _vibeHardRules.push('SLEEP/REST — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake. Only the most soothing, minimal, ultra-calm tracks.');
       }
-      if (_uc.includes('party') || _uc.includes('dancing') || _uc.includes('club') || _uc.includes('social')) {
-        _vibeHardRules.push('PARTY/DANCE — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be something people can dance or sing along to at a party. No ballads, no introspective slow jams.');
+      if (_uc.includes('party') || _uc.includes('dancing') || _uc.includes('club') || _uc.includes('social') || _uc.includes('pregame') || _uc.includes('pump') || _uc.includes('hype')) {
+        _vibeHardRules.push('PARTY/DANCE/PREGAME — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be high-energy and something people can move to. No ballads, no introspective slow jams, no emotionally heavy songs. Slow Kanye (e.g. "30 Hours"), Sia ballads (e.g. "1+1"), Lady Gaga film covers, Camila Cabello slow cuts — all WRONG for this context. If you would not play it to hype up a crowd, remove it.');
       }
       if (_uc.includes('summer')) {
-        _vibeHardRules.push('SUMMER VIBES — HARD RULE: This playlist is specifically for summer escapism — warm, bright, carefree energy. REMOVE any melancholic, anxious, heavy, or wintry tracks. No breakup ballads, no late-night sad R&B, no emotionally heavy songs. Every track should feel like it belongs on a beach or a summer road trip. "1 step forward, 3 steps back," "Unfaithful," "2AM"-style tracks are WRONG for this context.');
+        _vibeHardRules.push('SUMMER VIBES — HARD RULE: This playlist is for warm, bright, carefree summer energy. REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy — regardless of season. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "All I Want" (Olivia Rodrigo), "Slut! (Taylor\'s Version)", "2AM" (SZA), "All This Madness" (Sam Smith) — all WRONG for this context. Every track should feel like it belongs on a beach or a summer road trip.');
       }
       // Explicit user avoidances
       if (_avoidances.some(a => a.toLowerCase().includes('slow')) || _promptLower.includes('no slow')) {
