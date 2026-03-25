@@ -1784,10 +1784,18 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       const allGenreBearingInconsistent =
         genreBearingSeeds.length > 0 &&
         genreBearingSeeds.every(s => genreInconsistentSeedNames.has(s.name.toLowerCase()));
-      if (allGenreBearingInconsistent) {
+      const hasConfirmedSeeds = seedInfos.some(s => {
+        const cu = confirmedArtistUuids[s.name.toLowerCase()];
+        return cu && cu !== 'INVALID' && !String(cu).startsWith('NOSIMILAR:');
+      });
+      if (allGenreBearingInconsistent && !hasConfirmedSeeds) {
         console.log(`⛔ Every genre-bearing seed is genre-inconsistent — skipping SC graph traversal entirely. Supplement flow will find correct artists.`);
         allArtistInfos = [];
-      } else for (const simName of similarNames) {
+      } else {
+        if (allGenreBearingInconsistent) {
+          console.log(`⚠️  All genre-bearing seeds inconsistent but confirmed reference artist(s) present — traversing their similarity graph with Claude's genre filter.`);
+        }
+        for (const simName of similarNames) {
         try {
           const simInfo = await getSoundChartsArtistInfo(simName);
           if (!simInfo?.uuid) continue;
@@ -1821,6 +1829,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           allArtistInfos.push(simInfo);
         } catch (err) { /* skip */ }
       }
+      } // end else (traversal)
       console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
 
       // Phase 2b: always expand with depth-2 similar artists (similar artists of the similar
@@ -6131,6 +6140,17 @@ Respond ONLY with valid JSON:
         console.log(`✓ Multi-phase SoundCharts total: ${soundChartsDiscoveredSongs.length} songs`);
       } else {
         const scQuery = buildSoundchartsQuery(genreData, allowExplicit);
+        // Inject confirmed reference-song artists as seeds so their SC similarity graph
+        // is traversed even when Claude's suggested seeds have wrong genre data.
+        if (genreData.referenceSongs?.length > 0) {
+          const existingLower = new Set(scQuery.artists.map(a => a.toLowerCase()));
+          for (const rs of genreData.referenceSongs) {
+            if (confirmedArtistUuids[rs.artist.toLowerCase()] && !existingLower.has(rs.artist.toLowerCase())) {
+              scQuery.artists.push(rs.artist);
+              existingLower.add(rs.artist.toLowerCase());
+            }
+          }
+        }
         const fetchCount = Math.min(songCount * 3, 200);
         // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
         const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
