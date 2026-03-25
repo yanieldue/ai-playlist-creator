@@ -5598,7 +5598,13 @@ DO NOT include any text outside the JSON.`
         { patterns: ['angry', 'frustrated', 'rage', 'need to vent', 'so pissed', 'pissed off', 'so mad'],
           genre: 'alternative', subgenre: null, mood: 'neutral', energy: 'high',
           seeds: ['Paramore', 'Linkin Park', 'Bring Me The Horizon', 'Grandson'] },
-        { patterns: ['celebratory', 'celebrating', 'let\'s celebrate', 'celebration', 'party mode'],
+        { patterns: [
+            'celebratory', 'celebrating', "let's celebrate", 'celebration', 'party mode',
+            'just got promoted', 'got promoted', 'got the job', 'new job', 'graduation',
+            'main character', 'on top of the world', 'we did it', 'i did it',
+            'feel like the main', 'feel amazing', 'best day', 'incredible news',
+            'excited', 'so excited', 'winning',
+          ],
           genre: 'pop', subgenre: null, mood: 'positive', energy: 'high',
           seeds: ['Dua Lipa', 'Lizzo', 'Harry Styles', 'Doja Cat'] },
         { patterns: ['heartbroken', 'broken heart', 'just got dumped', 'he left me', 'she left me', 'breakup playlist'],
@@ -5662,19 +5668,33 @@ DO NOT include any text outside the JSON.`
       /\bbest\s+ever\b/i,
       /\bgreatest\s+of\s+all\s+time\b/i,
       /\bbest\s+of\s+all\s+time\b/i,
+      /\bof\s+all\s+time\b/i,                                  // "top 5 rap songs of all time"
       /\bgoat\b/i,
-      /\ball[- ]time\s+(?:best|greatest|classic|top|hit)\b/i, // "all-time classics"
-      /\bgreatest\b.{0,30}\bever\b/i,                         // "greatest pop songs ever"
-      /\bbest\b.{0,30}\bever\b/i,                              // "best songs ever"
-      /\b\d+\s+greatest\b/i,                                   // "5 greatest..."
-      /\btop\s+\d+\s+(?:of\s+all\s+time|ever)\b/i,
-      /\bclassics?\s+everyone\s+knows\b/i,                     // "classics everyone knows"
-      /\bmost\s+iconic\b/i,
+      /\ball[- ]time\s+(?:best|greatest|classic|top|hit)\b/i,
+      /\bgreatest\b.{0,40}\bever\b/i,                          // "greatest pop songs ever"
+      /\bbest\b.{0,40}\bever\b/i,
+      /\b(?:saddest|happiest|hardest|biggest|dopest|illest|rarest|craziest)\b.{0,30}\bever\b/i, // "saddest songs ever"
+      /\b\d+\s+greatest\b/i,
+      /\btop\s+\d+\b.{0,40}\b(?:of\s+all\s+time|ever)\b/i,   // "top 5 rap songs of all time"
+      /\bclassics?\s+everyone\s+knows\b/i,
+      /\bmost\s+(?:legendary|famous|iconic|celebrated|classic)\b/i, // "most legendary"
       /\buniversally?\s+(?:known|loved|recognized)\b/i,
     ];
-    const _isSuperlativeMode = _superlativePatterns.some(r => r.test(prompt));
+    const _matchedSuperlative = _superlativePatterns.find(r => r.test(prompt));
+    const _isSuperlativeMode = !!_matchedSuperlative;
     if (_isSuperlativeMode) {
-      console.log('🏆 Superlative mode: will sort final pool by Spotify popularity DESC');
+      console.log(`🏆 Superlative mode triggered (pattern: ${_matchedSuperlative}) — will sort by popularity DESC`);
+      // Ensure candidate pool has high-popularity tracks to choose from
+      if (genreData.trackConstraints.popularity.min === null || genreData.trackConstraints.popularity.min === undefined || genreData.trackConstraints.popularity.min < 65) {
+        genreData.trackConstraints.popularity.min = 65;
+        console.log('🏆 Superlative mode: setting popularity floor to 65');
+      }
+      // "All time" means no era restriction unless the user specified one
+      if (!genreData.era.decade && !genreData.era.descriptors?.length) {
+        genreData.era.yearRange.min = null;
+        genreData.era.yearRange.max = null;
+        console.log('🏆 Superlative mode: cleared era constraints (all-time scope)');
+      }
     }
 
     // ── Contradiction detection ────────────────────────────────────────────────
