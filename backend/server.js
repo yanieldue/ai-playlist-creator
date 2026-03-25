@@ -5319,17 +5319,46 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // Seasonal escapism pre-processing: when the user explicitly requests a season
-    // but includes a conflicting real-world context ("it's freezing but I need summer music"),
-    // inject an explicit override hint into the prompt BEFORE Claude extraction runs.
-    // This must happen here — before extraction — because mood signals are processed in that
-    // step, and "freezing"/"cold" would otherwise win over the stated season request.
-    const _wantsSummer = /\b(summer|beach|warm|tropical|july|august)\b.{0,40}\b(playlist|music|songs|vibes|feel|energy)\b/i.test(prompt)
-      || /\b(playlist|music|songs|vibes)\b.{0,40}\b(summer|beach|warm|tropical)\b/i.test(prompt);
-    const _contextConflict = /\b(freez|freezing|cold|winter|snow|icy|chilly)\b/i.test(prompt);
-    if (_wantsSummer && _contextConflict) {
-      prompt += ` [OVERRIDE: User is requesting SUMMER ESCAPISM. The cold/winter/freezing detail explains WHY they want summer music — it is NOT a mood or context signal. Set useCase: "summer", mood: "positive", atmosphere: ["carefree", "warm", "upbeat", "beachy"], suggestedSeedArtists to summery artists (Harry Styles, Doja Cat, Summer Salt, Bad Bunny, Outkast). Do NOT set any cold, melancholic, or wintry signals.]`;
-      console.log(`☀️  Summer escapism detected — injecting override hint`);
+    // Escapism pre-processing: detect "stated desired state + conflicting real-world context."
+    // Without this, the extraction step sees the real-world context word as a mood/energy signal
+    // and delivers music for where the user IS rather than where they WANT TO BE.
+    // The fix must run here — before extraction — so the override wins before mood inference starts.
+    // Each check: (stated desire pattern) + (conflicting context pattern) → inject an override hint.
+    // Only the first match fires; they're ordered by specificity.
+    const _escapismChecks = [
+      {
+        // Summer/warm escapism + cold/winter context
+        // e.g. "I need a summer playlist, it's freezing outside"
+        wants: () => /\b(summer|beach|warm|tropical|july|august)\b.{0,60}\b(playlist|music|songs|vibes|feel|energy)\b/i.test(prompt)
+          || /\b(playlist|music|songs|vibes)\b.{0,60}\b(summer|beach|warm|tropical)\b/i.test(prompt),
+        conflict: () => /\b(freez|freezing|cold|winter|snow|icy|chilly)\b/i.test(prompt),
+        hint: `User is requesting SUMMER ESCAPISM. The cold/winter/freezing detail explains WHY they want summer music — it is NOT a mood or genre signal. Set useCase: "summer", mood: "positive", atmosphere: ["carefree", "warm", "upbeat", "beachy"], suggestedSeedArtists to summery artists (Harry Styles, Doja Cat, Summer Salt, Bad Bunny, Outkast). Do NOT set any cold, melancholic, or wintry signals.`,
+        emoji: '☀️ ',
+      },
+      {
+        // Party/high-energy escapism + tired/weekday/work context
+        // e.g. "it's Monday morning but I need a Friday night playlist"
+        // e.g. "I'm exhausted but need something to hype me up"
+        wants: () => /\b(party|hype|friday night|weekend energy|pregame|going out|bops|club|dance floor|high energy)\b/i.test(prompt),
+        conflict: () => /\b(tired|exhausted|monday|tuesday|wednesday|thursday|early morning|work day|at work|office|long day|drained)\b/i.test(prompt),
+        hint: `User wants HIGH ENERGY/PARTY music as escapism from tiredness or a weekday context. "Tired" / "Monday" / "work" explains WHY they need the energy boost — it is NOT an energy or mood signal. Set energyTarget: "high", mood: "positive", useCase: "party". Do NOT set low energy, melancholic, or study-mode signals.`,
+        emoji: '🎉',
+      },
+      {
+        // Outdoor/festival escapism + stuck inside/trapped context
+        // e.g. "I'm stuck inside but give me an outdoor festival vibe"
+        wants: () => /\b(outdoor|outside|festival|open air|windows down|fresh air|road trip)\b/i.test(prompt),
+        conflict: () => /\b(stuck inside|trapped|can'?t go out|indoors|at home|locked in|can'?t leave|inside all day)\b/i.test(prompt),
+        hint: `User wants OUTDOOR/FESTIVAL vibes as escapism from being stuck inside. The "stuck inside" detail explains WHY they want it — it is NOT a use-case or context signal. Deliver open, energetic, feel-good outdoor music. Do NOT set indoor, home, or ambient signals.`,
+        emoji: '🌲',
+      },
+    ];
+    for (const check of _escapismChecks) {
+      if (check.wants() && check.conflict()) {
+        prompt += ` [OVERRIDE: ${check.hint}]`;
+        console.log(`${check.emoji} Escapism conflict detected — injecting override hint`);
+        break;
+      }
     }
 
     console.log('Generating playlist for prompt:', prompt);
