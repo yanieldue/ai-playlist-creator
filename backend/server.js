@@ -7340,8 +7340,10 @@ Example response: [1, 2, 4, 5, 7, ...]`
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
               const supplementGenreData = {
                 primaryGenre: genreData.primaryGenre,
-                atmosphere: [],          // relaxed — no mood filter
+                atmosphere: [],          // relaxed — no atmosphere/theme filter
                 era: genreData.era,
+                mood: genreData.mood,              // inherit — energy/mood are non-negotiable
+                energyTarget: genreData.energyTarget,
                 trackConstraints: {},    // relaxed — no popularity filter
                 artistConstraints: {
                   exclusiveMode: false,
@@ -7431,6 +7433,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 primaryGenre: genreData.primaryGenre,
                 atmosphere: [],
                 era: genreData.era,
+                mood: genreData.mood,              // inherit — prevents off-vibe global hits
+                energyTarget: genreData.energyTarget,
+                contextClues: { useCase: genreData.contextClues?.useCase }, // drives SC theme filter
                 // Preserve popularity preference so career stage filter applies
                 // (prevents unrelated mainstream artists like Ed Sheeran appearing)
                 trackConstraints: { popularity: genreData.trackConstraints?.popularity },
@@ -7798,7 +7803,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
       console.log(`📋 Multi-phase total: ${selectedTracks.length} tracks across ${_phases.length} phases`);
     } else {
-      // ── Familiarity ratio split (80% hits / 20% deep cuts, etc.) ─────────────
+      // ── Familiarity ratio split (80% hits / 20% deep cuts, etc.) ���────────────
       const _famRatio = genreData.discoveryBalance?.familiarityRatio;
       const _hitsFraction = _famRatio?.hits;
       const _deepFraction = _famRatio?.deepCuts;
