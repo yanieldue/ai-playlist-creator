@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Icons from './Icons';
 import { isPaid } from '../utils/plan';
+import mp from '../utils/mixpanel';
 import '../styles/Pricing.css';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -36,6 +37,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const showTrial = !alreadyPaid && !trialUsed;
 
   useEffect(() => {
+    mp.track('Pricing Page Viewed');
     if (!userId || alreadyPaid) return;
     const email = userId.includes('@') ? userId : null;
     if (!email) return;
@@ -47,6 +49,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const handleUpgrade = async () => {
     if (!userId) { navigate('/'); return; }
     if (alreadyPaid) return;
+    mp.track('Upgrade Clicked', { plan: 'pro', billing_period: billingPeriod });
     setLoading(true);
     setError(null);
     try {
@@ -54,6 +57,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
         userId,
         billingPeriod,
       });
+      mp.track('Upgrade Succeeded', { plan: 'pro', billing_period: billingPeriod });
       localStorage.setItem('seenPricingPage', 'true');
       window.location.href = data.url;
     } catch (err) {
@@ -64,6 +68,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
 
   const handleStartTrial = async () => {
     if (!userId) { navigate('/'); return; }
+    mp.track('Upgrade Clicked', { plan: 'trial', billing_period: 'annual' });
     setTrialLoading(true);
     setError(null);
     try {
@@ -71,6 +76,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
         userId,
         trial: true,
       });
+      mp.track('Upgrade Succeeded', { plan: 'trial', billing_period: 'annual' });
       localStorage.setItem('seenPricingPage', 'true');
       window.location.href = data.url;
     } catch (err) {
@@ -94,13 +100,13 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
         <div className="pricing-toggle">
           <button
             className={`pricing-toggle-btn ${billingPeriod === 'monthly' ? 'active' : ''}`}
-            onClick={() => setBillingPeriod('monthly')}
+            onClick={() => { mp.track('Billing Period Toggled', { period: 'monthly' }); setBillingPeriod('monthly'); }}
           >
             Monthly
           </button>
           <button
             className={`pricing-toggle-btn ${billingPeriod === 'annual' ? 'active' : ''}`}
-            onClick={() => setBillingPeriod('annual')}
+            onClick={() => { mp.track('Billing Period Toggled', { period: 'annual' }); setBillingPeriod('annual'); }}
           >
             Annual
             <span className="pricing-save-badge">Save 30%</span>
@@ -198,7 +204,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
       </p>
 
       {isOnboarding && (
-        <button className="pricing-skip-btn" onClick={onContinueFree}>
+        <button className="pricing-skip-btn" onClick={() => { mp.track('Continued with Free'); onContinueFree(); }}>
           Continue with Free
         </button>
       )}

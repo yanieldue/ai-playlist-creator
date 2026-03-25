@@ -1151,6 +1151,17 @@ const PlaylistGenerator = () => {
       const result = await playlistService.generatePlaylist(prompt.trim(), userId, activePlatform || 'spotify', allowExplicit, songCount, [], null, generationAbortControllerRef.current.signal);
       clearInterval(messageInterval);
       setGeneratingMessage('');
+
+      // Handle contradictory constraints — show the question and let user fix their prompt
+      if (result.clarificationNeeded) {
+        setShowGeneratingModal(false);
+        setShowGeneratingChatModal(false);
+        setGeneratingError(`❓ ${result.clarificationQuestion}`);
+        isGeneratingRef.current = false;
+        setLoading(false);
+        return;
+      }
+
       setShowGeneratingModal(false);
       if (showComposeModal) {
         setComposePhase('tracks');
@@ -1568,6 +1579,7 @@ const PlaylistGenerator = () => {
 
     // Only clear input and add to chat on first attempt
     if (retryCount === 0) {
+      mp.track('Refine Started', { source: 'compose_modal', message_length: userMessage.length });
       setChatInput('');
       setChatLoading(true);
       if (showComposeModal) setComposePhase('loading');
@@ -1823,6 +1835,7 @@ const PlaylistGenerator = () => {
         track_count: result.tracks?.length || 0,
         platform: activePlatform || 'spotify',
       });
+      mp.track('Refine Succeeded', { source: 'compose_modal', track_count: result.tracks?.length || 0 });
 
       // Update chat messages in state
       setChatMessages(updatedChatMessages);
@@ -2196,6 +2209,7 @@ const PlaylistGenerator = () => {
     const draft = draftPlaylists.find(d => (d.playlistId || d.id) === draftId);
     if (!draft) return;
 
+    mp.track('Draft Resumed');
     navigate('/generate', {
       state: {
         initialPlaylist: draft,
@@ -2206,6 +2220,7 @@ const PlaylistGenerator = () => {
   };
 
   const handleDiscardDraft = async (draftId) => {
+    mp.track('Draft Discarded');
     try {
       // Delete from database
       await playlistService.deleteDraft(userId, draftId);
@@ -2408,13 +2423,13 @@ const PlaylistGenerator = () => {
             </div>
             <div className="nav-center nav-tabs-center">
               <button
-                onClick={() => setActiveTab('home')}
+                onClick={() => { mp.track('Tab Viewed', { tab: 'home' }); setActiveTab('home'); }}
                 className={`nav-tab-item ${activeTab === 'home' ? 'active' : ''}`}
               >
                 Home
               </button>
               <button
-                onClick={() => setActiveTab('playlists')}
+                onClick={() => { mp.track('Tab Viewed', { tab: 'playlists' }); setActiveTab('playlists'); }}
                 className={`nav-tab-item ${activeTab === 'playlists' ? 'active' : ''}`}
               >
                 Playlists
@@ -2703,7 +2718,7 @@ const PlaylistGenerator = () => {
                 <div className="create-fab-menu">
                   <button
                     className="create-fab-option"
-                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); navigate('/generate', { state: { activePlatform } }); }}
+                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); mp.track('Generate Page Opened', { source: 'fab' }); navigate('/generate', { state: { activePlatform } }); }}
                   >
                     <span className="create-fab-option-icon"><Icons.Plus size={20} /></span>
                     <div className="create-fab-option-text">
@@ -2713,7 +2728,7 @@ const PlaylistGenerator = () => {
                   </button>
                   <button
                     className="create-fab-option"
-                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); navigate('/from-mix', { state: { returnTab: activeTab } }); }}
+                    onClick={e => { e.stopPropagation(); setShowCreateMenu(false); mp.track('From Mix Page Opened'); navigate('/from-mix', { state: { returnTab: activeTab } }); }}
                   >
                     <span className="create-fab-option-icon"><Icons.Headphones size={20} /></span>
                     <div className="create-fab-option-text">
@@ -2821,7 +2836,7 @@ const PlaylistGenerator = () => {
                         </button>
                       </div>
                       <div className="compose-options-row">
-                        <button className="compose-option-chip" onClick={() => navigate('/from-mix', { state: { returnTab: activeTab } })}>
+                        <button className="compose-option-chip" onClick={() => { mp.track('From Mix Page Opened'); navigate('/from-mix', { state: { returnTab: activeTab } }); }}>
                           <Icons.Headphones size={13} /> From Mix
                         </button>
                         <div className="compose-option-chip">
@@ -2938,7 +2953,7 @@ const PlaylistGenerator = () => {
                     {/* Footer */}
                     {composePhase === 'tracks' && generatedPlaylist && (
                       <div className="gen-screen-footer">
-                        <button className="gen-screen-refine-btn" onClick={() => setComposePhase('refine')}>
+                        <button className="gen-screen-refine-btn" onClick={() => { mp.track('Refine Phase Entered', { source: 'compose' }); setComposePhase('refine'); }}>
                           ✦ Refine this playlist
                         </button>
                         <button className="gen-screen-create-btn" onClick={() => {

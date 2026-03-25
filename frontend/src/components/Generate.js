@@ -4,6 +4,7 @@ import playlistService from '../services/api';
 import { isPaid } from '../utils/plan';
 import Icons from './Icons';
 import Toast from './Toast';
+import mp from '../utils/mixpanel';
 import '../styles/Generate.css';
 
 const SUGGESTIONS = [
@@ -185,6 +186,7 @@ export default function Generate() {
       if (isGeneratingRef.current) return;
       isGeneratingRef.current = true;
       generationIdRef.current += 1;
+      mp.track('Generate Playlist Started', { prompt_length: prompt.trim().length, song_count: songCount });
       setLoading(true);
       setGeneratingPrompt(prompt.trim());
       setPhase('loading');
@@ -213,6 +215,13 @@ export default function Generate() {
       // Ignore stale responses from a previous generation attempt
       if (myGenerationId !== generationIdRef.current) return;
 
+      // Handle contradictory constraints — show question and let user fix their prompt
+      if (result.clarificationNeeded) {
+        setError(`❓ ${result.clarificationQuestion}`);
+        setPhase('input');
+        return;
+      }
+
       const playlist = {
         ...result,
         originalPrompt: prompt.trim(),
@@ -234,6 +243,7 @@ export default function Generate() {
       if (playlist.tracks?.length > 0) {
         setGeneratedPlaylist(playlist);
         setPhase('tracks');
+        mp.track('Generate Playlist Succeeded', { track_count: playlist.tracks.length, song_count: songCount });
       } else {
         setError('No songs found. Please try a different prompt.');
       }
@@ -312,6 +322,7 @@ export default function Generate() {
     if (!chatInput.trim() || chatLoading) return;
     const userMessage = chatInput.trim();
 
+    mp.track('Refine Started', { message_length: userMessage.length });
     setChatInput('');
     setChatLoading(true);
     setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
@@ -397,6 +408,7 @@ export default function Generate() {
 
       setChatMessages(finalChatMessages);
       setGeneratedPlaylist(updated);
+      mp.track('Refine Succeeded', { track_count: result.tracks.length });
       setPhase('tracks');
       setChatLoading(false);
 
@@ -430,6 +442,7 @@ export default function Generate() {
   const tabPath = (tab) => tab === 'playlists' ? '/playlists' : '/';
 
   const handleCreate = () => {
+    mp.track('Playlist Created', { track_count: generatedPlaylist.tracks.length, has_auto_update: updateFrequency !== 'never', update_frequency: updateFrequency });
     const finalName = editedPlaylistName.trim() || generatedPlaylist.playlistName;
     navigate(tabPath(returnTab), {
       state: {
@@ -445,6 +458,9 @@ export default function Generate() {
   };
 
   const goBack = () => {
+    if (phase !== 'input') {
+      mp.track('Generation Abandoned', { phase });
+    }
     const updatedDraft = generatedPlaylist?.draftId
       ? { ...generatedPlaylist, lockedTrackIds: [...lockedTrackIds] }
       : null;
@@ -519,7 +535,7 @@ export default function Generate() {
                 <>
                   <div className="generate-suggestions-label">Try asking</div>
                   {SUGGESTIONS.map(s => (
-                    <button key={s} className="generate-suggestion-card" onClick={() => setPrompt(s)}>
+                    <button key={s} className="generate-suggestion-card" onClick={() => { mp.track('Suggestion Clicked', { prompt: s, phase: 'generate' }); setPrompt(s); }}>
                       <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
                       {s}
                     </button>
@@ -619,7 +635,7 @@ export default function Generate() {
               <>
                 <div className="generate-suggestions-label">Try asking</div>
                 {REFINE_SUGGESTIONS.map(s => (
-                  <button key={s} className="generate-suggestion-card" onClick={() => setChatInput(s)}>
+                  <button key={s} className="generate-suggestion-card" onClick={() => { mp.track('Suggestion Clicked', { prompt: s, phase: 'refine' }); setChatInput(s); }}>
                     <Icons.Sparkles size={16} style={{ flexShrink: 0 }} />
                     {s}
                   </button>
@@ -697,7 +713,7 @@ export default function Generate() {
       {phase === 'tracks' && generatedPlaylist && (
         <>
           <div className="generate-settings-bar">
-            <button className="generate-settings-chip" onClick={() => setUpdateSheetOpen(true)}>
+            <button className="generate-settings-chip" onClick={() => { mp.track('Auto Update Sheet Opened'); setUpdateSheetOpen(true); }}>
               <Icons.Refresh size={13} />
               {updateFrequency === 'never' ? 'Set updates' : `${updateFrequency.charAt(0).toUpperCase() + updateFrequency.slice(1)} updates`}
             </button>
@@ -736,6 +752,7 @@ export default function Generate() {
                 className={`generate-sheet-option${updateFrequency === freq ? ' selected' : ''}${paid && !isPaid() ? ' locked' : ''}`}
                 onClick={() => {
                   if (paid && !isPaid()) return;
+                  mp.track('Auto Update Set', { frequency: freq });
                   setUpdateFrequency(freq);
                   setUpdateSheetOpen(false);
                 }}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/ProductTour.css';
 import Icons from './Icons';
+import mp from '../utils/mixpanel';
 
 // ── Diagram components (use real app CSS classes) ─────────────────────────────
 
@@ -284,6 +285,7 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(0);
+      mp.track('Product Tour Started');
       document.body.style.overflow = 'hidden';
       const allArtists = [...DIAGRAM_ARTIST_NAMES, ...PLAYLIST_COVER_ARTISTS].filter((v, i, a) => a.indexOf(v) === i);
       fetch(`${API_BASE}/api/artist-images?names=${encodeURIComponent(allArtists.join(','))}`)
@@ -308,20 +310,22 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
 
   const handleNext = () => {
     if (isLast) {
+      mp.track('Product Tour Completed', { steps_viewed: currentStep + 1 });
       if (onComplete) onComplete();
       onClose();
     } else {
+      mp.track('Tour Step Viewed', { step: currentStep + 1, total_steps: STEPS.length });
       setCurrentStep(s => s + 1);
     }
   };
 
   return (
     <>
-      <div className="product-tour-overlay" onClick={onClose} style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,0.5)' }} />
+      <div className="product-tour-overlay" onClick={() => { mp.track('Product Tour Skipped', { step: currentStep, total_steps: STEPS.length }); onClose(); }} style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,0.5)' }} />
       <div className="product-tour-tooltip center">
         <div className="product-tour-header">
           <h3>{step.title}</h3>
-          <button className="tour-close-button" onClick={onClose}>×</button>
+          <button className="tour-close-button" onClick={() => { mp.track('Product Tour Skipped', { step: currentStep, total_steps: STEPS.length }); onClose(); }}>×</button>
         </div>
 
         <div className="product-tour-body">

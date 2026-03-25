@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Icons from './Icons';
 import Toast from './Toast';
 import { isWeeklyLimitActive, getWeeklyLimitResetDate, setWeeklyLimitResetsAt } from '../utils/plan';
+import mp from '../utils/mixpanel';
 import '../styles/Generate.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
@@ -43,6 +44,7 @@ export default function FromMix() {
   // Redirect if not authenticated
   useEffect(() => {
     if (!userId) navigate('/', { replace: true });
+    else mp.track('From Mix Page Viewed');
   }, []); // eslint-disable-line
 
   // Sync editable name when video title loads
@@ -89,6 +91,7 @@ export default function FromMix() {
       return;
     }
 
+    mp.track('Mix Analysis Started');
     setPhase('analyzing');
     setTracks([]);
     setRemovedIds(new Set());
@@ -139,6 +142,7 @@ export default function FromMix() {
           break;
         }
         case 'done':
+          setTracks(prev => { mp.track('Mix Analysis Succeeded', { track_count: prev.length }); return prev; });
           setPhase('tracks');
           setStatusMsg('');
           es.close();
@@ -180,6 +184,7 @@ export default function FromMix() {
   const tabPath = (tab) => tab === 'playlists' ? '/playlists' : '/';
 
   const handleCreate = () => {
+    mp.track('Mix Playlist Created', { track_count: tracks.length });
     const finalName = editedName.trim() || `Mix: ${videoTitle}` || 'Mix Playlist';
     const playlist = {
       tracks,
@@ -204,6 +209,7 @@ export default function FromMix() {
   };
 
   const goBack = () => {
+    mp.track('From Mix Abandoned', { phase });
     esRef.current?.close();
     if (phase === 'analyzing') { setPhase('input'); return; }
     navigate(tabPath(returnTab), { state: { returnTab } });

@@ -5167,6 +5167,25 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
+    // ── Age-to-era preprocessing ──────────────────────────────────────────────
+    // Detect "I'm X, take me back to being Y" or "I was 16 in [year]" patterns
+    // and inject the computed year range into the prompt so Claude doesn't have
+    // to do the math (it often fails). Current year is used as reference.
+    const _currentYear = new Date().getFullYear();
+    const _ageToEraMatch = prompt.match(/i(?:'m| am) (\d{1,2}).*?(?:take me back|reminds? me|when i was|back to being|feel like i(?:'m| was)|being) (\d{1,2})/i)
+      || prompt.match(/(?:take me back|feel like i(?:'m| was)|back to being|when i was|reminds? me of being) (\d{1,2}).*?i(?:'m| am) (\d{1,2})/i);
+    if (_ageToEraMatch) {
+      const [, a, b] = _ageToEraMatch;
+      const currentAge = parseInt(a), targetAge = parseInt(b);
+      if (currentAge > targetAge && currentAge <= 100 && targetAge >= 5) {
+        const eraCenter = _currentYear - (currentAge - targetAge);
+        const eraMin = eraCenter - 2;
+        const eraMax = eraCenter + 3;
+        prompt += ` [Era hint: user is ${currentAge} and wants to feel ${targetAge} again — that maps to approximately ${eraMin}–${eraMax}. Set yearRange.min=${eraMin}, yearRange.max=${eraMax}.]`;
+        console.log(`🎂 Age-to-era: ${currentAge}yo → ${targetAge}yo = era ${eraMin}–${eraMax}`);
+      }
+    }
+
     console.log('Generating playlist for prompt:', prompt);
 
     // Step 0: Use Claude to extract the genre, style, audio features, AND all refinement constraints from the prompt
@@ -5228,7 +5247,8 @@ Respond ONLY with valid JSON in this format:
     "avoid": ["breakup", "political", "explicit", etc.] or []
   },
   "discoveryBalance": {
-    "preference": "cohesive/varied/unexpected" or null
+    "preference": "cohesive/varied/unexpected" or null,
+    "familiarityRatio": { "hits": 0.0-1.0 or null, "deepCuts": 0.0-1.0 or null }
   },
   "songCount": integer (5-100) or null,
   "referenceSongs": [{ "title": "song title", "artist": "artist name" }] or [],
@@ -5255,11 +5275,13 @@ POPULARITY:
 - "hidden gems", "lesser known": max: 50
 - "mix of popular and underground": preference: "balanced"
 
-SONG LENGTH:
+SONG LENGTH (per-track duration only — NOT total playlist runtime):
+- ONLY use trackConstraints.duration when the user describes individual song length: "short songs", "under 3 minutes", "no songs over 4 minutes", "long tracks"
 - "short songs", "under 3 minutes": max: 180
 - "longer tracks", "over 5 minutes": min: 300
 - "no songs over 4 minutes": max: 240
 - Convert minutes to seconds
+- CRITICAL: "X minutes of music", "a 45-minute playlist", "an hour of music" → these describe TOTAL RUNTIME, not song length. Set songCount (e.g. 45 min → ~13 songs, 1 hour → ~15 songs, 2 hours → ~30 songs). Do NOT set trackConstraints.duration for total runtime requests.
 
 VERSION EXCLUSIONS:
 - "no live", "studio only": exclude ["live"]
@@ -5319,6 +5341,12 @@ DISCOVERY:
 - "cohesive", "similar sound": preference: "cohesive"
 - "variety", "eclectic": preference: "varied"
 - "surprise me", "unexpected picks": preference: "unexpected"
+- FAMILIARITY RATIO: When user specifies a split between hits and deep cuts, extract both fractions (must sum to 1.0):
+  * "80% hits, 20% deep cuts" → familiarityRatio: { hits: 0.8, deepCuts: 0.2 }
+  * "mostly popular songs with a few deep cuts" → familiarityRatio: { hits: 0.75, deepCuts: 0.25 }
+  * "half and half, half known half obscure" → familiarityRatio: { hits: 0.5, deepCuts: 0.5 }
+  * "mostly deep cuts with a few hits" → familiarityRatio: { hits: 0.25, deepCuts: 0.75 }
+  * If no ratio specified → familiarityRatio: { hits: null, deepCuts: null }
 
 SONG COUNT:
 - Explicit numbers: "50 songs", "25 tracks", "30 pop songs", "give me 40" → extract that number
@@ -5326,6 +5354,18 @@ SONG COUNT:
 - Duration-based: "an hour of music" = 15, "a 30-minute playlist" = 8, "a 2-hour mix" = 30
 - Size descriptors: "short playlist" = 10, "quick playlist" = 10, "big playlist" = 50, "massive playlist" = 75, "full playlist" = 30
 - If no count is implied at all → null
+
+USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
+When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
+- "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "cleaning", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
+- "work out", "gym", "run", "running", "exercise" → mood: "positive", energyTarget: "high", useCase: "gym"
+- "study", "focus", "deep work", "coding" → mood: "neutral", energyTarget: "low", useCase: "study"
+- "drive", "road trip", "long drive" → mood: "positive", energyTarget: "medium", useCase: "driving"
+- "sleep", "wind down", "bedtime", "relax before bed" → mood: "neutral", energyTarget: "low", useCase: "sleep"
+- "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "cooking"
+- "dinner party", "gathering", "friends over", "people coming over" → mood: "positive", energyTarget: "medium", useCase: "party"
+- "morning routine", "getting ready", "start the day" → mood: "positive", energyTarget: "medium", useCase: "morning"
+These are defaults only — if the user specifies a genre or mood explicitly, that takes precedence.
 
 LANGUAGE (culturalContext.language):
 - "I want Spanish songs", "Spanish music", "songs in Spanish" → prefer: ["Spanish"], exclude: []
@@ -5355,6 +5395,8 @@ These are used to find similar artists and build the playlist.
 - When the prompt includes "Current songs include: ...", "Reference tracks: ...", or "Key artists in this playlist: ...", extract up to 5 of the most representative artists from those lists into suggestedSeedArtists. Prefer variety (different artists over repeats).
 - When the user explicitly names artists ("artists like X", "similar to Y"), put them in requestedArtists.
 - When neither of the above apply, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
+- REVEALED vs. STATED PREFERENCES: If the user states a self-label ("I only listen to rap", "I'm a country fan") BUT also names specific songs or artists that clearly contradict that label, trust the songs over the label. Example: "I only listen to rap but my favorites are Olivia Rodrigo, JVKE, and Taylor Swift" → the actual taste is bedroom pop/indie pop; set genre and seed artists based on the named songs, not the self-label. The songs don't lie.
+- EMOTIONAL STATE → SEED ARTISTS: When the user describes an emotional state with no genre keywords, infer appropriate artists. "Numb and empty after a breakup" → suggestedSeedArtists: ["Phoebe Bridgers", "The National", "Bon Iver", "Big Thief"]. "Need to clean my apartment, make time pass" → suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore"] with mood: "positive", energyTarget: "medium".
 Examples (no reference tracks):
 - "top pop songs" → suggestedSeedArtists: ["Taylor Swift", "Dua Lipa", "The Weeknd", "Harry Styles"]
 - "r&b for when I'm in my feels" → suggestedSeedArtists: ["SZA", "Daniel Caesar", "H.E.R.", "Brent Faiyaz"]
@@ -5373,6 +5415,13 @@ MOOD (emotional valence — separate from energy):
 - "happy", "uplifting", "feel-good", "positive", "welcoming", "café", "bright", "cheerful", "healing", "hopeful", "good vibes", "triumphant", "euphoric", "everything works out", "happy ending", "movie ending", "breakthrough", "cathartic release" → mood: "positive"
 - "emotional but uplifting", "bittersweet but hopeful", "emotional climax that resolves well" → mood: "positive"
 - "sad", "melancholic", "heartbreak", "crying", "heavy", "gloomy", "dark emotions", "heartache", "longing" → mood: "melancholic"
+- EMOTIONAL STATE INPUTS — treat the user's described emotional state as a genre/mood signal even with no genre keywords:
+  * "numb", "empty", "hollow", "disconnected", "zoned out", "numb and empty", "feeling nothing" → mood: "melancholic", energyTarget: "low", atmosphere: ["introspective", "quiet", "sparse"] — think Phoebe Bridgers, The National, Bon Iver, Big Thief
+  * "can't stop crying", "devastated", "broken", "wrecked" → mood: "melancholic", energyTarget: "low"
+  * "anxious", "nervous", "spiraling", "in my head" → mood: "neutral", energyTarget: "low", atmosphere: ["introspective", "calm"]
+  * "need to feel something", "processing", "healing" → mood: "neutral", atmosphere: ["introspective", "bittersweet"]
+  * "angry", "frustrated", "need to vent" → mood: "neutral", energyTarget: "high", atmosphere: ["cathartic", "driving"]
+  * "hyped", "energized", "pumped up", "unstoppable" → mood: "positive", energyTarget: "high"
 - IMPORTANT: "emotional" alone is NOT melancholic — it is intensity, not valence. Only use "melancholic" when the context is clearly sad/negative.
 - "chill", "background", "ambient", "focus", "study", "neutral", "calm" (without emotional context) → mood: "neutral"
 - "emotional" without clear positive/negative context → null (let atmosphere and genre determine the tone)
@@ -5383,6 +5432,9 @@ EXCLUDED ARTISTS:
 - "no mainstream hits", "no chart toppers", "no radio songs", "avoid popular songs", "underground only", "deep cuts only", "no famous songs" → set trackConstraints.popularity.preference: "underground" AND trackConstraints.popularity.max: 60
 - "no [artist] but similar sound/vibe" → add [artist] to excludedArtists (include the artist names, not just the preference)
 - If multiple exclusions mentioned, include all artist names
+- ABBREVIATIONS & NICKNAMES: Resolve common abbreviations to full artist names. Examples: "TS" or "T.S." → "Taylor Swift", "TSwift" → "Taylor Swift", "Ye" → "Kanye West", "Bey" → "Beyoncé", "Jay" or "Hov" → "Jay-Z", "Drizzy" → "Drake", "Weezy" → "Lil Wayne"
+- PRODUCER EXCLUSIONS: "no Jack Antonoff songs", "no Max Martin production" → add those names to excludedArtists (the filter will match on artist name; note this won't filter by producer but will log the intent)
+- CRITICAL: When the user says "no [name]", always try to resolve [name] to the most likely well-known artist before adding to excludedArtists
 
 ENERGY TARGET:
 - "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
@@ -5391,18 +5443,22 @@ ENERGY TARGET:
 - If conflicting signals are present (both chill and hype), use "medium" rather than picking one
 - If unclear → null
 
-ENERGY PROGRESSION:
-- "build from chill to hype", "start slow end hype", "warm up then peak", "gradually get more intense", "starts mellow builds to hype", "gradual energy increase", "gradually increasing", "pacing", "build up", "energy curve", "ramp up" → energyProgression: "ramp_up"
+ENERGY PROGRESSION (gradual ramps only — no hard split):
+- Use energyProgression ONLY when the energy change is described as GRADUAL (no distinct halves/sections): "gradually get more intense", "slowly builds up", "gradual energy increase", "gradually increasing", "pacing", "energy curve", "ramp up", "warm up then peak"
 - Running/workout context with "gradual", "build", "pacing", "warm up" → energyProgression: "ramp_up"
-- "start hype wind down", "peak at start then chill", "high energy then relaxing", "cool down", "energy ramp down" → energyProgression: "ramp_down"
+- "high energy then gradually winds down", "starts hype slowly gets chill" → energyProgression: "ramp_down"
+- CRITICAL: Do NOT use energyProgression for "first half X, second half Y" or any prompt with clear halves/sections — those are phases (see below)
 - All other cases → null
 
 MULTI-PHASE DETECTION:
-If the prompt describes a journey through 2–4 clearly distinct moods or energy levels (indicated by "→", "then", "followed by", "starting with...ending with", "morning...afternoon...night", etc.), set phases:
+Use phases whenever the prompt describes two or more DISTINCT, named segments — "first half / second half", "start with X then Y", "X → Y", "X followed by Y", "X then switch to Y", "first part / second part", time-of-day arcs, or event arcs.
+RULE: If the user is describing a SPLIT or TRANSITION between distinct moods/energies (even just two), use phases. energyProgression is only for smooth/gradual ramps with no clear division.
 - Each phase: label (short name), energy ("low"|"medium"|"high"), mood ("positive"|"neutral"|"melancholic"|null), fraction (share of total tracks — must sum to 1.0)
-- "morning warm-up → focus mode → evening wind-down" → phases: [{"label":"morning","energy":"medium","mood":"positive","fraction":0.33},{"label":"focus","energy":"low","mood":"neutral","fraction":0.34},{"label":"wind-down","energy":"low","mood":"melancholic","fraction":0.33}]
+- "first half chill, second half hype" → phases: [{"label":"chill","energy":"low","mood":"neutral","fraction":0.5},{"label":"hype","energy":"high","mood":"positive","fraction":0.5}]
+- "start chill then get hype" → phases: [{"label":"chill","energy":"low","mood":"neutral","fraction":0.4},{"label":"hype","energy":"high","mood":"positive","fraction":0.6}]
 - "chill then hype party" → phases: [{"label":"chill","energy":"low","mood":"neutral","fraction":0.4},{"label":"hype","energy":"high","mood":"positive","fraction":0.6}]
-- Only set when there are EXPLICIT, CLEAR transition signals. Gradual ramps (use energyProgression instead) and general variety do NOT qualify.
+- "morning warm-up → focus mode → evening wind-down" → phases: [{"label":"morning","energy":"medium","mood":"positive","fraction":0.33},{"label":"focus","energy":"low","mood":"neutral","fraction":0.34},{"label":"wind-down","energy":"low","mood":"melancholic","fraction":0.33}]
+- "build from chill to hype" (gradual, no clear split) → energyProgression: "ramp_up", phases: null
 - If no multi-phase pattern → phases: null
 
 Use null, [], or false for any feature not mentioned.
@@ -5458,7 +5514,8 @@ DO NOT include any text outside the JSON.`
         avoid: []
       },
       discoveryBalance: {
-        preference: null
+        preference: null,
+        familiarityRatio: { hits: null, deepCuts: null }
       },
       songCount: null,
       bpmConstraint: { min: null, max: null },
@@ -5522,6 +5579,57 @@ DO NOT include any text outside the JSON.`
         genreData.era.yearRange.min = 2005;
         genreData.era.yearRange.max = new Date().getFullYear();
         console.log(`🎉 Event mode: default era range ${genreData.era.yearRange.min}–${genreData.era.yearRange.max}`);
+      }
+    }
+
+    // ── Contradiction detection ────────────────────────────────────────────────
+    // Detect the most common cases where constraints directly conflict with each
+    // other. Surface a friendly clarification question rather than silently
+    // picking one side or producing a broken playlist.
+    // Only runs for new playlists (not refinements) where the user hasn't
+    // already confirmed the intent.
+    if (!playlistId) {
+      const _contradictions = [];
+
+      // 1. Artist requested AND excluded at the same time
+      const _reqNorms = new Set((genreData.artistConstraints?.requestedArtists || []).map(a => a.toLowerCase().trim()));
+      const _excNorms = (genreData.artistConstraints?.excludedArtists || []).map(a => a.toLowerCase().trim());
+      const _bothSides = _excNorms.filter(ex => [..._reqNorms].some(r => r.includes(ex) || ex.includes(r)));
+      if (_bothSides.length > 0) {
+        _contradictions.push(`You mentioned ${_bothSides.join(', ')} both as an artist to include and one to exclude — which do you want?`);
+      }
+
+      // 2. Underground preference conflicts with event mode popularity floor
+      const _wantsUnderground = genreData.trackConstraints?.popularity?.preference === 'underground'
+        || (genreData.trackConstraints?.popularity?.max !== null && genreData.trackConstraints?.popularity?.max !== undefined && genreData.trackConstraints?.popularity?.max <= 50);
+      if (_wantsUnderground && _isEventMode) {
+        _contradictions.push(`You asked for underground/deep cuts but also for a ${genreData.contextClues?.useCase || 'event'} setting — events usually work better with recognizable hits. Should I keep it underground or use crowd-friendly popular songs?`);
+      }
+
+      // 3. Era range min > max (user typo like "2020 to 2010")
+      const _eraMin = genreData.era?.yearRange?.min;
+      const _eraMax = genreData.era?.yearRange?.max;
+      if (_eraMin && _eraMax && _eraMin > _eraMax) {
+        _contradictions.push(`The year range you specified (${_eraMin}–${_eraMax}) seems reversed. Did you mean ${_eraMax}–${_eraMin}?`);
+      }
+
+      // 4. Exclusive mode with an artist who was also excluded
+      if (genreData.artistConstraints?.exclusiveMode && genreData.artistConstraints?.excludedArtists?.length > 0) {
+        const excNames = genreData.artistConstraints.excludedArtists.join(', ');
+        const reqNames = (genreData.artistConstraints.requestedArtists || []).join(', ');
+        _contradictions.push(`You asked for only ${reqNames} but also said to exclude ${excNames}. These conflict — could you clarify?`);
+      }
+
+      if (_contradictions.length > 0) {
+        const question = _contradictions[0]; // surface the most important one
+        console.log(`⚠️ Contradiction detected: ${question}`);
+        return res.json({
+          clarificationNeeded: true,
+          clarificationQuestion: question,
+          playlistName: null,
+          tracks: [],
+          trackCount: 0,
+        });
       }
     }
 
@@ -7206,8 +7314,40 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
       console.log(`📋 Multi-phase total: ${selectedTracks.length} tracks across ${_phases.length} phases`);
     } else {
-      selectedTracks = tracksForSelection.slice(0, selectionTarget);
-      console.log(`📋 Using top ${selectedTracks.length} tracks (${hasVibeRequirements ? 'vibe check will run' : 'no vibe check needed'})`);
+      // ── Familiarity ratio split (80% hits / 20% deep cuts, etc.) ─────────────
+      const _famRatio = genreData.discoveryBalance?.familiarityRatio;
+      const _hitsFraction = _famRatio?.hits;
+      const _deepFraction = _famRatio?.deepCuts;
+      if (_hitsFraction && _deepFraction && (_hitsFraction + _deepFraction) >= 0.9) {
+        const hitsTarget = Math.round(songCount * _hitsFraction);
+        const deepTarget = Math.max(1, songCount - hitsTarget);
+        // Hits = high popularity (≥65), deep cuts = lower popularity (<65)
+        // Sort desc by popularity so we pick the most popular hits first
+        const hitPool = [...tracksForSelection].filter(t => (t.popularity ?? 50) >= 65)
+          .sort((a, b) => (b.popularity ?? 50) - (a.popularity ?? 50));
+        const deepPool = [...tracksForSelection].filter(t => (t.popularity ?? 50) < 65)
+          .sort((a, b) => (a.popularity ?? 50) - (b.popularity ?? 50)); // least popular first for discovery
+        const hitsSelected = hitPool.slice(0, hitsTarget);
+        const deepSelected = deepPool.slice(0, deepTarget);
+        // Interleave: roughly every Nth track is a deep cut so they're spread through the playlist
+        selectedTracks = [];
+        const deepEveryN = Math.max(2, Math.round(songCount / Math.max(deepSelected.length, 1)));
+        let deepIdx = 0, hitIdx = 0, pos = 0;
+        while (selectedTracks.length < songCount) {
+          if (deepIdx < deepSelected.length && pos > 0 && pos % deepEveryN === 0) {
+            selectedTracks.push(deepSelected[deepIdx++]);
+          } else if (hitIdx < hitsSelected.length) {
+            selectedTracks.push(hitsSelected[hitIdx++]);
+          } else if (deepIdx < deepSelected.length) {
+            selectedTracks.push(deepSelected[deepIdx++]);
+          } else break;
+          pos++;
+        }
+        console.log(`🎯 Familiarity ratio ${Math.round(_hitsFraction*100)}/${Math.round(_deepFraction*100)}: ${hitsSelected.length} hits + ${deepSelected.length} deep cuts = ${selectedTracks.length} tracks`);
+      } else {
+        selectedTracks = tracksForSelection.slice(0, selectionTarget);
+        console.log(`📋 Using top ${selectedTracks.length} tracks (${hasVibeRequirements ? 'vibe check will run' : 'no vibe check needed'})`);
+      }
     }
 
     // Step 4: VIBE CHECK - Review the selected tracks for coherence
@@ -7276,7 +7416,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
 
       // "No mainstream" / underground preference
-      if (_popPref === 'underground' || genreData.trackConstraints?.popularity?.max <= 60) {
+      const _maxPopForVibeRule = genreData.trackConstraints?.popularity?.max;
+      if (_popPref === 'underground' || (_maxPopForVibeRule !== null && _maxPopForVibeRule !== undefined && _maxPopForVibeRule <= 60)) {
         _vibeHardRules.push('NO MAINSTREAM HITS — HARD RULE: The user explicitly requested underground/deep cuts only. REMOVE any artist with radio hits, chart success, major label backing, or household-name recognition. Travis Scott, Kanye West, Drake, The Weeknd, Rihanna, Ariana Grande, and similar mainstream acts must be REMOVED even if their sound matches the genre. Only keep artists who are genuinely underground, indie, or niche.');
       }
 
@@ -7619,6 +7760,24 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     } catch (forceIncludeErr) {
       console.log('[FORCE-INCLUDE] Skipped due to error:', forceIncludeErr.message);
+    }
+
+    // ── Final excluded-artist sweep ─────────────────────────────────────────────
+    // Hard-remove any track by an excluded artist — runs AFTER force-include so
+    // a force-include can never smuggle in a banned artist.
+    const _finalExcludedNorms = (genreData.artistConstraints?.excludedArtists || [])
+      .map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      .filter(Boolean);
+    if (_finalExcludedNorms.length > 0) {
+      const beforeSweep = selectedTracks.length;
+      selectedTracks = selectedTracks.filter(t => {
+        const norm = (t.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return !_finalExcludedNorms.some(ex => norm === ex || norm.includes(ex) || ex.includes(norm));
+      });
+      const removed = beforeSweep - selectedTracks.length;
+      if (removed > 0) {
+        console.log(`🚫 Final excluded-artist sweep removed ${removed} track(s) for: ${genreData.artistConstraints.excludedArtists.join(', ')}`);
+      }
     }
 
     // ── Multi-phase transition smoothing ────────────────────────────────────────

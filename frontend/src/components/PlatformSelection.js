@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import ConfirmModal from './ConfirmModal';
+import mp from '../utils/mixpanel';
 import '../styles/SignupForm.css';
 import '../styles/PlatformSelection.css';
 
@@ -13,6 +14,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   const [confirmModal, setConfirmModal] = useState(null);
 
   useEffect(() => {
+    mp.track('Platform Selection Viewed');
     const fetchConnectedPlatforms = async () => {
       const userEmail = email || localStorage.getItem('userEmail');
       if (userEmail) {
@@ -59,6 +61,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   };
 
   const proceedConnectSpotify = async () => {
+    mp.track('Platform Connect Clicked', { platform: 'spotify' });
     setIsConnecting('spotify');
     setError('');
     try {
@@ -85,6 +88,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   };
 
   const proceedConnectApple = async () => {
+    mp.track('Platform Connect Clicked', { platform: 'apple' });
     setIsConnecting('apple');
     setError('');
     try {
@@ -107,6 +111,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
   };
 
   const handleFinishSignup = async () => {
+    if (!anyConnected) mp.track('Platform Selection Skipped');
     setLoading(true);
     setError('');
     try {

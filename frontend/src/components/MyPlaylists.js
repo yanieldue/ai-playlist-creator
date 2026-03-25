@@ -7,6 +7,7 @@ import ErrorMessage from './ErrorMessage';
 import UpgradeModal from './UpgradeModal';
 import { isPaid } from '../utils/plan';
 import { playlistsCache } from '../utils/cache';
+import mp from '../utils/mixpanel';
 import '../styles/MyPlaylists.css';
 import '../styles/EditOptionsModal.css';
 import '../styles/PlaylistGenerator.css';
@@ -299,6 +300,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
       );
 
       // Refresh playlists to show updated tracks
+      mp.track('Tracks Removed', { count: tracksToRemove.length });
       await fetchPlaylists();
       setSelectedTracksToRemove(new Set());
       setEditingPlaylistId(null);
@@ -339,6 +341,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
       // Toggle reaction: if already set to this reaction, remove it
       const newReaction = track.reaction === reaction ? null : reaction;
 
+      mp.track('Track Reacted', { reaction: newReaction });
       console.log('Reacting to song:', { playlistId, trackId: track.id, trackName: track.name, reaction: newReaction });
 
       // Call reaction endpoint
@@ -396,6 +399,9 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
 
   const handleToggleLock = async (playlistId, track) => {
     try {
+      const playlist = playlists.find(p => p.playlistId === playlistId);
+      const currentlyLocked = playlist?.lockedTracks?.includes(track.id);
+      mp.track('Track Locked', { locked: !currentlyLocked });
       const result = await playlistService.toggleLock(playlistId, userId, track.id);
       setPlaylists(prev => prev.map(p => {
         if (p.playlistId !== playlistId) return p;
@@ -422,6 +428,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
       setUpgradeModal({ open: true, feature: 'Import Playlists' });
       return;
     }
+    mp.track('Import Modal Opened');
     setShowImportModal(true);
     setLoadingPlaylists(true);
     setError('');
@@ -525,6 +532,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
       }
 
       console.log('Delete response:', data);
+      mp.track('Playlist Deleted');
       setError(`✅ Playlist deleted successfully`);
       await fetchPlaylists();
       closeDeleteModal();
@@ -542,8 +550,9 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
     setError('');
 
     try {
-      await playlistService.importPlaylist(userId, playlistId);
+      const importResult = await playlistService.importPlaylist(userId, playlistId);
       await fetchPlaylists();
+      mp.track('Playlist Imported', { track_count: importResult?.tracks?.length || 0 });
       closeImportModal();
       showToast('Playlist imported successfully!', 'success');
     } catch (err) {
@@ -587,6 +596,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
         refreshSongCount || 30
       );
 
+      mp.track('Auto Update Changed', { frequency: tempUpdateFrequency });
       showToast('Settings updated successfully!', 'success');
       await fetchPlaylists();
       closeEditOptionsModal();
@@ -603,6 +613,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
     }
     if (!editOptionsPlaylist) return;
 
+    mp.track('Manual Refresh Started', { mode: manualRefreshMode });
     setRefreshing(true);
     setRefreshingMessage('Generating new songs...');
     setRefreshError(null);
@@ -746,6 +757,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
       // Refresh the playlists list
       await fetchPlaylists();
+      mp.track('Manual Refresh Succeeded', { track_count: result.tracks?.length || 0 });
       setRefreshing(false);
       closeEditOptionsModal();
     } catch (err) {
@@ -1371,7 +1383,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       </span>
                     </div>
                   ) : (
-                    <div className="chat-input-container" onClick={() => onRefinePlaylist && onRefinePlaylist(editOptionsPlaylist)}>
+                    <div className="chat-input-container" onClick={() => { mp.track('Refine Opened', { source: 'my_playlists' }); onRefinePlaylist && onRefinePlaylist(editOptionsPlaylist); }}>
                       <input
                         type="text"
                         value=""

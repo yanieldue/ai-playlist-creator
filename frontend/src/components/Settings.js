@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import '../styles/Settings.css';
 import playlistService from '../services/api';
+import mp from '../utils/mixpanel';
 
 const Settings = ({ onBack }) => {
   const [allowExplicit, setAllowExplicit] = useState(() => {
@@ -32,11 +33,13 @@ const Settings = ({ onBack }) => {
   };
 
   const handleToggleExplicit = (newValue) => {
+    mp.track('Setting Changed', { setting: 'explicit_content', value: newValue });
     setAllowExplicit(newValue);
     persistSettings(newValue, darkMode);
   };
 
   const handleToggleDarkMode = (newValue) => {
+    mp.track('Setting Changed', { setting: 'dark_mode', value: newValue });
     setDarkMode(newValue);
     if (newValue) {
       document.documentElement.classList.add('dark-mode');

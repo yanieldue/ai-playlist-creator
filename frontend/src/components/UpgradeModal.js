@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icons from './Icons';
+import mp from '../utils/mixpanel';
 import '../styles/UpgradeModal.css';
 
 const FEATURE_DESCRIPTIONS = {
@@ -27,17 +28,30 @@ const PAID_BENEFITS = [
 
 export default function UpgradeModal({ isOpen, onClose, featureName }) {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isOpen) {
+      mp.track('Upgrade Modal Viewed', { feature: featureName });
+    }
+  }, [isOpen, featureName]);
+
   if (!isOpen) return null;
 
   const handleUpgradeClick = () => {
+    mp.track('Upgrade CTA Clicked', { feature: featureName, source: 'upgrade_modal' });
     onClose();
     navigate('/pricing');
   };
 
+  const handleClose = () => {
+    mp.track('Upgrade Modal Dismissed', { feature: featureName });
+    onClose();
+  };
+
   return (
-    <div className="upgrade-overlay" onClick={onClose}>
+    <div className="upgrade-overlay" onClick={handleClose}>
       <div className="upgrade-modal" onClick={e => e.stopPropagation()}>
-        <button className="upgrade-close" onClick={onClose} aria-label="Close">✕</button>
+        <button className="upgrade-close" onClick={handleClose} aria-label="Close">✕</button>
 
         <div className="upgrade-lock-icon"><Icons.Lock size={40} /></div>
 
