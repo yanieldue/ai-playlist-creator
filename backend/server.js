@@ -5319,6 +5319,19 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
+    // Seasonal escapism pre-processing: when the user explicitly requests a season
+    // but includes a conflicting real-world context ("it's freezing but I need summer music"),
+    // inject an explicit override hint into the prompt BEFORE Claude extraction runs.
+    // This must happen here — before extraction — because mood signals are processed in that
+    // step, and "freezing"/"cold" would otherwise win over the stated season request.
+    const _wantsSummer = /\b(summer|beach|warm|tropical|july|august)\b.{0,40}\b(playlist|music|songs|vibes|feel|energy)\b/i.test(prompt)
+      || /\b(playlist|music|songs|vibes)\b.{0,40}\b(summer|beach|warm|tropical)\b/i.test(prompt);
+    const _contextConflict = /\b(freez|freezing|cold|winter|snow|icy|chilly)\b/i.test(prompt);
+    if (_wantsSummer && _contextConflict) {
+      prompt += ` [OVERRIDE: User is requesting SUMMER ESCAPISM. The cold/winter/freezing detail explains WHY they want summer music — it is NOT a mood or context signal. Set useCase: "summer", mood: "positive", atmosphere: ["carefree", "warm", "upbeat", "beachy"], suggestedSeedArtists to summery artists (Harry Styles, Doja Cat, Summer Salt, Bad Bunny, Outkast). Do NOT set any cold, melancholic, or wintry signals.]`;
+      console.log(`☀️  Summer escapism detected — injecting override hint`);
+    }
+
     console.log('Generating playlist for prompt:', prompt);
 
     // Step 0: Use Claude to extract the genre, style, audio features, AND all refinement constraints from the prompt
@@ -7347,6 +7360,17 @@ Example response: [1, 2, 4, 5, 7, ...]`
                     const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
                     if ((artistTrackCount.get(ak) || 0) >= suppMaxPerArtist) continue;
                     artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
+                  }
+                  // Apply catalog context overrides before accepting supplement track
+                  const _suppKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                  const _suppOverride = TRACK_CONTEXT_OVERRIDES[_suppKey];
+                  if (_suppOverride) {
+                    const _suppMoodOk = !genreData.mood || _suppOverride.requiredMoods.includes(genreData.mood);
+                    const _suppEnergyOk = !genreData.energyTarget || _suppOverride.requiredEnergies.includes(genreData.energyTarget);
+                    if (!_suppMoodOk || !_suppEnergyOk) {
+                      console.log(`🚫 [CATALOG-OVERRIDE/SUPP] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} — ${_suppOverride.reason}`);
+                      continue;
+                    }
                   }
                   seenTrackIds.add(track.id);
                   seenSupplementArtists.add((song.artistName || '').toLowerCase());
