@@ -1257,18 +1257,39 @@ const SOUNDCHARTS_THEME_MAP = {
   'protest': 'Social Issues', 'social': 'Social Issues',
 };
 
-// Catalog-level context overrides — tracks confirmed to be repeated false positives
-// in specific energy/mood contexts. Audio features API is deprecated (403), so these
-// are hardcoded based on confirmed test failures. Format: "artistlower::tracklower"
-// requiredMoods/requiredEnergies: contexts in which this track IS appropriate.
-// If the current playlist context matches none of these, the track is filtered out
-// before it reaches the vibe check.
+// Catalog-level context overrides — tracks with confirmed repeated false positives
+// that cannot be fixed via prompt engineering alone. Spotify audio features API
+// returns 403 (deprecated for this app), so energy/valence filtering is not
+// available at query time. These tracks have high popularity scores (>70) that
+// cause them to survive the candidate pool regardless of playlist context.
+//
+// Format: "artistnamelower::tracknamelower"
+// requiredMoods:    playlist moods in which this track IS appropriate (allowlist)
+// requiredEnergies: playlist energy targets in which this track IS appropriate (allowlist)
+// If the current playlist context does not match BOTH, the track is removed before
+// the vibe check. This is an allowlist (not a blocklist) — tracks only survive if
+// the context explicitly permits them.
+//
+// HOW TO ADD NEW ENTRIES:
+//   1. Confirm the false positive across at least 3 independent test prompts
+//   2. Record which test prompts it appeared in (for audit trail)
+//   3. Set requiredMoods/requiredEnergies to contexts where the track genuinely fits
+//   4. Add the date so stale entries can be reviewed
+//
+// If this list exceeds ~15 entries, consider a proper energy/valence filter
+// via a third-party audio analysis API (Spotify's is deprecated).
 const TRACK_CONTEXT_OVERRIDES = {
+  // Added 2026-03-25. Slow breakup ballad (2006). Popularity: 74.
+  // False positives in: Prompt 73 (pregame), Prompt 74 (dinner party), Prompt 82 (summer),
+  // Prompt D (high-energy pregame) — 6 confirmed appearances across test suite.
   'rihanna::unfaithful': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
     reason: 'slow breakup ballad — 6 confirmed false positives in high-energy/positive contexts',
   },
+  // Added 2026-03-25. Anxious acoustic piano ballad (2021). Popularity: 78.
+  // False positives in: Prompt 71 (nervous/excited), Prompt 73 (pregame), Prompt 80 (cooking),
+  // Prompt D (high-energy pregame) — 4 confirmed appearances across test suite.
   'olivia rodrigo::1 step forward, 3 steps back': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
@@ -5478,7 +5499,8 @@ When the user describes a task, activity, or situation with no genre keywords, i
 - "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "cooking"
 - "dinner party", "gathering", "friends over", "people coming over" → mood: "positive", energyTarget: "medium", useCase: "party"
 - "morning routine", "getting ready", "start the day" → mood: "positive", energyTarget: "medium", useCase: "morning"
-- "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Surf Mesa", "beabadoobee"]
+- "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
+  NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
 These are defaults only — if the user specifies a genre or mood explicitly, that takes precedence.
 
