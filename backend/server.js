@@ -6332,6 +6332,22 @@ Respond ONLY with valid JSON:
       console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
     }
 
+    // Artists marked NOSIMILAR that also have a confirmed Spotify ID have a wrong SC profile
+    // (e.g. electronic "Keffer" instead of R&B "Keffer"). We skip their SC songs here and
+    // fetch their actual top tracks from Spotify directly later (Spotify-direct injection).
+    // Also include artists where SC returned nothing at all (no UUID) but Spotify confirmed them.
+    const nosimilarWithSpotify = new Set(
+      Object.entries(confirmedSpotifyArtistIds)
+        .filter(([artistLower]) => {
+          const scUuid = confirmedArtistUuids[artistLower];
+          return !scUuid || (typeof scUuid === 'string' && scUuid.startsWith('NOSIMILAR:'));
+        })
+        .map(([artistLower]) => artistLower)
+    );
+    if (nosimilarWithSpotify.size > 0) {
+      console.log(`🎵 [SPOTIFY-DIRECT] ${nosimilarWithSpotify.size} artist(s) will use Spotify top tracks (wrong/missing SC profile): [${[...nosimilarWithSpotify].join(', ')}]`);
+    }
+
     // Map to recommendedTracks (ISRC + releaseDate passed through for exact lookup and era filtering)
     // Filter out any songs with missing names to prevent malformed Spotify searches
     // Also pre-filter by era using SoundCharts' original releaseDate — this avoids the
@@ -6342,6 +6358,8 @@ Respond ONLY with valid JSON:
     let recommendedTracks = soundChartsDiscoveredSongs
       .filter(scSong => {
         if (!scSong.name || !scSong.name.trim()) return false;
+        // Skip songs from wrong-profile SC artists — they'll be sourced from Spotify directly
+        if (nosimilarWithSpotify.has((scSong.artistName || '').toLowerCase())) return false;
         if (scSong.releaseDate && (eraMin || eraMax)) {
           const year = parseInt(scSong.releaseDate.substring(0, 4));
           if (eraMin && year < eraMin) {
@@ -6750,6 +6768,33 @@ Return ONLY valid JSON:
         console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
         return true;
       };
+
+      // ── Spotify-direct top tracks for reference artists with wrong/missing SC profile ──
+      // These artists were filtered out of recommendedTracks above; we fetch their actual
+      // top tracks from Spotify instead of relying on the mismatched SC artist profile.
+      if (platform === 'spotify' && nosimilarWithSpotify.size > 0) {
+        for (const artistLower of nosimilarWithSpotify) {
+          const spotifyArtistId = confirmedSpotifyArtistIds[artistLower];
+          if (!spotifyArtistId) continue;
+          const artistDisplay = referenceSongs0.find(r => r.artist.toLowerCase() === artistLower)?.artist || artistLower;
+          try {
+            console.log(`🎵 [SPOTIFY-DIRECT] Fetching top tracks for "${artistDisplay}" (${spotifyArtistId})...`);
+            const topTracksRes = await userSpotifyApi.getArtistTopTracks(spotifyArtistId, 'US');
+            const topTracks = topTracksRes.body.tracks || [];
+            console.log(`  → ${topTracks.length} top tracks for "${artistDisplay}"`);
+            for (const t of topTracks) {
+              const syntheticSong = {
+                track: t.name, artist: artistDisplay,
+                isrc: t.external_ids?.isrc || null,
+                releaseDate: t.album?.release_date || null,
+              };
+              await validateAndAdd(t, syntheticSong, platform);
+            }
+          } catch (err) {
+            console.log(`⚠️  [SPOTIFY-DIRECT] Failed for "${artistDisplay}": ${err.message}`);
+          }
+        }
+      }
 
       // Retry wrapper and error formatter — shared by Spotify and Apple Music search loops.
       // Defined here (outside the platform branch) so both branches can reference them.
