@@ -912,6 +912,26 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
       const titleNorm = title.toLowerCase().replace(/[^a-z0-9]/g, '');
       const prefNorms = (preferredGenres || []).map(g => g.toLowerCase());
 
+      // Priority -1: Spotify artist ID match at the artist profile level — strongest signal.
+      // When multiple SC artists share a name (e.g. R&B "Keffer" vs electronic "Keffer"),
+      // check which SC artist profile has a Spotify link matching our confirmed Spotify artist ID.
+      // This works even when the reference song isn't in the SC artist's top-50 songs.
+      if (confirmedSpotifyArtistId) {
+        for (const candidate of candidates) {
+          try {
+            const scSpotifyArtistId = await getSoundChartsArtistPlatformId(candidate.uuid, 'spotify');
+            if (scSpotifyArtistId && scSpotifyArtistId === confirmedSpotifyArtistId) {
+              console.log(`✓ SoundCharts artist-fallback: Spotify artist ID match at profile level → "${candidate.name}" (${confirmedSpotifyArtistId}) — UUID ${candidate.uuid}`);
+              // Grab any song from this artist for the songUuid (used for Spotify QA downstream)
+              const songs = await getSoundChartsArtistSongs(candidate.uuid, 5);
+              const result = { songUuid: songs[0]?.uuid || null, artistUuid: candidate.uuid, artistName: candidate.name };
+              setSCCache(cacheKey, result);
+              return result;
+            }
+          } catch (e) { /* fall through */ }
+        }
+      }
+
       // Collect ALL candidates that have a matching song, then prefer the one
       // whose SC genres overlap with the caller's genre hint (e.g. "trap soul")
       // so we don't grab a genre-homonymous artist (e.g. an electro "Keffer"
@@ -1032,6 +1052,49 @@ async function getSoundChartsSongPlatformId(songUuid, scPlatform) {
     return null;
   } catch (error) {
     console.log(`⚠️  SoundCharts identifiers error for UUID ${songUuid} (${scPlatform}): ${error.message}`);
+    setSCCache(cacheKey, null);
+    return null;
+  }
+}
+
+// Look up an artist's platform identifier (e.g. Spotify artist ID) via SC artist identifiers API.
+// Mirrors getSoundChartsSongPlatformId but for the artist resource.
+async function getSoundChartsArtistPlatformId(artistUuid, scPlatform) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey || !artistUuid) return null;
+
+  const cacheKey = `artist-platformid:${scPlatform}:${artistUuid}`;
+  const cached = getSCCache(cacheKey);
+  if (cached !== undefined) return cached;
+
+  try {
+    await throttleSoundCharts();
+    const response = await axios.get(
+      `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/identifiers`,
+      {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+        params: { platform: scPlatform, onlyDefault: true, offset: 0, limit: 5 },
+        timeout: 10000
+      }
+    );
+    const items = response.data?.items || [];
+    const platformItem = items.find(item =>
+      (item.platform || '').toLowerCase() === scPlatform ||
+      (item.identifier || '').includes(scPlatform)
+    );
+    if (platformItem) {
+      let id = platformItem.identifier || platformItem.id || platformItem.value || null;
+      if (scPlatform === 'spotify' && id && id.includes('spotify.com/artist/')) {
+        id = id.split('spotify.com/artist/')[1].split('?')[0];
+      }
+      setSCCache(cacheKey, id);
+      return id;
+    }
+    setSCCache(cacheKey, null);
+    return null;
+  } catch (error) {
+    console.log(`⚠️  SoundCharts artist identifiers error for UUID ${artistUuid} (${scPlatform}): ${error.message}`);
     setSCCache(cacheKey, null);
     return null;
   }
