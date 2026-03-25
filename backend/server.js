@@ -5747,6 +5747,16 @@ DO NOT include any text outside the JSON.`
               } else if (scMappedSpotifyArtistId) {
                 console.log(`✓ Spotify QA passed for "${refSong.artist}": SC song maps to correct Spotify artist ${scMappedSpotifyArtistId}`);
               }
+            } else {
+              // SC artist has no Spotify track mapping — likely the wrong artist profile
+              // (e.g. an electronic artist with the same name who isn't on Spotify).
+              // Mark NOSIMILAR so we skip their genre/similar data but still attempt to
+              // fetch their songs (which will mostly 404 on Spotify, harmless).
+              console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping — SC artist likely wrong profile, marking NOSIMILAR`);
+              const existing = confirmedArtistUuids[refSong.artist.toLowerCase()];
+              if (existing && existing !== 'INVALID' && !String(existing).startsWith('NOSIMILAR:')) {
+                confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
+              }
             }
           } catch (qaErr) {
             console.log(`⚠️  Spotify QA check failed for "${refSong.artist}": ${qaErr.message} — keeping SC UUID`);
