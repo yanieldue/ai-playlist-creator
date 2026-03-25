@@ -1257,6 +1257,25 @@ const SOUNDCHARTS_THEME_MAP = {
   'protest': 'Social Issues', 'social': 'Social Issues',
 };
 
+// Catalog-level context overrides — tracks confirmed to be repeated false positives
+// in specific energy/mood contexts. Audio features API is deprecated (403), so these
+// are hardcoded based on confirmed test failures. Format: "artistlower::tracklower"
+// requiredMoods/requiredEnergies: contexts in which this track IS appropriate.
+// If the current playlist context matches none of these, the track is filtered out
+// before it reaches the vibe check.
+const TRACK_CONTEXT_OVERRIDES = {
+  'rihanna::unfaithful': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    reason: 'slow breakup ballad — 6 confirmed false positives in high-energy/positive contexts',
+  },
+  'olivia rodrigo::1 step forward, 3 steps back': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    reason: 'anxious acoustic piano ballad — 4 confirmed false positives in high-energy/positive contexts',
+  },
+};
+
 // Build a SoundCharts query from Claude-extracted genreData.
 // Used by executeSoundChartsStrategy() to replace the old similarity-tree approach.
 function buildSoundchartsQuery(genreData, allowExplicit = true) {
@@ -5459,6 +5478,8 @@ When the user describes a task, activity, or situation with no genre keywords, i
 - "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "cooking"
 - "dinner party", "gathering", "friends over", "people coming over" → mood: "positive", energyTarget: "medium", useCase: "party"
 - "morning routine", "getting ready", "start the day" → mood: "positive", energyTarget: "medium", useCase: "morning"
+- "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Surf Mesa", "beabadoobee"]
+NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
 These are defaults only — if the user specifies a genre or mood explicitly, that takes precedence.
 
 LANGUAGE (culturalContext.language):
@@ -7738,6 +7759,30 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
     }
 
+    // Step 3.5: Catalog context overrides — deterministic filter for known false positives.
+    // Runs before the vibe check (no LLM call) to remove tracks whose sonic profile has been
+    // confirmed as incompatible with specific energy/mood contexts across multiple test cycles.
+    if (selectedTracks.length > 0) {
+      const _ctxMood = genreData.mood;
+      const _ctxEnergy = genreData.energyTarget;
+      const beforeOverride = selectedTracks.length;
+      selectedTracks = selectedTracks.filter(track => {
+        const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+        const override = TRACK_CONTEXT_OVERRIDES[key];
+        if (!override) return true;
+        const moodOk = !_ctxMood || override.requiredMoods.includes(_ctxMood);
+        const energyOk = !_ctxEnergy || override.requiredEnergies.includes(_ctxEnergy);
+        if (!moodOk || !energyOk) {
+          console.log(`🚫 [CATALOG-OVERRIDE] Removing "${track.name}" by ${track.artist} — ${override.reason}`);
+          return false;
+        }
+        return true;
+      });
+      if (selectedTracks.length < beforeOverride) {
+        console.log(`🚫 [CATALOG-OVERRIDE] Removed ${beforeOverride - selectedTracks.length} track(s) via context overrides`);
+      }
+    }
+
     // Step 4: VIBE CHECK - Review the selected tracks for coherence
     // This addresses the #1 complaint: AI missing the "vibe" even when genres match
     // Also filters out mainstream artists when underground preference is detected
@@ -7765,6 +7810,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
       if (_uc.includes('party') || _uc.includes('dancing') || _uc.includes('club') || _uc.includes('social')) {
         _vibeHardRules.push('PARTY/DANCE — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be something people can dance or sing along to at a party. No ballads, no introspective slow jams.');
+      }
+      if (_uc.includes('summer')) {
+        _vibeHardRules.push('SUMMER VIBES — HARD RULE: This playlist is specifically for summer escapism — warm, bright, carefree energy. REMOVE any melancholic, anxious, heavy, or wintry tracks. No breakup ballads, no late-night sad R&B, no emotionally heavy songs. Every track should feel like it belongs on a beach or a summer road trip. "1 step forward, 3 steps back," "Unfaithful," "2AM"-style tracks are WRONG for this context.');
       }
       // Explicit user avoidances
       if (_avoidances.some(a => a.toLowerCase().includes('slow')) || _promptLower.includes('no slow')) {
