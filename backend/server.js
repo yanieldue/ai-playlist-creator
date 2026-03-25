@@ -5986,7 +5986,31 @@ DO NOT include any text outside the JSON.`
                   confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
                 }
               } else {
-                console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping but Spotify artist confirmed — SC data gap, keeping artist UUID`);
+                // Spotify artist confirmed but SC song has no Spotify link.
+                // Could be a SC data gap (right artist) OR the wrong SC profile that also has no Spotify link.
+                // Disambiguate using genre: if the SC artist's genres have zero overlap with the
+                // playlist's expected genres, it's almost certainly the wrong profile (e.g. electronic
+                // Keffer when we want R&B Keffer) — mark NOSIMILAR so Spotify top tracks are used instead.
+                const scArtistUuid = confirmedArtistUuids[refSong.artist.toLowerCase()];
+                let scGenres = [];
+                try {
+                  const scArtistInfo = await getSoundChartsArtistInfoByUuid(scArtistUuid, refSong.artist);
+                  scGenres = scArtistInfo?.genres || [];
+                } catch (_) {}
+                const playlistGenreNorms = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])]
+                  .filter(Boolean).map(g => g.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                const scGenreNorms = scGenres.map(g => g.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                const hasGenreOverlap = playlistGenreNorms.length === 0 || scGenreNorms.length === 0 ||
+                  scGenreNorms.some(sg => playlistGenreNorms.some(pg => sg.includes(pg) || pg.includes(sg)));
+                if (!hasGenreOverlap) {
+                  console.log(`⚠️  SC artist genre mismatch for "${refSong.artist}": SC genres [${scGenres.join(', ')}] vs playlist [${[genreData.primaryGenre, ...(genreData.secondaryGenres||[])].filter(Boolean).join(', ')}] — marking NOSIMILAR, will use Spotify top tracks instead`);
+                  const existing = confirmedArtistUuids[refSong.artist.toLowerCase()];
+                  if (existing && existing !== 'INVALID' && !String(existing).startsWith('NOSIMILAR:')) {
+                    confirmedArtistUuids[refSong.artist.toLowerCase()] = 'NOSIMILAR:' + existing;
+                  }
+                } else {
+                  console.log(`⚠️  SC song for "${refSong.artist}" has no Spotify mapping but Spotify artist confirmed — SC data gap, keeping artist UUID`);
+                }
               }
             }
           } catch (qaErr) {
