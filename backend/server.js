@@ -7511,13 +7511,14 @@ Tracks to check:
 ${suppNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
 List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
-Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
+IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no track names, no reasoning. Examples of valid responses: "NONE" or "2" or "1, 3, 4".`
                   }]
                 });
                 const _suppFilterText = _suppFilterResp.content[0]?.text?.trim() || 'NONE';
                 console.log(`🔍 Post-supplement filter: ${_suppFilterText}`);
                 if (_suppFilterText.toUpperCase() !== 'NONE') {
-                  const _suppBadNums = _suppFilterText.split(/[,\s]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= suppNewTracks.length);
+                  // Use regex to extract standalone numbers — avoids picking up list markers like "1." or "2."
+                  const _suppBadNums = (_suppFilterText.match(/(?<![.\d])(\d+)(?![.\d])/g) || []).map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= suppNewTracks.length);
                   if (_suppBadNums.length > 0) {
                     const _suppBadIndices = new Set(_suppBadNums.map(n => _preSupplementCount + n - 1));
                     const _suppRemovedNames = [..._suppBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
@@ -7641,13 +7642,14 @@ Tracks to check:
 ${gfNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
 List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
-Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
+IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no track names, no reasoning. Examples of valid responses: "NONE" or "2" or "1, 3, 4".`
                   }]
                 });
                 const _gfFilterText = _gfFilterResp.content[0]?.text?.trim() || 'NONE';
                 console.log(`🔍 Post-gap-fill filter: ${_gfFilterText}`);
                 if (_gfFilterText.toUpperCase() !== 'NONE') {
-                  const _gfBadNums = _gfFilterText.split(/[,\s]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= gfNewTracks.length);
+                  // Use regex to extract standalone numbers — avoids picking up list markers like "1." or "2."
+                  const _gfBadNums = (_gfFilterText.match(/(?<![.\d])(\d+)(?![.\d])/g) || []).map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= gfNewTracks.length);
                   if (_gfBadNums.length > 0) {
                     const _gfBadIndices = new Set(_gfBadNums.map(n => _preGapFillCount + n - 1));
                     const _gfRemovedNames = [..._gfBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
