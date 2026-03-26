@@ -258,6 +258,13 @@ class DatabaseService {
     );
   }
 
+  async markTrialUsed(email) {
+    await pool.query(
+      `UPDATE users SET trial_used = TRUE, updated_at = NOW() WHERE email = $1`,
+      [email]
+    );
+  }
+
   async updateStripeCustomer(email, stripeCustomerId) {
     await pool.query(
       `UPDATE users SET stripe_customer_id = $1, updated_at = NOW() WHERE email = $2`,
