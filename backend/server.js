@@ -65,6 +65,11 @@ app.use(cors({
       return callback(null, true);
     }
 
+    // Allow Vercel preview deployments for this project
+    if (/^https:\/\/ai-playlist-creator-7cgm.*\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
     // Allow all other origins in development
     if (process.env.NODE_ENV !== 'production') {
       return callback(null, true);
