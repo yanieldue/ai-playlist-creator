@@ -7330,6 +7330,19 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
         // Only take the early return if we have enough tracks — otherwise fall through to fallback.
         if (selectedTracks.length >= Math.min(songCount, 15)) {
+          // Helper: normalized key used by the final dedup (mirrors logic at end of this block).
+          // Pre-populate from already-selected tracks so supplement/gap fill don't add
+          // variant titles (e.g. "BATTER UP" when "BATTER UP (7 ver.)" is already chosen)
+          // that would be silently removed by the final dedup, leaving the count short.
+          const _normTitle = (t) => (t || '').toLowerCase()
+            .replace(/\s*[\(\[].*?[\)\]]/g, '')
+            .replace(/\s*-\s*(remix|edit|mix|version|live|acoustic|instrumental|sped.?up|slowed|karaoke|radio|extended|remaster).*$/i, '')
+            .replace(/\s+/g, ' ').trim();
+          const _normArtist = (a) => (a || '').toLowerCase()
+            .split(/\s*(?:feat\.|ft\.|featuring)\s*/i)[0]
+            .split(/\s*&\s*/)[0].trim();
+          const seenNormKeys = new Set(selectedTracks.map(t => `${_normTitle(t.name)}::${_normArtist(t.artist)}`));
+
           // Supplement with more songs if short of target.
           if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const needed = songCount - selectedTracks.length;
@@ -7408,6 +7421,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
                       continue;
                     }
                   }
+                  const _suppNormKey = `${_normTitle(track.name)}::${_normArtist(track.artists?.[0]?.name || track.artist || '')}`;
+                  if (seenNormKeys.has(_suppNormKey)) continue;
+                  seenNormKeys.add(_suppNormKey);
                   seenTrackIds.add(track.id);
                   seenSupplementArtists.add((song.artistName || '').toLowerCase());
                   selectedTracks.push({
@@ -7487,6 +7503,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
                       continue;
                     }
                   }
+                  const _gfNormKey = `${_normTitle(track.name)}::${_normArtist(track.artists?.[0]?.name || track.artist || '')}`;
+                  if (seenNormKeys.has(_gfNormKey)) continue;
+                  seenNormKeys.add(_gfNormKey);
                   seenTrackIds.add(track.id);
                   selectedTracks.push({
                     id: track.id, name: track.name,
