@@ -1287,9 +1287,11 @@ const TRACK_CONTEXT_OVERRIDES = {
   // Added 2026-03-25. Slow breakup ballad (2006). Popularity: 74.
   // False positives in: Prompt 73 (pregame), Prompt 74 (dinner party), Prompt 82 (summer),
   // Prompt D (high-energy pregame), Prompts 84/86/88 — 10 confirmed appearances across test suite.
+  // blockedUseCases provides deterministic block even when mood/energy aren't extracted.
   'rihanna::unfaithful': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'slow breakup ballad — 10 confirmed false positives in high-energy/positive contexts',
   },
   // Added 2026-03-25. Anxious acoustic piano ballad (2021). Popularity: 78.
@@ -1298,6 +1300,7 @@ const TRACK_CONTEXT_OVERRIDES = {
   'olivia rodrigo::1 step forward, 3 steps back': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'anxious acoustic piano ballad — 4 confirmed false positives in high-energy/positive contexts',
   },
   // Added 2026-03-26. Melancholic indie-pop breakup song (2022). Popularity: 90.
@@ -1306,6 +1309,7 @@ const TRACK_CONTEXT_OVERRIDES = {
   'harry styles::as it was': {
     requiredMoods: ['melancholic', 'neutral'],
     requiredEnergies: ['low', 'medium'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'melancholic indie-pop breakup song — 3 confirmed false positives in high-energy contexts',
   },
   // Added 2026-03-26. Slow acoustic ballad variant of "Bad Decisions". Popularity: ~60.
@@ -1313,6 +1317,7 @@ const TRACK_CONTEXT_OVERRIDES = {
   'benny blanco::bad decisions - acoustic': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'acoustic ballad variant — wrong for any high-energy/party/workout context',
   },
   // Added 2026-03-26. Soft acoustic-pop ballad (2022). Popularity: ~75.
@@ -1321,6 +1326,7 @@ const TRACK_CONTEXT_OVERRIDES = {
   'sam smith::all this madness': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'slow emotional ballad — wrong for summer/party/workout contexts',
   },
 };
@@ -5329,7 +5335,7 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // ── Age-to-era preprocessing ──────────────────────────────────────────────
+    // ── Age-to-era preprocessing ─────���────────────────────────────────────────
     // Detect "I'm X, take me back to being Y" or "I was 16 in [year]" patterns
     // and inject the computed year range into the prompt so Claude doesn't have
     // to do the math (it often fails). Current year is used as reference.
@@ -5564,7 +5570,7 @@ USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
 When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
 - "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "party", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
 - "pregame", "hype playlist", "banger", "bangers", "going out tonight", "turn up", "turn up tonight", "night out", "we're going out", "hard hitting", "hard-hitting", "slap", "slaps", "absolute banger" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party"
-- "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout"
+- "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents. DO NOT pick Ed Sheeran, OneRepublic, Sia, Kylie Minogue, Olly Alexander, Imagine Dragons (ballads), or any artist whose catalog skews slow/emotional.
 - "study", "focus", "deep work", "coding", "concentration", "homework" → mood: "neutral", energyTarget: "low", useCase: "focus"
 - "drive", "road trip", "long drive", "commute" → mood: "positive", energyTarget: "medium", useCase: "chill"
 - "relax", "chill out", "wind down after work", "easy listening", "lazy Sunday" → mood: "positive", energyTarget: "low", useCase: "chill"
@@ -7450,7 +7456,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   if (_suppOverride) {
                     const _suppMoodOk = !genreData.mood || _suppOverride.requiredMoods.includes(genreData.mood);
                     const _suppEnergyOk = !genreData.energyTarget || _suppOverride.requiredEnergies.includes(genreData.energyTarget);
-                    if (!_suppMoodOk || !_suppEnergyOk) {
+                    const _suppUcBlocked = _suppUseCase && (_suppOverride.blockedUseCases || []).includes(_suppUseCase);
+                    if (_suppUcBlocked || !_suppMoodOk || !_suppEnergyOk) {
                       console.log(`🚫 [CATALOG-OVERRIDE/SUPP] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} — ${_suppOverride.reason}`);
                       continue;
                     }
@@ -7487,7 +7494,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
           if (_suppUseCase && _suppNewCount > 0) {
             const _suppRuleMap = {
               workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo — only high-energy, pump-up tracks belong here. Specific tracks to REMOVE: Rihanna "Unfaithful" (slow ballad), Rihanna "Stay" (slow ballad), Harry Styles "As It Was" (melancholic mid-tempo), SZA "2AM" (slow R&B), SZA "20 Something" (slow R&B), SZA "30 For 30" (slow duet), Khalid "9.13" (slow), Khalid "8TEEN" (mid-tempo), Sam Smith "All This Madness" (ballad), Ed Sheeran "Perfect" (ballad), Lewis Capaldi "Someone You Loved" (ballad), Dua Lipa "Anything For Love" (ballad), Lady Gaga "1000 Doves" (power ballad), benny blanco "Bad Decisions - Acoustic" (acoustic ballad), The Weeknd "A Lonely Night" (slow R&B), The Weeknd "A Lesser Man" (slow R&B), Sia "1+1" (ballad), Sia "2 Minutes Til New Years" (slow ballad), Camila Cabello "All These Years" (slow), Akon "Mama Africa" (slow world pop).',
-              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Every song must be high-energy. Specific tracks to REMOVE: Rihanna "Unfaithful" (slow ballad), Rihanna "Stay" (slow ballad), Harry Styles "As It Was" (melancholic), The Weeknd "A Lonely Night" (slow R&B), The Weeknd "A Lesser Man" (slow R&B), SZA "2AM" (slow), SZA "20 Something" (slow), SZA "30 For 30" (slow duet), Khalid "8TEEN" (mid-tempo), Sam Smith ballads, Lewis Capaldi "Someone You Loved" (ballad), Dua Lipa "Anything For Love" (ballad), Ed Sheeran "Perfect" (ballad), Sia "1+1" (ballad), Lady Gaga "1000 Doves" (power ballad), benny blanco "Bad Decisions - Acoustic" (acoustic ballad), Camila Cabello "All These Years" (slow).',
+              party: 'This playlist is for a party/pregame. REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally associated with upbeat music. The test is: would a DJ play this to keep a crowd dancing? If not, REMOVE it. Examples of types to REMOVE: slow ballads, emotional pop, mid-tempo breakup songs, anthemic but slow builds, tearjerker intros. Specific tracks to REMOVE: Rihanna "Unfaithful", Rihanna "Stay", Harry Styles "As It Was", The Weeknd "A Lonely Night", The Weeknd "A Lesser Man", SZA "2AM", SZA "20 Something", Sam Smith ballads, Lewis Capaldi "Someone You Loved", Dua Lipa "Anything For Love", Ed Sheeran "Perfect", Sia "1+1", Sia "2 Minutes Til New Years", Avicii "Addicted To You", Avicii "Waiting For Love", OneRepublic "All The Right Moves", benny blanco "Bad Decisions - Acoustic".',
               summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Specific tracks to REMOVE: Rihanna "Unfaithful" (sad ballad), Harry Styles "As It Was" (melancholic breakup), SZA "2AM" (late-night slow), SZA "30 For 30" (sad duet), Olivia Rodrigo "All I Want" (slow sad), Taylor Swift "Slut!" (slow sad), Sam Smith ballads, Lewis Capaldi "Someone You Loved" (deeply melancholic), The Weeknd "A Lonely Night" (slow), Dua Lipa "Anything For Love" (ballad).',
               focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, aggressive, or attention-grabbing track. Only calm, background-friendly music.',
               sleep: 'This playlist is for sleeping. REMOVE any energetic, upbeat, or attention-grabbing track. Only soothing, calm, minimal tracks.',
@@ -7583,7 +7590,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                   if (_gfOverride) {
                     const _gfMoodOk = !genreData.mood || _gfOverride.requiredMoods.includes(genreData.mood);
                     const _gfEnergyOk = !genreData.energyTarget || _gfOverride.requiredEnergies.includes(genreData.energyTarget);
-                    if (!_gfMoodOk || !_gfEnergyOk) {
+                    const _gfUcBlocked = _gfUseCase && (_gfOverride.blockedUseCases || []).includes(_gfUseCase);
+                    if (_gfUcBlocked || !_gfMoodOk || !_gfEnergyOk) {
                       console.log(`🚫 [CATALOG-OVERRIDE/GAP] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} — ${_gfOverride.reason}`);
                       continue;
                     }
@@ -7618,7 +7626,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           if (_gfUseCase && _gfNewCount > 0) {
             const _gfRuleMap = {
               workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo. Examples to REMOVE: Harry Styles "As It Was", Rihanna "Unfaithful", SZA "2AM", Khalid "9.13", Sam Smith ballads, Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Dua Lipa "Anything For Love", Lady Gaga "1000 Doves", Sia "1+1", The Weeknd "A Lonely Night".',
-              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Examples to REMOVE: Harry Styles "As It Was", Rihanna "Unfaithful", The Weeknd "A Lonely Night", SZA "2AM", Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Sia "1+1", benny blanco "Bad Decisions - Acoustic".',
+              party: 'This playlist is for a party/pregame. REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally associated with upbeat music. The test: would a DJ play this to keep a crowd dancing? If not, REMOVE it. Examples to REMOVE: Rihanna "Unfaithful", Harry Styles "As It Was", The Weeknd "A Lonely Night", SZA "2AM", Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Sia "1+1", Avicii "Addicted To You", OneRepublic "All The Right Moves", benny blanco "Bad Decisions - Acoustic".',
               summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Examples to REMOVE: Harry Styles "As It Was", Lewis Capaldi "Someone You Loved", Sam Smith ballads, Olivia Rodrigo "All I Want", Rihanna "Unfaithful", SZA "2AM", The Weeknd "A Lonely Night".',
               focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, or attention-grabbing track. Only calm background music.',
               sleep: 'This playlist is for sleeping. REMOVE any energetic or upbeat track. Only soothing, calm, minimal tracks.',
@@ -8014,6 +8022,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
     if (selectedTracks.length > 0) {
       const _ctxMood = genreData.mood;
       const _ctxEnergy = genreData.energyTarget;
+      const _ctxUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
       const beforeOverride = selectedTracks.length;
       selectedTracks = selectedTracks.filter(track => {
         const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
@@ -8021,7 +8030,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
         if (!override) return true;
         const moodOk = !_ctxMood || override.requiredMoods.includes(_ctxMood);
         const energyOk = !_ctxEnergy || override.requiredEnergies.includes(_ctxEnergy);
-        if (!moodOk || !energyOk) {
+        // blockedUseCases: deterministic block regardless of whether mood/energy was extracted
+        const useCaseBlocked = _ctxUseCase && (override.blockedUseCases || []).includes(_ctxUseCase);
+        if (useCaseBlocked || !moodOk || !energyOk) {
           console.log(`🚫 [CATALOG-OVERRIDE] Removing "${track.name}" by ${track.artist} — ${override.reason}`);
           return false;
         }
