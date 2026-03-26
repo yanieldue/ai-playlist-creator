@@ -1954,6 +1954,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       }
       } // end else (traversal)
       console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
+      console.log(`🌱 Seeds: [${seedInfos.map(s => s.name).join(', ')}]`);
 
       // Phase 2b: always expand with depth-2 similar artists (similar artists of the similar
       // artists) for more diversity. Capped at DEPTH2_MAX new artists to keep API calls bounded.
