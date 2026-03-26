@@ -7461,7 +7461,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 era: genreData.era,
                 mood: genreData.mood,              // inherit — prevents off-vibe global hits
                 energyTarget: genreData.energyTarget,
-                contextClues: { useCase: genreData.contextClues?.useCase }, // drives SC theme filter
+                contextClues: {}, // omit useCase — theme filters (e.g. Sport) are too narrow and cause 0 results; energy/mood filters are sufficient
                 // Preserve popularity preference so career stage filter applies
                 // (prevents unrelated mainstream artists like Ed Sheeran appearing)
                 trackConstraints: { popularity: genreData.trackConstraints?.popularity },
@@ -7920,7 +7920,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
       // Use-case hard constraint rules — useCase values are canonical (see extraction schema)
       if (_uc === 'workout') {
-        _vibeHardRules.push('WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must feel pump-up and high energy. If it sounds like a breakup song, a late-night vibe, or could play at a funeral, cut it immediately. Think: does this make you want to sprint? If no, cut it.');
+        _vibeHardRules.push('WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must feel pump-up and high energy. Think: does this make you want to sprint? If no, cut it. Examples to REMOVE: SZA "30 For 30" (slow emotional duet), SZA "20 Something" (introspective slow R&B), Khalid "8TEEN" (coming-of-age mid-tempo), Khalid "Young Dumb & Broke" (mid-tempo), The Weeknd "A Lesser Man" (slow R&B), The Weeknd "Call Out My Name" (slow ballad), Sia "3 Minutes \'Til New Years" (slow ballad), Dua Lipa "Anything For Love" (mid-tempo ballad), Camila Cabello "Am I Wrong" (slow pop), Akon "Mama Africa" (slow world pop), Lady Gaga "1000 Doves" (power ballad), 50 Cent "21 Questions" (slow R&B), benny blanco "Bad Decisions" (mid-tempo pop) — all WRONG for workout. Keep high-energy tracks like: Eminem "Till I Collapse", Macklemore "Ain\'t Gonna Die Tonight", Marshmello dance tracks, Imagine Dragons up-tempo rock.');
       }
       if (_uc === 'focus') {
         _vibeHardRules.push('FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting songs. No heavy bass drops, intense rap verses, or anything that would pull attention away from deep work. Only calm, background-friendly music that blends into the background.');
@@ -7929,7 +7929,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
         _vibeHardRules.push('SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake. Only the most soothing, minimal, ultra-calm tracks.');
       }
       if (_uc === 'party') {
-        _vibeHardRules.push('PARTY/PREGAME — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be high-energy and something people can move to. No ballads, no introspective slow jams, no emotionally heavy songs. Slow Kanye (e.g. "30 Hours"), Sia ballads (e.g. "1+1"), Lady Gaga film covers, Camila Cabello slow cuts — all WRONG for this context. If you would not play it to hype up a crowd, remove it.');
+        _vibeHardRules.push('PARTY/PREGAME — HARD RULE: REMOVE any slow, sad, ambient, or low-energy tracks. Every song must be high-energy and something people can move to. No ballads, no introspective slow jams, no emotionally heavy songs. Examples to REMOVE: slow Kanye (e.g. "30 Hours"), Sia ballads (e.g. "1+1", "3 Minutes \'Til New Years"), Lady Gaga film covers (e.g. "1000 Doves"), Camila Cabello slow cuts (e.g. "Am I Wrong"), SZA slow R&B (e.g. "30 For 30", "2AM", "20 Something"), Khalid slow cuts (e.g. "8TEEN"), The Weeknd R&B ballads (e.g. "A Lonely Night", "A Lesser Man"), Rihanna slow songs (e.g. "Unfaithful", "Stay"), Dua Lipa ballads (e.g. "Anything For Love"), benny blanco mid-tempo pop (e.g. "Bad Decisions") — all WRONG for party. If you would not play it to hype up a crowd, remove it.');
       }
       if (_uc === 'summer') {
         _vibeHardRules.push('SUMMER VIBES — HARD RULE: This playlist is for warm, bright, carefree summer energy. REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy — regardless of season. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "All I Want" (Olivia Rodrigo), "Slut! (Taylor\'s Version)", "2AM" (SZA), "All This Madness" (Sam Smith) — all WRONG for this context. Every track should feel like it belongs on a beach or a summer road trip.');
