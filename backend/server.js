@@ -6836,8 +6836,9 @@ Return ONLY valid JSON:
         const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const reqNorm = norm(artistName);
         for (const t of items) {
-          const fn = norm(t.artists?.[0]?.name);
-          if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+          // Check all artists (primary + featured) — "Arrows" by Fences feat. Macklemore
+          const artistMatch = (t.artists || []).some(a => { const fn = norm(a.name); return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn); });
+          if (artistMatch) {
             console.log(`🔍 [TEXT] ${fLabel}`);
             return { track: t, usedExact: false };
           }
@@ -6874,10 +6875,12 @@ Return ONLY valid JSON:
           const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const reqNorm = norm(artistName);
           for (const t of (results || [])) {
-            const fn = norm(t.artists?.[0]?.name || t.artist);
             const nameLower = (t.name || '').toLowerCase();
             if (nameLower.includes(' / ') || /\[slowed|\(slowed|karaoke|orchestra version|\(mixed\)/i.test(t.name)) continue;
-            if (reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn)) {
+            // Check all artists (primary + featured) — some platforms list the featured artist as the credited artist
+            const artistNames = t.artists?.length ? t.artists.map(a => a.name) : [t.artist];
+            const artistMatch = artistNames.some(name => { const fn = norm(name); return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn); });
+            if (artistMatch) {
               console.log(`🔍 [TEXT] ${fLabel}`);
               return { track: t, usedExact: false };
             }
@@ -7128,22 +7131,16 @@ Return ONLY valid JSON:
             return null;
           }
 
-          // Text search: find a track that matches the requested artist
+          // Text search: find a track that matches the requested artist (check all artists, not just primary)
           const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
           for (const t of items) {
-            const foundArtistNorm = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-            if (requestedArtistNorm.length < 6) {
-              if (foundArtistNorm === requestedArtistNorm) {
-                console.log(`🔍 [TEXT] ${label}`);
-                return { track: t, usedExact: false };
-              }
-            } else {
-              if (foundArtistNorm === requestedArtistNorm ||
-                  foundArtistNorm.startsWith(requestedArtistNorm) ||
-                  requestedArtistNorm.startsWith(foundArtistNorm)) {
-                console.log(`🔍 [TEXT] ${label}`);
-                return { track: t, usedExact: false };
-              }
+            const artistMatch = (t.artists || []).some(a => {
+              const fn = (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              return requestedArtistNorm.length < 6 ? fn === requestedArtistNorm : fn === requestedArtistNorm || fn.startsWith(requestedArtistNorm) || requestedArtistNorm.startsWith(fn);
+            });
+            if (artistMatch) {
+              console.log(`🔍 [TEXT] ${label}`);
+              return { track: t, usedExact: false };
             }
           }
           const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
