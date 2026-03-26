@@ -11195,6 +11195,8 @@ app.post('/api/stripe/webhook', async (req, res) => {
       const user = await db.getUserByStripeCustomerId(sub.customer);
       if (user) {
         await db.updateSubscription(user.email, { subscriptionId: null, status: 'canceled', endsAt: null, plan: 'free' });
+        // Anyone who had a paid subscription (trial or direct) can't start a new free trial
+        await db.markTrialUsed(user.email);
         console.log(`✓ Stripe: downgraded ${user.email} to free`);
       }
     }
