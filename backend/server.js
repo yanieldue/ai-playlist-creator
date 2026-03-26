@@ -5399,7 +5399,7 @@ Respond ONLY with valid JSON in this format:
     "language": { "prefer": ["list of preferred languages, e.g. 'Spanish', 'Korean'"], "exclude": ["list of excluded languages"] }
   },
   "contextClues": {
-    "useCase": "canonical activity/context — MUST be one of: party | workout | focus | chill | sleep | summer | heartbreak | background | morning | null. Never invent new values. Map semantically using these examples: party (pregame, hype, banger, turn up, going out, club, dance, night out, bar, tailgate) | workout (gym, run, running, exercise, training, cardio, lifting) | focus (study, deep work, coding, concentration, homework, productivity) | chill (relax, winding down, lazy, easy listening, background, drive, road trip) | sleep (bedtime, falling asleep, wind down, nap, meditation) | summer (beach, sunny, warm, pool, tropical, vacation, july, august) | heartbreak (sad, breakup, crying, missing someone, emotional) | background (dinner, cooking, hosting, ambient, gathering, friends over) | morning (waking up, commute, getting ready, start the day). If genuinely ambiguous between two categories, return null — falling through to genre/mood is better than a wrong useCase.",
+    "useCase": "canonical activity/context — MUST be one of: party | workout | focus | chill | sleep | summer | heartbreak | background | morning | null. Never invent new values. Map semantically using these examples: party (pregame, hype, banger, bangers, turn up, turn up tonight, going out, we're going out, night out, club, dance, bar, tailgate, hard hitting, slaps, absolute banger) | workout (gym, run, running, exercise, training, cardio, lifting) | focus (study, deep work, coding, concentration, homework, productivity) | chill (relax, winding down, lazy, easy listening, background, drive, road trip) | sleep (bedtime, falling asleep, wind down, nap, meditation) | summer (beach, sunny, warm, pool, tropical, vacation, july, august) | heartbreak (sad, breakup, crying, missing someone, emotional) | background (dinner, cooking, hosting, ambient, gathering, friends over) | morning (waking up, commute, getting ready, start the day). If genuinely ambiguous between two categories, return null — falling through to genre/mood is better than a wrong useCase.",
     "audience": ["christian", "family", "youth", "clean"] or [],
     "avoidances": ["what NOT to include"]
   },
@@ -5540,7 +5540,7 @@ SONG COUNT:
 USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
 When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
 - "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "party", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
-- "pregame", "hype playlist", "banger", "going out tonight", "turn up", "night out" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party"
+- "pregame", "hype playlist", "banger", "bangers", "going out tonight", "turn up", "turn up tonight", "night out", "we're going out", "hard hitting", "hard-hitting", "slap", "slaps", "absolute banger" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party"
 - "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout"
 - "study", "focus", "deep work", "coding", "concentration", "homework" → mood: "neutral", energyTarget: "low", useCase: "focus"
 - "drive", "road trip", "long drive", "commute" → mood: "positive", energyTarget: "medium", useCase: "chill"
@@ -7054,6 +7054,13 @@ Return ONLY valid JSON:
         return String(err);
       };
 
+      // Collect 20% more tracks than needed when vibe check will run, so it has a buffer
+      // to trim bad tracks without falling back to supplement. Mirrors the selectionTarget
+      // logic at line ~7828 — keep in sync if that formula changes.
+      const _hasVibeReqs = (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer');
+      const _earlyStopTarget = _hasVibeReqs && !_phases ? Math.ceil(songCount * 1.2) : songCount;
+      console.log(`🎯 Track collection target: ${_earlyStopTarget} (songCount=${songCount}, vibeBuffer=${_hasVibeReqs && !_phases})`);
+
       if (platform === 'spotify') {
 
         // Per-song Spotify lookup (runs in parallel within each batch)
@@ -7121,7 +7128,7 @@ Return ONLY valid JSON:
         };
 
         // ── Phase B: batched parallel Spotify lookups ──
-        for (let i = 0; i < recommendedTracks.length && allTracks.length < songCount; i += BATCH_SIZE) {
+        for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
@@ -7134,7 +7141,7 @@ Return ONLY valid JSON:
           }));
 
           for (const { recommendedSong, found } of batchResults) {
-            if (allTracks.length >= songCount) break;
+            if (allTracks.length >= _earlyStopTarget) break;
             if (!found) { console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`); continue; }
 
             let { track } = found;
@@ -7152,7 +7159,7 @@ Return ONLY valid JSON:
             }
 
             if (!await validateAndAdd(track, recommendedSong, 'spotify')) continue;
-            if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Spotify tracks`); break; }
+            if (allTracks.length >= _earlyStopTarget) { console.log(`🎯 Early stop: reached ${_earlyStopTarget} matched Spotify tracks`); break; }
           }
         }
 
@@ -7207,7 +7214,7 @@ Return ONLY valid JSON:
         };
 
         // ── Phase B: batched parallel Apple Music lookups ──
-        for (let i = 0; i < recommendedTracks.length && allTracks.length < songCount; i += BATCH_SIZE) {
+        for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
@@ -7220,11 +7227,11 @@ Return ONLY valid JSON:
           }));
 
           for (const { recommendedSong, found } of batchResults) {
-            if (allTracks.length >= songCount) break;
+            if (allTracks.length >= _earlyStopTarget) break;
             if (!found) { console.log(`✗ Could not find: "${recommendedSong.track}" by ${recommendedSong.artist}`); continue; }
 
             if (!await validateAndAdd(found.track, recommendedSong, 'apple')) continue;
-            if (allTracks.length >= songCount) { console.log(`🎯 Early stop: reached ${songCount} matched Apple Music tracks`); break; }
+            if (allTracks.length >= _earlyStopTarget) { console.log(`🎯 Early stop: reached ${_earlyStopTarget} matched Apple Music tracks`); break; }
           }
         }
       }
@@ -7349,6 +7356,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
           const seenNormKeys = new Set(selectedTracks.map(t => `${_normTitle(t.name)}::${_normArtist(t.artist)}`));
 
           // Supplement with more songs if short of target.
+          const _preSupplementCount = selectedTracks.length;
           if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const needed = songCount - selectedTracks.length;
             console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${songCount}`);
@@ -7447,6 +7455,55 @@ Example response: [1, 2, 4, 5, 7, ...]`
               console.log(`🔁 After supplement: ${selectedTracks.length}/${songCount} tracks (${seenSupplementArtists.size} new artists added)`);
             } catch (suppFetchErr) {
               console.log('Supplement failed:', suppFetchErr.message);
+            }
+          }
+
+          // Post-supplement useCase filter — supplement tracks bypass the main vibe check,
+          // so run a targeted lightweight filter on newly added tracks to catch context mismatches
+          // (e.g. slow/sad songs in a workout or party playlist).
+          const _suppUseCase = genreData.contextClues.useCase;
+          const _suppNewCount = selectedTracks.length - _preSupplementCount;
+          if (_suppUseCase && _suppNewCount > 0) {
+            const _suppRuleMap = {
+              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo — only high-energy, pump-up tracks belong here.',
+              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Every song must be high-energy and something people can move to. No ballads, no slow jams.',
+              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Only warm, bright, carefree-feeling songs.',
+              focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, aggressive, or attention-grabbing track. Only calm, background-friendly music.',
+              sleep: 'This playlist is for sleeping. REMOVE any energetic, upbeat, or attention-grabbing track. Only soothing, calm, minimal tracks.',
+            };
+            const _suppRule = _suppRuleMap[_suppUseCase];
+            if (_suppRule) {
+              const suppNewTracks = selectedTracks.slice(_preSupplementCount);
+              console.log(`🔍 Post-supplement filter: checking ${suppNewTracks.length} new tracks against useCase "${_suppUseCase}"...`);
+              try {
+                const _suppFilterResp = await anthropic.messages.create({
+                  model: 'claude-haiku-4-5-20251001',
+                  max_tokens: 300,
+                  messages: [{
+                    role: 'user',
+                    content: `Context rule: ${_suppRule}
+
+Tracks to check:
+${suppNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+
+List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
+Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
+                  }]
+                });
+                const _suppFilterText = _suppFilterResp.content[0]?.text?.trim() || 'NONE';
+                console.log(`🔍 Post-supplement filter: ${_suppFilterText}`);
+                if (_suppFilterText.toUpperCase() !== 'NONE') {
+                  const _suppBadNums = _suppFilterText.split(/[,\s]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= suppNewTracks.length);
+                  if (_suppBadNums.length > 0) {
+                    const _suppBadIndices = new Set(_suppBadNums.map(n => _preSupplementCount + n - 1));
+                    const _suppRemovedNames = [..._suppBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
+                    console.log(`🔍 Post-supplement: removing ${_suppBadIndices.size} off-context tracks: ${_suppRemovedNames.join(', ')}`);
+                    selectedTracks = selectedTracks.filter((_, i) => !_suppBadIndices.has(i));
+                  }
+                }
+              } catch (suppFilterErr) {
+                console.log('Post-supplement filter failed (non-fatal):', suppFilterErr.message);
+              }
             }
           }
 
