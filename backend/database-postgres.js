@@ -183,6 +183,12 @@ async function migrateDatabase() {
       ADD COLUMN IF NOT EXISTS dark_mode BOOLEAN DEFAULT FALSE
     `);
 
+    // Add trial tracking column
+    await client.query(`
+      ALTER TABLE users
+      ADD COLUMN IF NOT EXISTS trial_used BOOLEAN DEFAULT FALSE
+    `);
+
     console.log('✓ PostgreSQL migrations complete');
   } catch (error) {
     console.error('Error running migrations:', error);
@@ -211,6 +217,7 @@ class DatabaseService {
              u.product_tour_completed as "productTourCompleted",
              u.allow_explicit as "allowExplicit",
              u.dark_mode as "darkMode",
+             u.trial_used as "trialUsed",
              u.created_at as "createdAt", u.updated_at as "updatedAt",
              COALESCE(cp.spotify, false) as spotify,
              COALESCE(cp.apple, false) as apple
@@ -236,6 +243,7 @@ class DatabaseService {
       productTourCompleted: row.productTourCompleted || false,
       allowExplicit: row.allowExplicit !== false, // default true
       darkMode: row.darkMode || false,
+      trialUsed: row.trialUsed || false,
       createdAt: row.createdAt,
       connectedPlatforms: {
         spotify: row.spotify,
