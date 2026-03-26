@@ -1286,11 +1286,11 @@ const SOUNDCHARTS_THEME_MAP = {
 const TRACK_CONTEXT_OVERRIDES = {
   // Added 2026-03-25. Slow breakup ballad (2006). Popularity: 74.
   // False positives in: Prompt 73 (pregame), Prompt 74 (dinner party), Prompt 82 (summer),
-  // Prompt D (high-energy pregame) — 6 confirmed appearances across test suite.
+  // Prompt D (high-energy pregame), Prompts 84/86/88 — 10 confirmed appearances across test suite.
   'rihanna::unfaithful': {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
-    reason: 'slow breakup ballad — 6 confirmed false positives in high-energy/positive contexts',
+    reason: 'slow breakup ballad — 10 confirmed false positives in high-energy/positive contexts',
   },
   // Added 2026-03-25. Anxious acoustic piano ballad (2021). Popularity: 78.
   // False positives in: Prompt 71 (nervous/excited), Prompt 73 (pregame), Prompt 80 (cooking),
@@ -1299,6 +1299,29 @@ const TRACK_CONTEXT_OVERRIDES = {
     requiredMoods: ['melancholic'],
     requiredEnergies: ['low'],
     reason: 'anxious acoustic piano ballad — 4 confirmed false positives in high-energy/positive contexts',
+  },
+  // Added 2026-03-26. Melancholic indie-pop breakup song (2022). Popularity: 90.
+  // False positives in: Prompt 84 run 2 (hype), Prompt 85 run 2 (turn up), Prompt 88 run 3 (gym) —
+  // 3 confirmed appearances in high-energy contexts. Acoustic and emotional, not a party/workout track.
+  'harry styles::as it was': {
+    requiredMoods: ['melancholic', 'neutral'],
+    requiredEnergies: ['low', 'medium'],
+    reason: 'melancholic indie-pop breakup song — 3 confirmed false positives in high-energy contexts',
+  },
+  // Added 2026-03-26. Slow acoustic ballad variant of "Bad Decisions". Popularity: ~60.
+  // False positives in: Prompt 84 run 2 (hype), Prompt 88 run 3 (gym) — acoustic = wrong for high-energy.
+  'benny blanco::bad decisions - acoustic': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    reason: 'acoustic ballad variant — wrong for any high-energy/party/workout context',
+  },
+  // Added 2026-03-26. Soft acoustic-pop ballad (2022). Popularity: ~75.
+  // False positives: summer playlists run 2-3 (Sam Smith is depth-2 from summer seed graph
+  // but consistently melancholic — no Sam Smith song belongs in summer/party/workout).
+  'sam smith::all this madness': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    reason: 'slow emotional ballad — wrong for summer/party/workout contexts',
   },
 };
 
@@ -5586,6 +5609,7 @@ These are used to find similar artists and build the playlist.
 - When neither of the above apply, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
 - REVEALED vs. STATED PREFERENCES: If the user states a self-label ("I only listen to rap", "I'm a country fan") BUT also names specific songs or artists that clearly contradict that label, trust the songs over the label. Example: "I only listen to rap but my favorites are Olivia Rodrigo, JVKE, and Taylor Swift" → the actual taste is bedroom pop/indie pop; set genre and seed artists based on the named songs, not the self-label. The songs don't lie.
 - EMOTIONAL STATE → SEED ARTISTS: When the user describes an emotional state with no genre keywords, infer appropriate artists. "Numb and empty after a breakup" → suggestedSeedArtists: ["Phoebe Bridgers", "The National", "Bon Iver", "Big Thief"]. "Need to clean my apartment, make time pass" → suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore"] with mood: "positive", energyTarget: "medium".
+- WORKOUT / HIGH-ENERGY → SEED ARTISTS: When useCase is "workout" or energyTarget is "high", suggestedSeedArtists MUST be demonstrably high-energy artists. Use artists known ONLY for pump-up music: Eminem, Kendrick Lamar, Travis Scott, 21 Savage, Lil Baby, Meek Mill, Skrillex, The Prodigy, Chemical Brothers, Rage Against the Machine, Metallica, Imagine Dragons, Marshmello, Calvin Harris, Tiësto. NEVER use The Weeknd, SZA, Khalid, Post Malone, Dua Lipa, Ed Sheeran, Sam Smith, Lewis Capaldi, or any artist primarily known for slow/mid-tempo songs — even if they occasionally have an upbeat track, their depth-2 similar-artist graph will pull in slow contamination. If the user names a soft artist ("gym playlist with Post Malone"), still pick high-energy artists for suggestedSeedArtists and keep Post Malone only in requestedArtists.
 Examples (no reference tracks):
 - "top pop songs" → suggestedSeedArtists: ["Taylor Swift", "Dua Lipa", "The Weeknd", "Harry Styles"]
 - "r&b for when I'm in my feels" → suggestedSeedArtists: ["SZA", "Daniel Caesar", "H.E.R.", "Brent Faiyaz"]
@@ -7465,9 +7489,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           if (_suppUseCase && _suppNewCount > 0) {
             const _suppRuleMap = {
-              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo — only high-energy, pump-up tracks belong here.',
-              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Every song must be high-energy and something people can move to. No ballads, no slow jams.',
-              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Only warm, bright, carefree-feeling songs.',
+              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo — only high-energy, pump-up tracks belong here. Specific tracks to REMOVE: Rihanna "Unfaithful" (slow ballad), Rihanna "Stay" (slow ballad), Harry Styles "As It Was" (melancholic mid-tempo), SZA "2AM" (slow R&B), SZA "20 Something" (slow R&B), SZA "30 For 30" (slow duet), Khalid "9.13" (slow), Khalid "8TEEN" (mid-tempo), Sam Smith "All This Madness" (ballad), Ed Sheeran "Perfect" (ballad), Lewis Capaldi "Someone You Loved" (ballad), Dua Lipa "Anything For Love" (ballad), Lady Gaga "1000 Doves" (power ballad), benny blanco "Bad Decisions - Acoustic" (acoustic ballad), The Weeknd "A Lonely Night" (slow R&B), The Weeknd "A Lesser Man" (slow R&B), Sia "1+1" (ballad), Sia "2 Minutes Til New Years" (slow ballad), Camila Cabello "All These Years" (slow), Akon "Mama Africa" (slow world pop).',
+              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Every song must be high-energy. Specific tracks to REMOVE: Rihanna "Unfaithful" (slow ballad), Rihanna "Stay" (slow ballad), Harry Styles "As It Was" (melancholic), The Weeknd "A Lonely Night" (slow R&B), The Weeknd "A Lesser Man" (slow R&B), SZA "2AM" (slow), SZA "20 Something" (slow), SZA "30 For 30" (slow duet), Khalid "8TEEN" (mid-tempo), Sam Smith ballads, Lewis Capaldi "Someone You Loved" (ballad), Dua Lipa "Anything For Love" (ballad), Ed Sheeran "Perfect" (ballad), Sia "1+1" (ballad), Lady Gaga "1000 Doves" (power ballad), benny blanco "Bad Decisions - Acoustic" (acoustic ballad), Camila Cabello "All These Years" (slow).',
+              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Specific tracks to REMOVE: Rihanna "Unfaithful" (sad ballad), Harry Styles "As It Was" (melancholic breakup), SZA "2AM" (late-night slow), SZA "30 For 30" (sad duet), Olivia Rodrigo "All I Want" (slow sad), Taylor Swift "Slut!" (slow sad), Sam Smith ballads, Lewis Capaldi "Someone You Loved" (deeply melancholic), The Weeknd "A Lonely Night" (slow), Dua Lipa "Anything For Love" (ballad).',
               focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, aggressive, or attention-grabbing track. Only calm, background-friendly music.',
               sleep: 'This playlist is for sleeping. REMOVE any energetic, upbeat, or attention-grabbing track. Only soothing, calm, minimal tracks.',
             };
@@ -7508,6 +7532,7 @@ Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
           }
 
           // Gap fill: if still short after supplement, pull from top_songs (different pool)
+          const _preGapFillCount = selectedTracks.length;
           if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const gapNeeded = songCount - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
@@ -7585,6 +7610,54 @@ Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
               console.log(`🔄 After gap fill: ${selectedTracks.length}/${songCount} tracks`);
             } catch (gapErr) {
               console.log('Gap fill failed:', gapErr.message);
+            }
+          }
+
+          // Post-gap-fill useCase filter — gap fill tracks also bypass the main vibe check,
+          // same contamination risk as supplement (e.g. "As It Was" entering via top_songs).
+          const _gfUseCase = genreData.contextClues.useCase;
+          const _gfNewCount = selectedTracks.length - _preGapFillCount;
+          if (_gfUseCase && _gfNewCount > 0) {
+            const _gfRuleMap = {
+              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo. Examples to REMOVE: Harry Styles "As It Was", Rihanna "Unfaithful", SZA "2AM", Khalid "9.13", Sam Smith ballads, Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Dua Lipa "Anything For Love", Lady Gaga "1000 Doves", Sia "1+1", The Weeknd "A Lonely Night".',
+              party: 'This playlist is for a party/pregame. REMOVE any slow, sad, ballad, or low-energy track. Examples to REMOVE: Harry Styles "As It Was", Rihanna "Unfaithful", The Weeknd "A Lonely Night", SZA "2AM", Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Sia "1+1", benny blanco "Bad Decisions - Acoustic".',
+              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Examples to REMOVE: Harry Styles "As It Was", Lewis Capaldi "Someone You Loved", Sam Smith ballads, Olivia Rodrigo "All I Want", Rihanna "Unfaithful", SZA "2AM", The Weeknd "A Lonely Night".',
+              focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, or attention-grabbing track. Only calm background music.',
+              sleep: 'This playlist is for sleeping. REMOVE any energetic or upbeat track. Only soothing, calm, minimal tracks.',
+            };
+            const _gfRule = _gfRuleMap[_gfUseCase];
+            if (_gfRule) {
+              const gfNewTracks = selectedTracks.slice(_preGapFillCount);
+              console.log(`🔍 Post-gap-fill filter: checking ${gfNewTracks.length} new tracks against useCase "${_gfUseCase}"...`);
+              try {
+                const _gfFilterResp = await anthropic.messages.create({
+                  model: 'claude-haiku-4-5-20251001',
+                  max_tokens: 300,
+                  messages: [{
+                    role: 'user',
+                    content: `Context rule: ${_gfRule}
+
+Tracks to check:
+${gfNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
+
+List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
+Format: comma-separated numbers only (e.g. "2, 5") or "NONE".`
+                  }]
+                });
+                const _gfFilterText = _gfFilterResp.content[0]?.text?.trim() || 'NONE';
+                console.log(`🔍 Post-gap-fill filter: ${_gfFilterText}`);
+                if (_gfFilterText.toUpperCase() !== 'NONE') {
+                  const _gfBadNums = _gfFilterText.split(/[,\s]+/).map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 1 && n <= gfNewTracks.length);
+                  if (_gfBadNums.length > 0) {
+                    const _gfBadIndices = new Set(_gfBadNums.map(n => _preGapFillCount + n - 1));
+                    const _gfRemovedNames = [..._gfBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
+                    console.log(`🔍 Post-gap-fill: removing ${_gfBadIndices.size} off-context tracks: ${_gfRemovedNames.join(', ')}`);
+                    selectedTracks = selectedTracks.filter((_, i) => !_gfBadIndices.has(i));
+                  }
+                }
+              } catch (gfFilterErr) {
+                console.log('Post-gap-fill filter failed (non-fatal):', gfFilterErr.message);
+              }
             }
           }
 
