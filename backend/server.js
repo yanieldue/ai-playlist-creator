@@ -7473,6 +7473,17 @@ Example response: [1, 2, 4, 5, 7, ...]`
                     if ((artistTrackCount.get(ak) || 0) >= gfMaxPerArtist) continue;
                     artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
                   }
+                  // Apply catalog context overrides before accepting gap fill track
+                  const _gfKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                  const _gfOverride = TRACK_CONTEXT_OVERRIDES[_gfKey];
+                  if (_gfOverride) {
+                    const _gfMoodOk = !genreData.mood || _gfOverride.requiredMoods.includes(genreData.mood);
+                    const _gfEnergyOk = !genreData.energyTarget || _gfOverride.requiredEnergies.includes(genreData.energyTarget);
+                    if (!_gfMoodOk || !_gfEnergyOk) {
+                      console.log(`🚫 [CATALOG-OVERRIDE/GAP] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} — ${_gfOverride.reason}`);
+                      continue;
+                    }
+                  }
                   seenTrackIds.add(track.id);
                   selectedTracks.push({
                     id: track.id, name: track.name,
@@ -8059,7 +8070,22 @@ DO NOT include any text outside the JSON.`;
             // Exclude both surviving tracks AND vibe-check-rejected tracks from backfill pool.
             // Only backfill from tracks that were never evaluated (not in the original selection).
             const vibeCheckedIds = new Set(selectedTracks.map(t => t.id));
-            const remainingTracks = tracksForSelection.filter(t => !vibeCheckedIds.has(t.id));
+            const remainingTracks = tracksForSelection.filter(t => {
+              if (vibeCheckedIds.has(t.id)) return false;
+              // Apply catalog context overrides — override-filtered tracks are not in vibeCheckedIds
+              // so they would otherwise re-enter here from the full tracksForSelection pool.
+              const _bfKey = `${(t.artist || '').toLowerCase()}::${(t.name || '').toLowerCase()}`;
+              const _bfOverride = TRACK_CONTEXT_OVERRIDES[_bfKey];
+              if (_bfOverride) {
+                const _bfMoodOk = !genreData.mood || _bfOverride.requiredMoods.includes(genreData.mood);
+                const _bfEnergyOk = !genreData.energyTarget || _bfOverride.requiredEnergies.includes(genreData.energyTarget);
+                if (!_bfMoodOk || !_bfEnergyOk) {
+                  console.log(`🚫 [CATALOG-OVERRIDE/BACKFILL] Skipping "${t.name}" by ${t.artist} — ${_bfOverride.reason}`);
+                  return false;
+                }
+              }
+              return true;
+            });
 
             if (remainingTracks.length > 0) {
               const neededCount = songCount - tracksAfterVibeCheck.length;
