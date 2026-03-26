@@ -2309,9 +2309,9 @@ const PlaylistGenerator = () => {
         userId,
         activePlatform || 'spotify',
         allowExplicit,
-        false,
         committedSongCount,
-        [], null,
+        [],
+        null,
         generationAbortControllerRef.current.signal
       );
       clearInterval(messageInterval);
