@@ -29,6 +29,12 @@ const ChatInputDiagram = () => (
 );
 
 const DIAGRAM_ARTIST_NAMES = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
+const HARDCODED_ARTIST_IMAGES = {
+  'Kendrick Lamar': '/tour-artist-kendrick.jpg',
+  'SZA': '/tour-artist-sza.jpg',
+  'Drake': '/tour-artist-drake.jpg',
+  'Rihanna': '/tour-artist-rihanna.jpg',
+};
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const ArtistsDiagram = ({ artistImages = {} }) => (
@@ -287,11 +293,7 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
       setCurrentStep(0);
       mp.track('Product Tour Started');
       document.body.style.overflow = 'hidden';
-      const allArtists = [...DIAGRAM_ARTIST_NAMES, ...PLAYLIST_COVER_ARTISTS].filter((v, i, a) => a.indexOf(v) === i);
-      fetch(`${API_BASE}/api/artist-images?names=${encodeURIComponent(allArtists.join(','))}`)
-        .then(r => r.json())
-        .then(data => setArtistImages(data.images || {}))
-        .catch(() => {});
+      setArtistImages(HARDCODED_ARTIST_IMAGES);
       fetch(`${API_BASE}/api/track-images?tracks=${encodeURIComponent(DIAGRAM_TRACK_KEYS.join(','))}`)
         .then(r => r.json())
         .then(data => setTrackImages(data.images || {}))
