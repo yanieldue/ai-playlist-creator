@@ -30,7 +30,11 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const [loading, setLoading] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [trialUsed, setTrialUsed] = useState(true); // default true = hide until confirmed eligible
+  // Initialize from cache so the button renders correctly on refresh without waiting for API
+  const [trialUsed, setTrialUsed] = useState(() => {
+    const cached = localStorage.getItem('trialUsed');
+    return cached === null ? true : cached === 'true'; // default hidden until confirmed eligible
+  });
 
   const userId = localStorage.getItem('userId');
   const alreadyPaid = isPaid();
@@ -42,7 +46,11 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
     const email = userId.includes('@') ? userId : null;
     if (!email) return;
     axios.get(`${API_BASE}/api/account/${encodeURIComponent(email)}`)
-      .then(({ data }) => setTrialUsed(data.trialUsed || false))
+      .then(({ data }) => {
+        const used = data.trialUsed || false;
+        setTrialUsed(used);
+        localStorage.setItem('trialUsed', String(used));
+      })
       .catch(() => setTrialUsed(true)); // on error, don't show trial
   }, [userId, alreadyPaid]);
 
@@ -78,6 +86,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
       });
       mp.track('Upgrade Succeeded', { plan: 'trial', billing_period: 'annual' });
       localStorage.setItem('seenPricingPage', 'true');
+      localStorage.setItem('trialUsed', 'true');
       window.location.href = data.url;
     } catch (err) {
       setError(err.response?.data?.error || 'Something went wrong. Please try again.');
