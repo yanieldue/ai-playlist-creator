@@ -1388,6 +1388,7 @@ const PlaylistGenerator = () => {
           ? draftPlaylists.filter(d => (d.playlistId || d.id) !== currentDraftId)
           : draftPlaylists.filter(d => (d.playlistId || d.id) !== generatedPlaylist.draftId);
         setDraftPlaylists(updatedDrafts);
+        _homeCache.draftPlaylists = updatedDrafts;
 
         // Clear state
         setShowPlaylistModal(false);
@@ -2152,6 +2153,7 @@ const PlaylistGenerator = () => {
                 d.playlist?.tracks?.length === generatedPlaylist.tracks.length)
             );
         setDraftPlaylists(updatedDrafts);
+        _homeCache.draftPlaylists = updatedDrafts;
 
         // Clear state
         setShowPlaylistModal(false);
@@ -2225,9 +2227,10 @@ const PlaylistGenerator = () => {
       // Delete from database
       await playlistService.deleteDraft(userId, draftId);
 
-      // Update local state - use playlistId if available, otherwise id
+      // Update local state and cache - use playlistId if available, otherwise id
       const updatedDrafts = draftPlaylists.filter(d => (d.playlistId || d.id) !== draftId);
       setDraftPlaylists(updatedDrafts);
+      _homeCache.draftPlaylists = updatedDrafts;
       if (currentDraftId === draftId) {
         setCurrentDraftId(null);
       }
