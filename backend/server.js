@@ -5574,7 +5574,8 @@ If the user mentions a specific song title + artist (e.g. "songs like Take It Sl
 
 SEED ARTISTS (CRITICAL):
 These are used to find similar artists and build the playlist.
-- When the prompt includes "Current songs include: ...", "Reference tracks: ...", or "Key artists in this playlist: ...", extract up to 5 of the most representative artists from those lists into suggestedSeedArtists. Prefer variety (different artists over repeats).
+- When the prompt includes "Current songs include: ...", "Reference tracks: ...", use those artists to inform genre/mood extraction and put the most representative ones into suggestedSeedArtists.
+- When the prompt includes "Key artists in this playlist: ...", use those artists ONLY to infer genre, mood, and vibe — do NOT put them into suggestedSeedArtists. They represent the current playlist contents, not the user's original intent. The user's original intent is in the prompt above.
 - When the user explicitly names artists ("artists like X", "similar to Y"), put them in requestedArtists.
 - When neither of the above apply, YOU MUST suggest 3-5 seed artists that exemplify the requested genre/mood.
 - REVEALED vs. STATED PREFERENCES: If the user states a self-label ("I only listen to rap", "I'm a country fan") BUT also names specific songs or artists that clearly contradict that label, trust the songs over the label. Example: "I only listen to rap but my favorites are Olivia Rodrigo, JVKE, and Taylor Swift" → the actual taste is bedroom pop/indie pop; set genre and seed artists based on the named songs, not the self-label. The songs don't lie.
