@@ -5283,10 +5283,11 @@ app.post('/api/generate-playlist', async (req, res) => {
         }
 
         if (desc) prompt += `\n\nPlaylist description: ${desc}`;
-        // Always include key artists — they help Claude find similar artists on SoundCharts.
-        // If their SC genres contradict the description, the genre-inconsistency check will
-        // exclude their songs from the candidate pool downstream.
-        if (storedPlaylist.tracks?.length > 0) {
+        // Only include key artists for imported playlists (no originalPrompt) where genre
+        // context cannot be inferred from the original user request. For AI-generated playlists,
+        // originalPrompt + description already define the genre — adding current track artists
+        // creates a feedback loop where bad artists perpetuate across refreshes.
+        if (!storedPlaylist.originalPrompt && storedPlaylist.tracks?.length > 0) {
           const trackArtists = [...new Set(storedPlaylist.tracks.map(t => t.artist).filter(Boolean))].slice(0, 5);
           if (trackArtists.length > 0) prompt += `\n\nKey artists in this playlist: ${trackArtists.join(', ')}.`;
         }
