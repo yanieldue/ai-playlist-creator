@@ -2572,7 +2572,7 @@ const PlaylistGenerator = () => {
                   </div>
                 ) : (
                   /* All home content renders at once */
-                  <div className="home-sections-ready">
+                  <div className={`home-sections-ready${topArtists.length > 0 ? ' home-sections-instant' : ''}`}>
                     {/* Draft Playlists - paid only */}
                     {isPaid() && draftPlaylists.length > 0 && (
                       <div className="unfinished-playlists-section">
