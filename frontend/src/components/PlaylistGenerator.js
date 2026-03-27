@@ -519,9 +519,8 @@ const PlaylistGenerator = () => {
                 setActivePlatform(null);
                 localStorage.removeItem('activePlatform');
               }
-              // Clear any displayed data
-              setTopArtists([]);
-              setNewArtists([]);
+              // Don't clear displayed artist data here — let the fetch naturally
+              // return empty so cached data isn't wiped on every mount
             }
 
             // If localStorage has appleMusicUserId but backend says Apple not connected, clear it
@@ -534,9 +533,8 @@ const PlaylistGenerator = () => {
                 setActivePlatform(null);
                 localStorage.removeItem('activePlatform');
               }
-              // Clear any displayed data
-              setTopArtists([]);
-              setNewArtists([]);
+              // Don't clear displayed artist data here — let the fetch naturally
+              // return empty so cached data isn't wiped on every mount
             }
           }
         })
