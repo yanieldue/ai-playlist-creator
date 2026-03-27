@@ -1329,6 +1329,32 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'slow emotional ballad — wrong for summer/party/workout contexts',
   },
+  // Added 2026-03-27. Winter-coded introspective folk-pop ballad (2020). Popularity: ~80.
+  // False positives: Prompt 86 summer runs 1 and 6 (appears twice in 6 runs — most persistent
+  // summer offender). Thematically unambiguous: it is literally about autumn/winter.
+  'taylor swift::\'tis the damn season': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'winter-coded introspective ballad — thematically wrong for any high-energy or warm-weather context',
+  },
+  // Added 2026-03-27. Slow sad indie-pop (2019). Popularity: ~72.
+  // False positives: Prompt 86 summer run 6. Whispered vocals, sparse instrumentation — clearly wrong
+  // for summer/party/workout even though Billie Eilish is a summer seed graph depth-2 artist.
+  'billie eilish::8': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'slow sad indie-pop — wrong for any high-energy or summer context',
+  },
+  // Added 2026-03-27. Slow sad ballad from HSM TV show (2019). Popularity: ~70.
+  // False positives: Prompt 86 summer. Non-standard album track that bypasses SC energy filtering.
+  'olivia rodrigo::all i want': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'slow sad TV-show ballad — wrong for any high-energy or summer context',
+  },
 };
 
 // Build a SoundCharts query from Claude-extracted genreData.
@@ -7291,6 +7317,20 @@ Return ONLY valid JSON:
         if (genreData.style) constraintLines.push(`Style/Vibe: ${genreData.style}`);
         if (genreData.atmosphere?.length > 0) constraintLines.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
         if (genreData.contextClues.useCase) constraintLines.push(`Use case: ${genreData.contextClues.useCase}`);
+        // UseCase hard rules — mirror the Sonnet vibe check rules so this fast Haiku pass
+        // catches the same contextual mismatches (it only sees "Use case: summer" otherwise,
+        // which is too vague to catch emotionally mismatched tracks in the right genre).
+        {
+          const _fastUc = (genreData.contextClues.useCase || '').toLowerCase();
+          const _fastHardRules = {
+            summer:  'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
+            party:   'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
+            workout: 'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
+            focus:   'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
+            sleep:   'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
+          };
+          if (_fastHardRules[_fastUc]) constraintLines.push(_fastHardRules[_fastUc]);
+        }
         if (eraMin || eraMax) {
           const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
           constraintLines.push(`Era: songs must be from ${eraDesc}. REMOVE any song originally recorded/released outside this range, even if it was recently repackaged or re-released.`);
@@ -7393,6 +7433,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
             .split(/\s*(?:feat\.|ft\.|featuring)\s*/i)[0]
             .split(/\s*&\s*/)[0].trim();
           const seenNormKeys = new Set(selectedTracks.map(t => `${_normTitle(t.name)}::${_normArtist(t.artist)}`));
+
+          // _suppUseCase hoisted here so the CATALOG-OVERRIDE check inside the supplement loop can reference it
+          const _suppUseCase = genreData.contextClues.useCase;
 
           // Supplement with more songs if short of target.
           const _preSupplementCount = selectedTracks.length;
@@ -7501,7 +7544,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
           // Post-supplement useCase filter — supplement tracks bypass the main vibe check,
           // so run a targeted lightweight filter on newly added tracks to catch context mismatches
           // (e.g. slow/sad songs in a workout or party playlist).
-          const _suppUseCase = genreData.contextClues.useCase;
+          // _suppUseCase is hoisted above the supplement loop — do not redeclare here.
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           if (_suppUseCase && _suppNewCount > 0) {
             const _suppRuleMap = {
