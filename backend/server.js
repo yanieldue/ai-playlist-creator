@@ -1766,7 +1766,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           isrc: item.song?.isrc?.value || item.song?.isrc || null,
           uuid: item.song?.uuid,
           releaseDate: item.song?.releaseDate || null,
-          source: strategy
+          source: strategy,
+          _scEnergy: item.song?.audio?.energy ?? null,
         }));
       if (mappedItems.length < items.length) {
         console.log(`⚠️  Dropped ${items.length - mappedItems.length} SoundCharts items with missing song name`);
@@ -2064,7 +2065,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
               isrc: item.song?.isrc?.value || item.song?.isrc || null,
               uuid: item.song?.uuid,
               releaseDate: item.song?.releaseDate || null,
-              source: 'artist_pool_top'
+              source: 'artist_pool_top',
+              _scEnergy: item.song?.audio?.energy ?? null,
             });
           }
         }
@@ -2090,7 +2092,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         // Skip obvious variants (live, remix, bonus, karaoke) to improve Spotify hit rate
         const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
         for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
-          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs' });
+          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
         }
         if (mainSongs.length > 0) console.log(`✓ Got ${mainSongs.length} songs from ${artistInfo.name} (direct)`);
       } catch (err) {
@@ -7030,8 +7032,12 @@ Return ONLY valid JSON:
           externalUrl,
           _phaseLabel: recommendedSong._phaseLabel || null,
           _phaseIndex: recommendedSong._phaseIndex ?? null,
+          _source: recommendedSong.source || null,
+          _scEnergy: recommendedSong._scEnergy ?? null,
         });
-        console.log(`✓ Found: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
+        const _srcTag = recommendedSong.source ? `[${recommendedSong.source}]` : '[unknown-source]';
+        const _energyTag = recommendedSong._scEnergy != null ? ` [energy: ${recommendedSong._scEnergy.toFixed(2)}]` : '';
+        console.log(`✓ Pool: ${_srcTag} "${track.name}" by ${track.artists?.[0]?.name || track.artist}${_energyTag}`);
         return true;
       };
 
@@ -7350,9 +7356,15 @@ Example response: [1, 2, 4, 5, 7, ...]`
               ? filteredTracks
               : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
             if (finalTracks.length >= 5) {
-              const removed = selectedTracks.length - finalTracks.length;
-              if (removed > 0) {
-                console.log(`✂️ Vibe check removed ${removed} mismatched tracks`);
+              const finalIds = new Set(finalTracks.map(t => t.id));
+              const removedTracks = selectedTracks.filter(t => !finalIds.has(t.id));
+              if (removedTracks.length > 0) {
+                console.log(`✂️ Vibe check (fast) removed ${removedTracks.length} mismatched tracks:`);
+                removedTracks.forEach(t => {
+                  const _rsrc = t._source || 'unknown-source';
+                  const _ren = t._scEnergy != null ? ` energy: ${t._scEnergy.toFixed(2)}` : ' energy: n/a';
+                  console.log(`  ❌ VIBE_CHECK removed: "${t.name}" by ${t.artist} [source: ${_rsrc},${_ren}]`);
+                });
               }
               selectedTracks = finalTracks;
             }
@@ -8213,7 +8225,10 @@ DO NOT include any text outside the JSON.`;
         if (vibeCheckData.vibeIssues && vibeCheckData.vibeIssues.length > 0) {
           console.log(`Vibe check found ${vibeCheckData.vibeIssues.length} tracks that don't fit the vibe:`);
           vibeCheckData.vibeIssues.forEach(issue => {
-            console.log(`  - "${issue.trackName}": ${issue.reason}`);
+            const _issuedTrack = selectedTracks[issue.index - 1];
+            const _issueSrc = _issuedTrack?._source || 'unknown-source';
+            const _issueEnergy = _issuedTrack?._scEnergy != null ? ` energy: ${_issuedTrack._scEnergy.toFixed(2)}` : ' energy: n/a';
+            console.log(`  ❌ VIBE_CHECK removed: "${issue.trackName}" [source: ${_issueSrc},${_issueEnergy}] — ${issue.reason}`);
           });
 
           // Filter to only keep tracks that passed the vibe check
