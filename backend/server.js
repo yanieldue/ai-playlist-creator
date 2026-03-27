@@ -1397,6 +1397,15 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['summer', 'morning'],
     reason: 'dark satirical pop — climate anxiety theme wrong for carefree summer context',
   },
+  // Added 2026-03-27. Brooklyn rap track featuring Macy Gray (2009). Popularity: ~60.
+  // False positive: cozy winter fireplace prompt run 1. Enters via Macy Gray depth-2 connection.
+  // Maino is a high-energy rapper with zero overlap with chill/folk/acoustic contexts.
+  'maino::all again (feat. macy gray)': {
+    requiredMoods: ['energetic'],
+    requiredEnergies: ['high'],
+    blockedUseCases: ['chill', 'background', 'sleep', 'focus', 'morning'],
+    reason: 'Brooklyn rap — contextually wrong for any low-energy or calm context; enters via Macy Gray depth-2',
+  },
 };
 
 // Build a SoundCharts query from Claude-extracted genreData.
@@ -7665,7 +7674,13 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             const gapNeeded = songCount - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
             try {
-              const gapGenreData = {
+              // Anchor gap fill to the same seed artists as supplement — without this, gap fill
+              // queries SC globally by genre alone and pulls whatever is popular worldwide,
+              // causing contextually wrong one-off tracks.
+              const gapSeedArtists = genreData.artistConstraints.requestedArtists?.length > 0
+                ? genreData.artistConstraints.requestedArtists
+                : genreData.artistConstraints.suggestedSeedArtists || [];
+                            const gapGenreData = {
                 primaryGenre: genreData.primaryGenre,
                 atmosphere: [],
                 era: genreData.era,
@@ -7675,7 +7690,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                 // Preserve popularity preference so career stage filter applies
                 // (prevents unrelated mainstream artists like Ed Sheeran appearing)
                 trackConstraints: { popularity: genreData.trackConstraints?.popularity },
-                artistConstraints: { exclusiveMode: false, requestedArtists: [] }
+                artistConstraints: { exclusiveMode: false, requestedArtists: [], suggestedSeedArtists: gapSeedArtists }
               };
               const gapQuery = buildSoundchartsQuery(gapGenreData, false, allowExplicit);
               const gfMinArtists = maxPerArtist ? Math.min(Math.ceil(gapNeeded / maxPerArtist * 1.5), 40) : 0;
