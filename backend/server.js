@@ -1355,6 +1355,48 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'slow sad TV-show ballad — wrong for any high-energy or summer context',
   },
+  // Added 2026-03-27. Mid-tempo tropicalia-pop (2017). Popularity: 84.
+  // False positives: Prompt 86 summer — 8 of 9 runs. Enters via gap-fill top_songs. Most persistent
+  // summer false positive in entire test suite. Ed Sheeran depth-2 via Bruno Mars.
+  'ed sheeran::shape of you': {
+    requiredMoods: ['positive'],
+    requiredEnergies: ['medium', 'high'],
+    blockedUseCases: ['summer'],
+    reason: 'mid-tempo pop — 8/9 summer false positives, too generic/indoors-coded for windows-down summer context',
+  },
+  // Added 2026-03-27. Slow dreamy R&B remix (2021). Popularity: ~55.
+  // False positives: Prompt 86 summer runs 3, 8, 9. Key mismatch with existing 'all this madness' entry.
+  // The Spotify title is the remix version — need separate entry for both forms.
+  'sam smith::a little melancholy': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'slow melancholic R&B ballad — wrong for any upbeat or summer context',
+  },
+  'sam smith::a little melancholy - arbitraire remix': {
+    requiredMoods: ['melancholic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'slow melancholic R&B remix — wrong for any upbeat or summer context',
+  },
+  // Added 2026-03-27. Slow romantic ballad (2024). Popularity: ~65.
+  // False positives: Prompt 86 summer runs 8, 9. Dua Lipa enters via depth-2 artist graph
+  // but this is one of her slow ballads, not her dance-pop tracks.
+  'dua lipa::anything for love': {
+    requiredMoods: ['melancholic', 'romantic'],
+    requiredEnergies: ['low'],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning'],
+    reason: 'slow romantic ballad — wrong for upbeat summer context despite artist being dance-pop',
+  },
+  // Added 2026-03-27. Dark/satirical upbeat pop (2019). Popularity: ~75.
+  // False positives: Prompt 86 summer runs 8, 9. High production energy but thematically dark
+  // (climate anxiety, going to hell) — wrong emotional register for carefree summer.
+  'billie eilish::all the good girls go to hell': {
+    requiredMoods: ['melancholic', 'dark'],
+    requiredEnergies: ['low', 'medium'],
+    blockedUseCases: ['summer', 'morning'],
+    reason: 'dark satirical pop — climate anxiety theme wrong for carefree summer context',
+  },
 };
 
 // Build a SoundCharts query from Claude-extracted genreData.
