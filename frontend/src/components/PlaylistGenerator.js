@@ -28,8 +28,9 @@ import '../styles/AccountModal.css';
 
 // Module-level cache — survives re-mounts (e.g. navigating back from /generate)
 // Stale-while-revalidate: show cached data instantly, refresh silently in background.
+// topArtists is also persisted to localStorage so it's available immediately on full page refresh.
 let _homeCache = {
-  topArtists: [],
+  topArtists: (() => { try { return JSON.parse(localStorage.getItem('topArtistsCache') || '[]'); } catch { return []; } })(),
   newArtists: [],
   trendingArtistsSections: [],
   draftPlaylists: [],
@@ -1467,6 +1468,7 @@ const PlaylistGenerator = () => {
       console.log('fetchTopArtists: Received data:', data);
       setTopArtists(data.artists);
       _homeCache.topArtists = data.artists;
+      try { localStorage.setItem('topArtistsCache', JSON.stringify(data.artists)); } catch {}
       console.log('fetchTopArtists: Set topArtists to:', data.artists.length, 'artists');
     } catch (err) {
       console.error('Failed to fetch top artists (non-critical):', err);
