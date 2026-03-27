@@ -5569,7 +5569,7 @@ SONG COUNT:
 USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
 When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
 - "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "party", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
-- "pregame", "hype playlist", "banger", "bangers", "going out tonight", "turn up", "turn up tonight", "night out", "we're going out", "hard hitting", "hard-hitting", "slap", "slaps", "absolute banger" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party"
+- "pregame", "hype playlist", "banger", "bangers", "going out tonight", "turn up", "turn up tonight", "night out", "we're going out", "hard hitting", "hard-hitting", "slap", "slaps", "absolute banger" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Travis Scott, Drake, Metro Boomin, 21 Savage, Calvin Harris (upbeat era), David Guetta, Dua Lipa (upbeat tracks), Cardi B, Megan Thee Stallion, Kendrick Lamar. DO NOT pick artists whose catalogs skew soft — no Ed Sheeran, no Sia, no Olly Alexander, no Sam Smith, no OneRepublic, no Swae Lee ballads, no Khalid. If the user's prompt implies a genre (e.g. hip-hop banger vs EDM banger), skew seeds to that genre's high-energy artists.
 - "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents. DO NOT pick Ed Sheeran, OneRepublic, Sia, Kylie Minogue, Olly Alexander, Imagine Dragons (ballads), or any artist whose catalog skews slow/emotional.
 - "study", "focus", "deep work", "coding", "concentration", "homework" → mood: "neutral", energyTarget: "low", useCase: "focus"
 - "drive", "road trip", "long drive", "commute" → mood: "positive", energyTarget: "medium", useCase: "chill"
@@ -7537,6 +7537,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           }
 
           // Gap fill: if still short after supplement, pull from top_songs (different pool)
+          // _gfUseCase hoisted here so the CATALOG-OVERRIDE/GAP check inside the loop can reference it
+          const _gfUseCase = genreData.contextClues.useCase;
           const _preGapFillCount = selectedTracks.length;
           if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
             const gapNeeded = songCount - selectedTracks.length;
@@ -7621,7 +7623,6 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
           // Post-gap-fill useCase filter — gap fill tracks also bypass the main vibe check,
           // same contamination risk as supplement (e.g. "As It Was" entering via top_songs).
-          const _gfUseCase = genreData.contextClues.useCase;
           const _gfNewCount = selectedTracks.length - _preGapFillCount;
           if (_gfUseCase && _gfNewCount > 0) {
             const _gfRuleMap = {
