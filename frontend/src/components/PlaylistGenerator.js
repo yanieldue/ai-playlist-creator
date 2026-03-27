@@ -2566,7 +2566,7 @@ const PlaylistGenerator = () => {
                       </button>
                     </div>
                   </div>
-                ) : loadingHomeContent ? (
+                ) : loadingHomeContent && topArtists.length === 0 && draftPlaylists.length === 0 ? (
                   <div className="playlists-loading">
                     <div className="playlists-loading-spinner" />
                   </div>
