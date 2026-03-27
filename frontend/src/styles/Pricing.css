@@ -92,7 +92,7 @@
   gap: 16px;
   max-width: 720px;
   margin: 0 auto;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .pricing-card {
@@ -102,6 +102,12 @@
   padding: 28px 24px 24px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-card .pricing-features {
+  flex: 1;
 }
 
 .pricing-card-pro {
