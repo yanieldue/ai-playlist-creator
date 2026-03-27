@@ -319,10 +319,6 @@ body {
   animation: homeSectionsIn 0.25s ease forwards;
 }
 
-/* Skip animation when data was already cached — no flash on re-mount */
-.home-sections-ready.home-sections-instant {
-  animation: none;
-}
 
 @keyframes homeSectionsIn {
   from { opacity: 0; transform: translateY(6px); }

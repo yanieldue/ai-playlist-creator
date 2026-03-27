@@ -39,8 +39,8 @@ let _homeCache = {
 
 const PlaylistGenerator = () => {
   const [prompt, setPrompt] = useState('');
-  const [userId, setUserId] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userId, setUserId] = useState(() => localStorage.getItem('userId') || null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('userId'));
   const [inSignupFlow, setInSignupFlow] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -2572,7 +2572,7 @@ const PlaylistGenerator = () => {
                   </div>
                 ) : (
                   /* All home content renders at once */
-                  <div className={`home-sections-ready${topArtists.length > 0 ? ' home-sections-instant' : ''}`}>
+                  <div className="home-sections-ready">
                     {/* Draft Playlists - paid only */}
                     {isPaid() && draftPlaylists.length > 0 && (
                       <div className="unfinished-playlists-section">
