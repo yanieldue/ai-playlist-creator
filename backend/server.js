@@ -7300,6 +7300,30 @@ Return ONLY valid JSON:
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks];
 
+        // CATALOG-OVERRIDE — apply context overrides before vibe check (mirrors Path B step 3.5)
+        if (selectedTracks.length > 0) {
+          const _pathAUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
+          const _pathAMood = genreData.mood;
+          const _pathAEnergy = genreData.energyTarget;
+          const _pathABefore = selectedTracks.length;
+          selectedTracks = selectedTracks.filter(track => {
+            const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+            const override = TRACK_CONTEXT_OVERRIDES[key];
+            if (!override) return true;
+            const moodOk = !_pathAMood || override.requiredMoods.includes(_pathAMood);
+            const energyOk = !_pathAEnergy || override.requiredEnergies.includes(_pathAEnergy);
+            const useCaseBlocked = _pathAUseCase && (override.blockedUseCases || []).includes(_pathAUseCase);
+            if (useCaseBlocked || !moodOk || !energyOk) {
+              console.log(`🚫 [CATALOG-OVERRIDE] Removing "${track.name}" by ${track.artist} — ${override.reason}`);
+              return false;
+            }
+            return true;
+          });
+          if (selectedTracks.length < _pathABefore) {
+            console.log(`🚫 [CATALOG-OVERRIDE] Removed ${_pathABefore - selectedTracks.length} track(s) via context overrides`);
+          }
+        }
+
         // Vibe check — only run when we actually have tracks to review
         if (selectedTracks.length >= 5) {
 
