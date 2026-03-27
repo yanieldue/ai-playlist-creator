@@ -7520,9 +7520,14 @@ Example response: [1, 2, 4, 5, 7, ...]`
             try {
               // Re-run artist-similarity discovery with relaxed constraints (no mood/theme filters)
               // to pull in more songs that weren't surfaced by the stricter primary pass.
-              const seedArtistsForSupplement = genreData.artistConstraints.requestedArtists?.length > 0
-                ? genreData.artistConstraints.requestedArtists
-                : genreData.artistConstraints.suggestedSeedArtists || [];
+              // Seed from artists already in the playlist — so supplement expands the playlist's
+              // own internal graph, not the user's listening history.
+              const playlistArtists = [...new Set(selectedTracks.map(t => t.artist).filter(Boolean))];
+              const seedArtistsForSupplement = playlistArtists.length > 0
+                ? playlistArtists
+                : (genreData.artistConstraints.requestedArtists?.length > 0
+                  ? genreData.artistConstraints.requestedArtists
+                  : genreData.artistConstraints.suggestedSeedArtists || []);
 
               // Build a relaxed query (genre + era only, no mood) using the new direct endpoint.
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
@@ -7674,12 +7679,16 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             const gapNeeded = songCount - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
             try {
-              // Anchor gap fill to the same seed artists as supplement — without this, gap fill
-              // queries SC globally by genre alone and pulls whatever is popular worldwide,
-              // causing contextually wrong one-off tracks.
-              const gapSeedArtists = genreData.artistConstraints.requestedArtists?.length > 0
-                ? genreData.artistConstraints.requestedArtists
-                : genreData.artistConstraints.suggestedSeedArtists || [];
+              // Seed from artists already in the playlist — same logic as supplement.
+              // Reuse playlistArtists if available (supplement ran first), otherwise recompute.
+              const _gfPlaylistArtists = typeof playlistArtists !== 'undefined' && playlistArtists.length > 0
+                ? playlistArtists
+                : [...new Set(selectedTracks.map(t => t.artist).filter(Boolean))];
+              const gapSeedArtists = _gfPlaylistArtists.length > 0
+                ? _gfPlaylistArtists
+                : (genreData.artistConstraints.requestedArtists?.length > 0
+                  ? genreData.artistConstraints.requestedArtists
+                  : genreData.artistConstraints.suggestedSeedArtists || []);
               const gapGenreData = {
                 primaryGenre: genreData.primaryGenre,
                 atmosphere: [],
