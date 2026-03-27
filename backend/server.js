@@ -7616,20 +7616,20 @@ Example response: [1, 2, 4, 5, 7, ...]`
             }
           }
 
-          // Post-supplement useCase filter — supplement tracks bypass the main vibe check,
-          // so run a targeted lightweight filter on newly added tracks to catch context mismatches
-          // (e.g. slow/sad songs in a workout or party playlist).
-          // _suppUseCase is hoisted above the supplement loop — do not redeclare here.
+          // Shared rule map for post-supplement and post-gap-fill vibe filters.
+          // Generic rules only — no hardcoded track lists (those are in TRACK_CONTEXT_OVERRIDES).
+          const _useCaseVibeRules = {
+              workout: 'This playlist is for a workout. Only high-energy, pump-up tracks belong here. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo.',
+              party: 'This playlist is for a party or pregame. Only tracks that work on a dancefloor belong here. REMOVE any track that is slow, emotional, mid-tempo, or melancholic — even if the artist is generally upbeat. Ask: would a DJ play this to keep a crowd dancing? If not, REMOVE it.',
+              summer: 'This playlist is for summer vibes. REMOVE any track that is slow, melancholic, sad, emotionally heavy, or winter-coded.',
+              chill: 'This playlist is for relaxing or chilling. REMOVE any track that is high-energy, aggressive, hype, or contextually jarring — rap/hip-hop that is not laid-back, loud EDM drops, or anything that would interrupt a low-energy listening session.',
+              background: 'This playlist is for background listening (dinner, cooking, hosting). REMOVE any track that is high-energy, aggressive, or attention-demanding — only mellow, easy-going music that works in the background.',
+              focus: 'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
+              sleep: 'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
+            };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           if (_suppUseCase && _suppNewCount > 0) {
-            const _suppRuleMap = {
-              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo — only high-energy, pump-up tracks belong here. Specific tracks to REMOVE: Rihanna "Unfaithful" (slow ballad), Rihanna "Stay" (slow ballad), Harry Styles "As It Was" (melancholic mid-tempo), SZA "2AM" (slow R&B), SZA "20 Something" (slow R&B), SZA "30 For 30" (slow duet), Khalid "9.13" (slow), Khalid "8TEEN" (mid-tempo), Sam Smith "All This Madness" (ballad), Ed Sheeran "Perfect" (ballad), Lewis Capaldi "Someone You Loved" (ballad), Dua Lipa "Anything For Love" (ballad), Lady Gaga "1000 Doves" (power ballad), benny blanco "Bad Decisions - Acoustic" (acoustic ballad), The Weeknd "A Lonely Night" (slow R&B), The Weeknd "A Lesser Man" (slow R&B), Sia "1+1" (ballad), Sia "2 Minutes Til New Years" (slow ballad), Camila Cabello "All These Years" (slow), Akon "Mama Africa" (slow world pop).',
-              party: 'This playlist is for a party/pregame. REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally associated with upbeat music. The test is: would a DJ play this to keep a crowd dancing? If not, REMOVE it. Examples of types to REMOVE: slow ballads, emotional pop, mid-tempo breakup songs, anthemic but slow builds, tearjerker intros. Specific tracks to REMOVE: Rihanna "Unfaithful", Rihanna "Stay", Harry Styles "As It Was", The Weeknd "A Lonely Night", The Weeknd "A Lesser Man", SZA "2AM", SZA "20 Something", Sam Smith ballads, Lewis Capaldi "Someone You Loved", Dua Lipa "Anything For Love", Ed Sheeran "Perfect", Sia "1+1", Sia "2 Minutes Til New Years", Avicii "Addicted To You", Avicii "Waiting For Love", OneRepublic "All The Right Moves", benny blanco "Bad Decisions - Acoustic".',
-              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Specific tracks to REMOVE: Rihanna "Unfaithful" (sad ballad), Harry Styles "As It Was" (melancholic breakup), SZA "2AM" (late-night slow), SZA "30 For 30" (sad duet), Olivia Rodrigo "All I Want" (slow sad), Taylor Swift "Slut!" (slow sad), Sam Smith ballads, Lewis Capaldi "Someone You Loved" (deeply melancholic), The Weeknd "A Lonely Night" (slow), Dua Lipa "Anything For Love" (ballad).',
-              focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, aggressive, or attention-grabbing track. Only calm, background-friendly music.',
-              sleep: 'This playlist is for sleeping. REMOVE any energetic, upbeat, or attention-grabbing track. Only soothing, calm, minimal tracks.',
-            };
-            const _suppRule = _suppRuleMap[_suppUseCase];
+            const _suppRule = _useCaseVibeRules[_suppUseCase];
             if (_suppRule) {
               const suppNewTracks = selectedTracks.slice(_preSupplementCount);
               console.log(`🔍 Post-supplement filter: checking ${suppNewTracks.length} new tracks against useCase "${_suppUseCase}"...`);
@@ -7680,7 +7680,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               const gapSeedArtists = genreData.artistConstraints.requestedArtists?.length > 0
                 ? genreData.artistConstraints.requestedArtists
                 : genreData.artistConstraints.suggestedSeedArtists || [];
-                            const gapGenreData = {
+              const gapGenreData = {
                 primaryGenre: genreData.primaryGenre,
                 atmosphere: [],
                 era: genreData.era,
@@ -7761,14 +7761,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           // same contamination risk as supplement (e.g. "As It Was" entering via top_songs).
           const _gfNewCount = selectedTracks.length - _preGapFillCount;
           if (_gfUseCase && _gfNewCount > 0) {
-            const _gfRuleMap = {
-              workout: 'This playlist is for a workout. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo. Examples to REMOVE: Harry Styles "As It Was", Rihanna "Unfaithful", SZA "2AM", Khalid "9.13", Sam Smith ballads, Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Dua Lipa "Anything For Love", Lady Gaga "1000 Doves", Sia "1+1", The Weeknd "A Lonely Night".',
-              party: 'This playlist is for a party/pregame. REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally associated with upbeat music. The test: would a DJ play this to keep a crowd dancing? If not, REMOVE it. Examples to REMOVE: Rihanna "Unfaithful", Harry Styles "As It Was", The Weeknd "A Lonely Night", SZA "2AM", Lewis Capaldi "Someone You Loved", Ed Sheeran "Perfect", Sia "1+1", Avicii "Addicted To You", OneRepublic "All The Right Moves", benny blanco "Bad Decisions - Acoustic".',
-              summer: 'This playlist is for summer vibes. REMOVE any slow, melancholic, sad, or emotionally heavy track. Examples to REMOVE: Harry Styles "As It Was", Lewis Capaldi "Someone You Loved", Sam Smith ballads, Olivia Rodrigo "All I Want", Rihanna "Unfaithful", SZA "2AM", The Weeknd "A Lonely Night".',
-              focus: 'This playlist is for focus/study. REMOVE any high-energy, hype, or attention-grabbing track. Only calm background music.',
-              sleep: 'This playlist is for sleeping. REMOVE any energetic or upbeat track. Only soothing, calm, minimal tracks.',
-            };
-            const _gfRule = _gfRuleMap[_gfUseCase];
+            const _gfRule = _useCaseVibeRules[_gfUseCase];
             if (_gfRule) {
               const gfNewTracks = selectedTracks.slice(_preGapFillCount);
               console.log(`🔍 Post-gap-fill filter: checking ${gfNewTracks.length} new tracks against useCase "${_gfUseCase}"...`);
