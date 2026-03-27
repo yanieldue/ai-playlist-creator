@@ -314,16 +314,6 @@ body {
   color: #ffffff;
 }
 
-/* Fade in home sections together when loading completes */
-.home-sections-ready {
-  animation: homeSectionsIn 0.25s ease forwards;
-}
-
-
-@keyframes homeSectionsIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
 
 .home-content .horizontal-scroll-section {
   padding: 0 0 0 16px;
