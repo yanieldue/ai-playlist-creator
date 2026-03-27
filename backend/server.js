@@ -6024,13 +6024,11 @@ DO NOT include any text outside the JSON.`
     if (!playlistId) {
       const _contradictions = [];
 
-      // 1. Artist requested AND excluded at the same time
-      const _reqNorms = new Set((genreData.artistConstraints?.requestedArtists || []).map(a => a.toLowerCase().trim()));
-      const _excNorms = (genreData.artistConstraints?.excludedArtists || []).map(a => a.toLowerCase().trim());
-      const _bothSides = _excNorms.filter(ex => [..._reqNorms].some(r => r.includes(ex) || ex.includes(r)));
-      if (_bothSides.length > 0) {
-        _contradictions.push(`You mentioned ${_bothSides.join(', ')} both as an artist to include and one to exclude — which do you want?`);
-      }
+      // 1. Artist requested AND excluded at the same time — only flag when exclusiveMode is on.
+      // "Sounds like X, no X songs" is valid: use X as a style seed but exclude their tracks.
+      // That case is handled correctly by the pipeline (seed for discovery, then exclude tracks).
+      // Only flag as a contradiction when the user asked for *only* that artist's songs AND also
+      // said to exclude them (exclusiveMode=true), which is caught by check #4 below.
 
       // 2. Underground preference conflicts with event mode popularity floor
       const _wantsUnderground = genreData.trackConstraints?.popularity?.preference === 'underground'
