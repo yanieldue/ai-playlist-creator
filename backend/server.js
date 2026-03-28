@@ -7673,6 +7673,20 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
                   if (!allowExplicit && track.explicit) continue;
+                  // Hard constraint: excluded artists — supplement bypasses validateAndAdd so we enforce here
+                  {
+                    const _suppExcludedNorms = (genreData.artistConstraints?.excludedArtists || []).map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                    if (_suppExcludedNorms.length > 0) {
+                      const _suppTrackArtistNorms = (track.artists || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                      const _suppArtistExcluded = _suppExcludedNorms.some(exNorm =>
+                        _suppTrackArtistNorms.some(an => an && exNorm && (an === exNorm || an.startsWith(exNorm) || exNorm.startsWith(an)))
+                      );
+                      if (_suppArtistExcluded) {
+                        console.log(`🚫 [SUPP-EXCLUDED] "${track.name}" by ${track.artists?.[0]?.name} — artist in exclusion list`);
+                        continue;
+                      }
+                    }
+                  }
                   const suppMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
                   if (suppMaxPerArtist !== null && suppMaxPerArtist !== undefined) {
                     const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
@@ -7727,23 +7741,29 @@ Example response: [1, 2, 4, 5, 7, ...]`
               sleep: 'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
-          if (_suppUseCase && _suppNewCount > 0) {
-            const _suppRule = _useCaseVibeRules[_suppUseCase];
-            if (_suppRule) {
+          {
+            // Collect all hard/binary constraint rules that apply to supplement tracks.
+            // Supplement bypasses the main vibe check, so binary constraints must be re-enforced here.
+            const _suppVocalGender = genreData.artistConstraints?.vocalGender;
+            const _suppConstraintRules = [];
+            if (_suppUseCase && _useCaseVibeRules[_suppUseCase]) _suppConstraintRules.push(_useCaseVibeRules[_suppUseCase]);
+            if (_suppVocalGender === 'female') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
+            if (_suppVocalGender === 'male') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            if (_suppConstraintRules.length > 0 && _suppNewCount > 0) {
               const suppNewTracks = selectedTracks.slice(_preSupplementCount);
-              console.log(`🔍 Post-supplement filter: checking ${suppNewTracks.length} new tracks against useCase "${_suppUseCase}"...`);
+              console.log(`🔍 Post-supplement filter: checking ${suppNewTracks.length} new tracks (${_suppConstraintRules.length} rules)...`);
               try {
                 const _suppFilterResp = await anthropic.messages.create({
                   model: 'claude-haiku-4-5-20251001',
                   max_tokens: 300,
                   messages: [{
                     role: 'user',
-                    content: `Context rule: ${_suppRule}
+                    content: `Rules (ALL must be enforced):\n${_suppConstraintRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 Tracks to check:
 ${suppNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
-List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
+List the NUMBER of every track that violates ANY rule. If all tracks pass, respond "NONE".
 IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no track names, no reasoning. Examples of valid responses: "NONE" or "2" or "1, 3, 4".`
                   }]
                 });
@@ -7755,7 +7775,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                   if (_suppBadNums.length > 0) {
                     const _suppBadIndices = new Set(_suppBadNums.map(n => _preSupplementCount + n - 1));
                     const _suppRemovedNames = [..._suppBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
-                    console.log(`🔍 Post-supplement: removing ${_suppBadIndices.size} off-context tracks: ${_suppRemovedNames.join(', ')}`);
+                    console.log(`🔍 Post-supplement: removing ${_suppBadIndices.size} off-constraint tracks: ${_suppRemovedNames.join(', ')}`);
                     selectedTracks = selectedTracks.filter((_, i) => !_suppBadIndices.has(i));
                   }
                 }
@@ -7819,6 +7839,20 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
                   if (!allowExplicit && track.explicit) continue;
+                  // Hard constraint: excluded artists — gap fill bypasses validateAndAdd so we enforce here
+                  {
+                    const _gfExcludedNorms = (genreData.artistConstraints?.excludedArtists || []).map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                    if (_gfExcludedNorms.length > 0) {
+                      const _gfTrackArtistNorms = (track.artists || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                      const _gfArtistExcluded = _gfExcludedNorms.some(exNorm =>
+                        _gfTrackArtistNorms.some(an => an && exNorm && (an === exNorm || an.startsWith(exNorm) || exNorm.startsWith(an)))
+                      );
+                      if (_gfArtistExcluded) {
+                        console.log(`🚫 [GAP-EXCLUDED] "${track.name}" by ${track.artists?.[0]?.name} — artist in exclusion list`);
+                        continue;
+                      }
+                    }
+                  }
                   const gfMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
                   if (gfMaxPerArtist !== null && gfMaxPerArtist !== undefined) {
                     const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
@@ -7860,26 +7894,30 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             }
           }
 
-          // Post-gap-fill useCase filter — gap fill tracks also bypass the main vibe check,
+          // Post-gap-fill constraint filter — gap fill tracks also bypass the main vibe check,
           // same contamination risk as supplement (e.g. "As It Was" entering via top_songs).
           const _gfNewCount = selectedTracks.length - _preGapFillCount;
-          if (_gfUseCase && _gfNewCount > 0) {
-            const _gfRule = _useCaseVibeRules[_gfUseCase];
-            if (_gfRule) {
+          {
+            const _gfVocalGender = genreData.artistConstraints?.vocalGender;
+            const _gfConstraintRules = [];
+            if (_gfUseCase && _useCaseVibeRules[_gfUseCase]) _gfConstraintRules.push(_useCaseVibeRules[_gfUseCase]);
+            if (_gfVocalGender === 'female') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
+            if (_gfVocalGender === 'male') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            if (_gfConstraintRules.length > 0 && _gfNewCount > 0) {
               const gfNewTracks = selectedTracks.slice(_preGapFillCount);
-              console.log(`🔍 Post-gap-fill filter: checking ${gfNewTracks.length} new tracks against useCase "${_gfUseCase}"...`);
+              console.log(`🔍 Post-gap-fill filter: checking ${gfNewTracks.length} new tracks (${_gfConstraintRules.length} rules)...`);
               try {
                 const _gfFilterResp = await anthropic.messages.create({
                   model: 'claude-haiku-4-5-20251001',
                   max_tokens: 300,
                   messages: [{
                     role: 'user',
-                    content: `Context rule: ${_gfRule}
+                    content: `Rules (ALL must be enforced):\n${_gfConstraintRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 Tracks to check:
 ${gfNewTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')}
 
-List the NUMBER of every track that violates the rule. If all tracks pass, respond "NONE".
+List the NUMBER of every track that violates ANY rule. If all tracks pass, respond "NONE".
 IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no track names, no reasoning. Examples of valid responses: "NONE" or "2" or "1, 3, 4".`
                   }]
                 });
@@ -7891,7 +7929,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                   if (_gfBadNums.length > 0) {
                     const _gfBadIndices = new Set(_gfBadNums.map(n => _preGapFillCount + n - 1));
                     const _gfRemovedNames = [..._gfBadIndices].map(i => selectedTracks[i]).filter(Boolean).map(t => `"${t.name}" by ${t.artist}`);
-                    console.log(`🔍 Post-gap-fill: removing ${_gfBadIndices.size} off-context tracks: ${_gfRemovedNames.join(', ')}`);
+                    console.log(`🔍 Post-gap-fill: removing ${_gfBadIndices.size} off-constraint tracks: ${_gfRemovedNames.join(', ')}`);
                     selectedTracks = selectedTracks.filter((_, i) => !_gfBadIndices.has(i));
                   }
                 }
