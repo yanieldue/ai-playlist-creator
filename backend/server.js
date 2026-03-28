@@ -7410,6 +7410,9 @@ Return ONLY valid JSON:
         }
         if (hasAvoidances) constraintLines.push(`AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
         if (wantsUndergroundFilter) constraintLines.push(`Popularity: UNDERGROUND/INDIE only — remove mainstream chart artists`);
+        const _fastVocalGender = genreData.artistConstraints?.vocalGender;
+        if (_fastVocalGender === 'female') constraintLines.push(`GENDER — HARD RULE: This playlist requires FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. No exceptions — even if the music fits the vibe perfectly.`);
+        if (_fastVocalGender === 'male') constraintLines.push(`GENDER — HARD RULE: This playlist requires MALE artists only. REMOVE any track by a female solo artist or female-fronted band. No exceptions.`);
 
         const seedArtistNames = hasRequestedArtists && !genreData.artistConstraints.exclusiveMode
           ? genreData.artistConstraints.requestedArtists
@@ -8098,7 +8101,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
     // SoundCharts already ranked songs by streams — take the top N directly.
     // Request 20% more if vibe check will run (it may trim some tracks).
-    const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer';
+    const hasVibeRequirements = genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer' || (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any');
     const selectionTarget = hasVibeRequirements && !_phases ? Math.ceil(songCount * 1.2) : songCount;
 
     // Multi-phase: select proportionally from each phase's track pool
@@ -8252,6 +8255,14 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
       const _maxPopForVibeRule = genreData.trackConstraints?.popularity?.max;
       if (_popPref === 'underground' || (_maxPopForVibeRule !== null && _maxPopForVibeRule !== undefined && _maxPopForVibeRule <= 60)) {
         _vibeHardRules.push('NO MAINSTREAM HITS — HARD RULE: The user explicitly requested underground/deep cuts only. REMOVE any artist with radio hits, chart success, major label backing, or household-name recognition. Travis Scott, Kanye West, Drake, The Weeknd, Rihanna, Ariana Grande, and similar mainstream acts must be REMOVED even if their sound matches the genre. Only keep artists who are genuinely underground, indie, or niche.');
+      }
+
+      // Gender constraint
+      const _vocalGender = genreData.artistConstraints?.vocalGender;
+      if (_vocalGender === 'female') {
+        _vibeHardRules.push('GENDER — HARD RULE: The user requested FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female solo artists, female rappers, and female-fronted groups are allowed. Examples to REMOVE: The Weeknd, Drake, J. Cole, dvsn, Big Sean, James Blake, Metro Boomin, Kendrick Lamar — ALL must be removed. No exceptions even if the song sounds perfect for the vibe.');
+      } else if (_vocalGender === 'male') {
+        _vibeHardRules.push('GENDER — HARD RULE: The user requested MALE artists only. REMOVE any track by a female solo artist, female rapper, or female-fronted band. No exceptions.');
       }
 
       // Cohesion / smooth-transitions request
