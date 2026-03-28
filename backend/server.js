@@ -7211,7 +7211,18 @@ Return ONLY valid JSON:
       // These artists were filtered out of recommendedTracks above; we fetch their actual
       // top tracks from Spotify instead of relying on the mismatched SC artist profile.
       if (platform === 'spotify' && nosimilarWithSpotify.size > 0) {
+        // In refresh context, reference artists (e.g. Keffer) are style hints, not playlist members.
+        // Only inject their top tracks if they're actually in the playlist being refreshed.
+        const _isRefreshContext = existingPlaylistData?.tracks?.length > 0;
+        const _playlistArtistSet = _isRefreshContext
+          ? new Set(existingPlaylistData.tracks.map(t => (t.artist || '').toLowerCase()))
+          : null;
+
         for (const artistLower of nosimilarWithSpotify) {
+          if (_isRefreshContext && _playlistArtistSet && !_playlistArtistSet.has(artistLower)) {
+            console.log(`🔒 [SPOTIFY-DIRECT] Skipping "${artistLower}" in refresh context — reference artist, not in playlist`);
+            continue;
+          }
           const spotifyArtistId = confirmedSpotifyArtistIds[artistLower];
           if (!spotifyArtistId) continue;
           const artistDisplay = referenceSongs0.find(r => r.artist.toLowerCase() === artistLower)?.artist || artistLower;
