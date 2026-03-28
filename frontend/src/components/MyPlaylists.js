@@ -397,6 +397,34 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
     }
   };
 
+  const handleRemoveTrack = async (playlistId, track) => {
+    try {
+      mp.track('Track Removed', { withoutDislike: true });
+      await playlistService.removeTrack(playlistId, userId, track.id, track.uri);
+
+      // Also remove from platform via MusicKit if Apple Music
+      const playlist = playlists.find(p => p.playlistId === playlistId);
+      if (playlist?.platform === 'apple' && musicKitService.isAuthorized()) {
+        try {
+          const trackIndex = playlist.tracks?.findIndex(t => t.id === track.id) ?? -1;
+          if (trackIndex !== -1) {
+            await musicKitService.removeTracksFromPlaylist(playlistId, [{ id: track.id, index: trackIndex }]);
+          }
+        } catch (mkErr) {
+          console.warn('[MusicKit] Track removal failed:', mkErr.message);
+        }
+      }
+
+      setPlaylists(prev => prev.map(p => {
+        if (p.playlistId !== playlistId) return p;
+        return { ...p, tracks: p.tracks.filter(t => t.id !== track.id) };
+      }));
+      showToast(`Removed "${track.name}" from playlist`, 'success');
+    } catch (err) {
+      showToast('Failed to remove track', 'error');
+    }
+  };
+
   const handleToggleLock = async (playlistId, track) => {
     try {
       const playlist = playlists.find(p => p.playlistId === playlistId);
@@ -996,6 +1024,13 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               ) : (
                                 <Icons.Star size={16} />
                               )}
+                            </button>
+                            <button
+                              className="track-reaction-button track-remove-button"
+                              onClick={() => handleRemoveTrack(playlist.playlistId, track)}
+                              title="Remove from playlist"
+                            >
+                              <Icons.MinusCircle size={16} />
                             </button>
                           </div>
                         </div>

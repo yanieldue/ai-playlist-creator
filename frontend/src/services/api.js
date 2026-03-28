@@ -252,6 +252,16 @@ export const playlistService = {
     return response.data;
   },
 
+  // Remove a track from a playlist without disliking it
+  removeTrack: async (playlistId, userId, trackId, trackUri) => {
+    const response = await api.post(`/api/playlists/${playlistId}/remove-track`, {
+      userId,
+      trackId,
+      trackUri,
+    });
+    return response.data;
+  },
+
   // Get all liked/disliked songs across all playlists
   getReactions: async (userId) => {
     const response = await api.get(`/api/reactions/${userId}`);

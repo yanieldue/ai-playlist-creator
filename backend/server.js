@@ -10519,6 +10519,70 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
   }
 });
 
+// Remove a track from a playlist without disliking it
+app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { userId, trackId, trackUri } = req.body;
+
+    if (!userId || !trackId) {
+      return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
+    }
+
+    // Get playlist from cache or DB
+    let userPlaylistsArray = userPlaylists.get(userId) || [];
+    let playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    if (!playlist && usePostgres) {
+      const dbPlaylists = await db.getUserPlaylists(userId);
+      userPlaylists.set(userId, dbPlaylists);
+      userPlaylistsArray = dbPlaylists;
+      playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    }
+
+    if (!playlist) {
+      return res.status(404).json({ error: 'Playlist not found' });
+    }
+
+    // Remove from playlist.tracks in backend state
+    if (playlist.tracks) {
+      playlist.tracks = playlist.tracks.filter(t => t.id !== trackId);
+    }
+    // Remove from lockedTracks if it was locked
+    if (playlist.lockedTracks) {
+      playlist.lockedTracks = playlist.lockedTracks.filter(id => id !== trackId);
+    }
+
+    userPlaylists.set(userId, userPlaylistsArray);
+    await savePlaylist(userId, playlist);
+
+    // Remove from platform playlist
+    if (trackUri) {
+      try {
+        const removeTokens = await db.getToken(userId);
+        if (removeTokens) {
+          const platformService = new PlatformService();
+          const removePlatform = playlist.platform || platformService.getPlatform(userId);
+          if (removePlatform === 'apple') {
+            const appleMusicApiRemove = platformService.getAppleMusicApi(removeTokens);
+            await appleMusicApiRemove.deleteTracksFromPlaylist(removeTokens.access_token, playlist.playlistId, [trackUri]);
+          } else {
+            await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], removeTokens);
+          }
+          console.log(`[REMOVE-TRACK] Removed track ${trackId} from platform playlist ${playlistId}`);
+        }
+      } catch (removeErr) {
+        console.log(`[REMOVE-TRACK] Could not remove from platform playlist: ${removeErr.message}`);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing track:', error);
+    res.status(500).json({ error: 'Failed to remove track', details: error.message });
+  }
+});
+
 // Get all liked/disliked songs across all playlists for a user
 app.get('/api/reactions/:userId', async (req, res) => {
   try {
