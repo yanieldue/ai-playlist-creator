@@ -7985,7 +7985,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             return true;
           });
 
-          // Update song history so future auto-updates exclude these tracks.
+          // Update song history and playlist.tracks so future refreshes anchor to the new track list.
           // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.
           if (playlistId && userId && !internalCall) {
             try {
@@ -7996,6 +7996,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                 if (!pl.songHistory) pl.songHistory = [];
                 pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
                 if (pl.songHistory.length > 150) pl.songHistory = pl.songHistory.slice(-150);
+                // Update playlist.tracks so the refresh anchor reflects the new track list
+                pl.tracks = selectedTracks;
+                pl.trackUris = selectedTracks.map(t => t.uri).filter(Boolean);
                 userPlaylists.set(userId, upa);
                 await savePlaylist(userId, pl);
                 console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
@@ -8896,7 +8899,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       }
     }
 
-    // Update song history so future auto-updates exclude these tracks.
+    // Update song history and playlist.tracks so future refreshes anchor to the new track list.
     // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.
     if (playlistId && userId && !internalCall) {
       try {
@@ -8907,6 +8910,9 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
           if (!pl.songHistory) pl.songHistory = [];
           pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
           if (pl.songHistory.length > 150) pl.songHistory = pl.songHistory.slice(-150);
+          // Update playlist.tracks so the refresh anchor reflects the new track list
+          pl.tracks = selectedTracks;
+          pl.trackUris = selectedTracks.map(t => t.uri).filter(Boolean);
           userPlaylists.set(userId, upa);
           await savePlaylist(userId, pl);
           console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
