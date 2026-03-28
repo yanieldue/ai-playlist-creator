@@ -1777,6 +1777,45 @@ const SOUNDCHARTS_AUDIO_FEATURE_MAP = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Classify seed artists by gender using a Haiku call and return only those matching
+// targetGender. Applied at seed selection time — before the SC similarity graph expands —
+// so a male seed's graph never generates a pool of male candidates for a female-only request.
+// Returns all artists unchanged if the call fails or targetGender is unset/'any'.
+async function filterArtistsByGender(artistNames, targetGender) {
+  if (!targetGender || targetGender === 'any' || !artistNames || artistNames.length === 0) return artistNames;
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      messages: [{
+        role: 'user',
+        content: `For each artist, classify them as "female", "male", or "mixed" (bands/groups with mixed gender membership).
+For an artist credit with a feature, classify by the PRIMARY artist only — ignore featured guests.
+Examples: "SZA featuring The Weeknd" → female. "The Weeknd featuring SZA" → male. "TLC" → female. "Maroon 5" → male.
+
+Artists:
+${artistNames.map((a, i) => `${i + 1}. ${a}`).join('\n')}
+
+Return ONLY a JSON object mapping 1-based index to classification: {"1": "female", "2": "male", ...}`
+      }]
+    });
+    const text = response.content[0].text.trim()
+      .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+      .replace(/^```\n?/, '').replace(/\n?```$/, '');
+    const classifications = JSON.parse(text);
+    const filtered = artistNames.filter((_, i) => {
+      const g = classifications[String(i + 1)];
+      return g === targetGender || g === 'mixed';
+    });
+    console.log(`🚻 Gender filter (${targetGender}): ${artistNames.length} → ${filtered.length} artists kept [${filtered.join(', ')}]`);
+    // Fallback: if filter removes every seed, return originals (avoids empty pool)
+    return filtered.length > 0 ? filtered : artistNames;
+  } catch (err) {
+    console.log(`⚠️  Gender filter classification failed: ${err.message} — using all seed artists`);
+    return artistNames;
+  }
+}
+
 // executeSoundChartsStrategy — direct attribute-based song discovery.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -6656,6 +6695,16 @@ Respond ONLY with valid JSON:
             }
           }
         }
+        // Gender filter at seed selection — happens before the SC similarity graph expands.
+        // Filtering here prevents a male seed's graph from generating a pool of male candidates.
+        // The vibe check gender rule is a backstop for edge cases (mixed bands, guest features),
+        // not the primary enforcement mechanism.
+        {
+          const _gf = genreData.artistConstraints?.vocalGender;
+          if (_gf && _gf !== 'any' && scQuery.artists.length > 0) {
+            scQuery.artists = await filterArtistsByGender(scQuery.artists, _gf);
+          }
+        }
         const fetchCount = Math.min(songCount * 3, 200);
         // When maxPerArtist is set, ensure the artist pool is large enough to cover songCount unique artists
         const minArtistsNeeded = maxPerArtist ? Math.min(Math.ceil(songCount / maxPerArtist * 1.5), 40) : 0;
@@ -7005,6 +7054,32 @@ Return ONLY valid JSON:
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
       // Returns true and mutates allTracks/seenTrackIds/seenSongSignatures if track passes all checks.
+      // ── Constraint enforcement spectrum ─────────────────────────────────────────────────
+      // Three stages; each constraint belongs to exactly one:
+      //
+      //   SEED SELECTION (before executeSoundChartsStrategy):
+      //     "Does this constraint determine which artists generate the pool?"
+      //     → Gender. Applied to scQuery.artists before the similarity graph expands.
+      //       A male seed's graph never generates a male pool for a female-only request.
+      //
+      //   TRACK ADMISSION (validateAndAdd, here):
+      //     "Does this constraint evaluate a specific track being added?"
+      //     → Artist exclusion, explicit flag, era cutoff, resolution divergence.
+      //       Hard binary rules. These run BEFORE the vibe check 75% floor — they bypass
+      //       it entirely. The 75% floor exists to prevent over-aggressive vibe check
+      //       removal of genre-adjacent tracks. It is NOT appropriate for binary constraints
+      //       ("75% female-only" is not a valid outcome). Binary constraints belong here,
+      //       not in the vibe check.
+      //
+      //   VIBE CHECK (post-selection):
+      //     "Does this constraint require judgment about fit and context?"
+      //     → Energy, mood, use-case coherence, edge cases that binary rules can't cover.
+      //       If you find yourself adding a hard binary rule to the vibe check, it almost
+      //       certainly belongs one stage earlier in the pipeline instead.
+      //
+      //   TRACK_CONTEXT_OVERRIDES: each entry is evidence of a missing upstream filter.
+      //   A recurring entry after its "fix" means the fix landed at the wrong stage.
+      // ────────────────────────────────────────────────────────────────────────────────────
       const validateAndAdd = async (track, recommendedSong, platform) => {
         if (seenTrackIds.has(track.id)) {
           console.log(`Skipping duplicate: "${track.name}" by ${track.artists?.[0]?.name || track.artist}`);
@@ -7171,7 +7246,7 @@ Return ONLY valid JSON:
       // Collect 20% more tracks than needed when vibe check will run, so it has a buffer
       // to trim bad tracks without falling back to supplement. Mirrors the selectionTarget
       // logic at line ~7828 — keep in sync if that formula changes.
-      const _hasVibeReqs = (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer');
+      const _hasVibeReqs = (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer' || (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any'));
       const _earlyStopTarget = _hasVibeReqs && !_phases ? Math.ceil(songCount * 1.2) : songCount;
       console.log(`🎯 Track collection target: ${_earlyStopTarget} (songCount=${songCount}, vibeBuffer=${_hasVibeReqs && !_phases})`);
 
@@ -7226,6 +7301,24 @@ Return ONLY valid JSON:
               return requestedArtistNorm.length < 6 ? fn === requestedArtistNorm : fn === requestedArtistNorm || fn.startsWith(requestedArtistNorm) || requestedArtistNorm.startsWith(fn);
             });
             if (artistMatch) {
+              // Resolution divergence check: verify SC source artist appears in the PRIMARY
+              // Spotify artist. Catches branded/compilation tracks where a known artist is
+              // secondary but an unrelated entity is listed as primary (e.g. "FIFA Sound"
+              // when SC source is "DJ Luian").
+              // Token overlap on primary only — "DJ Luian" on "DJ Luian, Amenazzy" primary
+              // passes; "DJ Luian" on "FIFA Sound" primary fails.
+              const _primaryArtist = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+              const _scSourceTokens = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
+              if (_scSourceTokens.length > 0) {
+                const _primaryTokens = _primaryArtist.split(/\s+/);
+                const _hasPrimaryOverlap = _scSourceTokens.some(tok =>
+                  _primaryTokens.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt))
+                );
+                if (!_hasPrimaryOverlap) {
+                  console.log(`❌ [ARTIST-DIVERGENCE] "${t.name}" — SC source "${recommendedSong.artist}" not in Spotify primary "${t.artists?.[0]?.name}" — trying next result`);
+                  continue;
+                }
+              }
               console.log(`🔍 [TEXT] ${label}`);
               return { track: t, usedExact: false };
             }
