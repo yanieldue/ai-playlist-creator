@@ -6706,8 +6706,9 @@ Respond ONLY with valid JSON:
             existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
           )];
           if (_anchorArtists.length > 0) {
-            console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}]`);
+            console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}] — disabling Level 1/2 expansion`);
             scQuery.artists = _anchorArtists;
+            scQuery.expandToSimilar = false;
           }
         }
         // Gender filter at seed selection — happens before the SC similarity graph expands.
