@@ -6704,7 +6704,7 @@ Respond ONLY with valid JSON:
         if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
           const _anchorArtists = [...new Set(
             existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
-          )].slice(0, 15);
+          )];
           if (_anchorArtists.length > 0) {
             console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}]`);
             scQuery.artists = _anchorArtists;
