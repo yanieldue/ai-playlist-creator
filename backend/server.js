@@ -6695,6 +6695,21 @@ Respond ONLY with valid JSON:
             }
           }
         }
+        // Refresh/auto-update seed anchor: replace Claude's inferred suggestedSeedArtists with
+        // the artists actually in the playlist. Claude sees the playlist name + 5 key artists
+        // and infers a much wider genre pool (e.g. suggesting Bad Bunny/Travis Scott for a
+        // CALLMEJB/elle. playlist). Locking seeds to playlist artists keeps the SC similarity
+        // graph anchored to what the playlist actually sounds like, not what Claude thinks
+        // the genre sounds like in general.
+        if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
+          const _anchorArtists = [...new Set(
+            existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
+          )].slice(0, 15);
+          if (_anchorArtists.length > 0) {
+            console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}]`);
+            scQuery.artists = _anchorArtists;
+          }
+        }
         // Gender filter at seed selection — happens before the SC similarity graph expands.
         // Filtering here prevents a male seed's graph from generating a pool of male candidates.
         // The vibe check gender rule is a backstop for edge cases (mixed bands, guest features),
@@ -7968,7 +7983,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                 const pl = upa[upi];
                 if (!pl.songHistory) pl.songHistory = [];
                 pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
-                if (pl.songHistory.length > 500) pl.songHistory = pl.songHistory.slice(-500);
+                if (pl.songHistory.length > 150) pl.songHistory = pl.songHistory.slice(-150);
                 userPlaylists.set(userId, upa);
                 await savePlaylist(userId, pl);
                 console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
@@ -8879,7 +8894,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
           const pl = upa[upi];
           if (!pl.songHistory) pl.songHistory = [];
           pl.songHistory = [...pl.songHistory, ...selectedTracks.map(t => `${normalizeForHistory(t.name)}|||${(t.artist || '').toLowerCase()}`)];
-          if (pl.songHistory.length > 500) pl.songHistory = pl.songHistory.slice(-500);
+          if (pl.songHistory.length > 150) pl.songHistory = pl.songHistory.slice(-150);
           userPlaylists.set(userId, upa);
           await savePlaylist(userId, pl);
           console.log(`[MANUAL-REFRESH] Song history updated — now ${pl.songHistory.length} tracks`);
@@ -11283,8 +11298,8 @@ async function processPlaylistUpdate(userId, playlist) {
           ...playlist.songHistory,
           ...tracksForHistory.map(t => `${normalizeForHistory(t.name)}|||${t.artist.toLowerCase()}`)
         ];
-        if (playlist.songHistory.length > 500) {
-          playlist.songHistory = playlist.songHistory.slice(-500);
+        if (playlist.songHistory.length > 150) {
+          playlist.songHistory = playlist.songHistory.slice(-150);
         }
         console.log(`[AUTO-UPDATE] Song history updated for ${playlist.playlistName} - now contains ${playlist.songHistory.length} tracks`);
       }
