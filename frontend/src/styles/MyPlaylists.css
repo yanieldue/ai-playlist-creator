@@ -709,23 +709,6 @@
   opacity: 0.5;
 }
 
-.track-remove-button {
-  color: #c7c7cc;
-}
-
-.track-remove-button:hover {
-  color: #ff453a;
-  opacity: 1;
-}
-
-:root.dark-mode .track-remove-button {
-  color: #48484a;
-}
-
-:root.dark-mode .track-remove-button:hover {
-  color: #ff453a;
-  opacity: 1;
-}
 
 .track-thumb-circle {
   width: 24px;

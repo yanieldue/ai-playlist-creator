@@ -983,6 +983,13 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             <div className="track-artist">{track.artist}</div>
                           </div>
                           <div className="track-actions">
+                            <button
+                              className="track-reaction-button"
+                              onClick={() => handleRemoveTrack(playlist.playlistId, track)}
+                              title="Remove from playlist"
+                            >
+                              <Icons.Minus size={16} />
+                            </button>
                             {/* Slot 1: X outline — hidden (space reserved) when liked */}
                             <button
                               className="track-reaction-button"
@@ -1024,13 +1031,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                               ) : (
                                 <Icons.Star size={16} />
                               )}
-                            </button>
-                            <button
-                              className="track-reaction-button track-remove-button"
-                              onClick={() => handleRemoveTrack(playlist.playlistId, track)}
-                              title="Remove from playlist"
-                            >
-                              <Icons.MinusCircle size={16} />
                             </button>
                           </div>
                         </div>
