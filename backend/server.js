@@ -1686,13 +1686,15 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     : [...new Set([...requestedArtists, ...filteredSeeds])];
 
   // Strategy selection:
-  // - exclusive mode → artist_songs (only those specific artists)
-  // - seed artists available → artist_songs + expandToSimilar (SoundCharts similar-artist graph
-  //   finds artists with a matching sound, far more precise than genre top-songs)
-  // - no seed artists → top_songs filtered by genre (last resort)
-  const strategy = isExclusive
+  // - exclusive mode or user explicitly named artists → artist_songs
+  //   (use SC similar-artist graph + full catalog, with mood/energy/theme filtering client-side
+  //    via SC lyrics-analysis data — covers deep cuts beyond top charts)
+  // - no specific artists named → top_songs with ALL SC filters
+  //   (genre + mood + energy + themes applied server-side by SC; paginate for full coverage
+  //   beyond just popular songs; suggestedSeedArtists used only as fallback if 0 results)
+  const strategy = (isExclusive || requestedArtists.length > 0)
     ? 'artist_songs'
-    : (seedArtists.length > 0 ? 'artist_songs' : 'top_songs');
+    : 'top_songs';
 
   const filters = [];
 
@@ -2077,23 +2079,38 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     };
     const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
     console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
+
+    // Paginate through SC's filtered song database — 200 per page, up to 3 pages (600 total).
+    // SC sorts by streams, but pagination gives progressively less-popular songs (deep cuts).
+    // All results already have genre + mood + energy + themes applied server-side by SC.
+    const PAGE_SIZE = 200;
+    const MAX_PAGES = strategy === 'trending' ? 1 : 3;
+    const allItems = [];
+
     try {
-      await throttleSoundCharts();
-      const response = await axios.post(
-        'https://customer.api.soundcharts.com/api/v2/top/songs',
-        body,
-        {
-          headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-          params: { offset: 0, limit: Math.min(fetchCount, 200) },
-          timeout: 15000
-        }
-      );
-      const items = response.data?.items || [];
-      console.log(`✓ SoundCharts returned ${items.length} songs`);
+      for (let page = 0; page < MAX_PAGES; page++) {
+        await throttleSoundCharts();
+        const response = await axios.post(
+          'https://customer.api.soundcharts.com/api/v2/top/songs',
+          body,
+          {
+            headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+            params: { offset: page * PAGE_SIZE, limit: PAGE_SIZE },
+            timeout: 15000
+          }
+        );
+        const pageItems = response.data?.items || [];
+        allItems.push(...pageItems);
+
+        // Stop paging early if SC returned fewer than a full page (no more results)
+        if (pageItems.length < PAGE_SIZE) break;
+      }
+
+      const items = allItems;
+      console.log(`✓ SoundCharts returned ${items.length} songs (${Math.ceil(items.length / PAGE_SIZE)} page(s))`);
 
       // If a genre filter returned 0 results, the genre slug may be unsupported.
-      // Prefer artist_songs with seed artists (stays genre-relevant) over stripping the filter
-      // (which returns unfiltered global top songs that may be completely off-genre).
+      // Fall back to artist_songs with seed artists (stays genre-relevant).
       const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres');
       if (items.length === 0 && genreFilters.length > 0) {
         const seeds = query.seedArtists || [];
