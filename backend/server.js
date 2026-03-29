@@ -7653,10 +7653,16 @@ Return ONLY valid JSON:
               // passes; "DJ Luian" on "FIFA Sound" primary fails.
               const _primaryArtist = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
               const _scSourceTokens = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
-              if (_scSourceTokens.length > 0) {
+              // Fallback: when tokenizer produces nothing (e.g. "H.E.R." → ["h","e","r"] → filtered to []),
+              // use the full normalized name so the divergence check always runs.
+              const _scSourceNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const _tokensToCheck = _scSourceTokens.length > 0 ? _scSourceTokens : (_scSourceNorm ? [_scSourceNorm] : []);
+              if (_tokensToCheck.length > 0) {
                 const _primaryTokens = _primaryArtist.split(/\s+/);
-                const _hasPrimaryOverlap = _scSourceTokens.some(tok =>
-                  _primaryTokens.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt))
+                const _primaryNormFull = _primaryArtist.replace(/\s+/g, '');
+                const _hasPrimaryOverlap = _tokensToCheck.some(tok =>
+                  _primaryTokens.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt)) ||
+                  _primaryNormFull === tok || _primaryNormFull.startsWith(tok) || tok.startsWith(_primaryNormFull)
                 );
                 if (!_hasPrimaryOverlap) {
                   console.log(`❌ [ARTIST-DIVERGENCE] "${t.name}" — SC source "${recommendedSong.artist}" not in Spotify primary "${t.artists?.[0]?.name}" — trying next result`);
