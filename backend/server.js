@@ -887,7 +887,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
       );
       if (resp.data?.object) {
         const s = resp.data.object;
-        const detail = { audio: s.audio || {}, moods: [], themes: [] };
+        const detail = { audio: s.audio || {}, moods: s.moods || [], themes: [] };
         db.setCachedSC(detailKey, detail);
         result.push({ ...song, ...detail });
         fetchCount++;
@@ -911,26 +911,55 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
 function filterCatalogByVibe(songs, soundchartsFilters, targetCount) {
   const energyFilter = soundchartsFilters?.find(f => f.type === 'energy')?.data;
   const valenceFilter = soundchartsFilters?.find(f => f.type === 'valence')?.data;
+  const moodsFilter = soundchartsFilters?.find(f => f.type === 'moods')?.data;
+  const requiredMoods = moodsFilter?.values || [];
+
+  // SC mood groups for conflict detection: if playlist requires sad moods, Joyful/Euphoric/etc. conflict
+  const UPBEAT_MOODS = new Set(['Joyful', 'Euphoric', 'Happy', 'Playful', 'Energetic', 'Empowering']);
+  const SAD_MOODS = new Set(['Sad', 'Melancholic', 'Dark']);
+  const hasUpbeatRequired = requiredMoods.some(m => UPBEAT_MOODS.has(m));
+  const hasSadRequired = requiredMoods.some(m => SAD_MOODS.has(m));
+
+  function isMoodConflict(songMoods) {
+    if (!songMoods || songMoods.length === 0) return false;
+    if (hasSadRequired && songMoods.some(m => UPBEAT_MOODS.has(m))) return true;
+    if (hasUpbeatRequired && songMoods.some(m => SAD_MOODS.has(m))) return true;
+    return false;
+  }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
 
   if (!energyFilter && !valenceFilter) {
-    const shuffled = [...songs];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    const good = [];
+    const bad = [];
+    for (const song of songs) {
+      (isMoodConflict(song.moods) ? bad : good).push(song);
     }
-    return shuffled.slice(0, targetCount);
+    shuffle(good);
+    shuffle(bad);
+    if (bad.length > 0) {
+      console.log(`🎭 [MOOD-FILTER] no audio filters — ${good.length} OK / ${bad.length} mood-conflict songs deprioritized`);
+    }
+    return [...good, ...bad].slice(0, targetCount);
   }
 
   const matched = [];
   const unmatched = [];
+  const conflicting = [];
 
   for (const song of songs) {
     const e = song.audio?.energy;
     const v = song.audio?.valence;
     const hasFeatures = e !== undefined && e !== null;
+    const moodConflict = isMoodConflict(song.moods);
 
     if (!hasFeatures) {
-      unmatched.push(song);
+      (moodConflict ? conflicting : unmatched).push(song);
       continue;
     }
 
@@ -944,19 +973,18 @@ function filterCatalogByVibe(songs, soundchartsFilters, targetCount) {
       if (valenceFilter.max !== undefined && v !== undefined && v > valenceFilter.max) passes = false;
     }
 
-    (passes ? matched : unmatched).push(song);
+    if (passes) matched.push(song);
+    else if (moodConflict) conflicting.push(song);
+    else unmatched.push(song);
   }
 
-  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)})`);
+  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features / ${conflicting.length} mood-conflict (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)})`);
 
-  for (const arr of [matched, unmatched]) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
+  for (const arr of [matched, unmatched, conflicting]) {
+    shuffle(arr);
   }
 
-  return [...matched, ...unmatched].slice(0, targetCount);
+  return [...matched, ...unmatched, ...conflicting].slice(0, targetCount);
 }
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
