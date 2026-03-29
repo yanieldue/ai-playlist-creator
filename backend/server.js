@@ -10785,9 +10785,12 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     }
     // Add to excludedSongs so refresh/auto-update won't re-add this track
     // (does NOT affect dislikedSongs or artist exclusions — just prevents the specific song from returning)
+    // Store as { id, uri } object so both the frontend manual-refresh path (maps song.uri)
+    // and the backend auto-update path (maps s.uri || s) can read it correctly.
     if (!playlist.excludedSongs) playlist.excludedSongs = [];
-    if (!playlist.excludedSongs.includes(trackId)) {
-      playlist.excludedSongs.push(trackId);
+    const alreadyExcluded = playlist.excludedSongs.some(s => (s.id || s) === trackId);
+    if (!alreadyExcluded) {
+      playlist.excludedSongs.push({ id: trackId, uri: trackUri });
     }
 
     userPlaylists.set(userId, userPlaylistsArray);
