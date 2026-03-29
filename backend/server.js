@@ -7899,11 +7899,13 @@ Example response: [1, 2, 4, 5, 7, ...]`
               // Seed from artists already in the playlist — so supplement expands the playlist's
               // own internal graph, not the user's listening history.
               const playlistArtists = [...new Set(selectedTracks.map(t => t.artist).filter(Boolean))];
-              const seedArtistsForSupplement = playlistArtists.length > 0
-                ? playlistArtists
+              // Cap supplement seeds at 5 — using all playlist artists causes depth-2 expansion
+              // to balloon to 60+ artists and 500 songs each, which is overkill for a few missing tracks.
+              const seedArtistsForSupplement = (playlistArtists.length > 0
+                ? playlistArtists.slice(0, 5)
                 : (genreData.artistConstraints.requestedArtists?.length > 0
-                  ? genreData.artistConstraints.requestedArtists
-                  : genreData.artistConstraints.suggestedSeedArtists || []);
+                  ? genreData.artistConstraints.requestedArtists.slice(0, 5)
+                  : (genreData.artistConstraints.suggestedSeedArtists || []).slice(0, 5)));
 
               // Build a relaxed query (genre + era only, no mood) using the new direct endpoint.
               // Include suggestedSeedArtists so the 403 fallback has artists to pull from.
@@ -7921,6 +7923,9 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 }
               };
               const supplementQuery = buildSoundchartsQuery(supplementGenreData, allowExplicit);
+              // Disable depth-2 expansion for supplement — we only need a few tracks,
+              // depth-2 multiplies the artist pool dramatically for no benefit here.
+              supplementQuery.expandToSimilar = false;
 
               // Request a larger pool so we have more candidates to match against
               const suppMinArtists = maxPerArtist ? Math.min(Math.ceil(needed / maxPerArtist * 1.5), 40) : 0;
