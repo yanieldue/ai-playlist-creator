@@ -10772,6 +10772,8 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     const { playlistId } = req.params;
     const { userId, trackId, trackUri } = req.body;
 
+    console.log(`[REMOVE-TRACK] userId=${userId} trackId=${trackId} trackUri=${trackUri} playlistId=${playlistId}`);
+
     if (!userId || !trackId) {
       return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
     }
@@ -10781,6 +10783,7 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     let playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
 
     if (!playlist && usePostgres) {
+      console.log(`[REMOVE-TRACK] Not in memory, loading from DB for userId=${userId}`);
       const dbPlaylists = await db.getUserPlaylists(userId);
       userPlaylists.set(userId, dbPlaylists);
       userPlaylistsArray = dbPlaylists;
@@ -10788,8 +10791,11 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     }
 
     if (!playlist) {
+      console.log(`[REMOVE-TRACK] Playlist ${playlistId} not found for userId=${userId}`);
       return res.status(404).json({ error: 'Playlist not found' });
     }
+
+    const tracksBefore = playlist.tracks?.length ?? 0;
 
     // Remove from playlist.tracks in backend state
     if (playlist.tracks) {
@@ -10809,8 +10815,11 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
       playlist.excludedSongs.push({ id: trackId, uri: trackUri });
     }
 
+    console.log(`[REMOVE-TRACK] tracks ${tracksBefore} → ${playlist.tracks?.length ?? 0}, excludedSongs now ${playlist.excludedSongs.length}`);
+
     userPlaylists.set(userId, userPlaylistsArray);
     await savePlaylist(userId, playlist);
+    console.log(`[REMOVE-TRACK] Saved successfully for playlist ${playlistId}`);
 
     // Remove from platform playlist
     if (trackUri) {
