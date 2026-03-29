@@ -417,7 +417,11 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
 
       setPlaylists(prev => prev.map(p => {
         if (p.playlistId !== playlistId) return p;
-        return { ...p, tracks: p.tracks.filter(t => t.id !== track.id) };
+        return {
+          ...p,
+          tracks: p.tracks.filter(t => t.id !== track.id),
+          excludedSongs: [...(p.excludedSongs || []), { id: track.id, uri: track.uri }],
+        };
       }));
       showToast(`Removed "${track.name}" from playlist`, 'success');
     } catch (err) {
