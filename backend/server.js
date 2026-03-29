@@ -849,6 +849,7 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName) {
 }
 
 // Enrich up to maxSongs from a catalog with SC audio features (energy, valence, etc.)
+// Also fetches SC lyrics-analysis moods (Melancholic, Joyful, etc.) for mood conflict detection.
 // Each song's details are cached individually so repeat calls are instant.
 async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
@@ -877,17 +878,28 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     }
 
     try {
+      // Fetch audio features and lyrics-analysis moods in parallel (throttle each separately)
       await throttleSCDetail();
-      const resp = await axios.get(
+      const audioPromise = axios.get(
         `https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`,
-        {
-          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
-          timeout: 8000
-        }
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
       );
-      if (resp.data?.object) {
-        const s = resp.data.object;
-        const detail = { audio: s.audio || {}, moods: s.moods || [], themes: [] };
+      await throttleSCDetail();
+      const lyricsPromise = axios.get(
+        `https://customer.api.soundcharts.com/api/v2/song/${song.uuid}/lyrics-analysis`,
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
+      ).catch(() => null); // moods are optional — never fail the whole enrichment
+
+      const [audioResp, lyricsResp] = await Promise.all([audioPromise, lyricsPromise]);
+
+      if (audioResp.data?.object) {
+        const s = audioResp.data.object;
+        const lyricsData = lyricsResp?.data?.lyricsAnalysis;
+        const detail = {
+          audio: s.audio || {},
+          moods: lyricsData?.moods || s.moods || [],
+          themes: lyricsData?.themes || [],
+        };
         db.setCachedSC(detailKey, detail);
         result.push({ ...song, ...detail });
         fetchCount++;
@@ -900,7 +912,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   }
 
   if (fetchCount > 0) {
-    console.log(`🎵 [CATALOG] Enriched ${fetchCount} songs with audio features`);
+    console.log(`🎵 [CATALOG] Enriched ${fetchCount} songs with audio features + moods`);
   }
 
   return result;
@@ -2407,7 +2419,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     if (genreFilterForSongs) {
       try {
         const sort = soundchartsSort || { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-        const body = { sort, filters: [genreFilterForSongs] };
+        // Pass ALL SC filters (genre, moods, energy, valence, themes) so the top_songs results
+        // are already mood/energy filtered — not just genre. This prevents upbeat songs from
+        // entering a sad playlist just because they're by an R&B artist.
+        const body = { sort, filters: soundchartsFilters };
         await throttleSoundCharts();
         const resp = await axios.post(
           'https://customer.api.soundcharts.com/api/v2/top/songs',
