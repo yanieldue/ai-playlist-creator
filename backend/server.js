@@ -7074,14 +7074,30 @@ Return ONLY valid JSON:
     const artistTrackCount = new Map(); // Per-artist track count for maxPerArtist enforcement
     const excludeTrackIds = new Set(excludeTrackUris.map(uri => uri.split(':').pop())); // Extract track IDs from URIs
 
-    // Load song history if playlistId is provided (for manual refresh)
+    // Load song history and excluded songs if playlistId is provided (for manual refresh)
     let playlistSongHistory = new Set();
     if (playlistId && userId) {
-      const userPlaylistsArray = userPlaylists.get(userId) || [];
-      const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
-      if (playlist && playlist.songHistory && playlist.songHistory.length > 0) {
-        playlistSongHistory = new Set(playlist.songHistory);
-        console.log(`[MANUAL-REFRESH] Loaded ${playlistSongHistory.size} tracks from song history to filter out repeats`);
+      let userPlaylistsArray = userPlaylists.get(userId) || [];
+      let refreshPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      if (!refreshPlaylist && usePostgres) {
+        const dbPlaylists = await db.getUserPlaylists(userId);
+        userPlaylists.set(userId, dbPlaylists);
+        refreshPlaylist = dbPlaylists.find(p => p.playlistId === playlistId);
+      }
+      if (refreshPlaylist) {
+        if (refreshPlaylist.songHistory && refreshPlaylist.songHistory.length > 0) {
+          playlistSongHistory = new Set(refreshPlaylist.songHistory);
+          console.log(`[MANUAL-REFRESH] Loaded ${playlistSongHistory.size} tracks from song history to filter out repeats`);
+        }
+        // Always apply the playlist's excludedSongs from the DB — this is the source of truth
+        // for songs the user explicitly removed, regardless of what the frontend passes.
+        if (refreshPlaylist.excludedSongs && refreshPlaylist.excludedSongs.length > 0) {
+          for (const s of refreshPlaylist.excludedSongs) {
+            const uri = (typeof s === 'object' ? s.uri : null) || s;
+            if (uri) excludeTrackIds.add(uri.split(':').pop());
+          }
+          console.log(`[MANUAL-REFRESH] Auto-excluded ${refreshPlaylist.excludedSongs.length} user-removed song(s) from playlist record`);
+        }
       }
     }
 
