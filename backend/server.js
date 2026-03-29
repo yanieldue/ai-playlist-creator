@@ -5805,11 +5805,14 @@ app.post('/api/generate-playlist', async (req, res) => {
         role: 'user',
         content: `Extract ALL musical characteristics, constraints, and refinement preferences from this playlist prompt.
 
-IMPORTANT — when the prompt contains "Refinements: ...", treat those as ADDITIVE constraints that narrow or layer on top of the original request. They do NOT replace the original. Examples:
-- "sad late-night playlist. Refinements: I want R&B" → sad R&B (keep mood: melancholic, add genre: r&b)
-- "upbeat workout songs. Refinements: make it hip-hop" → upbeat hip-hop workout (keep energyTarget: high, add genre: hip hop)
-- "chill indie music. Refinements: more acoustic" → chill acoustic indie (keep genre + mood, add acoustic production preference)
-Never discard the original mood, energy, or vibe when a genre refinement is present.
+IMPORTANT — when the prompt contains "Refinements: ...", treat those as ADDITIVE constraints that narrow or layer on top of the original request. They do NOT replace the original. Every constraint from the original request (genre, mood, energy, artists, era, etc.) is preserved unless the refinement explicitly overrides it.
+Examples:
+- "sad late-night playlist. Refinements: I want R&B" → sad R&B (keep mood + energy, add genre)
+- "I want Drake songs. Refinements: sad songs" → sad Drake songs (keep requestedArtists: [Drake], add mood: melancholic)
+- "upbeat workout songs. Refinements: make it hip-hop" → upbeat hip-hop workout (keep energyTarget: high, add genre)
+- "chill indie music. Refinements: more acoustic" → chill acoustic indie (keep genre + mood, add production preference)
+- "80s rock. Refinements: more guitar-driven" → 80s guitar-driven rock (keep era + genre, add style detail)
+Never silently drop any constraint from the original request unless the refinement explicitly says to change it.
 
 Prompt: "${prompt}"
 
