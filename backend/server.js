@@ -6915,14 +6915,28 @@ Respond ONLY with valid JSON:
         // CALLMEJB/elle. playlist). Locking seeds to playlist artists keeps the SC similarity
         // graph anchored to what the playlist actually sounds like, not what Claude thinks
         // the genre sounds like in general.
+        //
+        // EXCEPTION: Genre pivot detection — if the refinement is asking for a fundamentally
+        // different genre (e.g. "make it r&b" on an indie playlist), Claude's suggestedSeedArtists
+        // will have zero overlap with the existing playlist's artist pool. In that case, skip the
+        // anchor and use Claude's seeds so the SC graph explores the new genre's territory.
         if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
           const _anchorArtists = [...new Set(
             existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
           )];
-          if (_anchorArtists.length > 0) {
+          // Detect genre pivot: Claude suggested seeds that don't overlap with the playlist's artists
+          const _claudeSeeds = (genreData.artistConstraints?.suggestedSeedArtists || []).map(a => a.toLowerCase());
+          const _anchorLower = new Set(_anchorArtists.map(a => a.toLowerCase()));
+          const _seedOverlap = _claudeSeeds.filter(a => _anchorLower.has(a)).length;
+          const _isGenrePivot = genreData.primaryGenre &&
+            _claudeSeeds.length > 0 &&
+            _seedOverlap === 0;
+          if (_anchorArtists.length > 0 && !_isGenrePivot) {
             console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}] — disabling Level 1/2 expansion`);
             scQuery.artists = _anchorArtists;
             scQuery.expandToSimilar = false;
+          } else if (_isGenrePivot) {
+            console.log(`🔀 Genre pivot detected: primaryGenre="${genreData.primaryGenre}", Claude seeds [${_claudeSeeds.join(', ')}] have 0 overlap with playlist artists — skipping anchor, using Claude's seeds`);
           }
         }
         // Gender filter at seed selection — happens before the SC similarity graph expands.
