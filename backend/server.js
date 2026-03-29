@@ -10783,6 +10783,12 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     if (playlist.lockedTracks) {
       playlist.lockedTracks = playlist.lockedTracks.filter(id => id !== trackId);
     }
+    // Add to excludedSongs so refresh/auto-update won't re-add this track
+    // (does NOT affect dislikedSongs or artist exclusions — just prevents the specific song from returning)
+    if (!playlist.excludedSongs) playlist.excludedSongs = [];
+    if (!playlist.excludedSongs.includes(trackId)) {
+      playlist.excludedSongs.push(trackId);
+    }
 
     userPlaylists.set(userId, userPlaylistsArray);
     await savePlaylist(userId, playlist);
