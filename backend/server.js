@@ -9523,28 +9523,31 @@ app.get('/api/playlists/:userId', async (req, res) => {
             const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
             const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
 
-            const tracks = playlistDetails.body.tracks.items.map(item => {
-              const trackId = item.track.id;
-              let reaction = null;
-              if (likedSongsMap.has(trackId)) {
-                reaction = 'thumbsUp';
-              } else if (dislikedSongsMap.has(trackId)) {
-                reaction = 'thumbsDown';
-              }
+            // Build excluded set (minus-button removes + dislikes) as safety net in case Spotify API removal failed
+            const excludedSongsSet = new Set([
+              ...(playlist.excludedSongs || []).map(s => s.id || s),
+              ...Array.from(dislikedSongsMap.keys()),
+            ]);
 
-              return {
-                id: trackId,
-                name: item.track.name,
-                artist: item.track.artists[0].name,
-                uri: item.track.uri,
-                album: item.track.album.name,
-                image: item.track.album.images[0]?.url,
-                externalUrl: item.track.external_urls.spotify,
-                explicit: item.track.explicit,
-                platform: 'spotify',
-                reaction: reaction
-              };
-            });
+            const tracks = playlistDetails.body.tracks.items
+              .filter(item => item.track && !excludedSongsSet.has(item.track.id))
+              .map(item => {
+                const trackId = item.track.id;
+                const reaction = likedSongsMap.has(trackId) ? 'thumbsUp' : null;
+
+                return {
+                  id: trackId,
+                  name: item.track.name,
+                  artist: item.track.artists[0].name,
+                  uri: item.track.uri,
+                  album: item.track.album.name,
+                  image: item.track.album.images[0]?.url,
+                  externalUrl: item.track.external_urls.spotify,
+                  explicit: item.track.explicit,
+                  platform: 'spotify',
+                  reaction: reaction
+                };
+              });
 
             return {
               ...playlist,
@@ -9620,8 +9623,14 @@ app.get('/api/playlists/:userId', async (req, res) => {
             const likedSongsMap = new Map((playlist.likedSongs || []).map(s => [s.id, s]));
             const dislikedSongsMap = new Map((playlist.dislikedSongs || []).map(s => [s.id, s]));
 
+            // Build excluded songs set (from both minus-button removes and dislike)
+            const excludedSongsSet = new Set([
+              ...(playlist.excludedSongs || []).map(s => s.id || s),
+              ...Array.from(dislikedSongsMap.keys()),
+            ]);
+
             const tracksWithDetails = tracks
-              .filter(track => !dislikedSongsMap.has(track.id)) // hide disliked songs (can't remove via API)
+              .filter(track => !excludedSongsSet.has(track.id)) // hide disliked/removed songs (can't remove via API)
               .map(track => {
                 const trackId = track.id;
                 const reaction = likedSongsMap.has(trackId) ? 'thumbsUp' : null;
