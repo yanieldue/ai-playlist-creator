@@ -5609,9 +5609,20 @@ app.post('/api/generate-playlist', async (req, res) => {
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       const storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
       if (storedPlaylist) {
+        // Extract the new refinement from the incoming prompt if present
+        // (the frontend sends "Original request: "..." \n\nRefinement: <new message>" or
+        // "...\n\nNew refinement: <new message>" — this hasn't been saved to the DB yet)
+        let incomingRefinement = null;
+        const _newRefinementMatch = prompt.match(/\n\nNew refinement:\s*(.+)$/is)
+          || prompt.match(/\n\nRefinement:\s*(.+)$/is);
+        if (_newRefinementMatch) {
+          incomingRefinement = _newRefinementMatch[1].trim();
+        }
+
         const storedRefinements = [
           ...(storedPlaylist.chatMessages || []).filter(m => m.role === 'user').map(m => m.content),
           ...(storedPlaylist.refinementInstructions || []),
+          ...(incomingRefinement ? [incomingRefinement] : []),
         ];
 
         // Resolve description first — needed to decide whether to include the playlist name
