@@ -10519,9 +10519,17 @@ app.post('/api/playlists/:playlistId/exclude-song', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields: userId, trackId' });
     }
 
-    // Get user's playlists
-    const userPlaylistsArray = userPlaylists.get(userId) || [];
-    const playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    // Get user's playlists — fall back to DB if not in memory (e.g. after server restart)
+    let userPlaylistsArray = userPlaylists.get(userId) || [];
+    let playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+
+    if (!playlist && usePostgres) {
+      console.log(`[EXCLUDE-SONG] Not in memory, loading from DB for userId=${userId}`);
+      const dbPlaylists = await db.getUserPlaylists(userId);
+      userPlaylists.set(userId, dbPlaylists);
+      userPlaylistsArray = dbPlaylists;
+      playlist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+    }
 
     if (!playlist) {
       return res.status(404).json({ error: 'Playlist not found' });
@@ -10718,6 +10726,18 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
         image: image || null,
         reactedAt: new Date().toISOString()
       });
+      // Remove from playlist.tracks so it doesn't reappear on page reload
+      if (playlist.tracks) {
+        const trackIdx = playlist.tracks.findIndex(t => t.id === trackId || t.uri === trackUri);
+        if (trackIdx > -1) playlist.tracks.splice(trackIdx, 1);
+      }
+      if (trackUri && playlist.trackUris) {
+        const uriIdx = playlist.trackUris.indexOf(trackUri);
+        if (uriIdx > -1) {
+          playlist.trackUris.splice(uriIdx, 1);
+          playlist.trackCount = playlist.trackUris.length;
+        }
+      }
       console.log(`[REACTION] User disliked song: ${trackName} by ${artistName}`);
     } else {
       console.log(`[REACTION] Removed reaction from song: ${trackName}`);
@@ -10796,15 +10816,22 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     }
 
     const tracksBefore = playlist.tracks?.length ?? 0;
-    if (playlist.tracks?.length > 0) {
-      const sample = playlist.tracks[0];
-      console.log(`[REMOVE-TRACK] Sample track fields: ${JSON.stringify(Object.keys(sample))} | id=${sample.id} | uri=${sample.uri}`);
-    }
 
-    // Remove from playlist.tracks in backend state
-    // Match by id OR uri — stored track objects may use either format
+    // Remove from playlist.tracks — match by id OR uri (same splice approach as exclude-song)
     if (playlist.tracks) {
-      playlist.tracks = playlist.tracks.filter(t => t.id !== trackId && t.uri !== trackUri);
+      const trackIndex = playlist.tracks.findIndex(t => t.id === trackId || t.uri === trackUri);
+      console.log(`[REMOVE-TRACK] findIndex=${trackIndex} for id=${trackId} | uri=${trackUri} | first track id=${playlist.tracks[0]?.id} uri=${playlist.tracks[0]?.uri}`);
+      if (trackIndex > -1) {
+        playlist.tracks.splice(trackIndex, 1);
+      }
+    }
+    // Remove from trackUris array
+    if (trackUri && playlist.trackUris) {
+      const uriIndex = playlist.trackUris.indexOf(trackUri);
+      if (uriIndex > -1) {
+        playlist.trackUris.splice(uriIndex, 1);
+        playlist.trackCount = playlist.trackUris.length;
+      }
     }
     // Remove from lockedTracks if it was locked
     if (playlist.lockedTracks) {
@@ -10815,7 +10842,7 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     // Store as { id, uri } object so both the frontend manual-refresh path (maps song.uri)
     // and the backend auto-update path (maps s.uri || s) can read it correctly.
     if (!playlist.excludedSongs) playlist.excludedSongs = [];
-    const alreadyExcluded = playlist.excludedSongs.some(s => (s.id || s) === trackId);
+    const alreadyExcluded = playlist.excludedSongs.some(s => (s.id || s) === trackId || (s.uri || '') === (trackUri || ''));
     if (!alreadyExcluded) {
       playlist.excludedSongs.push({ id: trackId, uri: trackUri });
     }
@@ -11867,7 +11894,7 @@ app.post('/api/log-error', async (req, res) => {
   }
 });
 
-// ─── Stripe Endpoints ────────────────────────────────────────────────────────
+// ─── Stripe Endpoints ────────────────────────────────────────────────────���───
 
 // POST /api/stripe/create-checkout-session
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
