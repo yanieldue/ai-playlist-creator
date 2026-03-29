@@ -5734,7 +5734,7 @@ app.post('/api/generate-playlist', async (req, res) => {
       }
     }
 
-    // ── Age-to-era preprocessing ─────���────────────────────────────────────────
+    // ── Age-to-era preprocessing ─────���──────────────────��─────────────────────
     // Detect "I'm X, take me back to being Y" or "I was 16 in [year]" patterns
     // and inject the computed year range into the prompt so Claude doesn't have
     // to do the math (it often fails). Current year is used as reference.
@@ -5804,6 +5804,12 @@ app.post('/api/generate-playlist', async (req, res) => {
       messages: [{
         role: 'user',
         content: `Extract ALL musical characteristics, constraints, and refinement preferences from this playlist prompt.
+
+IMPORTANT — when the prompt contains "Refinements: ...", treat those as ADDITIVE constraints that narrow or layer on top of the original request. They do NOT replace the original. Examples:
+- "sad late-night playlist. Refinements: I want R&B" → sad R&B (keep mood: melancholic, add genre: r&b)
+- "upbeat workout songs. Refinements: make it hip-hop" → upbeat hip-hop workout (keep energyTarget: high, add genre: hip hop)
+- "chill indie music. Refinements: more acoustic" → chill acoustic indie (keep genre + mood, add acoustic production preference)
+Never discard the original mood, energy, or vibe when a genre refinement is present.
 
 Prompt: "${prompt}"
 
