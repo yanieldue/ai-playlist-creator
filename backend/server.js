@@ -878,27 +878,19 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     }
 
     try {
-      // Fetch audio features and lyrics-analysis moods in parallel (throttle each separately)
+      // v2.25 song endpoint returns audio features, moods, and themes all in one call
       await throttleSCDetail();
-      const audioPromise = axios.get(
+      const audioResp = await axios.get(
         `https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`,
         { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
       );
-      await throttleSCDetail();
-      const lyricsPromise = axios.get(
-        `https://customer.api.soundcharts.com/api/v2/song/${song.uuid}/lyrics-analysis`,
-        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
-      ).catch(() => null); // moods are optional — never fail the whole enrichment
-
-      const [audioResp, lyricsResp] = await Promise.all([audioPromise, lyricsPromise]);
 
       if (audioResp.data?.object) {
         const s = audioResp.data.object;
-        const lyricsData = lyricsResp?.data?.lyricsAnalysis;
         const detail = {
           audio: s.audio || {},
-          moods: lyricsData?.moods || s.moods || [],
-          themes: lyricsData?.themes || [],
+          moods: s.moods || [],
+          themes: s.themes || [],
         };
         db.setCachedSC(detailKey, detail);
         result.push({ ...song, ...detail });
@@ -1378,6 +1370,8 @@ async function getSoundChartsSongDetails(songUuid, options = {}) {
         genres: song.genres?.map(g => g.root) || [],
         subgenres: song.genres?.flatMap(g => g.sub || []) || [],
         audio: song.audio || {},
+        moods: song.moods || [],
+        themes: song.themes || [],
         isrc: song.isrc?.value,
         explicit: song.explicit,
         duration: song.duration
@@ -2080,11 +2074,11 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     const body = { sort, ...(soundchartsFilters.length > 0 ? { filters: soundchartsFilters } : {}) };
     console.log(`🎵 SoundCharts ${strategy}: filters=[${soundchartsFilters.map(f => f.type).join(', ')}]`);
 
-    // Paginate through SC's filtered song database — 200 per page, up to 3 pages (600 total).
+    // Paginate through SC's filtered song database — 500 per page (SC max), up to 2 pages (1000 total).
     // SC sorts by streams, but pagination gives progressively less-popular songs (deep cuts).
     // All results already have genre + mood + energy + themes applied server-side by SC.
-    const PAGE_SIZE = 200;
-    const MAX_PAGES = strategy === 'trending' ? 1 : 3;
+    const PAGE_SIZE = 500;
+    const MAX_PAGES = strategy === 'trending' ? 1 : 2;
     const allItems = [];
 
     try {
@@ -2142,6 +2136,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           releaseDate: item.song?.releaseDate || null,
           source: strategy,
           _scEnergy: item.song?.audio?.energy ?? null,
+          audio: item.song?.audio || {},
+          moods: item.song?.moods || [],
+          themes: item.song?.themes || [],
         }));
       if (mappedItems.length < items.length) {
         console.log(`⚠️  Dropped ${items.length - mappedItems.length} SoundCharts items with missing song name`);
