@@ -10749,20 +10749,29 @@ app.post('/api/playlists/:playlistId/react-to-song', async (req, res) => {
     await savePlaylist(userId, playlist);
     console.log(`[REACTION] Successfully saved reaction for ${trackName}`);
 
-    // Remove thumbed-down song from the platform playlist
+    // Remove thumbed-down song from the platform playlist — resolve email to platform userId
     if (reaction === 'thumbsDown' && trackUri && playlist.playlistId) {
       try {
-        const reactionTokens = await db.getToken(userId);
-        if (reactionTokens) {
-          const platformService = new PlatformService();
-          const reactionPlatform = platformService.getPlatform(userId);
-          if (reactionPlatform === 'apple') {
-            const appleMusicApiReact = platformService.getAppleMusicApi(reactionTokens);
-            await appleMusicApiReact.deleteTracksFromPlaylist(reactionTokens.access_token, playlist.playlistId, [trackUri]);
-          } else {
-            await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], reactionTokens);
+        const reactionPlatform = playlist.platform || 'spotify';
+        let reactionPlatformUserId = userId;
+        if (isEmailBasedUserId(userId)) {
+          reactionPlatformUserId = await resolvePlatformUserId(userId, reactionPlatform);
+          if (!reactionPlatformUserId && reactionPlatform === 'spotify') {
+            reactionPlatformUserId = await resolvePlatformUserId(userId, 'apple');
           }
-          console.log(`[REACTION] Removed "${trackName}" from platform playlist`);
+        }
+        if (reactionPlatformUserId) {
+          const reactionTokens = await db.getToken(reactionPlatformUserId);
+          if (reactionTokens) {
+            const platformService = new PlatformService();
+            if (reactionPlatform === 'apple') {
+              const appleMusicApiReact = platformService.getAppleMusicApi(reactionTokens);
+              await appleMusicApiReact.deleteTracksFromPlaylist(reactionTokens.access_token, playlist.playlistId, [trackUri]);
+            } else {
+              await platformService.removeTracksFromPlaylist(reactionPlatformUserId, playlist.playlistId, [trackUri], reactionTokens);
+            }
+            console.log(`[REACTION] Removed "${trackName}" from platform playlist`);
+          }
         }
       } catch (removeErr) {
         // Non-critical — the in-app removal already happened; log and continue
@@ -10853,20 +10862,29 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     await savePlaylist(userId, playlist);
     console.log(`[REMOVE-TRACK] Saved successfully for playlist ${playlistId}`);
 
-    // Remove from platform playlist
+    // Remove from platform playlist — resolve email to platform userId for token lookup
     if (trackUri) {
       try {
-        const removeTokens = await db.getToken(userId);
-        if (removeTokens) {
-          const platformService = new PlatformService();
-          const removePlatform = playlist.platform || platformService.getPlatform(userId);
-          if (removePlatform === 'apple') {
-            const appleMusicApiRemove = platformService.getAppleMusicApi(removeTokens);
-            await appleMusicApiRemove.deleteTracksFromPlaylist(removeTokens.access_token, playlist.playlistId, [trackUri]);
-          } else {
-            await platformService.removeTracksFromPlaylist(userId, playlist.playlistId, [trackUri], removeTokens);
+        let removePlatformUserId = userId;
+        const removePlatform = playlist.platform || 'spotify';
+        if (isEmailBasedUserId(userId)) {
+          removePlatformUserId = await resolvePlatformUserId(userId, removePlatform);
+          if (!removePlatformUserId && removePlatform === 'spotify') {
+            removePlatformUserId = await resolvePlatformUserId(userId, 'apple');
           }
-          console.log(`[REMOVE-TRACK] Removed track ${trackId} from platform playlist ${playlistId}`);
+        }
+        if (removePlatformUserId) {
+          const removeTokens = await db.getToken(removePlatformUserId);
+          if (removeTokens) {
+            const platformService = new PlatformService();
+            if (removePlatform === 'apple') {
+              const appleMusicApiRemove = platformService.getAppleMusicApi(removeTokens);
+              await appleMusicApiRemove.deleteTracksFromPlaylist(removeTokens.access_token, playlist.playlistId, [trackUri]);
+            } else {
+              await platformService.removeTracksFromPlaylist(removePlatformUserId, playlist.playlistId, [trackUri], removeTokens);
+            }
+            console.log(`[REMOVE-TRACK] Removed track ${trackId} from platform playlist ${playlistId}`);
+          }
         }
       } catch (removeErr) {
         console.log(`[REMOVE-TRACK] Could not remove from platform playlist: ${removeErr.message}`);
