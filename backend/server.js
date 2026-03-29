@@ -760,6 +760,206 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
   }
 }
 
+// ── Full artist catalog cache ─────────────────────────────────────────────────────────────────
+// Fetches ALL songs for an artist (not just top 10), caches in DB, and uses a freshness check
+// (1-song fetch) to detect new releases and trigger a repull automatically.
+
+// Separate throttle for song detail enrichment calls (lighter endpoint, faster burst)
+let scSongDetailLastCallTime = 0;
+async function throttleSCDetail() {
+  const now = Date.now();
+  const elapsed = now - scSongDetailLastCallTime;
+  if (elapsed < 150) await new Promise(r => setTimeout(r, 150 - elapsed));
+  scSongDetailLastCallTime = Date.now();
+}
+
+async function getArtistFullCatalogFromSC(artistUuid, artistName) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey) return [];
+
+  // Step 1: Freshness check — fetch the most recent 1 song
+  let latestSongUuid = null;
+  try {
+    await throttleSoundCharts();
+    const latestResp = await axios.get(
+      `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/songs`,
+      {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+        params: { offset: 0, limit: 1 },
+        timeout: 5000
+      }
+    );
+    latestSongUuid = latestResp.data?.items?.[0]?.uuid || null;
+  } catch (e) {
+    console.log(`⚠️  [CATALOG] Freshness check failed for "${artistName}": ${e.message}`);
+  }
+
+  // Step 2: Check DB cache
+  const catalogKey = `full_catalog:${artistUuid}`;
+  const cached = db.getCachedSC(catalogKey);
+  if (cached?.songs?.length > 0) {
+    if (!latestSongUuid || cached.latestSongUuid === latestSongUuid) {
+      console.log(`📦 [CATALOG] Cache hit for "${artistName}" (${cached.songs.length} songs)`);
+      return cached.songs;
+    }
+    console.log(`🔄 [CATALOG] New release detected for "${artistName}" — repulling full catalog`);
+  }
+
+  // Step 3: Paginate through all songs (100 per page, cap at 500)
+  const allSongs = [];
+  let offset = 0;
+  const pageSize = 100;
+
+  while (true) {
+    try {
+      await throttleSoundCharts();
+      const resp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/songs`,
+        {
+          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+          params: { offset, limit: pageSize },
+          timeout: 15000
+        }
+      );
+      const items = resp.data?.items || [];
+      for (const song of items) {
+        allSongs.push({
+          uuid: song.uuid,
+          name: song.name,
+          releaseDate: song.releaseDate,
+          isrc: song.isrc?.value || song.isrc || null,
+        });
+      }
+      if (items.length < pageSize || allSongs.length >= 500) break;
+      offset += pageSize;
+    } catch (e) {
+      console.log(`⚠️  [CATALOG] Page fetch error for "${artistName}" at offset ${offset}: ${e.message}`);
+      break;
+    }
+  }
+
+  console.log(`📡 [CATALOG] Fetched ${allSongs.length} songs for "${artistName}"`);
+
+  if (allSongs.length > 0) {
+    db.setCachedSC(catalogKey, { songs: allSongs, latestSongUuid, cachedAt: new Date().toISOString() });
+  }
+
+  return allSongs;
+}
+
+// Enrich up to maxSongs from a catalog with SC audio features (energy, valence, etc.)
+// Each song's details are cached individually so repeat calls are instant.
+async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey) return songs;
+
+  const result = [];
+  let fetchCount = 0;
+
+  for (const song of songs) {
+    if (!song.uuid) {
+      result.push(song);
+      continue;
+    }
+
+    const detailKey = `song_detail:${song.uuid}`;
+    const cached = db.getCachedSC(detailKey);
+    if (cached) {
+      result.push({ ...song, audio: cached.audio || {}, moods: cached.moods || [], themes: cached.themes || [] });
+      continue;
+    }
+
+    if (fetchCount >= maxSongs) {
+      result.push(song);
+      continue;
+    }
+
+    try {
+      await throttleSCDetail();
+      const resp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`,
+        {
+          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+          timeout: 8000
+        }
+      );
+      if (resp.data?.object) {
+        const s = resp.data.object;
+        const detail = { audio: s.audio || {}, moods: [], themes: [] };
+        db.setCachedSC(detailKey, detail);
+        result.push({ ...song, ...detail });
+        fetchCount++;
+      } else {
+        result.push(song);
+      }
+    } catch (e) {
+      result.push(song);
+    }
+  }
+
+  if (fetchCount > 0) {
+    console.log(`🎵 [CATALOG] Enriched ${fetchCount} songs with audio features`);
+  }
+
+  return result;
+}
+
+// Filter catalog songs by energy/valence from SC query filters.
+// Songs with matching audio features are preferred; songs without features are used as fallback.
+function filterCatalogByVibe(songs, soundchartsFilters, targetCount) {
+  const energyFilter = soundchartsFilters?.find(f => f.type === 'energy')?.data;
+  const valenceFilter = soundchartsFilters?.find(f => f.type === 'valence')?.data;
+
+  if (!energyFilter && !valenceFilter) {
+    const shuffled = [...songs];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, targetCount);
+  }
+
+  const matched = [];
+  const unmatched = [];
+
+  for (const song of songs) {
+    const e = song.audio?.energy;
+    const v = song.audio?.valence;
+    const hasFeatures = e !== undefined && e !== null;
+
+    if (!hasFeatures) {
+      unmatched.push(song);
+      continue;
+    }
+
+    let passes = true;
+    if (energyFilter) {
+      if (energyFilter.min !== undefined && e < energyFilter.min) passes = false;
+      if (energyFilter.max !== undefined && e > energyFilter.max) passes = false;
+    }
+    if (valenceFilter && passes) {
+      if (valenceFilter.min !== undefined && v !== undefined && v < valenceFilter.min) passes = false;
+      if (valenceFilter.max !== undefined && v !== undefined && v > valenceFilter.max) passes = false;
+    }
+
+    (passes ? matched : unmatched).push(song);
+  }
+
+  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)})`);
+
+  for (const arr of [matched, unmatched]) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  return [...matched, ...unmatched].slice(0, targetCount);
+}
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
 // Helper function to search for a specific song on SoundCharts by title + artist
 // Returns the matching song's artist UUID directly — no ambiguity from artist name search
 // Helper: get artist info when UUID is already known (skips the name-search step entirely)
@@ -2204,15 +2404,29 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
     for (const artistInfo of unrepresented) {
       try {
-        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
+        const fullCatalog = await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name);
         // Skip obvious variants (live, remix, bonus, karaoke) to improve Spotify hit rate
-        const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-        for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
-          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
+        const mainSongs = fullCatalog.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+        const pool = mainSongs.length > 0 ? mainSongs : fullCatalog;
+        // Enrich a subset with audio features, then vibe-filter
+        const enriched = await enrichCatalogWithAudioFeatures(pool, 40);
+        const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist);
+        for (const song of vibeFiltered) {
+          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: song.audio?.energy ?? null });
         }
-        if (mainSongs.length > 0) console.log(`✓ Got ${mainSongs.length} songs from ${artistInfo.name} (direct)`);
+        console.log(`✓ [CATALOG] ${vibeFiltered.length}/${pool.length} songs selected for "${artistInfo.name}"`);
       } catch (err) {
-        console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
+        console.log(`⚠️  Error fetching full catalog for "${artistInfo.name}": ${err.message}`);
+        // Fallback to legacy 10-song fetch
+        try {
+          const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
+          const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+          for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
+            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
+          }
+        } catch (fallbackErr) {
+          console.log(`⚠️  Fallback also failed for "${artistInfo.name}": ${fallbackErr.message}`);
+        }
       }
     }
 
