@@ -10798,8 +10798,9 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     const tracksBefore = playlist.tracks?.length ?? 0;
 
     // Remove from playlist.tracks in backend state
+    // Match by id OR uri — stored track objects may use either format
     if (playlist.tracks) {
-      playlist.tracks = playlist.tracks.filter(t => t.id !== trackId);
+      playlist.tracks = playlist.tracks.filter(t => t.id !== trackId && t.uri !== trackUri);
     }
     // Remove from lockedTracks if it was locked
     if (playlist.lockedTracks) {
