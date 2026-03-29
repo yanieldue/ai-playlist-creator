@@ -10796,6 +10796,10 @@ app.post('/api/playlists/:playlistId/remove-track', async (req, res) => {
     }
 
     const tracksBefore = playlist.tracks?.length ?? 0;
+    if (playlist.tracks?.length > 0) {
+      const sample = playlist.tracks[0];
+      console.log(`[REMOVE-TRACK] Sample track fields: ${JSON.stringify(Object.keys(sample))} | id=${sample.id} | uri=${sample.uri}`);
+    }
 
     // Remove from playlist.tracks in backend state
     // Match by id OR uri — stored track objects may use either format
