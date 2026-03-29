@@ -1925,6 +1925,24 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     }
   }
 
+  // Merge Claude's directly-output SC filters (audio, mood, lyrical).
+  // These replace lookup-table-derived filters of the same type, since Claude interprets
+  // the prompt more dynamically than static keyword maps can.
+  // Skip types that need server-side slug/code mapping (handled above by existing logic).
+  const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages']);
+  const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
+  for (const cf of claudeScFilters) {
+    if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
+    const existingIdx = filters.findIndex(f => f.type === cf.type);
+    if (existingIdx !== -1) {
+      filters.splice(existingIdx, 1, cf);
+      console.log(`🎯 Claude SC filter override: ${cf.type} ${JSON.stringify(cf.data)}`);
+    } else {
+      filters.push(cf);
+      console.log(`🎯 Claude SC filter added: ${cf.type} ${JSON.stringify(cf.data)}`);
+    }
+  }
+
   return {
     strategy,
     artists: seedArtists,
@@ -5932,7 +5950,10 @@ Respond ONLY with valid JSON in this format:
   "energyTarget": "low" | "medium" | "high" | null,
   "energyProgression": "ramp_up" | "ramp_down" | null,
   "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null,
-  "genreAccessibility": "newcomer" | "curious" | "enthusiast" | null
+  "genreAccessibility": "newcomer" | "curious" | "enthusiast" | null,
+  "soundchartsFilters": [
+    { "type": "filterType", "data": {} }
+  ]
 }
 
 EXTRACTION GUIDELINES:
@@ -6181,6 +6202,63 @@ GENRE ACCESSIBILITY (genreAccessibility):
 - When genreAccessibility: "enthusiast" — prefer deep cuts, obscure artists, and non-obvious picks that a long-time fan hasn't heard
 - If no accessibility signal → null
 
+SOUNDCHARTS DIRECT FILTERS (soundchartsFilters — CRITICAL):
+Use this field to directly output SoundCharts API filter objects that precisely match the prompt's intent.
+These are used VERBATIM in the SC song search — be accurate and specific.
+
+DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness, moods, themes, emotionalIntensityScore
+DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages (handled separately)
+
+FILTER SHAPES:
+- Numeric range: { "type": "energy", "data": { "min": 0.6 } }  — include only min, only max, or both
+- Mood list: { "type": "moods", "data": { "values": ["Sad", "Melancholic"], "operator": "in" } }
+- Theme list: { "type": "themes", "data": { "values": ["Heartbreak", "Love"], "operator": "in" } }
+- Score range: { "type": "emotionalIntensityScore", "data": { "min": 7 } }  — scale 1–10
+
+VALID MOOD VALUES (exact strings only):
+Melancholic, Joyful, Euphoric, Sad, Happy, Calm, Energetic, Empowering, Aggressive, Dark, Romantic, Sensual, Spiritual, Peaceful, Nostalgic, Playful
+
+VALID THEME VALUES (exact strings only):
+Love, Heartbreak, Party, Relationships, Sex, Success, Power, Friendship, Money, Social Issues, Nature, Adventure, Home, Religion, Death, Youth, Dance
+
+AUDIO FEATURE RANGES (all 0.0–1.0 except tempo in BPM and scores 1–10):
+- energy: activity/intensity. Sleep: max 0.30. Chill/relax: max 0.45. Focus/study: max 0.55. Medium: 0.38–0.68. Workout/gym: min 0.75. Hype/intense: min 0.80.
+- valence: musical positivity. Dark/sad: max 0.35. Melancholic: max 0.40. Neutral: 0.35–0.65. Happy/upbeat: min 0.65. Joyful/euphoric: min 0.72.
+- danceability: rhythmic consistency. Groovy: min 0.65. Dance: min 0.72. Club/party: min 0.78.
+- acousticness: acoustic instrumentation likelihood. Slightly acoustic: min 0.40. Acoustic/unplugged: min 0.60. Fully acoustic: min 0.80.
+- tempo (BPM): Slow ballad: max 80. Slow: max 90. Mid-tempo: 90–120. Uptempo: min 120. Fast: min 140. EDM/rave: min 128.
+- liveness: live audience presence. Exclude live recordings: max 0.40.
+- speechiness: spoken word ratio. Rap-heavy: min 0.33. Exclude rap/spoken word: max 0.33.
+- instrumentalness: absence of vocals. Instrumental: min 0.55. Lo-fi/background: min 0.30.
+- emotionalIntensityScore (1–10): lyrical emotional intensity. Light/fun: max 4. Moderate: 4–7. Deeply emotional: min 7. Intense/cathartic: min 8.
+
+MAPPING EXAMPLES — think dynamically, these are not exhaustive:
+- "songs I can dance to", "danceable", "banger" → { type: "danceability", data: { min: 0.72 } }
+- "party anthems", "turn up" → { type: "danceability", data: { min: 0.75 } }, { type: "energy", data: { min: 0.70 } }, { type: "moods", data: { values: ["Euphoric", "Energetic"], operator: "in" } }
+- "sad songs", "heartbreak", "crying" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.35 } }, { type: "themes", data: { values: ["Heartbreak"], operator: "in" } }
+- "happy/upbeat/feel-good" → { type: "moods", data: { values: ["Happy", "Joyful"], operator: "in" } }, { type: "valence", data: { min: 0.65 } }
+- "chill/relaxing/laid-back" → { type: "energy", data: { max: 0.45 } }, { type: "moods", data: { values: ["Calm", "Peaceful"], operator: "in" } }
+- "gym/workout" → { type: "energy", data: { min: 0.75 } }, { type: "danceability", data: { min: 0.65 } }
+- "acoustic/unplugged" → { type: "acousticness", data: { min: 0.60 } }
+- "love songs/romantic" → { type: "moods", data: { values: ["Romantic"], operator: "in" } }, { type: "themes", data: { values: ["Love", "Relationships"], operator: "in" } }
+- "dark/moody" → { type: "moods", data: { values: ["Dark", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.35 } }
+- "nostalgic" → { type: "moods", data: { values: ["Nostalgic"], operator: "in" } }
+- "motivational/empowering" → { type: "moods", data: { values: ["Empowering"], operator: "in" } }, { type: "emotionalIntensityScore", data: { min: 6 } }
+- "emotional/deeply emotional" → { type: "emotionalIntensityScore", data: { min: 7 } }
+- "high emotion sad" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "emotionalIntensityScore", data: { min: 7 } }, { type: "valence", data: { max: 0.35 } }
+- "slow jams" → { type: "tempo", data: { max: 95 } }, { type: "moods", data: { values: ["Romantic", "Sensual"], operator: "in" } }
+- "lo-fi/study" → { type: "energy", data: { max: 0.50 } }, { type: "instrumentalness", data: { min: 0.30 } }
+- "euphoric/euphoria" → { type: "moods", data: { values: ["Euphoric"], operator: "in" } }, { type: "valence", data: { min: 0.70 } }
+- "sleep/meditation" → { type: "energy", data: { max: 0.30 } }, { type: "moods", data: { values: ["Calm", "Peaceful"], operator: "in" } }
+- "aggressive/intense/metal" → { type: "energy", data: { min: 0.78 } }, { type: "moods", data: { values: ["Aggressive"], operator: "in" } }
+- "spiritual/worship" → { type: "moods", data: { values: ["Spiritual"], operator: "in" } }, { type: "themes", data: { values: ["Religion"], operator: "in" } }
+
+RULES:
+- Only include filters where you have HIGH CONFIDENCE in the mapping. Fewer accurate filters beat many uncertain ones.
+- Do NOT output conflicting filters for the same type (e.g. energy min 0.75 AND energy max 0.45). If signals conflict, omit that filter type.
+- Always output moods + valence together when the prompt is clearly sad or clearly happy.
+- For ambiguous prompts like "vibes" or "good music" with no emotional descriptor, output [] (empty array).
+
 Use null, [], or false for any feature not mentioned.
 
 DO NOT include any text outside the JSON.`
@@ -6244,6 +6322,7 @@ DO NOT include any text outside the JSON.`
       energyProgression: null,
       phases: null,
       genreAccessibility: null,
+      soundchartsFilters: [],
     };
     try {
       let genreText = genreExtractionResponse.content[0].text.trim();
