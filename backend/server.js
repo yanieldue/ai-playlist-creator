@@ -2263,6 +2263,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         const cu = confirmedArtistUuids[s.name.toLowerCase()];
         return cu && cu !== 'INVALID' && !String(cu).startsWith('NOSIMILAR:');
       });
+      // Normalized primary genre slug — used for strict depth-1 AND depth-2 checks.
+      // Defined here (before depth-1 loop) so both phases share the same value.
+      const _primaryNorm = query?.primaryGenre ? normalizeGenre(query.primaryGenre) : null;
+
       if (allGenreBearingInconsistent && !hasConfirmedSeeds) {
         console.log(`⛔ Every genre-bearing seed is genre-inconsistent — skipping SC graph traversal entirely. Supplement flow will find correct artists.`);
         allArtistInfos = [];
@@ -2279,6 +2283,14 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           // 1. Must include the expected genre (e.g. r&b) — prevents genre drift.
           if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) {
             console.log(`⏭️  Skipping "${simInfo.name}" — missing expected genre [${expectedGenres.join(', ')}]`);
+            continue;
+          }
+          // 1c. Strict primary-genre check for depth-1: same logic as depth-2 — when
+          // primaryGenre is set, require at least one of the artist's genres to contain
+          // the primary genre slug. Prevents e.g. Italian neo-soul artists entering an
+          // R&B playlist because they have 'soul' but not 'r&b' in their SC genres.
+          if (_primaryNorm && artistGenres.length > 0 && !artistGenres.some(g => normalizeGenre(g).includes(_primaryNorm))) {
+            console.log(`⏭️  Skipping "${simInfo.name}" (depth-1) — missing primary genre "${query.primaryGenre}" in genres [${artistGenres.join(', ')}]`);
             continue;
           }
           // 1b. If the artist has NO genre data, check whether their own SC similar artists
@@ -2324,8 +2336,6 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       }
 
       let depth2Added = 0;
-      // Normalized primary genre slug for strict depth-2 check (e.g. 'rb' from 'r&b')
-      const _primaryNorm = query?.primaryGenre ? normalizeGenre(query.primaryGenre) : null;
       for (const name of depth2Candidates) {
         if (depth2Added >= DEPTH2_MAX) break;
         try {
