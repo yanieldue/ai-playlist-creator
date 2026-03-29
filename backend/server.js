@@ -1896,6 +1896,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     seedArtists,
     soundchartsFilters: filters,
     soundchartsSort: { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
+    primaryGenre: genreData.primaryGenre || null,
   };
 }
 
@@ -2323,6 +2324,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       }
 
       let depth2Added = 0;
+      // Normalized primary genre slug for strict depth-2 check (e.g. 'rb' from 'r&b')
+      const _primaryNorm = query?.primaryGenre ? normalizeGenre(query.primaryGenre) : null;
       for (const name of depth2Candidates) {
         if (depth2Added >= DEPTH2_MAX) break;
         try {
@@ -2331,6 +2334,11 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           const artistGenres = (info.genres || []).map(g => g.toLowerCase());
           if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) continue;
           if (!seedHasContrastingGenre && contrastingGenres.some(g => artistHasExactGenre(artistGenres, g))) continue;
+          // Stricter depth-2 check: when primaryGenre is set, require at least one of the
+          // artist's genres to contain the primary genre slug. This prevents secondary genres
+          // from seeds (e.g. 'hip hop' on an R&B artist) from admitting pure hip-hop artists
+          // like Tyler, the Creator into an R&B playlist via depth-2 graph drift.
+          if (_primaryNorm && artistGenres.length > 0 && !artistGenres.some(g => normalizeGenre(g).includes(_primaryNorm))) continue;
           // Same unknown-genre pool-overlap check as depth-1: if no genre data, require that
           // at least one of this artist's similar artists overlaps with the known seed pool.
           if (expectedGenres.length > 0 && artistGenres.length === 0) {
@@ -5606,8 +5614,15 @@ app.post('/api/generate-playlist', async (req, res) => {
     // and top-5 artists so Claude has concrete genre anchors regardless of how sparse the
     // original prompt is.
     if (playlistId && userId) {
-      const userPlaylistsArray = userPlaylists.get(userId) || [];
-      const storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      let userPlaylistsArray = userPlaylists.get(userId) || [];
+      let storedPlaylist = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      // DB fallback: in-memory map is empty after server restart; load from Postgres
+      if (!storedPlaylist && usePostgres) {
+        const dbPlaylists = await db.getUserPlaylists(userId);
+        userPlaylists.set(userId, dbPlaylists);
+        userPlaylistsArray = dbPlaylists;
+        storedPlaylist = dbPlaylists.find(p => p.playlistId === playlistId);
+      }
       if (storedPlaylist) {
         // Extract the new refinement from the incoming prompt if present
         // (the frontend sends "Original request: "..." \n\nRefinement: <new message>" or
@@ -5675,6 +5690,37 @@ app.post('/api/generate-playlist', async (req, res) => {
         }
 
         console.log(`[REFRESH] Rebuilt prompt for "${storedPlaylist.playlistName}": "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
+      }
+    }
+
+    // ── Structured refinement prompt normalization ────────────────────────────
+    // When the draft lookup above didn't fire (no playlistId, or draft not found),
+    // the frontend's structured prompt still reaches here unchanged:
+    //   Original request: "indie songs like Phoebe Bridgers"
+    //   Key artists in this playlist: Phoebe Bridgers, Alex G, ...
+    //   Refinement: can you make it r&b songs
+    //
+    // The "Key artists" line biases Claude's genre extraction toward the old genre.
+    // Strip it and rebuild into the cleaner format that Claude handles correctly.
+    {
+      const _origMatch = prompt.match(/^Original request:\s*"([^"]+)"/i);
+      const _refMatch = prompt.match(/\n\n(?:New refinement|Refinement):\s*(.+)$/is);
+      const _prevRefMatch = prompt.match(/\n\nPrevious refinements:\s*(.+?)\n\nNew refinement:/is);
+      if (_origMatch && _refMatch) {
+        const _origReq = _origMatch[1].trim();
+        const _newRef = _refMatch[1].trim();
+        const _prevRefs = _prevRefMatch ? _prevRefMatch[1].trim() : null;
+        const _descMatch = prompt.match(/\n\nPlaylist description:\s*(.+?)(?:\n\n|$)/is);
+        const _desc = _descMatch ? _descMatch[1].trim() : null;
+        // Rebuild without artist context — keep only original, description, and refinements
+        const _allRefinements = [
+          ...(_prevRefs ? [_prevRefs] : []),
+          _newRef,
+        ].filter(Boolean).join('. ');
+        prompt = _origReq;
+        if (_allRefinements) prompt += `. Refinements: ${_allRefinements}`;
+        if (_desc) prompt += `\n\nPlaylist description: ${_desc}`;
+        console.log(`[REFINE-NORMALIZE] Stripped artist context, rebuilt prompt: "${prompt.substring(0, 150)}${prompt.length > 150 ? '...' : ''}"`);
       }
     }
 
@@ -6821,11 +6867,17 @@ Respond ONLY with valid JSON:
       console.log(`🔍 Looking up existing playlist: ${playlistId} for user ${userId}`);
       const userPlaylistsArray = userPlaylists.get(userId) || [];
       existingPlaylistData = userPlaylistsArray.find(p => p.playlistId === playlistId);
+      // DB fallback: in-memory map is empty after server restart; load from Postgres
+      if (!existingPlaylistData && usePostgres) {
+        const dbPlaylists = await db.getUserPlaylists(userId);
+        userPlaylists.set(userId, dbPlaylists);
+        existingPlaylistData = dbPlaylists.find(p => p.playlistId === playlistId);
+      }
 
       if (existingPlaylistData) {
         console.log(`✓ Found existing playlist: "${existingPlaylistData.playlistName || 'Untitled'}"`);
       } else {
-        console.log(`⚠️  Playlist ${playlistId} not found in memory cache`);
+        console.log(`⚠️  Playlist ${playlistId} not found in memory cache or database`);
       }
 
       // Prompt was already rebuilt from originalPrompt + refinements before Claude extraction.
