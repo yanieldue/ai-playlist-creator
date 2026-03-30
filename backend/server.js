@@ -6264,7 +6264,7 @@ EXCLUDED ARTISTS:
 - "no mainstream hits", "no chart toppers", "no radio songs", "avoid popular songs", "underground only", "deep cuts only", "no famous songs" → set trackConstraints.popularity.preference: "underground" AND trackConstraints.popularity.max: 60
 - "no [artist] but similar sound/vibe" → add [artist] to excludedArtists (include the artist names, not just the preference)
 - If multiple exclusions mentioned, include all artist names
-- ABBREVIATIONS & NICKNAMES: Resolve common abbreviations to full artist names. Examples: "TS" or "T.S." → "Taylor Swift", "TSwift" → "Taylor Swift", "Ye" → "Kanye West", "Bey" → "Beyoncé", "Jay" or "Hov" → "Jay-Z", "Drizzy" → "Drake", "Weezy" → "Lil Wayne"
+- ABBREVIATIONS & NICKNAMES: Resolve common abbreviations to full artist names. Examples: "TS" or "T.S." → "Taylor Swift", "TSwift" → "Taylor Swift", "Ye" → "Kanye West", "Bey" → "Beyoncé", "Jay" or "Hov" �� "Jay-Z", "Drizzy" → "Drake", "Weezy" → "Lil Wayne"
 - PRODUCER EXCLUSIONS: "no Jack Antonoff songs", "no Max Martin production" → add those names to excludedArtists (the filter will match on artist name; note this won't filter by producer but will log the intent)
 - CRITICAL: When the user says "no [name]", always try to resolve [name] to the most likely well-known artist before adding to excludedArtists
 - IMPLICIT EXCLUSION — "expand beyond" phrases: When the user signals they want to DISCOVER BEYOND a named artist (not get more of them), add that artist to both suggestedSeedArtists (for genre/taste anchoring) AND excludedArtists (to keep their songs out of the output).
@@ -12256,6 +12256,64 @@ function drainUpdateQueue() {
   }
 }
 
+// Daily proactive cache enrichment — fetches and caches full catalogs for today's top
+// artists across all major genres. Warms Phase 3b so users hit the fast vibe-filtered
+// cache path instead of the slow cold-fetch path. Uses setImmediate internally so it
+// never blocks the request loop.
+async function enrichTopArtistsCache() {
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  if (!appId || !apiKey) return;
+
+  console.log('🔥 [ENRICHMENT] Starting daily top-artists cache warm...');
+  const sort = { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
+  const SC_ENRICHMENT_GENRES = ['pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african'];
+
+  // Step 1: collect unique artist names from top 500 songs per genre
+  const artistQueue = new Map(); // lowerName -> { name, genre }
+  for (const scGenre of SC_ENRICHMENT_GENRES) {
+    try {
+      await throttleSoundCharts();
+      const resp = await axios.post(
+        'https://customer.api.soundcharts.com/api/v2/top/songs',
+        { sort, filters: [{ type: 'songGenres', data: { values: [scGenre], operator: 'in' } }] },
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: 0, limit: 500 }, timeout: 15000 }
+      );
+      const items = resp.data?.items || [];
+      for (const item of items) {
+        const name = item.song?.creditName;
+        if (name && !artistQueue.has(name.toLowerCase())) {
+          artistQueue.set(name.toLowerCase(), { name, genre: scGenre });
+        }
+      }
+      console.log(`🔥 [ENRICHMENT] ${scGenre}: ${items.length} songs, ${artistQueue.size} unique artists so far`);
+    } catch (err) {
+      console.log(`⚠️  [ENRICHMENT] top/songs fetch failed for "${scGenre}": ${err.message}`);
+    }
+  }
+
+  // Step 2: for each artist not already cached, fetch + store full catalog
+  let enriched = 0, skipped = 0, failed = 0;
+  for (const [, { name, genre }] of artistQueue) {
+    try {
+      const artistInfo = await getSoundChartsArtistInfo(name, genre);
+      if (!artistInfo?.uuid) { skipped++; continue; }
+
+      // Skip if catalog is already cached (freshness check still runs inside getArtistFullCatalogFromSC)
+      const catalogKey = `full_catalog:${artistInfo.uuid}`;
+      const cached = db.getCachedSC(catalogKey);
+      if (cached?.songs?.length > 0) { skipped++; continue; }
+
+      await getArtistFullCatalogFromSC(artistInfo.uuid, name);
+      enriched++;
+    } catch (err) {
+      failed++;
+      console.log(`⚠️  [ENRICHMENT] Failed for "${name}": ${err.message}`);
+    }
+  }
+  console.log(`✅ [ENRICHMENT] Done — ${enriched} enriched, ${skipped} already cached, ${failed} failed`);
+}
+
 // Auto-update scheduler - checks every minute for playlists that need updating.
 // Uses setInterval instead of node-cron to avoid spurious "missed execution" warnings
 // on shared Railway infrastructure.
@@ -12532,6 +12590,16 @@ async function startServer() {
       // Start the auto-update scheduler
       scheduleAutoUpdates();
       console.log(`⏰ Auto-update scheduler started`);
+
+      // Proactive cache warm — only runs when ENRICH_TOP_ARTISTS=true in env.
+      // Disable this after the SC API quota period ends to preserve calls for real users.
+      if (process.env.ENRICH_TOP_ARTISTS === 'true') {
+        setTimeout(() => enrichTopArtistsCache(), 60000);
+        cron.schedule('0 3 * * *', () => enrichTopArtistsCache());
+        console.log(`🔥 Top-artists enrichment scheduled (startup +60s, then daily at 3 AM)`);
+      } else {
+        console.log(`⏭️  Top-artists enrichment disabled (set ENRICH_TOP_ARTISTS=true to enable)`);
+      }
 
       // Clean up expired artist cache every hour
       setInterval(() => {
