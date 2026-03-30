@@ -864,7 +864,9 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName, genre = null) 
     } catch (e) {
       console.log(`⚠️  [CATALOG] Freshness check failed for "${artistName}": ${e.message}`);
     }
-    if (!latestSongUuid || cached.latestSongUuid === latestSongUuid) {
+    // Check if the latest song already exists in artist_songs — more reliable than comparing stored UUID field
+    const alreadyStored = latestSongUuid ? await db.artistSongExists(artistUuid, latestSongUuid) : false;
+    if (!latestSongUuid || alreadyStored) {
       // No new music — bump cachedAt so we skip the freshness check for another 24h
       db.setCachedSC(catalogKey, { ...cached, cachedAt: new Date().toISOString() });
       console.log(`📦 [CATALOG] Cache hit for "${artistName}" (${cached.songs.length} songs, no new releases)`);
@@ -909,9 +911,11 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName, genre = null) 
   console.log(`📡 [CATALOG] Fetched ${allSongs.length} songs for "${artistName}"`);
 
   if (allSongs.length > 0) {
-    db.setCachedSC(catalogKey, { songs: allSongs, latestSongUuid, cachedAt: new Date().toISOString() });
-    // Also write to structured tables for SQL queryability
-    db.upsertArtistCatalog(artistUuid, artistName, allSongs, latestSongUuid, genre).catch(e => {
+    // Use first song from full fetch as the authoritative latest (same sort order as freshness check)
+    const freshLatestSongUuid = allSongs[0]?.uuid || latestSongUuid;
+    db.setCachedSC(catalogKey, { songs: allSongs, latestSongUuid: freshLatestSongUuid, cachedAt: new Date().toISOString() });
+    // Also write to structured tables for SQL queryability (incremental — only new songs)
+    db.upsertArtistCatalog(artistUuid, artistName, allSongs, freshLatestSongUuid, genre).catch(e => {
       console.log(`⚠️  [CATALOG] Structured write failed for "${artistName}": ${e.message}`);
     });
   }

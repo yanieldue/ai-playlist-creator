@@ -142,6 +142,16 @@ async function initializeTables() {
       CREATE INDEX IF NOT EXISTS idx_artist_songs_artist_uuid ON artist_songs(artist_uuid);
       CREATE INDEX IF NOT EXISTS idx_artist_songs_isrc ON artist_songs(isrc);
       CREATE INDEX IF NOT EXISTS idx_artist_songs_song_uuid ON artist_songs(song_uuid);
+      ALTER TABLE artist_songs ADD COLUMN IF NOT EXISTS song_uuid TEXT;
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'artist_songs_song_uuid_key'
+        ) THEN
+          DELETE FROM artist_songs a USING artist_songs b
+            WHERE a.id > b.id AND a.song_uuid IS NOT DISTINCT FROM b.song_uuid AND a.song_uuid IS NOT NULL;
+          ALTER TABLE artist_songs ADD CONSTRAINT artist_songs_song_uuid_key UNIQUE (song_uuid);
+        END IF;
+      END $$;
       CREATE INDEX IF NOT EXISTS idx_artist_catalogs_genre ON artist_catalogs(genre);
 
       CREATE TABLE IF NOT EXISTS platform_user_ids (
@@ -826,6 +836,14 @@ class DatabaseService {
   }
 
   // Structured artist catalog storage (queryable via SQL)
+  async artistSongExists(artistUuid, songUuid) {
+    const result = await pool.query(
+      `SELECT 1 FROM artist_songs WHERE artist_uuid = $1 AND song_uuid = $2 LIMIT 1`,
+      [artistUuid, songUuid]
+    );
+    return result.rows.length > 0;
+  }
+
   async upsertArtistCatalog(artistUuid, artistName, songs, latestSongUuid, genre = null) {
     const client = await pool.connect();
     try {
@@ -838,12 +856,12 @@ class DatabaseService {
            song_count = $4, latest_song_uuid = $5, cached_at = NOW()`,
         [artistUuid, artistName, genre, songs.length, latestSongUuid]
       );
-      // Replace all songs for this artist
-      await client.query(`DELETE FROM artist_songs WHERE artist_uuid = $1`, [artistUuid]);
+      // Incremental insert — only add songs not already stored
       for (const song of songs) {
         await client.query(
           `INSERT INTO artist_songs (artist_uuid, song_uuid, song_name, isrc, release_date)
-           VALUES ($1, $2, $3, $4, $5)`,
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (song_uuid) DO NOTHING`,
           [artistUuid, song.uuid || null, song.name, song.isrc || null, song.releaseDate || null]
         );
       }
