@@ -12594,18 +12594,17 @@ async function enrichTopArtistsCache() {
         if (songs?.length > 0) enriched++;
       }
 
-      // Enrich top 40 songs with audio features (Pass 1 is instant if already cached)
+      // Enrich all songs with audio features (Pass 1 is instant for already-cached songs)
       if (songs?.length > 0) {
-        const top40 = songs.slice(0, 40);
         // Check if any songs still need audio enrichment (not already cached)
         let needsAudio = false;
-        for (const s of top40) {
+        for (const s of songs) {
           if (!s.uuid) continue;
           const sd = await db.getCachedSC(`song_detail:${s.uuid}`);
           if (!sd?.audio || Object.keys(sd.audio).length === 0) { needsAudio = true; break; }
         }
         if (needsAudio) {
-          await enrichCatalogWithAudioFeatures(top40, 40);
+          await enrichCatalogWithAudioFeatures(songs, songs.length);
           audioEnriched++;
         }
       }
