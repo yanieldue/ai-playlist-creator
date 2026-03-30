@@ -2602,15 +2602,36 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
     for (const artistInfo of unrepresented) {
       try {
-        // Quick fetch: get the artist's top songs directly from SC (no full catalog pagination,
-        // no audio enrichment). Phase 3a already covered charting songs via top_songs;
-        // this supplements with songs from pool artists that didn't appear in the genre chart.
-        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.max(songsPerArtist, 20));
-        const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-        for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
-          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
+        // Check DB cache for a previously enriched full catalog (populated by background enrichment).
+        // Cache hit: vibe-filter with energy/valence so we don't return upbeat songs for sad prompts.
+        // Cache miss: quick fetch for now, schedule background enrichment for next time.
+        const catalogKey = `full_catalog:${artistInfo.uuid}`;
+        const cachedCatalog = db.getCachedSC(catalogKey);
+        if (cachedCatalog?.songs?.length > 0) {
+          const mainSongs = cachedCatalog.songs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+          const pool = mainSongs.length > 0 ? mainSongs : cachedCatalog.songs;
+          const enriched = await enrichCatalogWithAudioFeatures(pool, 40);
+          const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist);
+          for (const song of vibeFiltered) {
+            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: song.audio?.energy ?? null });
+          }
+          console.log(`✓ [CACHED] ${vibeFiltered.length}/${pool.length} vibe-filtered songs for "${artistInfo.name}"`);
+        } else {
+          // No cache: quick fetch so the user isn't blocked, then enrich in the background.
+          const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.max(songsPerArtist, 20));
+          const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+          for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
+            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
+          }
+          console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs for "${artistInfo.name}" — scheduling background enrichment`);
+          // Non-blocking: fetch + cache full catalog after response is sent.
+          // Next generation/refresh this artist will hit the cache and be vibe-filtered.
+          setImmediate(() => {
+            getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(e => {
+              console.log(`⚠️  Background enrichment failed for "${artistInfo.name}": ${e.message}`);
+            });
+          });
         }
-        console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs fetched for "${artistInfo.name}"`);
       } catch (err) {
         console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
       }
