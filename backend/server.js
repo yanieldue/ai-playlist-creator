@@ -1147,9 +1147,9 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
 
     // If we have a Spotify ISRC, try exact ISRC match first — works across name ambiguity
     if (spotifyIsrc) {
-      const isrcMatch = (response.data?.items || []).find(s =>
-        (s.isrc?.value || s.isrc) === spotifyIsrc
-      );
+      // SC may store ISRC in multiple field shapes — check all known variants
+      const extractScIsrc = (s) => s.isrc?.value || s.isrc || s.isrcs?.[0]?.value || s.isrcs?.[0] || null;
+      const isrcMatch = (response.data?.items || []).find(s => extractScIsrc(s) === spotifyIsrc);
       if (isrcMatch) {
         const artistUuid = isrcMatch.artists?.[0]?.uuid || null;
         const artistName = isrcMatch.artists?.[0]?.name || isrcMatch.creditName;
@@ -1186,7 +1186,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
       // confirmed Spotify ISRC, validate the match against it before committing.
       // ISRC mismatch (or match has no ISRC while we have one) means wrong artist — fall through
       // to the artist-candidate fallback which has Spotify-ID-based disambiguation (Priority 0).
-      const matchIsrc = match.isrc?.value || match.isrc || null;
+      const matchIsrc = match.isrc?.value || match.isrc || match.isrcs?.[0]?.value || match.isrcs?.[0] || null;
       const isrcConflict = spotifyIsrc && matchIsrc && matchIsrc !== spotifyIsrc;
       const isrcUnverifiable = spotifyIsrc && !matchIsrc && confirmedSpotifyArtistId;
       if (isrcConflict || isrcUnverifiable) {
