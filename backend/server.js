@@ -1185,25 +1185,31 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
       // even when the song has one (e.g. Marvin's Room USCM51100267 is in SC's DB but not in
       // search results). Fetch the full song detail to get the authoritative ISRC for comparison.
       let matchIsrc = match.isrc?.value || match.isrc || match.isrcs?.[0]?.value || match.isrcs?.[0] || null;
-      if (!matchIsrc && match.uuid && spotifyIsrc) {
+      let detailSong = null;
+      // SC song search returns abbreviated items — fetch full detail to get ISRC and artist UUID
+      // (both fields are absent from search results but present in the detail endpoint).
+      if ((!matchIsrc || !match.artists?.[0]?.uuid) && match.uuid) {
         try {
           await throttleSoundCharts();
           const detailResp = await axios.get(
             `https://customer.api.soundcharts.com/api/v2/song/${match.uuid}`,
             { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
           );
-          const detailSong = detailResp.data?.object || detailResp.data;
-          matchIsrc = detailSong?.isrc?.value || detailSong?.isrc || null;
-          if (matchIsrc) console.log(`🔍 SoundCharts song detail ISRC for "${match.name}": ${matchIsrc}`);
-        } catch (_) { /* detail fetch failed — proceed without ISRC */ }
+          detailSong = detailResp.data?.object || detailResp.data;
+          if (!matchIsrc) {
+            matchIsrc = detailSong?.isrc?.value || detailSong?.isrc || null;
+            if (matchIsrc) console.log(`🔍 SoundCharts song detail ISRC for "${match.name}": ${matchIsrc}`);
+          }
+        } catch (_) { /* detail fetch failed — proceed without it */ }
       }
       const isrcConflict = spotifyIsrc && matchIsrc && matchIsrc !== spotifyIsrc;
       if (isrcConflict) {
         console.log(`⚠️  SoundCharts title match for "${title}" by "${match.artists?.[0]?.name || match.creditName}" ISRC ${matchIsrc} conflicts with Spotify ISRC ${spotifyIsrc} — falling through to artist-candidate fallback`);
         match = null; // fall through to artist-candidate fallback below
       } else {
-        const artistUuid = match.artists?.[0]?.uuid || null;
-        const artistName = match.artists?.[0]?.name || match.creditName;
+        // Prefer UUID/name from detail (more complete) over abbreviated search result
+        const artistUuid = match.artists?.[0]?.uuid || detailSong?.artists?.[0]?.uuid || null;
+        const artistName = match.artists?.[0]?.name || detailSong?.artists?.[0]?.name || match.creditName;
         console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}${matchIsrc ? ` (ISRC: ${matchIsrc})` : ''}`);
         const result = { songUuid: match.uuid, artistUuid, artistName };
         setSCCache(cacheKey, result);
@@ -1751,10 +1757,14 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // - exclusive mode or user explicitly named artists → artist_songs
   //   (use SC similar-artist graph + full catalog, with mood/energy/theme filtering client-side
   //    via SC lyrics-analysis data — covers deep cuts beyond top charts)
-  // - no specific artists named → top_songs with ALL SC filters
-  //   (genre + mood + energy + themes applied server-side by SC; paginate for full coverage
-  //   beyond just popular songs; suggestedSeedArtists used only as fallback if 0 results)
-  const strategy = (isExclusive || requestedArtists.length > 0)
+  // - reference songs provided → also artist_songs, using suggestedSeedArtists as seeds.
+  //   The reference song anchors the vibe (e.g. "same vibe as Marvin's Room by Drake") and
+  //   suggestedSeedArtists encode the genre/scene. top_songs would return a generic
+  //   low-energy r&b pool (Bruno Mars, John Legend) instead of the intended artist graph.
+  // - no specific artists or reference songs → top_songs with ALL SC filters
+  //   (genre + mood + energy + themes applied server-side by SC)
+  const hasReferenceSongs = (genreData.referenceSongs || []).length > 0;
+  const strategy = (isExclusive || requestedArtists.length > 0 || (hasReferenceSongs && suggestedSeeds.length > 0))
     ? 'artist_songs'
     : 'top_songs';
 
@@ -8322,8 +8332,12 @@ Example response: [1, 2, 4, 5, 7, ...]`
               .map(idx => selectedTracks[idx - 1])
               .filter(t => t !== undefined);
 
-            // Never remove more than 25% of tracks — prevents over-filtering
-            const minKeep = Math.ceil(selectedTracks.length * 0.75);
+            // For melancholic/heartbreak playlists the risk is almost exclusively upbeat songs
+            // sneaking in — never missing sad ones. Raise the floor to 85% so Haiku can only
+            // cut 15% of tracks, preventing good songs like "White Ferrari" / "Nights" being
+            // removed because their titles don't signal sadness clearly enough.
+            const _isMelancholic = genreData.mood === 'melancholic' || (genreData.contextClues?.useCase || '') === 'heartbreak';
+            const minKeep = Math.ceil(selectedTracks.length * (_isMelancholic ? 0.85 : 0.75));
             const finalTracks = filteredTracks.length >= minKeep
               ? filteredTracks
               : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
