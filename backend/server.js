@@ -1147,21 +1147,23 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         if (confirmedSpotifyArtistId && artistUuid) {
           try {
             const scSpotifyId = await getSoundChartsArtistPlatformId(artistUuid, 'spotify');
-            if (scSpotifyId && scSpotifyId !== confirmedSpotifyArtistId) {
+            if (!scSpotifyId) {
+              console.log(`⚠️  SC ISRC lookup: "${artistName}" (${artistUuid}) has no Spotify link in SC — cannot verify against expected ${confirmedSpotifyArtistId}, falling through to by-platform`);
+              // Don't return — fall through to by-platform / name-search
+            } else if (scSpotifyId !== confirmedSpotifyArtistId) {
               console.log(`⚠️  SC ISRC lookup: "${artistName}" (${artistUuid}) Spotify ID ${scSpotifyId} ≠ expected ${confirmedSpotifyArtistId} — SC ISRC data mismatch, falling through to by-platform`);
               // Don't return — fall through to by-platform / name-search
             } else {
-              console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}${scSpotifyId ? ' [Spotify ID verified]' : ''}`);
+              console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid} [Spotify ID verified]`);
               const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
               setSCCache(cacheKey, result);
               return result;
             }
           } catch (_) {
-            // Verification call failed — trust the ISRC result
-            console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
-            const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
-            setSCCache(cacheKey, result);
-            return result;
+            // Verification call failed — when we have a confirmedSpotifyArtistId we can't
+            // trust an unverified ISRC result (SC ISRC→artist links can be wrong).
+            // Fall through to by-platform / name-search instead.
+            console.log(`⚠️  SC ISRC lookup: "${artistName}" (${artistUuid}) Spotify ID verification failed — falling through to by-platform`);
           }
         } else {
           console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
@@ -1293,11 +1295,14 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
           // returned Latin Dante). Confirm by checking the returned artist's Spotify link
           // maps back to the same ID we queried with.
           const scSpotifyId = await getSoundChartsArtistPlatformId(scArtist.uuid, 'spotify').catch(() => null);
-          if (scSpotifyId && scSpotifyId !== confirmedSpotifyArtistId) {
+          if (!scSpotifyId) {
+            console.log(`⚠️  SC by-platform: "${scArtist.name}" (${scArtist.uuid}) has no Spotify link in SC — cannot verify against expected ${confirmedSpotifyArtistId}, falling through to name search`);
+            // fall through to name search
+          } else if (scSpotifyId !== confirmedSpotifyArtistId) {
             console.log(`⚠️  SC by-platform: "${scArtist.name}" (${scArtist.uuid}) Spotify ID ${scSpotifyId} ≠ expected ${confirmedSpotifyArtistId} — SC mapping wrong, falling through to name search`);
             // fall through to name search
           } else {
-            console.log(`✓ SoundCharts direct Spotify-ID lookup: "${scArtist.name}" → UUID ${scArtist.uuid}${scSpotifyId ? ' [verified]' : ''}`);
+            console.log(`✓ SoundCharts direct Spotify-ID lookup: "${scArtist.name}" → UUID ${scArtist.uuid} [verified]`);
             const songs = await getSoundChartsArtistSongs(scArtist.uuid, 5);
             const result = { songUuid: songs[0]?.uuid || null, artistUuid: scArtist.uuid, artistName: scArtist.name, _confirmedStrong: true };
             setSCCache(cacheKey, result);
