@@ -1543,17 +1543,6 @@ const SOUNDCHARTS_SUBGENRE_MAP = {
   'salsa': 'salsa', 'dembow': 'dembow',
 };
 
-// Map lyrical theme labels → SoundCharts themes filter values
-// Only confirmed valid SC theme values — others (Introspection, Motivation, Sport, Travel,
-// Nostalgia, Summer, Spirituality) are unverified and cause 404 errors on top/songs.
-const SOUNDCHARTS_THEME_MAP = {
-  'love': 'Love', 'romance': 'Love', 'romantic': 'Love',
-  'heartbreak': 'Heartbreak', 'breakup': 'Heartbreak', 'heartbroken': 'Heartbreak',
-  'party': 'Party', 'club': 'Party', 'nightlife': 'Party',
-  'friendship': 'Friendship', 'friends': 'Friendship',
-  'money': 'Success', 'success': 'Success', 'hustle': 'Success',
-  'protest': 'Social Issues', 'social issues': 'Social Issues',
-};
 
 // Catalog-level context overrides — tracks with confirmed repeated false positives
 // that cannot be fixed via prompt engineering alone. Spotify audio features API
@@ -1931,16 +1920,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     }
   }
 
-  // Lyrical themes filter — from Claude-extracted lyricalContent.themes + useCase
-  const themeLabels = [
-    ...(genreData.lyricalContent?.themes || []),
-    genreData.contextClues?.useCase || '',
-  ].map(l => l.toLowerCase().trim()).filter(Boolean);
-  const scThemes = [...new Set(themeLabels.map(l => SOUNDCHARTS_THEME_MAP[l]).filter(Boolean))];
-  if (scThemes.length > 0) {
-    filters.push({ type: 'themes', data: { values: scThemes, operator: 'in' } });
-    console.log(`📝 SoundCharts themes filter: [${scThemes.join(', ')}]`);
-  }
+  // NOTE: themes filter (Heartbreak, Party, etc.) has very sparse SC coverage — AND'd with
+  // genre+moods+audio it consistently returns 0 results. Removed from SC filters entirely.
 
   // Artist career stage filter — maps popularity preference to career stage
   const popPref = genreData.trackConstraints?.popularity?.preference;
@@ -1988,7 +1969,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // These replace lookup-table-derived filters of the same type, since Claude interprets
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
-  const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore']);
+  const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes']);
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
@@ -2189,9 +2170,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         const hasAudioFilters = energyFilter || valenceFilter;
 
         // Step 1: if moods + tight audio → 0, loosen the audio thresholds and keep moods.
-        // Claude sometimes sets very tight thresholds (e.g. valence max 0.35) that combined with
-        // moods produce an empty intersection. Widen by ~30% to recover songs while keeping mood quality.
-        // _audioLoosened flag prevents infinite recursion if the loosened query also returns 0.
+        // Widen by ~30% to recover songs while keeping mood quality.
+        // _audioLoosened prevents infinite recursion.
         if (moodsFilter && hasAudioFilters && !query._audioLoosened) {
           const loosenedFilters = soundchartsFilters.map(f => {
             if (f.type === 'energy' || f.type === 'valence') {
@@ -2210,26 +2190,14 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 2: drop moods but keep audio (and themes).
+        // Step 2: drop moods but keep audio.
         // Dropping moods without audio risks pulling off-era songs (Nat King Cole, etc.)
-        // so only do this after audio-only has already been attempted.
+        // so only do this after audio-loosening has already been attempted.
         if (moodsFilter) {
           const filtersWithoutMoods = soundchartsFilters.filter(f => f.type !== 'moods');
           console.log(`⚠️  SoundCharts top_songs returned 0 — retrying without moods filter`);
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: filtersWithoutMoods },
-            fetchCount,
-            confirmedArtistUuids
-          );
-        }
-
-        // Step 2.5: themes filter may have sparse SC coverage — drop it and retry with audio only.
-        const themesFilter = soundchartsFilters.find(f => f.type === 'themes');
-        if (themesFilter) {
-          const filtersWithoutThemes = soundchartsFilters.filter(f => f.type !== 'themes');
-          console.log(`⚠️  SoundCharts top_songs returned 0 — retrying without themes filter`);
-          return executeSoundChartsStrategy(
-            { ...query, soundchartsFilters: filtersWithoutThemes },
             fetchCount,
             confirmedArtistUuids
           );
@@ -6333,8 +6301,8 @@ SOUNDCHARTS DIRECT FILTERS (soundchartsFilters — CRITICAL):
 Use this field to directly output SoundCharts API filter objects that precisely match the prompt's intent.
 These are used VERBATIM in the SC song search — be accurate and specific.
 
-DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness, moods, themes
-DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore (handled separately or unsupported)
+DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness, moods
+DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore, themes (handled separately or unsupported)
 
 FILTER SHAPES:
 - Numeric range: { "type": "energy", "data": { "min": 0.6 } }  — include only min, only max, or both
@@ -6344,12 +6312,10 @@ FILTER SHAPES:
 VALID MOOD VALUES (exact strings only):
 Melancholic, Joyful, Euphoric, Sad, Happy, Calm, Energetic, Empowering, Aggressive, Dark, Romantic, Sensual, Spiritual, Peaceful, Nostalgic, Playful
 
-VALID THEME VALUES (exact strings only — only output values from this list):
-Love, Heartbreak, Party, Friendship, Success, Social Issues
 
 AUDIO FEATURE RANGES (all 0.0–1.0 except tempo in BPM and scores 1–10):
 - energy: activity/intensity. Sleep: max 0.30. Chill/relax: max 0.45. Focus/study: max 0.55. Medium: 0.38–0.68. Workout/gym: min 0.75. Hype/intense: min 0.80.
-- valence: musical positivity. Dark/sad: max 0.40. Melancholic: max 0.45. Neutral: 0.35–0.65. Happy/upbeat: min 0.65. Joyful/euphoric: min 0.72.
+- valence: musical positivity. Dark/sad/melancholic: max 0.45. Neutral: 0.35–0.65. Happy/upbeat: min 0.65. Joyful/euphoric: min 0.72.
 - danceability: rhythmic consistency. Groovy: min 0.65. Dance: min 0.72. Club/party: min 0.78.
 - acousticness: acoustic instrumentation likelihood. Slightly acoustic: min 0.40. Acoustic/unplugged: min 0.60. Fully acoustic: min 0.80.
 - tempo (BPM): Slow ballad: max 80. Slow: max 90. Mid-tempo: 90–120. Uptempo: min 120. Fast: min 140. EDM/rave: min 128.
@@ -6359,23 +6325,23 @@ AUDIO FEATURE RANGES (all 0.0–1.0 except tempo in BPM and scores 1–10):
 MAPPING EXAMPLES — think dynamically, these are not exhaustive:
 - "songs I can dance to", "danceable", "banger" → { type: "danceability", data: { min: 0.72 } }
 - "party anthems", "turn up" → { type: "danceability", data: { min: 0.75 } }, { type: "energy", data: { min: 0.70 } }, { type: "moods", data: { values: ["Euphoric", "Energetic"], operator: "in" } }
-- "sad songs", "heartbreak", "crying" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.40 } }, { type: "themes", data: { values: ["Heartbreak"], operator: "in" } }
+- "sad songs", "heartbreak", "crying" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
 - "happy/upbeat/feel-good" → { type: "moods", data: { values: ["Happy", "Joyful"], operator: "in" } }, { type: "valence", data: { min: 0.65 } }
 - "chill/relaxing/laid-back" → { type: "energy", data: { max: 0.45 } }, { type: "moods", data: { values: ["Calm", "Peaceful"], operator: "in" } }
 - "gym/workout" → { type: "energy", data: { min: 0.75 } }, { type: "danceability", data: { min: 0.65 } }
 - "acoustic/unplugged" → { type: "acousticness", data: { min: 0.60 } }
-- "love songs/romantic" → { type: "moods", data: { values: ["Romantic"], operator: "in" } }, { type: "themes", data: { values: ["Love", "Relationships"], operator: "in" } }
-- "dark/moody" → { type: "moods", data: { values: ["Dark", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.40 } }
+- "love songs/romantic" → { type: "moods", data: { values: ["Romantic"], operator: "in" } }
+- "dark/moody" → { type: "moods", data: { values: ["Dark", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
 - "nostalgic" → { type: "moods", data: { values: ["Nostalgic"], operator: "in" } }
 - "motivational/empowering" → { type: "moods", data: { values: ["Empowering"], operator: "in" } }
-- "emotional/deeply emotional" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.40 } }
-- "high emotion sad" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.40 } }
+- "emotional/deeply emotional" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
+- "high emotion sad" → { type: "moods", data: { values: ["Sad", "Melancholic"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
 - "slow jams" → { type: "tempo", data: { max: 95 } }, { type: "moods", data: { values: ["Romantic", "Sensual"], operator: "in" } }
 - "lo-fi/study" → { type: "energy", data: { max: 0.50 } }, { type: "instrumentalness", data: { min: 0.30 } }
 - "euphoric/euphoria" → { type: "moods", data: { values: ["Euphoric"], operator: "in" } }, { type: "valence", data: { min: 0.70 } }
 - "sleep/meditation" → { type: "energy", data: { max: 0.30 } }, { type: "moods", data: { values: ["Calm", "Peaceful"], operator: "in" } }
 - "aggressive/intense/metal" → { type: "energy", data: { min: 0.78 } }, { type: "moods", data: { values: ["Aggressive"], operator: "in" } }
-- "spiritual/worship" → { type: "moods", data: { values: ["Spiritual"], operator: "in" } }, { type: "themes", data: { values: ["Religion"], operator: "in" } }
+- "spiritual/worship" → { type: "moods", data: { values: ["Spiritual"], operator: "in" } }
 
 RULES:
 - Only include filters where you have HIGH CONFIDENCE in the mapping. Fewer accurate filters beat many uncertain ones.
@@ -8407,7 +8373,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                   }]
                 });
                 const _suppFilterText = _suppFilterResp.content[0]?.text?.trim() || 'NONE';
-                console.log(`🔍 Post-supplement filter: ${_suppFilterText}`);
+                console.log(`��� Post-supplement filter: ${_suppFilterText}`);
                 if (_suppFilterText.toUpperCase() !== 'NONE') {
                   // Use regex to extract standalone numbers — avoids picking up list markers like "1." or "2."
                   const _suppBadNums = (_suppFilterText.match(/(?<![.\d])(\d+)(?![.\d])/g) || []).map(n => parseInt(n)).filter(n => !isNaN(n) && n >= 1 && n <= suppNewTracks.length);
@@ -9421,7 +9387,7 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       console.log('[FORCE-INCLUDE] Skipped due to error:', forceIncludeErr.message);
     }
 
-    // ── Final excluded-artist sweep ─────────────────────────────────────────────
+    // ── Final excluded-artist sweep ─��──────────────────────────��────────────────
     // Hard-remove any track by an excluded artist — runs AFTER force-include so
     // a force-include can never smuggle in a banned artist.
     const _finalExcludedNorms = (genreData.artistConstraints?.excludedArtists || [])
@@ -12489,7 +12455,7 @@ app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────��──────────────────────────────────────────────────────────
 
 // Initialize database and start server
 async function startServer() {
