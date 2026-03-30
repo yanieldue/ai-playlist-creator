@@ -941,8 +941,13 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     const detailKey = `song_detail:${song.uuid}`;
     const cached = db.getCachedSC(detailKey);
     if (cached) {
-      result.push({ ...song, audio: cached.audio || {}, moods: cached.moods || [], themes: cached.themes || [] });
-      continue;
+      // Treat empty audio as stale — pre-fix cache entries stored audio: {} before we read s.audio.
+      // Re-fetch so vibe filtering can actually use energy/valence data.
+      if (cached.audio && Object.keys(cached.audio).length > 0) {
+        result.push({ ...song, audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
+        continue;
+      }
+      // Fall through to re-fetch
     }
 
     if (fetchCount >= maxSongs) {
@@ -8226,8 +8231,23 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
               // Request a larger pool so we have more candidates to match against
               const suppMinArtists = maxPerArtist ? Math.min(Math.ceil(needed / maxPerArtist * 1.5), 40) : 0;
-              const supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
+              let supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
+
+              // Genre validation: filter supplement pool by Spotify artist genres to block
+              // SC genre mislabels (e.g. Amy Winehouse, Arctic Monkeys tagged as R&B).
+              if (genreData.primaryGenre && supplementPool.length > 0) {
+                const suppArtistNames = [...new Set(supplementPool.map(s => s.artistName).filter(Boolean))];
+                const suppGenreMap = await batchGetSpotifyArtistGenres(suppArtistNames).catch(() => new Map());
+                const beforeSupp = supplementPool.length;
+                supplementPool = supplementPool.filter(s => {
+                  const spGenres = suppGenreMap.get((s.artistName || '').toLowerCase()) || null;
+                  return isArtistInGenreFamily(spGenres, genreData.primaryGenre);
+                });
+                if (supplementPool.length < beforeSupp) {
+                  console.log(`🎯 Supplement genre filter: ${beforeSupp} → ${supplementPool.length} songs (Spotify validation)`);
+                }
+              }
 
               const seenSupplementArtists = new Set();
 
