@@ -1797,15 +1797,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     }
   }
 
-  // If moods are Sad/Melancholic, skip label-derived energy filter — sad songs span all energy
-  // levels and combining energy max with sad moods + genre reliably returns 0 from SC top_songs.
-  const hasSadMoodsForAudio = scMoods.some(m => m === 'Sad' || m === 'Melancholic');
-
   for (const [feature, range] of Object.entries(featureRanges)) {
-    if (feature === 'energy' && hasSadMoodsForAudio) {
-      console.log(`⚡ Skipping label-derived energy filter — sad/melancholic moods span all energy levels`);
-      continue;
-    }
     if (range.min !== undefined && range.max !== undefined && range.min > range.max) {
       // Contradictory energy signals (e.g. "chill but kinda hype") → use medium band
       // instead of skipping entirely, so we don't lose all filtering for that feature.
@@ -1853,9 +1845,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   if (energyTarget) {
     const energyIdx = filters.findIndex(f => f.type === 'energy');
     // Skip energy filter if moods are Sad/Melancholic — sad R&B/pop spans all energy levels,
-    // and energy max 0.42 + sad moods + genre reliably returns 0 from SC's top_songs.
-    const hasSadMoods = scMoods.some(m => m === 'Sad' || m === 'Melancholic');
-    if (energyIdx === -1 && !hasSadMoods) {
+    if (energyIdx === -1) {
       // No energy filter was set — add one based on the target
       const energyRanges = { low: { max: 0.42 }, medium: { min: 0.38, max: 0.68 }, high: { min: 0.72 } };
       const er = energyRanges[energyTarget];
@@ -1863,8 +1853,6 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
         filters.push({ type: 'energy', data: er });
         console.log(`⚡ Energy target "${energyTarget}": ${JSON.stringify(er)}`);
       }
-    } else if (hasSadMoods && energyIdx === -1) {
-      console.log(`⚡ Skipping energyTarget "${energyTarget}" energy filter — sad/melancholic moods span all energy levels`);
     }
     // If an energy filter already exists (from label pass), leave it — it's more specific
   }
@@ -1983,18 +1971,9 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
   const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes']);
-  // Re-check sad moods after the moods filter may have been added/replaced above
-  const finalMoodsFilter = filters.find(f => f.type === 'moods');
-  const hasSadMoodsFinal = finalMoodsFilter?.data?.values?.some(m => m === 'Sad' || m === 'Melancholic') || false;
-
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
-    // Don't let Claude add an energy filter for sad/melancholic playlists — it kills SC results
-    if (cf.type === 'energy' && cf.data?.max !== undefined && hasSadMoodsFinal) {
-      console.log(`⚡ Blocking Claude energy max filter (${cf.data.max}) — sad/melancholic moods span all energy levels`);
-      continue;
-    }
     const existingIdx = filters.findIndex(f => f.type === cf.type);
     if (existingIdx !== -1) {
       filters.splice(existingIdx, 1, cf);
@@ -2134,7 +2113,7 @@ Return ONLY a JSON object mapping 1-based index to classification: {"1": "female
 }
 
 // executeSoundChartsStrategy — direct attribute-based song discovery.
-// ──────────────────────────────────────────────────────────���──────────────────
+// ───────���──────────────────────────────────────────────────���──────────────────
 
 // Cached flag: once we know top/songs returns 403 on this plan, skip the call.
 async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0) {
@@ -6370,7 +6349,6 @@ RULES:
 - Only include filters where you have HIGH CONFIDENCE in the mapping. Fewer accurate filters beat many uncertain ones.
 - Do NOT output conflicting filters for the same type (e.g. energy min 0.75 AND energy max 0.45). If signals conflict, omit that filter type.
 - Always output moods + valence together when the prompt is clearly sad or clearly happy.
-- For sad/melancholic/heartbreak prompts, do NOT output an energy filter — sad songs span all energy levels. Only add energy when the user explicitly mentions energy level (e.g. "slow", "quiet", "low energy" → max 0.45; "hype", "intense" → min 0.75).
 - For ambiguous prompts like "vibes" or "good music" with no emotional descriptor, output [] (empty array).
 
 Use null, [], or false for any feature not mentioned.
