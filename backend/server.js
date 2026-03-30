@@ -7326,6 +7326,23 @@ Respond ONLY with valid JSON:
         _phaseIndex: scSong._phaseIndex ?? null,
       }));
 
+    // Artist-level genre filter — SC sometimes tags songs as R&B whose artist is clearly not
+    // (e.g. Lukas Graham, Sam Smith, Arctic Monkeys). Filter by Spotify artist genres to catch these.
+    if (genreData.primaryGenre && recommendedTracks.length > 0) {
+      const scArtistNames = [...new Set(recommendedTracks.map(t => t.artist).filter(Boolean))];
+      const scGenreMap = await batchGetSpotifyArtistGenres(scArtistNames).catch(() => new Map());
+      const beforeFilter = recommendedTracks.length;
+      recommendedTracks = recommendedTracks.filter(t => {
+        const spGenres = scGenreMap.get((t.artist || '').toLowerCase()) || null;
+        const ok = isArtistInGenreFamily(spGenres, genreData.primaryGenre);
+        if (!ok) console.log(`🚫 SC artist genre mismatch: "${t.artist}" (${(spGenres || []).join(', ')}) → not ${genreData.primaryGenre}`);
+        return ok;
+      });
+      if (recommendedTracks.length < beforeFilter) {
+        console.log(`🎯 SC artist genre filter: ${beforeFilter} → ${recommendedTracks.length} songs (removed ${beforeFilter - recommendedTracks.length} off-genre)`);
+      }
+    }
+
     console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts (${soundChartsDiscoveredSongs.length - recommendedTracks.length} pre-filtered by era)`);
 
     // Safety: if era filtering was too aggressive (dropped >60% of songs and we have fewer than 2x target),
