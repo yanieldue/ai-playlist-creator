@@ -6821,6 +6821,7 @@ DO NOT include any text outside the JSON.`
                   a => a.name.toLowerCase() === refSong.artist.toLowerCase()
                 );
                 let artistConfirmed = false;
+                let foundMismatch = false;
                 for (const candidate of artistCandidates) {
                   try {
                     const scSpotifyId = await getSoundChartsArtistPlatformId(candidate.uuid, 'spotify');
@@ -6831,15 +6832,20 @@ DO NOT include any text outside the JSON.`
                       break;
                     } else if (scSpotifyId && scSpotifyId !== refSpotifyArtistId) {
                       console.log(`⚠️  SC artist "${candidate.name}" (UUID ${candidate.uuid}) links to wrong Spotify artist ${scSpotifyId} (want ${refSpotifyArtistId})`);
+                      foundMismatch = true;
                     }
                   } catch (_) { /* ignore per-candidate errors */ }
                 }
                 if (!artistConfirmed && artistCandidates.length > 0) {
-                  // No SC candidate matched our Spotify artist ID — mark INVALID so the name-based
-                  // fallback in executeSoundChartsStrategy won’t silently pick the wrong profile
-                  // and contaminate the similar-artist graph.
-                  confirmedArtistUuids[refSong.artist.toLowerCase()] = 'INVALID';
-                  console.log(`⚠️  No SC artist profile matched Spotify ID for "${refSong.artist}" — marking INVALID to prevent wrong-artist contamination`);
+                  if (foundMismatch) {
+                    // Every SC candidate with a Spotify link pointed to the wrong artist — INVALID.
+                    confirmedArtistUuids[refSong.artist.toLowerCase()] = 'INVALID';
+                    console.log(`⚠️  All SC "${refSong.artist}" candidates link to wrong Spotify artist — marking INVALID`);
+                  } else {
+                    // SC’s platform ID data is simply absent (common even for major artists like Drake).
+                    // Don’t penalize — leave unconfirmed so name-based fallback can still use the artist.
+                    console.log(`⚠️  Could not verify SC artist for "${refSong.artist}" via Spotify ID (SC platform links missing) — leaving unconfirmed`);
+                  }
                 }
               } catch (artistSearchErr) {
                 console.log(`⚠️  Artist profile fallback search failed for "${refSong.artist}": ${artistSearchErr.message}`);
@@ -8236,11 +8242,12 @@ Return ONLY valid JSON:
         {
           const _fastUc = (genreData.contextClues.useCase || '').toLowerCase();
           const _fastHardRules = {
-            summer:  'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
-            party:   'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
-            workout: 'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
-            focus:   'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
-            sleep:   'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
+            summer:      'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
+            party:       'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
+            workout:     'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
+            focus:       'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
+            sleep:       'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
+            heartbreak:  'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
           };
           if (_fastHardRules[_fastUc]) constraintLines.push(_fastHardRules[_fastUc]);
         }
@@ -8499,13 +8506,14 @@ Example response: [1, 2, 4, 5, 7, ...]`
           // Shared rule map for post-supplement and post-gap-fill vibe filters.
           // Generic rules only — no hardcoded track lists (those are in TRACK_CONTEXT_OVERRIDES).
           const _useCaseVibeRules = {
-              workout: 'This playlist is for a workout. Only high-energy, pump-up tracks belong here. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo.',
-              party: 'This playlist is for a party or pregame. Only tracks that work on a dancefloor belong here. REMOVE any track that is slow, emotional, mid-tempo, or melancholic — even if the artist is generally upbeat. Ask: would a DJ play this to keep a crowd dancing? If not, REMOVE it.',
-              summer: 'This playlist is for summer vibes. REMOVE any track that is slow, melancholic, sad, emotionally heavy, or winter-coded.',
-              chill: 'This playlist is for relaxing or chilling. REMOVE any track that is high-energy, aggressive, hype, or contextually jarring — rap/hip-hop that is not laid-back, loud EDM drops, or anything that would interrupt a low-energy listening session.',
+              workout:    'This playlist is for a workout. Only high-energy, pump-up tracks belong here. REMOVE any track that is slow, mellow, emotional, sad, or mid-tempo.',
+              party:      'This playlist is for a party or pregame. Only tracks that work on a dancefloor belong here. REMOVE any track that is slow, emotional, mid-tempo, or melancholic — even if the artist is generally upbeat. Ask: would a DJ play this to keep a crowd dancing? If not, REMOVE it.',
+              summer:     'This playlist is for summer vibes. REMOVE any track that is slow, melancholic, sad, emotionally heavy, or winter-coded.',
+              chill:      'This playlist is for relaxing or chilling. REMOVE any track that is high-energy, aggressive, hype, or contextually jarring — rap/hip-hop that is not laid-back, loud EDM drops, or anything that would interrupt a low-energy listening session.',
               background: 'This playlist is for background listening (dinner, cooking, hosting). REMOVE any track that is high-energy, aggressive, or attention-demanding — only mellow, easy-going music that works in the background.',
-              focus: 'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
-              sleep: 'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
+              focus:      'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
+              sleep:      'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
+              heartbreak: 'This is a heartbreak/sad/late-night emotional playlist. REMOVE any track that is clearly upbeat, celebratory, high-energy, or would not fit a late-night feelings session. KEEP sad, melancholic, emotional, or introspective tracks even if the title sounds positive.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           {
