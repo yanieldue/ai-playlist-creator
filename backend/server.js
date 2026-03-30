@@ -1181,13 +1181,22 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
     }
 
     if (match) {
-      // When multiple SC artists share a name (e.g. two "Keffer" profiles), the title search
-      // returns whichever one SC ranks first — which may be the wrong one. Reject only on
-      // an actual ISRC *conflict* (both ISRCs present and they differ = definitively wrong song).
-      // Do NOT reject when SC's ISRC field is absent — SC's song search API frequently omits
-      // the ISRC even for songs that have one (e.g. Marvin's Room USCM51100267 confirmed in SC
-      // frontend but not returned by the song search endpoint).
-      const matchIsrc = match.isrc?.value || match.isrc || match.isrcs?.[0]?.value || match.isrcs?.[0] || null;
+      // The song search endpoint returns abbreviated items — the ISRC field is typically absent
+      // even when the song has one (e.g. Marvin's Room USCM51100267 is in SC's DB but not in
+      // search results). Fetch the full song detail to get the authoritative ISRC for comparison.
+      let matchIsrc = match.isrc?.value || match.isrc || match.isrcs?.[0]?.value || match.isrcs?.[0] || null;
+      if (!matchIsrc && match.uuid && spotifyIsrc) {
+        try {
+          await throttleSoundCharts();
+          const detailResp = await axios.get(
+            `https://customer.api.soundcharts.com/api/v2/song/${match.uuid}`,
+            { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
+          );
+          const detailSong = detailResp.data?.object || detailResp.data;
+          matchIsrc = detailSong?.isrc?.value || detailSong?.isrc || null;
+          if (matchIsrc) console.log(`🔍 SoundCharts song detail ISRC for "${match.name}": ${matchIsrc}`);
+        } catch (_) { /* detail fetch failed — proceed without ISRC */ }
+      }
       const isrcConflict = spotifyIsrc && matchIsrc && matchIsrc !== spotifyIsrc;
       if (isrcConflict) {
         console.log(`⚠️  SoundCharts title match for "${title}" by "${match.artists?.[0]?.name || match.creditName}" ISRC ${matchIsrc} conflicts with Spotify ISRC ${spotifyIsrc} — falling through to artist-candidate fallback`);
@@ -1195,7 +1204,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
       } else {
         const artistUuid = match.artists?.[0]?.uuid || null;
         const artistName = match.artists?.[0]?.name || match.creditName;
-        console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}`);
+        console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}${matchIsrc ? ` (ISRC: ${matchIsrc})` : ''}`);
         const result = { songUuid: match.uuid, artistUuid, artistName };
         setSCCache(cacheKey, result);
         return result;
