@@ -2116,7 +2116,7 @@ Return ONLY a JSON object mapping 1-based index to classification: {"1": "female
 // ───────���──────────────────────────────────────────────────���──────────────────
 
 // Cached flag: once we know top/songs returns 403 on this plan, skip the call.
-async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0) {
+async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0, pendingEnrichment = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
@@ -2188,7 +2188,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: loosenedFilters, _audioLoosened: true },
             fetchCount,
-            confirmedArtistUuids
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
           );
         }
 
@@ -2201,7 +2203,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: filtersWithoutMoods },
             fetchCount,
-            confirmedArtistUuids
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
           );
         }
 
@@ -2212,7 +2216,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           return executeSoundChartsStrategy(
             { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
             fetchCount,
-            confirmedArtistUuids
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
           );
         }
         // No seed artists — last resort: retry without genre filter
@@ -2221,7 +2227,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         return executeSoundChartsStrategy(
           { ...query, soundchartsFilters: filtersWithoutGenre },
           fetchCount,
-          confirmedArtistUuids
+          confirmedArtistUuids,
+          minArtists,
+          pendingEnrichment
         );
       }
 
@@ -2257,7 +2265,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: simplifiedFilters },
             fetchCount,
-            confirmedArtistUuids
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
           );
         }
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
@@ -2277,7 +2287,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     let songs = await executeSoundChartsStrategy(
       { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
       fetchCount,
-      confirmedArtistUuids
+      confirmedArtistUuids,
+      minArtists,
+      pendingEnrichment
     );
     // Apply release date filter if the original query had one
     const rdFilter = soundchartsFilters.find(f => f.type === 'releaseDate');
@@ -2623,17 +2635,28 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
             songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
           }
-          console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs for "${artistInfo.name}" — scheduling background enrichment`);
-          // Non-blocking: fetch + cache full catalog after response is sent.
-          // Next generation/refresh this artist will hit the cache and be vibe-filtered.
-          setImmediate(() => {
-            getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(e => {
-              console.log(`⚠️  Background enrichment failed for "${artistInfo.name}": ${e.message}`);
-            });
-          });
+          console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs for "${artistInfo.name}" — queued for background enrichment`);
+          // Queue for enrichment after res.json() — caller drains pendingEnrichment post-response.
+          if (pendingEnrichment) pendingEnrichment.push(artistInfo);
         }
       } catch (err) {
         console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
+      }
+    }
+
+    // Queue all uncached pool artists (including Phase 3a ones and similar artists from
+    // depth-1/depth-2 expansion) for background enrichment. This warms the cache for
+    // future requests so Phase 3b hits the fast vibe-filtered path next time.
+    if (pendingEnrichment) {
+      const alreadyQueued = new Set(pendingEnrichment.map(a => a.uuid));
+      for (const artistInfo of allArtistInfos) {
+        if (alreadyQueued.has(artistInfo.uuid)) continue;
+        const catalogKey = `full_catalog:${artistInfo.uuid}`;
+        const cached = db.getCachedSC(catalogKey);
+        if (!cached?.songs?.length) {
+          pendingEnrichment.push(artistInfo);
+          alreadyQueued.add(artistInfo.uuid);
+        }
       }
     }
 
@@ -7186,6 +7209,9 @@ Respond ONLY with valid JSON:
     // Discover songs via SoundCharts — direct attribute-based query (no similarity tree)
     let soundChartsDiscoveredSongs = [];
     const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+    // Collects Phase 3b cache-miss artists + all uncached pool artists for background enrichment.
+    // Drained via setImmediate after res.json() so enrichment never blocks the response.
+    const pendingEnrichment = [];
     const _phases = Array.isArray(genreData.phases) && genreData.phases.length >= 2 ? genreData.phases : null;
 
     if (process.env.SOUNDCHARTS_APP_ID) {
@@ -7299,7 +7325,7 @@ Respond ONLY with valid JSON:
         console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
         console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
         try {
-          soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded);
+          soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded, pendingEnrichment);
           console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
         } catch (scErr) {
           console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
@@ -8645,6 +8671,15 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             tracks: selectedTracks,
             trackCount: selectedTracks.length
           });
+          // Drain enrichment queue after response is sent — non-blocking
+          if (pendingEnrichment.length > 0) {
+            const toEnrich = [...pendingEnrichment];
+            setImmediate(async () => {
+              for (const artistInfo of toEnrich) {
+                await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(() => {});
+              }
+            });
+          }
           return; // Done
         }
         console.log(`⚠️ Only ${selectedTracks.length}/${songCount} tracks found, trying fallback...`);
@@ -9577,6 +9612,15 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       tracks: selectedTracks,
       trackCount: selectedTracks.length
     });
+    // Drain enrichment queue after response is sent — non-blocking
+    if (pendingEnrichment.length > 0) {
+      const toEnrich = [...pendingEnrichment];
+      setImmediate(async () => {
+        for (const artistInfo of toEnrich) {
+          await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(() => {});
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Error generating playlist:', error);
