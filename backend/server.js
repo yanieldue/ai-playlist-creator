@@ -1154,7 +1154,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         const artistUuid = isrcMatch.artists?.[0]?.uuid || null;
         const artistName = isrcMatch.artists?.[0]?.name || isrcMatch.creditName;
         console.log(`✓ SoundCharts ISRC match: "${isrcMatch.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → UUID ${artistUuid}`);
-        const result = { songUuid: isrcMatch.uuid, artistUuid, artistName };
+        const result = { songUuid: isrcMatch.uuid, artistUuid, artistName, _confirmedStrong: true };
         setSCCache(cacheKey, result);
         return result;
       }
@@ -1211,7 +1211,9 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         const artistUuid = match.artists?.[0]?.uuid || detailSong?.artists?.[0]?.uuid || null;
         const artistName = match.artists?.[0]?.name || detailSong?.artists?.[0]?.name || match.creditName;
         console.log(`🔍 SoundCharts song search: "${match.name}" by ${artistName} → artist UUID ${artistUuid}${matchIsrc ? ` (ISRC: ${matchIsrc})` : ''}`);
-        const result = { songUuid: match.uuid, artistUuid, artistName };
+        // Strong if both ISRCs exist and match — confirms this is the right song/artist beyond title similarity
+        const _confirmedStrong = !!(spotifyIsrc && matchIsrc && matchIsrc === spotifyIsrc);
+        const result = { songUuid: match.uuid, artistUuid, artistName, _confirmedStrong };
         setSCCache(cacheKey, result);
         return result;
       }
@@ -1251,7 +1253,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
               console.log(`✓ SoundCharts artist-fallback: Spotify artist ID match at profile level → "${candidate.name}" (${confirmedSpotifyArtistId}) — UUID ${candidate.uuid}`);
               // Grab any song from this artist for the songUuid (used for Spotify QA downstream)
               const songs = await getSoundChartsArtistSongs(candidate.uuid, 5);
-              const result = { songUuid: songs[0]?.uuid || null, artistUuid: candidate.uuid, artistName: candidate.name };
+              const result = { songUuid: songs[0]?.uuid || null, artistUuid: candidate.uuid, artistName: candidate.name, _confirmedStrong: true };
               setSCCache(cacheKey, result);
               return result;
             }
@@ -1269,6 +1271,9 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         const songs = await getSoundChartsArtistSongs(candidate.uuid, 50);
         const songMatch = songs.find(s => {
           const sNorm = s.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Guard: empty sNorm means non-Latin title (e.g. Cyrillic) — titleNorm.startsWith("") is
+          // always true, so skip these to avoid falsely matching wrong-language songs.
+          if (!sNorm) return false;
           return sNorm === titleNorm || sNorm.startsWith(titleNorm) || titleNorm.startsWith(sNorm);
         });
         if (songMatch) {
@@ -1291,7 +1296,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
                 const artistIdOnTrack = trackRes.body.artists?.[0]?.id;
                 if (artistIdOnTrack === confirmedSpotifyArtistId) {
                   console.log(`✓ SoundCharts artist-fallback: Spotify ID match → "${m.candidate.name}" (${confirmedSpotifyArtistId}) — UUID ${m.candidate.uuid}`);
-                  const result = { songUuid: m.songMatch.uuid, artistUuid: m.candidate.uuid, artistName: m.candidate.name };
+                  const result = { songUuid: m.songMatch.uuid, artistUuid: m.candidate.uuid, artistName: m.candidate.name, _confirmedStrong: true };
                   setSCCache(cacheKey, result);
                   return result;
                 }
@@ -1304,7 +1309,7 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         const isrcPick = spotifyIsrc ? songMatches.find(m => m.songIsrc === spotifyIsrc) : null;
         if (isrcPick) {
           console.log(`✓ SoundCharts artist-fallback: ISRC match → "${isrcPick.candidate.name}" (ISRC: ${spotifyIsrc}) — UUID ${isrcPick.candidate.uuid}`);
-          const result = { songUuid: isrcPick.songMatch.uuid, artistUuid: isrcPick.candidate.uuid, artistName: isrcPick.candidate.name };
+          const result = { songUuid: isrcPick.songMatch.uuid, artistUuid: isrcPick.candidate.uuid, artistName: isrcPick.candidate.name, _confirmedStrong: true };
           setSCCache(cacheKey, result);
           return result;
         }
@@ -1318,7 +1323,8 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         } else {
           console.log(`✓ SoundCharts artist-fallback: "${pick.candidate.name}" has "${pick.songMatch.name}" → UUID ${pick.candidate.uuid}`);
         }
-        const result = { songUuid: pick.songMatch.uuid, artistUuid: pick.candidate.uuid, artistName: pick.candidate.name };
+        // Title-only match with no Spotify/ISRC verification — could be wrong artist (e.g. Russian "Dante" vs R&B "Dante")
+        const result = { songUuid: pick.songMatch.uuid, artistUuid: pick.candidate.uuid, artistName: pick.candidate.name, _confirmedStrong: false };
         setSCCache(cacheKey, result);
         return result;
       }
@@ -6758,6 +6764,7 @@ DO NOT include any text outside the JSON.`
     // referenceSongs come from the user prompt: "songs similar to Ain't No One by Dante"
     const confirmedArtistUuids = {};      // { artistNameLower: uuid | 'INVALID' | 'NOSIMILAR:<uuid>' }
     const confirmedSpotifyArtistIds = {}; // { artistNameLower: spotifyArtistId }
+    const confirmedArtistUuidsStrong = new Set(); // artists confirmed via ISRC/Spotify-ID match (right artist for sure)
 
     // Get app-level Spotify token once — used for both reference-song ID lookup and genre validation.
     // App credentials work for all platforms (no user auth needed).
@@ -6818,7 +6825,8 @@ DO NOT include any text outside the JSON.`
           if (result?.artistUuid) {
             confirmedArtistUuids[refSong.artist.toLowerCase()] = result.artistUuid;
             if (result.songUuid) confirmedSongUuids[refSong.artist.toLowerCase()] = result.songUuid;
-            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}`);
+            if (result._confirmedStrong) confirmedArtistUuidsStrong.add(refSong.artist.toLowerCase());
+            console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}${result._confirmedStrong ? ' [strong]' : ' [weak]'}`);
           } else {
             console.log(`⚠ Could not confirm "${refSong.artist}" via song "${refSong.title}" — will fall back to name search`);
             // Step B.2: When the song lookup fails but we have a confirmed Spotify artist ID,
@@ -6846,7 +6854,8 @@ DO NOT include any text outside the JSON.`
                     const scSpotifyId = await getSoundChartsArtistPlatformId(candidate.uuid, 'spotify');
                     if (scSpotifyId && scSpotifyId === refSpotifyArtistId) {
                       confirmedArtistUuids[refSong.artist.toLowerCase()] = candidate.uuid;
-                      console.log(`✓ Artist profile match for "${refSong.artist}" via Spotify ID ${refSpotifyArtistId} → SC UUID ${candidate.uuid}`);
+                      confirmedArtistUuidsStrong.add(refSong.artist.toLowerCase());
+                      console.log(`✓ Artist profile match for "${refSong.artist}" via Spotify ID ${refSpotifyArtistId} → SC UUID ${candidate.uuid} [strong]`);
                       artistConfirmed = true;
                       break;
                     } else if (scSpotifyId && scSpotifyId !== refSpotifyArtistId) {
@@ -7443,22 +7452,32 @@ Respond ONLY with valid JSON:
       console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
     }
 
-    // Artists with NO SC UUID at all but a confirmed Spotify ID use Spotify-direct injection.
-    // NOSIMILAR artists are excluded here — they already have an SC UUID and are handled by
-    // Phase 1 of artist_songs strategy (SC catalog + audio filters). Adding Spotify top tracks
-    // on top would bypass energy/valence filtering and inject wrong-mood songs (e.g. Drake's
-    // "One Dance" into a melancholic playlist when his SC sad songs like "Marvin's Room" are
-    // already fetched via the SC catalog path).
+    // Artists that need Spotify-direct injection fall into two categories:
+    // 1. No SC UUID at all (!scUuid) — SC couldn't find them.
+    // 2. NOSIMILAR but NOT strongly confirmed — SC found a same-name artist but couldn't
+    //    verify it's the right one (e.g. Russian "Dante" confirmed only by title-match bug,
+    //    not by ISRC or Spotify ID). Their SC catalog may be wrong → use Spotify top tracks.
+    //
+    // EXCLUDED from Spotify-direct: NOSIMILAR artists that ARE strongly confirmed (ISRC/Spotify-ID
+    // verified). These are right artists whose SC genre data just doesn't match the playlist
+    // (e.g. Drake confirmed via Marvin's Room ISRC — his SC catalog has the correct sad songs,
+    // and using getArtistTopTracks would inject mood-wrong hits like "One Dance" / "God's Plan").
     const nosimilarWithSpotify = new Set(
       Object.entries(confirmedSpotifyArtistIds)
         .filter(([artistLower]) => {
           const scUuid = confirmedArtistUuids[artistLower];
-          return !scUuid;  // Only artists SC couldn't find at all — NOSIMILAR handled by SC catalog path
+          if (!scUuid) return true; // no SC UUID — always use Spotify-direct
+          if (typeof scUuid === 'string' && scUuid.startsWith('NOSIMILAR:')) {
+            // NOSIMILAR + strongly confirmed = right artist, SC genre mismatch only → SC catalog handles it
+            // NOSIMILAR + weakly confirmed  = possibly wrong SC profile → keep Spotify-direct
+            return !confirmedArtistUuidsStrong.has(artistLower);
+          }
+          return false;
         })
         .map(([artistLower]) => artistLower)
     );
     if (nosimilarWithSpotify.size > 0) {
-      console.log(`🎵 [SPOTIFY-DIRECT] ${nosimilarWithSpotify.size} artist(s) will use Spotify top tracks (no SC profile found): [${[...nosimilarWithSpotify].join(', ')}]`);
+      console.log(`🎵 [SPOTIFY-DIRECT] ${nosimilarWithSpotify.size} artist(s) will use Spotify top tracks (no/wrong SC profile): [${[...nosimilarWithSpotify].join(', ')}]`);
     }
 
     // Map to recommendedTracks (ISRC + releaseDate passed through for exact lookup and era filtering)
@@ -7970,8 +7989,8 @@ Return ONLY valid JSON:
           try {
             console.log(`🎵 [SPOTIFY-DIRECT] Fetching top tracks for "${artistDisplay}" (${spotifyArtistId})...`);
             const topTracksRes = await userSpotifyApi.getArtistTopTracks(spotifyArtistId, 'US');
-            const topTracks = topTracksRes.body.tracks || [];
-            console.log(`  → ${topTracks.length} top tracks for "${artistDisplay}"`);
+            const topTracks = (topTracksRes.body.tracks || []).slice(0, 5); // cap at 5 to preserve pool diversity
+            console.log(`  → using ${topTracks.length} top tracks for "${artistDisplay}"`);
             for (const t of topTracks) {
               const syntheticSong = {
                 track: t.name, artist: artistDisplay,
