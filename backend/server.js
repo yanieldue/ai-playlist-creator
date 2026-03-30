@@ -2210,7 +2210,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 2: moods alone (no audio filters, or already loosened) → drop moods but keep audio.
+        // Step 2: drop moods but keep audio (and themes).
         // Dropping moods without audio risks pulling off-era songs (Nat King Cole, etc.)
         // so only do this after audio-only has already been attempted.
         if (moodsFilter) {
@@ -2218,6 +2218,18 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           console.log(`⚠️  SoundCharts top_songs returned 0 — retrying without moods filter`);
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: filtersWithoutMoods },
+            fetchCount,
+            confirmedArtistUuids
+          );
+        }
+
+        // Step 2.5: themes filter may have sparse SC coverage — drop it and retry with audio only.
+        const themesFilter = soundchartsFilters.find(f => f.type === 'themes');
+        if (themesFilter) {
+          const filtersWithoutThemes = soundchartsFilters.filter(f => f.type !== 'themes');
+          console.log(`⚠️  SoundCharts top_songs returned 0 — retrying without themes filter`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: filtersWithoutThemes },
             fetchCount,
             confirmedArtistUuids
           );
