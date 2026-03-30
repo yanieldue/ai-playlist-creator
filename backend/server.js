@@ -7219,6 +7219,28 @@ Respond ONLY with valid JSON:
     // Collects Phase 3b cache-miss artists + all uncached pool artists for background enrichment.
     // Drained via setImmediate after res.json() so enrichment never blocks the response.
     const pendingEnrichment = [];
+
+    // Enriches artists discovered via top_songs strategy (no UUID available — needs name lookup).
+    // Also used for artist_songs pool artists passed via pendingEnrichment.
+    const drainEnrichmentQueue = (extraArtistNames = []) => {
+      const toEnrich = [...pendingEnrichment];
+      const genre = genreData.primaryGenre || null;
+      setImmediate(async () => {
+        // Phase 3b cache-miss artists (have UUID already)
+        for (const artistInfo of toEnrich) {
+          await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name, genre).catch(() => {});
+        }
+        // top_songs strategy artists (only have name — need UUID lookup first)
+        for (const artistName of extraArtistNames) {
+          try {
+            const info = await getSoundChartsArtistInfo(artistName, genre);
+            if (info?.uuid) {
+              await getArtistFullCatalogFromSC(info.uuid, artistName, genre).catch(() => {});
+            }
+          } catch (e) { /* skip */ }
+        }
+      });
+    };
     const _phases = Array.isArray(genreData.phases) && genreData.phases.length >= 2 ? genreData.phases : null;
 
     if (process.env.SOUNDCHARTS_APP_ID) {
@@ -8678,15 +8700,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             tracks: selectedTracks,
             trackCount: selectedTracks.length
           });
-          // Drain enrichment queue after response is sent — non-blocking
-          if (pendingEnrichment.length > 0) {
-            const toEnrich = [...pendingEnrichment];
-            setImmediate(async () => {
-              for (const artistInfo of toEnrich) {
-                await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(() => {});
-              }
-            });
-          }
+          const _topSongsArtists = [...new Set(soundChartsDiscoveredSongs.map(s => s.artistName).filter(Boolean))];
+          drainEnrichmentQueue(_topSongsArtists);
           return; // Done
         }
         console.log(`⚠️ Only ${selectedTracks.length}/${songCount} tracks found, trying fallback...`);
@@ -9619,15 +9634,8 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       tracks: selectedTracks,
       trackCount: selectedTracks.length
     });
-    // Drain enrichment queue after response is sent — non-blocking
-    if (pendingEnrichment.length > 0) {
-      const toEnrich = [...pendingEnrichment];
-      setImmediate(async () => {
-        for (const artistInfo of toEnrich) {
-          await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name).catch(() => {});
-        }
-      });
-    }
+    const _topSongsArtists = [...new Set(soundChartsDiscoveredSongs.map(s => s.artistName).filter(Boolean))];
+    drainEnrichmentQueue(_topSongsArtists);
 
   } catch (error) {
     console.error('Error generating playlist:', error);
