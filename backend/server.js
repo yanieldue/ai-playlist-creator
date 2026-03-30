@@ -12314,26 +12314,30 @@ async function enrichTopArtistsCache() {
 
   console.log('🔥 [ENRICHMENT] Starting daily top-artists cache warm...');
   const sort = { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-  const SC_ENRICHMENT_GENRES = ['pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african'];
+  // All SC genre slugs from SOUNDCHARTS_GENRE_MAP
+  const SC_ENRICHMENT_GENRES = ['pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african', 'jazz', 'classical', 'metal', 'reggae', 'blues'];
 
-  // Step 1: collect unique artist names from top 500 songs per genre
+  // Step 1: collect unique artist names from top 1000 songs per genre (2 pages × 500)
   const artistQueue = new Map(); // lowerName -> { name, genre }
   for (const scGenre of SC_ENRICHMENT_GENRES) {
     try {
-      await throttleSoundCharts();
-      const resp = await axios.post(
-        'https://customer.api.soundcharts.com/api/v2/top/songs',
-        { sort, filters: [{ type: 'songGenres', data: { values: [scGenre], operator: 'in' } }] },
-        { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: 0, limit: 500 }, timeout: 15000 }
-      );
-      const items = resp.data?.items || [];
-      for (const item of items) {
-        const name = item.song?.creditName;
-        if (name && !artistQueue.has(name.toLowerCase())) {
-          artistQueue.set(name.toLowerCase(), { name, genre: scGenre });
+      for (let page = 0; page < 2; page++) {
+        await throttleSoundCharts();
+        const resp = await axios.post(
+          'https://customer.api.soundcharts.com/api/v2/top/songs',
+          { sort, filters: [{ type: 'songGenres', data: { values: [scGenre], operator: 'in' } }] },
+          { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: page * 500, limit: 500 }, timeout: 15000 }
+        );
+        const items = resp.data?.items || [];
+        for (const item of items) {
+          const name = item.song?.creditName;
+          if (name && !artistQueue.has(name.toLowerCase())) {
+            artistQueue.set(name.toLowerCase(), { name, genre: scGenre });
+          }
         }
+        if (items.length < 500) break; // no more pages
       }
-      console.log(`🔥 [ENRICHMENT] ${scGenre}: ${items.length} songs, ${artistQueue.size} unique artists so far`);
+      console.log(`🔥 [ENRICHMENT] ${scGenre}: ${artistQueue.size} unique artists so far`);
     } catch (err) {
       console.log(`⚠️  [ENRICHMENT] top/songs fetch failed for "${scGenre}": ${err.message}`);
     }
