@@ -833,18 +833,9 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
   }
 }
 
-// ── Full artist catalog cache ─────────────────────────────────────────────────────────────────
+// ── Full artist catalog cache ─────────────────────────────────────���───────────────────────────
 // Fetches ALL songs for an artist (not just top 10), caches in DB, and uses a freshness check
 // (1-song fetch) to detect new releases and trigger a repull automatically.
-
-// Separate throttle for song detail enrichment calls (lighter endpoint, faster burst)
-let scSongDetailLastCallTime = 0;
-async function throttleSCDetail() {
-  const now = Date.now();
-  const elapsed = now - scSongDetailLastCallTime;
-  if (elapsed < 150) await new Promise(r => setTimeout(r, 150 - elapsed));
-  scSongDetailLastCallTime = Date.now();
-}
 
 async function getArtistFullCatalogFromSC(artistUuid, artistName) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
@@ -929,55 +920,47 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return songs;
 
-  const result = [];
+  const ENRICH_BATCH = 5; // parallel SC detail calls per batch
+  const enriched = new Map(); // uuid → { audio, moods, themes }
   let fetchCount = 0;
 
+  // Pass 1: serve from cache (instant)
+  const needsFetch = [];
   for (const song of songs) {
-    if (!song.uuid) {
-      result.push(song);
-      continue;
+    if (!song.uuid) continue;
+    const cached = db.getCachedSC(`song_detail:${song.uuid}`);
+    // Treat empty audio as stale — entries cached before the enrichment fix had audio: {}
+    if (cached?.audio && Object.keys(cached.audio).length > 0) {
+      enriched.set(song.uuid, { audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
+    } else {
+      needsFetch.push(song);
     }
+  }
 
-    const detailKey = `song_detail:${song.uuid}`;
-    const cached = db.getCachedSC(detailKey);
-    if (cached) {
-      // Treat empty audio as stale — pre-fix cache entries stored audio: {} before we read s.audio.
-      // Re-fetch so vibe filtering can actually use energy/valence data.
-      if (cached.audio && Object.keys(cached.audio).length > 0) {
-        result.push({ ...song, audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
-        continue;
+  // Pass 2: fetch uncached songs in parallel batches with inter-batch throttle
+  for (let i = 0; i < needsFetch.length && fetchCount < maxSongs; i += ENRICH_BATCH) {
+    const batch = needsFetch.slice(i, Math.min(i + ENRICH_BATCH, i + (maxSongs - fetchCount)));
+    if (batch.length === 0) break;
+    if (i > 0) await new Promise(r => setTimeout(r, 150)); // throttle between batches
+
+    const results = await Promise.allSettled(
+      batch.map(song =>
+        axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`, {
+          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+          timeout: 8000,
+        }).then(resp => ({ uuid: song.uuid, object: resp.data?.object }))
+      )
+    );
+
+    for (const r of results) {
+      if (r.status === 'fulfilled' && r.value.object) {
+        const s = r.value.object;
+        const detail = { audio: s.audio || {}, moods: s.moods || [], themes: s.themes || [] };
+        db.setCachedSC(`song_detail:${r.value.uuid}`, detail);
+        enriched.set(r.value.uuid, detail);
+        if (Object.keys(detail.audio).length > 0) fetchCount++;
       }
-      // Fall through to re-fetch
-    }
-
-    if (fetchCount >= maxSongs) {
-      result.push(song);
-      continue;
-    }
-
-    try {
-      // v2.25 song endpoint returns audio features, moods, and themes all in one call
-      await throttleSCDetail();
-      const audioResp = await axios.get(
-        `https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`,
-        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
-      );
-
-      if (audioResp.data?.object) {
-        const s = audioResp.data.object;
-        const detail = {
-          audio: s.audio || {},
-          moods: s.moods || [],
-          themes: s.themes || [],
-        };
-        db.setCachedSC(detailKey, detail);
-        result.push({ ...song, ...detail });
-        fetchCount++;
-      } else {
-        result.push(song);
-      }
-    } catch (e) {
-      result.push(song);
+      // On failure: song stays unenriched (returned as-is below)
     }
   }
 
@@ -985,7 +968,10 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     console.log(`🎵 [CATALOG] Enriched ${fetchCount} songs with audio features + moods`);
   }
 
-  return result;
+  // Return songs in original order with enrichment applied where available
+  return songs.map(song =>
+    song.uuid && enriched.has(song.uuid) ? { ...song, ...enriched.get(song.uuid) } : song
+  );
 }
 
 // Filter catalog songs by energy/valence from SC query filters.
