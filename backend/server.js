@@ -1692,7 +1692,7 @@ const TRACK_CONTEXT_OVERRIDES = {
 
 // Build a SoundCharts query from Claude-extracted genreData.
 // Used by executeSoundChartsStrategy() to replace the old similarity-tree approach.
-function buildSoundchartsQuery(genreData, allowExplicit = true) {
+function buildSoundchartsQuery(genreData, allowExplicit = true, { forceTopSongs = false } = {}) {
   const isExclusive = genreData.artistConstraints.exclusiveMode === true ||
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
@@ -1734,7 +1734,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // - no specific artists named → top_songs with ALL SC filters
   //   (genre + mood + energy + themes applied server-side by SC; paginate for full coverage
   //   beyond just popular songs; suggestedSeedArtists used only as fallback if 0 results)
-  const strategy = (isExclusive || requestedArtists.length > 0)
+  const strategy = (!forceTopSongs && (isExclusive || requestedArtists.length > 0))
     ? 'artist_songs'
     : 'top_songs';
 
@@ -2123,7 +2123,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
   const { strategy, artists = [], soundchartsFilters = [], soundchartsSort } = query;
 
-  // ─��� top_songs / trending ──────────────────────────────────────���──────────
+  // ─��� top_songs / trending ──────────────────────────────────────���──��───────
   if (strategy === 'top_songs' || strategy === 'trending') {
     const sort = soundchartsSort || {
       type: 'metric', platform: 'spotify', metricType: 'streams',
@@ -7241,9 +7241,17 @@ Respond ONLY with valid JSON:
             _claudeSeeds.length > 0 &&
             _seedOverlap === 0;
           if (_anchorArtists.length > 0 && !_isGenrePivot) {
-            console.log(`🔒 Refresh: anchoring seeds to playlist artists [${_anchorArtists.join(', ')}] — disabling Level 1/2 expansion`);
-            scQuery.artists = _anchorArtists;
-            scQuery.expandToSimilar = false;
+            if (scQuery.strategy === 'artist_songs') {
+              // Rebuild with top_songs for fast refresh: SC genre+audio filters maintain vibe
+              // without the slow UUID lookups + catalog fetches for ~20-30 playlist artists.
+              // The Spotify artist genre filter (applied post-SC) catches any off-genre outliers.
+              const _refreshQuery = buildSoundchartsQuery(genreData, allowExplicit, { forceTopSongs: true });
+              Object.assign(scQuery, _refreshQuery);
+              console.log(`⚡ Refresh: fast path (top_songs) — SC filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
+            } else {
+              // Already top_songs — artists are only used as fallback seeds, no change needed
+              console.log(`🔒 Refresh: already top_songs, no anchor needed`);
+            }
           } else if (_isGenrePivot) {
             console.log(`🔀 Genre pivot detected: primaryGenre="${genreData.primaryGenre}", Claude seeds [${_claudeSeeds.join(', ')}] have 0 overlap with playlist artists — skipping anchor, using Claude's seeds`);
           }
