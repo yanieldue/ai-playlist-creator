@@ -592,7 +592,7 @@ async function throttleSoundCharts() {
 }
 
 // Helper function to search artist on SoundCharts
-async function searchSoundChartsArtist(artistName, expectedGenre = null) {
+async function searchSoundChartsArtist(artistName, expectedGenre = null, knownUuid = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
 
@@ -623,6 +623,20 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null) {
     );
 
     if (response.data?.items?.length > 0) {
+      // If we already know the SC UUID (from a similarity graph reference), use it to pick
+      // the right artist directly — avoids name-collision bugs like wrong "Dante" (Spanish rap
+      // vs R&B) when the search returns multiple artists with the same name.
+      if (knownUuid) {
+        const uuidMatch = response.data.items.find(a => a.uuid === knownUuid);
+        if (uuidMatch) {
+          console.log(`🔍 SoundCharts: "${uuidMatch.name}" matched by UUID (${knownUuid.slice(0, 8)}...)`);
+          setSCCache(cacheKey, uuidMatch); db.setCachedSC(cacheKey, uuidMatch);
+          return uuidMatch;
+        }
+        // UUID not in first-page results — fall through to normal disambiguation
+        console.log(`⚠️  SoundCharts: known UUID ${knownUuid.slice(0, 8)}... not in search results for "${artistName}" — falling back to name match`);
+      }
+
       // Collect all exact name matches (case-insensitive)
       const exactMatches = response.data.items.filter(a =>
         a.name.toLowerCase() === artistName.toLowerCase()
@@ -754,8 +768,8 @@ async function getSoundChartsSimilarArtists(artistUuid, limit = 10) {
 }
 
 // Helper function to get artist info including genres and similar artists from SoundCharts
-async function getSoundChartsArtistInfo(artistName, expectedGenre = null) {
-  const artist = await searchSoundChartsArtist(artistName, expectedGenre);
+async function getSoundChartsArtistInfo(artistName, expectedGenre = null, knownUuid = null) {
+  const artist = await searchSoundChartsArtist(artistName, expectedGenre, knownUuid);
   if (!artist) {
     console.log(`🔍 SoundCharts: "${artistName}" not found`);
     return null;
@@ -767,7 +781,8 @@ async function getSoundChartsArtistInfo(artistName, expectedGenre = null) {
   const genres = artist.genres?.map(g => g.root) || [];
   const subgenres = artist.genres?.flatMap(g => g.sub || []) || [];
 
-  // Get similar artists
+  // Get similar artists — preserve UUIDs so pool builder can pass them as hints
+  // when looking up each similar artist, preventing name-collision bugs (e.g. two "Dante"s)
   const similarArtists = await getSoundChartsSimilarArtists(artist.uuid, 10);
 
   const result = {
@@ -775,6 +790,8 @@ async function getSoundChartsArtistInfo(artistName, expectedGenre = null) {
     uuid: artist.uuid,
     genres: [...new Set([...genres, ...subgenres])],
     similarArtists: similarArtists.map(a => a.name),
+    // Map of lowercased name → SC UUID for all similar artists
+    _similarUuids: Object.fromEntries(similarArtists.map(a => [a.name.toLowerCase(), a.uuid])),
     careerStage: artist.careerStage // long_tail, developing, mainstream, superstar
   };
 
@@ -2461,7 +2478,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     let allArtistInfos = [...seedInfos];
     if (expandToSimilar && seedInfos.length > 0) {
       const seenNames = new Set(seedInfos.map(a => a.name.toLowerCase()));
-      const similarNames = [];
+      const similarNames = []; // { name, uuid } pairs — uuid may be null
       // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10, max 20.
       // Cap at 20 to avoid runaway serial SC calls for large song counts (each call is ~300ms).
       // minArtists overrides the cap when per-artist diversity requires more unique artists.
@@ -2476,7 +2493,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           if (added >= similarPerSeed) break;
           if (seenNames.has(simName.toLowerCase())) continue;
           seenNames.add(simName.toLowerCase());
-          similarNames.push(simName);
+          // Preserve the SC UUID from the similarity graph so we can pass it as a hint
+          // when looking up the artist — prevents name-collision bugs (e.g. two "Dante"s)
+          const simUuid = seedInfo._similarUuids?.[simName.toLowerCase()] || null;
+          similarNames.push({ name: simName, uuid: simUuid });
           added++;
         }
       }
@@ -2566,9 +2586,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         if (allGenreBearingInconsistent) {
           console.log(`⚠️  All genre-bearing seeds inconsistent but confirmed reference artist(s) present — traversing their similarity graph with Claude's genre filter.`);
         }
-        for (const simName of similarNames) {
+        for (const { name: simName, uuid: simUuid } of similarNames) {
         try {
-          const simInfo = await getSoundChartsArtistInfo(simName);
+          const simInfo = await getSoundChartsArtistInfo(simName, null, simUuid);
           if (!simInfo?.uuid) continue;
           const artistGenres = (simInfo.genres || []).map(g => g.toLowerCase());
 
@@ -2622,22 +2642,23 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         console.log(`⏩ Skipping depth-2 expansion — depth-1 pool already has ${allArtistInfos.length} artists`);
       } else {
       console.log(`🔍 Phase 2b: depth-1 pool has ${allArtistInfos.length} artists (< ${DEPTH2_MIN_POOL}) — expanding with depth-2 similar artists...`);
-      const depth2Candidates = [];
+      const depth2Candidates = []; // { name, uuid } pairs
       for (const artistInfo of allArtistInfos) {
         for (const name of (artistInfo.similarArtists || [])) {
           if (seenNames.has(name.toLowerCase())) continue;
           seenNames.add(name.toLowerCase());
-          depth2Candidates.push(name);
+          const uuid = artistInfo._similarUuids?.[name.toLowerCase()] || null;
+          depth2Candidates.push({ name, uuid });
           if (depth2Candidates.length >= DEPTH2_MAX * 3) break;
         }
         if (depth2Candidates.length >= DEPTH2_MAX * 3) break;
       }
 
       let depth2Added = 0;
-      for (const name of depth2Candidates) {
+      for (const { name, uuid: d2Uuid } of depth2Candidates) {
         if (depth2Added >= DEPTH2_MAX) break;
         try {
-          const info = await getSoundChartsArtistInfo(name);
+          const info = await getSoundChartsArtistInfo(name, null, d2Uuid);
           if (!info?.uuid) continue;
           const artistGenres = (info.genres || []).map(g => g.toLowerCase());
           if (expectedGenres.length > 0 && artistGenres.length > 0 && !expectedGenres.some(g => artistHasGenre(artistGenres, g))) continue;
