@@ -7761,25 +7761,39 @@ Return ONLY valid JSON:
       return variations.some(variation => lowerName.includes(variation));
     };
 
-    // ── Shared Phase A helper — pre-fetch SC platform IDs for a song pool ──
+    // ── Shared Phase A helper — fetch ISRCs (and platform IDs as fallback) for songs without one ──
+    // SC almost always has ISRCs for catalogued songs — fetching them lets us use exact ISRC
+    // search on Spotify/Apple Music instead of unreliable text search.
     const prefetchPlatformIds = async (pool, scPlatformCode) => {
       if (!process.env.SOUNDCHARTS_APP_ID) return;
+      const appId = process.env.SOUNDCHARTS_APP_ID;
+      const apiKey = process.env.SOUNDCHARTS_API_KEY;
       const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
       if (needing.length === 0) return;
-      console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
-      let consecFails = 0;
-      let totalHits = 0;
+      console.log(`🔍 [Phase A] Fetching ISRCs from SC for ${needing.length} songs without ISRC...`);
+      let isrcHits = 0;
+      let platformHits = 0;
       for (const song of needing) {
+        // Primary: fetch ISRC from SC song detail — covers all platforms, SC coverage is high
+        try {
+          await throttleSoundCharts();
+          const detailResp = await axios.get(
+            `https://customer.api.soundcharts.com/api/v2/song/${song.uuid}`,
+            { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
+          );
+          const detail = detailResp.data?.object || detailResp.data;
+          const isrc = detail?.isrc?.value || detail?.isrc || null;
+          if (isrc) {
+            song.isrc = isrc;
+            isrcHits++;
+            continue; // ISRC found — no need for platform ID lookup
+          }
+        } catch (_) { /* fall through to platform ID */ }
+        // Fallback: try SC platform track ID (works for some mainstream artists)
         song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
-        if (song.platformId) { consecFails = 0; totalHits++; }
-        else if (++consecFails >= 10) {
-          // Stop only after 10 consecutive misses — SC platform ID coverage for niche
-          // artists is sparse, so a few early misses don't mean the whole pool is uncovered.
-          console.log(`🔍 [Phase A] Stopping early — 10 consecutive misses`);
-          break;
-        }
+        if (song.platformId) platformHits++;
       }
-      console.log(`🔍 [Phase A] Got IDs for ${needing.filter(s => s.platformId).length}/${needing.length} songs`);
+      console.log(`🔍 [Phase A] ISRCs: ${isrcHits}, platform IDs: ${platformHits} / ${needing.length} songs`);
     };
 
     // Scale batch size with song count so Phase B lookup time stays roughly constant
