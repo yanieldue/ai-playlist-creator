@@ -861,7 +861,7 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName, genre = null) 
 
   // Step 1: Check DB cache — skip freshness check if cached within last 24h
   const catalogKey = `full_catalog:${artistUuid}`;
-  const cached = db.getCachedSC(catalogKey);
+  const cached = await db.getCachedSC(catalogKey);
   if (cached?.songs?.length > 0) {
     const cachedAt = cached.cachedAt ? new Date(cached.cachedAt).getTime() : 0;
     const ageHours = (Date.now() - cachedAt) / 3600000;
@@ -956,7 +956,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   const needsFetch = [];
   for (const song of songs) {
     if (!song.uuid) continue;
-    const cached = db.getCachedSC(`song_detail:${song.uuid}`);
+    const cached = await db.getCachedSC(`song_detail:${song.uuid}`);
     // Treat empty audio as stale — entries cached before the enrichment fix had audio: {}
     if (cached?.audio && Object.keys(cached.audio).length > 0) {
       enriched.set(song.uuid, { audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
@@ -2757,7 +2757,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         // Cache hit: vibe-filter with energy/valence so we don't return upbeat songs for sad prompts.
         // Cache miss: quick fetch for now, schedule background enrichment for next time.
         const catalogKey = `full_catalog:${artistInfo.uuid}`;
-        const cachedCatalog = db.getCachedSC(catalogKey);
+        const cachedCatalog = await db.getCachedSC(catalogKey);
         if (cachedCatalog?.songs?.length > 0) {
           const mainSongs = cachedCatalog.songs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
           const pool = mainSongs.length > 0 ? mainSongs : cachedCatalog.songs;
