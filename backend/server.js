@@ -1227,15 +1227,32 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
     // This handles cases where song-title search doesn't credit the right artist (features, compilations, etc.)
     console.log(`🔍 SoundCharts song search: trying artist-candidate fallback for "${artist}"...`);
     try {
+      // Fetch up to 25 candidates — SC sorts by popularity so the right artist for a less-mainstream
+      // act (e.g. R&B "Dante") can be buried below more-popular same-name artists (e.g. Russian pop
+      // "Dante"). When we have a confirmed Spotify artist ID, paginate a second page if needed.
+      const FALLBACK_LIMIT = 25;
       const artistSearchResp = await axios.get(
         `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(artist)}`,
         {
           headers: { 'x-app-id': appId, 'x-api-key': apiKey },
-          params: { offset: 0, limit: 10 },
+          params: { offset: 0, limit: FALLBACK_LIMIT },
           timeout: 10000
         }
       );
-      const candidates = (artistSearchResp.data?.items || []).filter(
+      let allItems = artistSearchResp.data?.items || [];
+      // If we have a confirmed Spotify ID and still haven't found a matching profile, fetch page 2
+      // before falling through to lower-confidence matching strategies.
+      if (confirmedSpotifyArtistId && allItems.length === FALLBACK_LIMIT) {
+        try {
+          await throttleSoundCharts();
+          const page2 = await axios.get(
+            `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(artist)}`,
+            { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, params: { offset: FALLBACK_LIMIT, limit: FALLBACK_LIMIT }, timeout: 10000 }
+          );
+          allItems = allItems.concat(page2.data?.items || []);
+        } catch (_) { /* page 2 optional */ }
+      }
+      const candidates = allItems.filter(
         a => a.name.toLowerCase() === artist.toLowerCase()
       );
       const titleNorm = title.toLowerCase().replace(/[^a-z0-9]/g, '');
