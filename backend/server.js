@@ -7229,7 +7229,14 @@ Respond ONLY with valid JSON:
         // different genre (e.g. "make it r&b" on an indie playlist), Claude's suggestedSeedArtists
         // will have zero overlap with the existing playlist's artist pool. In that case, skip the
         // anchor and use Claude's seeds so the SC graph explores the new genre's territory.
-        if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
+        if (existingPlaylistData && scQuery.strategy === 'artist_songs' &&
+            existingPlaylistData.tracks?.length === 0 && !genreData.artistConstraints?.exclusiveMode) {
+          // 0-song playlist refresh: keep Claude's seeds but skip similar-artist expansion.
+          // Depth-2 expansion reaches 25+ artists → 25 catalog fetches → ~160s > 120s frontend timeout.
+          // With expandToSimilar=false, only the 5 seed artists are fetched (~30-40s total).
+          scQuery.expandToSimilar = false;
+          console.log(`⚡ Refresh: 0-song playlist — skipping expansion, seeds only: [${scQuery.artists.join(', ')}]`);
+        } else if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
           const _anchorArtists = [...new Set(
             existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
           )];
