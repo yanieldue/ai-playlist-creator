@@ -6589,6 +6589,22 @@ DO NOT include any text outside the JSON.`
 
     console.log('Extracted genre data:', genreData);
 
+    // ── Enforce reference song artists into requestedArtists ─────────────────
+    // Claude sometimes puts reference song artists into suggestedSeedArtists
+    // instead of requestedArtists (which we ignore). Ensure they always land in
+    // requestedArtists so the SC artist_songs strategy is used correctly.
+    if (genreData.referenceSongs?.length > 0 && genreData.artistConstraints) {
+      const existing = new Set((genreData.artistConstraints.requestedArtists || []).map(a => a.toLowerCase()));
+      for (const rs of genreData.referenceSongs) {
+        if (rs.artist && !existing.has(rs.artist.toLowerCase())) {
+          if (!genreData.artistConstraints.requestedArtists) genreData.artistConstraints.requestedArtists = [];
+          genreData.artistConstraints.requestedArtists.push(rs.artist);
+          existing.add(rs.artist.toLowerCase());
+          console.log(`[REF-ENFORCE] Added "${rs.artist}" to requestedArtists from referenceSongs`);
+        }
+      }
+    }
+
     // ── Prompt-level clean override ───────────────────────────────────────────
     // If the prompt or extracted audience signals clean/family/safe content,
     // force allowExplicit=false regardless of account setting. One explicit track
