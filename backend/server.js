@@ -7768,11 +7768,14 @@ Return ONLY valid JSON:
       if (needing.length === 0) return;
       console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${needing.length} songs...`);
       let consecFails = 0;
+      let totalHits = 0;
       for (const song of needing) {
         song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
-        if (song.platformId) { consecFails = 0; }
-        else if (++consecFails >= 2) {
-          console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
+        if (song.platformId) { consecFails = 0; totalHits++; }
+        else if (++consecFails >= 10) {
+          // Stop only after 10 consecutive misses — SC platform ID coverage for niche
+          // artists is sparse, so a few early misses don't mean the whole pool is uncovered.
+          console.log(`🔍 [Phase A] Stopping early — 10 consecutive misses`);
           break;
         }
       }
@@ -7818,28 +7821,48 @@ Return ONLY valid JSON:
             return { track: r.body, usedExact: true };
           }
         }
-        // 3. Text search
-        const r = await Promise.race([
-          userSpotifyApi.searchTracks(`track:${song.name} artist:${artistName}`, { limit: 5 }),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-        ]);
-        const items = r.body.tracks.items;
-        if (items.length === 0) {
-          console.log(`❌ [TEXT-EMPTY] ${fLabel} — Spotify returned 0 results`);
-          return null;
-        }
+        // 3. Text search — three attempts with progressively looser queries
         const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const reqNorm = norm(artistName);
-        for (const t of items) {
-          // Check all artists (primary + featured) — "Arrows" by Fences feat. Macklemore
-          const artistMatch = (t.artists || []).some(a => { const fn = norm(a.name); return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn); });
-          if (artistMatch) {
-            console.log(`🔍 [TEXT] ${fLabel}`);
-            return { track: t, usedExact: false };
+        const checkArtistMatch = (t) => (t.artists || []).some(a => {
+          const fn = norm(a.name);
+          return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn);
+        });
+
+        // Strip feat. credit and mix/version suffixes for cleaner queries
+        const stripTitle = (t) => t
+          .replace(/\s*[\(\[](feat\.|ft\.|featuring)[^\)\]]*[\)\]]/gi, '')  // "(feat. X)" / "[feat. X]"
+          .replace(/\s+-\s+(original mix|radio edit|extended mix|slowed|sped up|remix|remaster(ed)?|acoustic|live|instrumental).*$/i, '')
+          .trim();
+        const cleanTitle = stripTitle(song.name || song.track || '');
+
+        const textAttempts = [
+          // Attempt 1: exact field query with original title
+          `track:${song.name} artist:${artistName}`,
+          // Attempt 2: field query with cleaned title (no feat./mix suffix)
+          cleanTitle !== song.name ? `track:${cleanTitle} artist:${artistName}` : null,
+          // Attempt 3: unqualified search — Spotify's general search is more forgiving
+          `${cleanTitle} ${artistName}`,
+        ].filter(Boolean);
+
+        for (const query of textAttempts) {
+          const r = await Promise.race([
+            userSpotifyApi.searchTracks(query, { limit: 5 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+          ]);
+          const items = r.body.tracks.items;
+          if (items.length === 0) continue;
+          for (const t of items) {
+            if (checkArtistMatch(t)) {
+              const usedClean = query !== textAttempts[0];
+              console.log(`🔍 [TEXT${usedClean ? '-LOOSE' : ''}] ${fLabel}`);
+              return { track: t, usedExact: false };
+            }
           }
         }
-        const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
-        console.log(`❌ [TEXT-MISMATCH] ${fLabel} — top Spotify results: ${topResults}`);
+        const lastItems = await userSpotifyApi.searchTracks(textAttempts[textAttempts.length - 1], { limit: 3 }).then(r => r.body.tracks.items).catch(() => []);
+        const topResults = lastItems.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
+        console.log(`❌ [TEXT-MISS] ${fLabel}${topResults ? ` — top results: ${topResults}` : ' — 0 results'}`);
         return null;
 
       } else if (platform === 'apple') {
