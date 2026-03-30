@@ -12575,26 +12575,46 @@ async function enrichTopArtistsCache() {
     }
   }
 
-  // Step 2: for each artist not already cached, fetch + store full catalog
-  let enriched = 0, skipped = 0, failed = 0;
+  // Step 2: for each artist, fetch full catalog + enrich top 40 songs with audio features
+  let enriched = 0, audioEnriched = 0, skipped = 0, failed = 0;
   for (const [, { name, genre }] of artistQueue) {
     try {
       const artistInfo = await getSoundChartsArtistInfo(name, genre);
       if (!artistInfo?.uuid) { skipped++; continue; }
 
-      // Skip if catalog is already cached (freshness check still runs inside getArtistFullCatalogFromSC)
       const catalogKey = `full_catalog:${artistInfo.uuid}`;
       const cached = await db.getCachedSC(catalogKey);
-      if (cached?.songs?.length > 0) { skipped++; continue; }
 
-      await getArtistFullCatalogFromSC(artistInfo.uuid, name, genre);
-      enriched++;
+      let songs;
+      if (cached?.songs?.length > 0) {
+        songs = cached.songs;
+        // Still run audio enrichment in case song_detail entries are missing
+      } else {
+        songs = await getArtistFullCatalogFromSC(artistInfo.uuid, name, genre);
+        if (songs?.length > 0) enriched++;
+      }
+
+      // Enrich top 40 songs with audio features (Pass 1 is instant if already cached)
+      if (songs?.length > 0) {
+        const top40 = songs.slice(0, 40);
+        // Check if any songs still need audio enrichment (not already cached)
+        let needsAudio = false;
+        for (const s of top40) {
+          if (!s.uuid) continue;
+          const sd = await db.getCachedSC(`song_detail:${s.uuid}`);
+          if (!sd?.audio || Object.keys(sd.audio).length === 0) { needsAudio = true; break; }
+        }
+        if (needsAudio) {
+          await enrichCatalogWithAudioFeatures(top40, 40);
+          audioEnriched++;
+        }
+      }
     } catch (err) {
       failed++;
       console.log(`⚠️  [ENRICHMENT] Failed for "${name}": ${err.message}`);
     }
   }
-  console.log(`✅ [ENRICHMENT] Done — ${enriched} enriched, ${skipped} already cached, ${failed} failed`);
+  console.log(`✅ [ENRICHMENT] Done — ${enriched} catalogs fetched, ${audioEnriched} audio-enriched, ${skipped} skipped, ${failed} failed`);
 }
 
 // Auto-update scheduler - checks every minute for playlists that need updating.
