@@ -1975,16 +1975,16 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
     // SC moods: force "or" operator so multiple moods are treated as OR not AND
-    if (cf.type === 'moods' && cf.data?.values) {
-      cf = { ...cf, data: { ...cf.data, operator: 'or' } };
-    }
-    const existingIdx = filters.findIndex(f => f.type === cf.type);
+    const finalCf = (cf.type === 'moods' && cf.data?.values)
+      ? { ...cf, data: { ...cf.data, operator: 'or' } }
+      : cf;
+    const existingIdx = filters.findIndex(f => f.type === finalCf.type);
     if (existingIdx !== -1) {
-      filters.splice(existingIdx, 1, cf);
-      console.log(`🎯 Claude SC filter override: ${cf.type} ${JSON.stringify(cf.data)}`);
+      filters.splice(existingIdx, 1, finalCf);
+      console.log(`🎯 Claude SC filter override: ${finalCf.type} ${JSON.stringify(finalCf.data)}`);
     } else {
-      filters.push(cf);
-      console.log(`🎯 Claude SC filter added: ${cf.type} ${JSON.stringify(cf.data)}`);
+      filters.push(finalCf);
+      console.log(`🎯 Claude SC filter added: ${finalCf.type} ${JSON.stringify(finalCf.data)}`);
     }
   }
 
