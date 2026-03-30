@@ -1769,13 +1769,9 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     genreData.style || '',
   ].map(l => l.toLowerCase().trim()).filter(Boolean);
 
-  const scMoodsAll = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
-  // SC "in" operator = AND (all must match) → 0 results with multiple moods. Use only the primary mood.
-  const scMoods = scMoodsAll.slice(0, 1);
-  if (scMoods.length > 0) {
-    filters.push({ type: 'moods', data: { values: scMoods, operator: 'in' } });
-    console.log(`🎭 SoundCharts mood filter: [${scMoods[0]}]${scMoodsAll.length > 1 ? ` (dropped: ${scMoodsAll.slice(1).join(', ')})` : ''}`);
-  }
+  // NOTE: SC moods filter returns 0 when combined with genre + audio filters (valence/energy).
+  // Moods filter is unreliable for top_songs — valence/energy already capture the mood numerically.
+  // Mood labels are still used to derive audio feature ranges below.
 
   // Audio feature filters.
   // For top_songs: apply all matched audio feature ranges.
@@ -1972,14 +1968,12 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // These replace lookup-table-derived filters of the same type, since Claude interprets
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
-  const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes']);
+  // moods is also skipped — SC moods filter returns 0 when combined with genre + audio filters
+  const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes', 'moods']);
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
-    // SC "in" = AND for moods → 0 results with multiple values. Enforce single mood.
-    const finalCf = (cf.type === 'moods' && Array.isArray(cf.data?.values) && cf.data.values.length > 1)
-      ? { ...cf, data: { ...cf.data, values: cf.data.values.slice(0, 1), operator: 'in' } }
-      : cf;
+    const finalCf = cf;
     const existingIdx = filters.findIndex(f => f.type === finalCf.type);
     if (existingIdx !== -1) {
       filters.splice(existingIdx, 1, finalCf);
@@ -2129,7 +2123,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
 
   const { strategy, artists = [], soundchartsFilters = [], soundchartsSort } = query;
 
-  // ─��� top_songs / trending ─────────────────────────────────────────────────
+  // ─��� top_songs / trending ──────────────────────────────────────���──────────
   if (strategy === 'top_songs' || strategy === 'trending') {
     const sort = soundchartsSort || {
       type: 'metric', platform: 'spotify', metricType: 'streams',
@@ -6309,12 +6303,11 @@ SOUNDCHARTS DIRECT FILTERS (soundchartsFilters — CRITICAL):
 Use this field to directly output SoundCharts API filter objects that precisely match the prompt's intent.
 These are used VERBATIM in the SC song search — be accurate and specific.
 
-DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness, moods
-DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore, themes (handled separately or unsupported)
+DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness
+DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore, themes, moods (moods filter returns 0 results in SC when combined with other filters — use valence/energy instead)
 
 FILTER SHAPES:
 - Numeric range: { "type": "energy", "data": { "min": 0.6 } }  — include only min, only max, or both
-- Mood list: { "type": "moods", "data": { "values": ["Sad"], "operator": "in" } }  ← EXACTLY ONE mood value ("in" = AND in SC, so multiple values = 0 results)
 - Theme list: { "type": "themes", "data": { "values": ["Heartbreak", "Love"], "operator": "in" } }
 
 VALID MOOD VALUES (exact strings only):
@@ -6333,29 +6326,28 @@ AUDIO FEATURE RANGES (all 0.0–1.0 except tempo in BPM and scores 1–10):
 MAPPING EXAMPLES — think dynamically, these are not exhaustive:
 - "songs I can dance to", "danceable", "banger" → { type: "danceability", data: { min: 0.72 } }
 - "party anthems", "turn up" → { type: "danceability", data: { min: 0.75 } }, { type: "energy", data: { min: 0.70 } }, { type: "moods", data: { values: ["Euphoric", "Energetic"], operator: "in" } }
-- "sad songs", "heartbreak", "crying" → { type: "moods", data: { values: ["Sad"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
-- "happy/upbeat/feel-good" → { type: "moods", data: { values: ["Happy"], operator: "in" } }, { type: "valence", data: { min: 0.65 } }
-- "chill/relaxing/laid-back" → { type: "energy", data: { max: 0.45 } }, { type: "moods", data: { values: ["Calm"], operator: "in" } }
+- "sad songs", "heartbreak", "crying" → { type: "valence", data: { max: 0.45 } }, { type: "energy", data: { max: 0.55 } }
+- "happy/upbeat/feel-good" → { type: "valence", data: { min: 0.65 } }, { type: "energy", data: { min: 0.55 } }
+- "chill/relaxing/laid-back" → { type: "energy", data: { max: 0.45 } }, { type: "valence", data: { min: 0.35 } }
 - "gym/workout" → { type: "energy", data: { min: 0.75 } }, { type: "danceability", data: { min: 0.65 } }
 - "acoustic/unplugged" → { type: "acousticness", data: { min: 0.60 } }
-- "love songs/romantic" → { type: "moods", data: { values: ["Romantic"], operator: "in" } }
-- "dark/moody" → { type: "moods", data: { values: ["Dark"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
-- "nostalgic" → { type: "moods", data: { values: ["Nostalgic"], operator: "in" } }
-- "motivational/empowering" → { type: "moods", data: { values: ["Empowering"], operator: "in" } }
-- "emotional/deeply emotional" → { type: "moods", data: { values: ["Sad"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
-- "high emotion sad" → { type: "moods", data: { values: ["Sad"], operator: "in" } }, { type: "valence", data: { max: 0.45 } }
-- "slow jams" → { type: "tempo", data: { max: 95 } }, { type: "moods", data: { values: ["Romantic"], operator: "in" } }
+- "love songs/romantic" → { type: "valence", data: { min: 0.45 } }, { type: "tempo", data: { max: 100 } }
+- "dark/moody" → { type: "valence", data: { max: 0.45 } }
+- "nostalgic" → { type: "valence", data: { min: 0.35, max: 0.65 } }
+- "motivational/empowering" → { type: "energy", data: { min: 0.65 } }, { type: "valence", data: { min: 0.50 } }
+- "emotional/deeply emotional" → { type: "valence", data: { max: 0.45 } }
+- "slow jams" → { type: "tempo", data: { max: 95 } }, { type: "valence", data: { min: 0.40 } }
 - "lo-fi/study" → { type: "energy", data: { max: 0.50 } }, { type: "instrumentalness", data: { min: 0.30 } }
-- "euphoric/euphoria" → { type: "moods", data: { values: ["Euphoric"], operator: "in" } }, { type: "valence", data: { min: 0.70 } }
-- "sleep/meditation" → { type: "energy", data: { max: 0.30 } }, { type: "moods", data: { values: ["Calm"], operator: "in" } }
-- "aggressive/intense/metal" → { type: "energy", data: { min: 0.78 } }, { type: "moods", data: { values: ["Aggressive"], operator: "in" } }
-- "spiritual/worship" → { type: "moods", data: { values: ["Spiritual"], operator: "in" } }
+- "euphoric/euphoria" → { type: "valence", data: { min: 0.70 } }, { type: "energy", data: { min: 0.65 } }
+- "sleep/meditation" → { type: "energy", data: { max: 0.30 } }, { type: "instrumentalness", data: { min: 0.20 } }
+- "aggressive/intense/metal" → { type: "energy", data: { min: 0.78 } }
+- "spiritual/worship" → { type: "valence", data: { min: 0.45 } }, { type: "energy", data: { max: 0.60 } }
 
 RULES:
 - Only include filters where you have HIGH CONFIDENCE in the mapping. Fewer accurate filters beat many uncertain ones.
 - Do NOT output conflicting filters for the same type (e.g. energy min 0.75 AND energy max 0.45). If signals conflict, omit that filter type.
 - Always output moods + valence together when the prompt is clearly sad or clearly happy.
-- CRITICAL: moods values array must contain EXACTLY ONE value. SC's "in" operator = AND, so multiple moods returns 0 results. Pick the single best mood.
+- CRITICAL: do NOT output moods filters — they are ignored. Use valence and energy to express mood instead.
 - For ambiguous prompts like "vibes" or "good music" with no emotional descriptor, output [] (empty array).
 
 Use null, [], or false for any feature not mentioned.
