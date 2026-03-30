@@ -1226,6 +1226,33 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
     // Fallback: search artist candidates by name, then check each one's songs for the reference title
     // This handles cases where song-title search doesn't credit the right artist (features, compilations, etc.)
     console.log(`🔍 SoundCharts song search: trying artist-candidate fallback for "${artist}"...`);
+
+    // Direct SC lookup by Spotify artist ID — O(1), bypasses name-search ambiguity entirely.
+    // When we have a confirmed Spotify artist ID, ask SC directly for the matching artist profile
+    // instead of searching by name and iterating candidates (which misses low-popularity profiles).
+    if (confirmedSpotifyArtistId && appId && apiKey) {
+      try {
+        await throttleSoundCharts();
+        const byPlatformResp = await axios.get(
+          `https://customer.api.soundcharts.com/api/v2/artist/by-platform/spotify/${confirmedSpotifyArtistId}`,
+          { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000 }
+        );
+        const scArtist = byPlatformResp.data?.object || byPlatformResp.data?.artist || byPlatformResp.data;
+        if (scArtist?.uuid) {
+          console.log(`✓ SoundCharts direct Spotify-ID lookup: "${scArtist.name}" → UUID ${scArtist.uuid}`);
+          const songs = await getSoundChartsArtistSongs(scArtist.uuid, 5);
+          const result = { songUuid: songs[0]?.uuid || null, artistUuid: scArtist.uuid, artistName: scArtist.name, _confirmedStrong: true };
+          setSCCache(cacheKey, result);
+          return result;
+        }
+      } catch (platformErr) {
+        // 404 = SC doesn't have this Spotify artist — fall through to name search
+        if (platformErr?.response?.status !== 404) {
+          console.log(`🔍 SC by-platform lookup failed for ${confirmedSpotifyArtistId}: ${platformErr.message}`);
+        }
+      }
+    }
+
     try {
       // Fetch up to 25 candidates — SC sorts by popularity so the right artist for a less-mainstream
       // act (e.g. R&B "Dante") can be buried below more-popular same-name artists (e.g. Russian pop
