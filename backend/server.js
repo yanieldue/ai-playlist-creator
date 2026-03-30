@@ -1289,11 +1289,20 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
         );
         const scArtist = byPlatformResp.data?.object || byPlatformResp.data?.artist || byPlatformResp.data;
         if (scArtist?.uuid) {
-          console.log(`✓ SoundCharts direct Spotify-ID lookup: "${scArtist.name}" → UUID ${scArtist.uuid}`);
-          const songs = await getSoundChartsArtistSongs(scArtist.uuid, 5);
-          const result = { songUuid: songs[0]?.uuid || null, artistUuid: scArtist.uuid, artistName: scArtist.name, _confirmedStrong: true };
-          setSCCache(cacheKey, result);
-          return result;
+          // Cross-verify: SC's by-platform mapping can be wrong (e.g. Dante's Spotify ID
+          // returned Latin Dante). Confirm by checking the returned artist's Spotify link
+          // maps back to the same ID we queried with.
+          const scSpotifyId = await getSoundChartsArtistPlatformId(scArtist.uuid, 'spotify').catch(() => null);
+          if (scSpotifyId && scSpotifyId !== confirmedSpotifyArtistId) {
+            console.log(`⚠️  SC by-platform: "${scArtist.name}" (${scArtist.uuid}) Spotify ID ${scSpotifyId} ≠ expected ${confirmedSpotifyArtistId} — SC mapping wrong, falling through to name search`);
+            // fall through to name search
+          } else {
+            console.log(`✓ SoundCharts direct Spotify-ID lookup: "${scArtist.name}" → UUID ${scArtist.uuid}${scSpotifyId ? ' [verified]' : ''}`);
+            const songs = await getSoundChartsArtistSongs(scArtist.uuid, 5);
+            const result = { songUuid: songs[0]?.uuid || null, artistUuid: scArtist.uuid, artistName: scArtist.name, _confirmedStrong: true };
+            setSCCache(cacheKey, result);
+            return result;
+          }
         }
       } catch (platformErr) {
         // 404 = SC doesn't have this Spotify artist — fall through to name search
