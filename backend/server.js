@@ -842,29 +842,32 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName) {
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
 
-  // Step 1: Freshness check — fetch the most recent 1 song
-  let latestSongUuid = null;
-  try {
-    await throttleSoundCharts();
-    const latestResp = await axios.get(
-      `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/songs`,
-      {
-        headers: { 'x-app-id': appId, 'x-api-key': apiKey },
-        params: { offset: 0, limit: 1 },
-        timeout: 5000
-      }
-    );
-    latestSongUuid = latestResp.data?.items?.[0]?.uuid || null;
-  } catch (e) {
-    console.log(`⚠️  [CATALOG] Freshness check failed for "${artistName}": ${e.message}`);
-  }
-
-  // Step 2: Check DB cache
+  // Step 1: Check DB cache — skip freshness check if cached within last 24h
   const catalogKey = `full_catalog:${artistUuid}`;
   const cached = db.getCachedSC(catalogKey);
   if (cached?.songs?.length > 0) {
+    const cachedAt = cached.cachedAt ? new Date(cached.cachedAt).getTime() : 0;
+    const ageHours = (Date.now() - cachedAt) / 3600000;
+    if (ageHours < 24) {
+      console.log(`📦 [CATALOG] Cache hit for "${artistName}" (${cached.songs.length} songs, ${Math.round(ageHours)}h old — skipping freshness check)`);
+      return cached.songs;
+    }
+    // Cache is stale (>24h) — check for new releases before using it
+    let latestSongUuid = null;
+    try {
+      await throttleSoundCharts();
+      const latestResp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2/artist/${artistUuid}/songs`,
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, params: { offset: 0, limit: 1 }, timeout: 5000 }
+      );
+      latestSongUuid = latestResp.data?.items?.[0]?.uuid || null;
+    } catch (e) {
+      console.log(`⚠️  [CATALOG] Freshness check failed for "${artistName}": ${e.message}`);
+    }
     if (!latestSongUuid || cached.latestSongUuid === latestSongUuid) {
-      console.log(`📦 [CATALOG] Cache hit for "${artistName}" (${cached.songs.length} songs)`);
+      // No new music — bump cachedAt so we skip the freshness check for another 24h
+      db.setCachedSC(catalogKey, { ...cached, cachedAt: new Date().toISOString() });
+      console.log(`📦 [CATALOG] Cache hit for "${artistName}" (${cached.songs.length} songs, no new releases)`);
       return cached.songs;
     }
     console.log(`🔄 [CATALOG] New release detected for "${artistName}" — repulling full catalog`);
