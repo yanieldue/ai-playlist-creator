@@ -1127,6 +1127,32 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
   const cached = getSCCache(cacheKey);
   if (cached !== undefined) return cached;
 
+  // Fastest path: if we have the Spotify ISRC, look up the song directly in SC by ISRC.
+  // This bypasses name-search ambiguity entirely (e.g. multiple "Dante" artists in SC where
+  // by-platform Spotify-ID lookup can return a wrong same-name artist with an incorrect link).
+  if (spotifyIsrc && appId && apiKey) {
+    try {
+      await throttleSoundCharts();
+      const isrcDirectResp = await axios.get(
+        `https://customer.api.soundcharts.com/api/v2/song/by-isrc/${encodeURIComponent(spotifyIsrc)}`,
+        { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000 }
+      );
+      const isrcSong = isrcDirectResp.data?.object || isrcDirectResp.data?.song;
+      if (isrcSong?.uuid) {
+        const artistUuid = isrcSong.artists?.[0]?.uuid || null;
+        const artistName = isrcSong.artists?.[0]?.name || isrcSong.creditName;
+        console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
+        const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
+        setSCCache(cacheKey, result);
+        return result;
+      }
+    } catch (isrcDirectErr) {
+      if (isrcDirectErr?.response?.status !== 404) {
+        console.log(`🔍 SC ISRC direct lookup failed for ${spotifyIsrc}: ${isrcDirectErr.message}`);
+      }
+    }
+  }
+
   try {
     await throttleSoundCharts();
     const response = await axios.get(
@@ -1772,49 +1798,16 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   const isExclusive = genreData.artistConstraints.exclusiveMode === true ||
                       genreData.artistConstraints.exclusiveMode === 'true';
   const requestedArtists = genreData.artistConstraints.requestedArtists || [];
-  const suggestedSeeds = genreData.artistConstraints.suggestedSeedArtists || [];
-  // requestedArtists = explicitly named by the user ("I want songs like Daniel J and Dre Dior")
-  // suggestedSeedArtists = Claude's inferred seeds from overall playlist context
-  // Always include requestedArtists first (they're the explicit ask), then fill with
-  // suggestedSeedArtists. Never let suggestedSeedArtists silently replace requestedArtists.
-  //
-  // Fuzzy-dedup: drop any suggestedSeed that is within edit distance 2 of a requestedArtist.
-  // This catches Claude misspellings like "Harmonic" when the playlist has "Harmanic" — a
-  // misspelled seed resolves to a completely different SC artist and pollutes the pool.
-  const _normArtist = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const _editDist = (a, b) => {
-    const m = a.length, n = b.length;
-    const dp = Array.from({ length: m + 1 }, (_, i) =>
-      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
-    );
-    for (let i = 1; i <= m; i++)
-      for (let j = 1; j <= n; j++)
-        dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
-    return dp[m][n];
-  };
-  const _reqNorms = requestedArtists.map(_normArtist);
-  const filteredSeeds = suggestedSeeds.filter(seed => {
-    const sn = _normArtist(seed);
-    const tooClose = _reqNorms.some(r => r !== sn && _editDist(r, sn) <= 2);
-    if (tooClose) console.log(`🔇 Dropping suggestedSeed "${seed}" — likely misspelling of a requestedArtist`);
-    return !tooClose;
-  });
-  const seedArtists = isExclusive
-    ? requestedArtists
-    : [...new Set([...requestedArtists, ...filteredSeeds])];
+  // Never use Claude's suggestedSeedArtists as seed artists — SC's own similarity graph
+  // determines what artists appear. Only user-explicit requestedArtists are trusted.
+  const seedArtists = requestedArtists;
 
   // Strategy selection:
-  // - exclusive mode or user explicitly named artists → artist_songs
-  //   (use SC similar-artist graph + full catalog, with mood/energy/theme filtering client-side
-  //    via SC lyrics-analysis data — covers deep cuts beyond top charts)
-  // - reference songs provided → also artist_songs, using suggestedSeedArtists as seeds.
-  //   The reference song anchors the vibe (e.g. "same vibe as Marvin's Room by Drake") and
-  //   suggestedSeedArtists encode the genre/scene. top_songs would return a generic
-  //   low-energy r&b pool (Bruno Mars, John Legend) instead of the intended artist graph.
-  // - no specific artists or reference songs → top_songs with ALL SC filters
-  //   (genre + mood + energy + themes applied server-side by SC)
+  // - exclusive mode or user explicitly named artists → artist_songs (SC graph from requested artists)
+  // - reference songs provided → artist_songs (reference artists injected as seeds post-build)
+  // - no specific artists or reference songs → top_songs with all SC filters
   const hasReferenceSongs = (genreData.referenceSongs || []).length > 0;
-  const strategy = (isExclusive || requestedArtists.length > 0 || (hasReferenceSongs && suggestedSeeds.length > 0))
+  const strategy = (isExclusive || requestedArtists.length > 0 || hasReferenceSongs)
     ? 'artist_songs'
     : 'top_songs';
 
@@ -7411,14 +7404,45 @@ Respond ONLY with valid JSON:
         console.log(`✓ Multi-phase SoundCharts total: ${soundChartsDiscoveredSongs.length} songs`);
       } else {
         const scQuery = buildSoundchartsQuery(genreData, allowExplicit);
-        // Inject confirmed reference-song artists as seeds so their SC similarity graph
-        // is traversed even when Claude's suggested seeds have wrong genre data.
-        if (genreData.referenceSongs?.length > 0) {
+        // Reference-song prompts ("find songs similar to X"): seed exclusively from the
+        // confirmed reference artists and let SC's similarity graph determine what else appears.
+        // Claude's suggestedSeedArtists (e.g. Michael Jackson injected for an R&B prompt) are
+        // intentionally ignored — they would add extra seeds whose SC graphs dilute the
+        // reference-artist-specific discovery. SC depth-1/depth-2 expansion from Dante/Keffer
+        // will naturally surface the right co-similar artists (lisseXX, MYRZ, etc.) without
+        // Claude steering the graph toward unrelated mainstream acts.
+        //
+        // Exception: when the user explicitly named artists (requestedArtists), those are kept
+        // because they are the user's direct ask, not Claude's inference.
+        const _hasReferenceSongs = (genreData.referenceSongs || []).length > 0;
+        const _hasRequestedArtists = (genreData.artistConstraints?.requestedArtists || []).length > 0;
+        if (_hasReferenceSongs && !_hasRequestedArtists) {
+          // Replace Claude's seeds entirely — use only the confirmed reference artists.
+          const refSeeds = [];
+          const refSeedsSeen = new Set();
+          for (const rs of genreData.referenceSongs) {
+            const lower = rs.artist.toLowerCase();
+            if (confirmedArtistUuids[lower] && !refSeedsSeen.has(lower)) {
+              refSeeds.push(rs.artist);
+              refSeedsSeen.add(lower);
+            }
+          }
+          if (refSeeds.length > 0) {
+            console.log(`🌱 Reference-song prompt: seeding SC graph exclusively from reference artists [${refSeeds.join(', ')}] — ignoring Claude's suggestedSeedArtists`);
+            scQuery.artists = refSeeds;
+            scQuery.seedArtists = refSeeds;
+            scQuery.expandToSimilar = true;
+            scQuery.strategy = 'artist_songs';
+          }
+        } else if (_hasReferenceSongs && _hasRequestedArtists) {
+          // User named artists explicitly — keep requested artists but also inject reference artists
+          // so their SC graph is traversed alongside the user's picks.
           const existingLower = new Set(scQuery.artists.map(a => a.toLowerCase()));
           for (const rs of genreData.referenceSongs) {
-            if (confirmedArtistUuids[rs.artist.toLowerCase()] && !existingLower.has(rs.artist.toLowerCase())) {
+            const lower = rs.artist.toLowerCase();
+            if (confirmedArtistUuids[lower] && !existingLower.has(lower)) {
               scQuery.artists.push(rs.artist);
-              existingLower.add(rs.artist.toLowerCase());
+              existingLower.add(lower);
             }
           }
         }
@@ -7429,32 +7453,20 @@ Respond ONLY with valid JSON:
         // graph anchored to what the playlist actually sounds like, not what Claude thinks
         // the genre sounds like in general.
         //
-        // EXCEPTION: Genre pivot detection — if the refinement is asking for a fundamentally
-        // different genre (e.g. "make it r&b" on an indie playlist), Claude's suggestedSeedArtists
-        // will have zero overlap with the existing playlist's artist pool. In that case, skip the
-        // anchor and use Claude's seeds so the SC graph explores the new genre's territory.
         if (existingPlaylistData && scQuery.strategy === 'artist_songs' &&
             existingPlaylistData.tracks?.length === 0 && !genreData.artistConstraints?.exclusiveMode) {
-          // 0-song playlist refresh: keep Claude's seeds but skip similar-artist expansion.
-          // Depth-2 expansion reaches 25+ artists → 25 catalog fetches → ~160s > 120s frontend timeout.
-          // With expandToSimilar=false, only the 5 seed artists are fetched (~30-40s total).
+          // 0-song playlist refresh: no artists to anchor to — fall back to top_songs so SC's
+          // genre/mood/energy filters drive discovery instead of an empty artist list.
+          scQuery.strategy = 'top_songs';
           scQuery.expandToSimilar = false;
-          console.log(`⚡ Refresh: 0-song playlist — skipping expansion, seeds only: [${scQuery.artists.join(', ')}]`);
+          console.log(`⚡ Refresh: 0-song playlist — switching to top_songs (no anchor artists available)`);
         } else if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
+          // Anchor seeds to the top 8 most-represented artists already in the playlist.
+          // This keeps refresh/auto-update grounded in what the playlist actually sounds like.
           const _anchorArtists = [...new Set(
             existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
           )];
-          // Detect genre pivot: Claude suggested seeds that don't overlap with the playlist's artists
-          const _claudeSeeds = (genreData.artistConstraints?.suggestedSeedArtists || []).map(a => a.toLowerCase());
-          const _anchorLower = new Set(_anchorArtists.map(a => a.toLowerCase()));
-          const _seedOverlap = _claudeSeeds.filter(a => _anchorLower.has(a)).length;
-          const _isGenrePivot = genreData.primaryGenre &&
-            _claudeSeeds.length > 0 &&
-            _seedOverlap === 0;
-          if (_anchorArtists.length > 0 && !_isGenrePivot) {
-            // Cap anchor pool to 8 most-represented artists to limit UUID lookup time.
-            // Full 20-30 artist pool takes 6-9s just for UUID resolution; 8 covers the
-            // playlist's core sound while keeping refresh under ~3s for Phase 1.
+          if (_anchorArtists.length > 0) {
             const _artistFreq = {};
             existingPlaylistData.tracks.forEach(t => {
               if (t.artist) _artistFreq[t.artist] = (_artistFreq[t.artist] || 0) + 1;
@@ -7465,9 +7477,7 @@ Respond ONLY with valid JSON:
             console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — disabling Level 1/2 expansion`);
             scQuery.artists = _cappedAnchor;
             scQuery.expandToSimilar = false;
-            scQuery.strategy = 'artist_songs'; // force catalog fetch for anchor artists (top_songs ignores artists field)
-          } else if (_isGenrePivot) {
-            console.log(`🔀 Genre pivot detected: primaryGenre="${genreData.primaryGenre}", Claude seeds [${_claudeSeeds.join(', ')}] have 0 overlap with playlist artists — skipping anchor, using Claude's seeds`);
+            scQuery.strategy = 'artist_songs';
           }
         }
         // Gender filter at seed selection — happens before the SC similarity graph expands.
