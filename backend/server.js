@@ -8521,8 +8521,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
                 trackConstraints: {},    // relaxed — no popularity filter
                 artistConstraints: {
                   exclusiveMode: false,
-                  requestedArtists: [],
-                  suggestedSeedArtists: seedArtistsForSupplement
+                  requestedArtists: seedArtistsForSupplement,
+                  suggestedSeedArtists: []
                 }
               };
               const supplementQuery = buildSoundchartsQuery(supplementGenreData, allowExplicit);
