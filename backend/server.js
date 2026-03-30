@@ -1141,10 +1141,34 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
       if (isrcSong?.uuid) {
         const artistUuid = isrcSong.artists?.[0]?.uuid || null;
         const artistName = isrcSong.artists?.[0]?.name || isrcSong.creditName;
-        console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
-        const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
-        setSCCache(cacheKey, result);
-        return result;
+        // When we have a confirmed Spotify artist ID, verify that the SC artist returned by
+        // ISRC lookup actually corresponds to that artist — SC's ISRC→artist links can be
+        // wrong (e.g. ISRC US3DF2602370 maps to electronic Keffer, not R&B Keffer).
+        if (confirmedSpotifyArtistId && artistUuid) {
+          try {
+            const scSpotifyId = await getSoundChartsArtistPlatformId(artistUuid, 'spotify');
+            if (scSpotifyId && scSpotifyId !== confirmedSpotifyArtistId) {
+              console.log(`⚠️  SC ISRC lookup: "${artistName}" (${artistUuid}) Spotify ID ${scSpotifyId} ≠ expected ${confirmedSpotifyArtistId} — SC ISRC data mismatch, falling through to by-platform`);
+              // Don't return — fall through to by-platform / name-search
+            } else {
+              console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}${scSpotifyId ? ' [Spotify ID verified]' : ''}`);
+              const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
+              setSCCache(cacheKey, result);
+              return result;
+            }
+          } catch (_) {
+            // Verification call failed — trust the ISRC result
+            console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
+            const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
+            setSCCache(cacheKey, result);
+            return result;
+          }
+        } else {
+          console.log(`✓ SoundCharts ISRC direct lookup: "${isrcSong.name}" by ${artistName} (ISRC: ${spotifyIsrc}) → artist UUID ${artistUuid}`);
+          const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: true };
+          setSCCache(cacheKey, result);
+          return result;
+        }
       }
     } catch (isrcDirectErr) {
       if (isrcDirectErr?.response?.status !== 404) {
