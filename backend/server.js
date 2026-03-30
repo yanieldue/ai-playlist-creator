@@ -2543,24 +2543,31 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     let songs = [];
     const poolNames = new Set(allArtistInfos.map(a => a.name.toLowerCase()));
 
-    // 3a: top_songs pass — popular songs from artists in the pool
+    // 3a: top_songs pass — popular songs from artists in the pool.
+    // Use only the genre filter (not energy/valence) to maximise the result set.
+    // Paginate up to 1000 songs so niche artists in the pool are more likely to appear.
+    // Vibe filtering (energy/valence) is not needed here — Phase 3b and the main vibe
+    // check handle it. This replaces full-catalog fetches for artists that chart.
     const genreFilterForSongs = soundchartsFilters.find(f => f.type === 'songGenres');
     if (genreFilterForSongs) {
       try {
         const sort = soundchartsSort || { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-        // Use only the genre filter here. Phase 3a's job is to identify which pool artists
-        // appear in popular charts — vibe filtering (energy/valence) happens in Phase 3b's
-        // filterCatalogByVibe. Passing all filters (genre + energy + valence) causes SC to
-        // return 0 items for many niche combos, forcing all artists through Phase 3b catalog fetches.
         const body = { sort, filters: [genreFilterForSongs] };
-        await throttleSoundCharts();
-        const resp = await axios.post(
-          'https://customer.api.soundcharts.com/api/v2/top/songs',
-          body,
-          { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: 0, limit: 200 }, timeout: 15000 }
-        );
-        const topItems = resp.data?.items || [];
-        const poolMatches = topItems.filter(item => {
+        const PAGE_SIZE_3A = 500;
+        const MAX_PAGES_3A = 2; // up to 1000 songs
+        let allTopItems = [];
+        for (let page = 0; page < MAX_PAGES_3A; page++) {
+          await throttleSoundCharts();
+          const resp = await axios.post(
+            'https://customer.api.soundcharts.com/api/v2/top/songs',
+            body,
+            { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: page * PAGE_SIZE_3A, limit: PAGE_SIZE_3A }, timeout: 15000 }
+          );
+          const items = resp.data?.items || [];
+          allTopItems = allTopItems.concat(items);
+          if (items.length < PAGE_SIZE_3A) break;
+        }
+        const poolMatches = allTopItems.filter(item => {
           const creditName = (item.song?.creditName || '').toLowerCase();
           return poolNames.has(creditName) || allArtistInfos.some(a => creditName.includes(a.name.toLowerCase()) || a.name.toLowerCase().includes(creditName));
         });
@@ -2577,7 +2584,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             });
           }
         }
-        console.log(`🎯 Artist pool top_songs: ${poolMatches.length} songs matched from pool of ${allArtistInfos.length} artists`);
+        console.log(`🎯 Artist pool top_songs: ${poolMatches.length} songs matched from pool of ${allArtistInfos.length} artists (scanned ${allTopItems.length} genre songs)`);
       } catch (err) {
         console.log(`⚠️  Artist pool top_songs fetch failed: ${err.message}`);
       }
@@ -2595,29 +2602,17 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
     for (const artistInfo of unrepresented) {
       try {
-        const fullCatalog = await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name);
-        // Skip obvious variants (live, remix, bonus, karaoke) to improve Spotify hit rate
-        const mainSongs = fullCatalog.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-        const pool = mainSongs.length > 0 ? mainSongs : fullCatalog;
-        // Enrich a subset with audio features, then vibe-filter
-        const enriched = await enrichCatalogWithAudioFeatures(pool, 40);
-        const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist);
-        for (const song of vibeFiltered) {
-          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: song.audio?.energy ?? null });
+        // Quick fetch: get the artist's top songs directly from SC (no full catalog pagination,
+        // no audio enrichment). Phase 3a already covered charting songs via top_songs;
+        // this supplements with songs from pool artists that didn't appear in the genre chart.
+        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.max(songsPerArtist, 20));
+        const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+        for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
+          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
         }
-        console.log(`✓ [CATALOG] ${vibeFiltered.length}/${pool.length} songs selected for "${artistInfo.name}"`);
+        console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs fetched for "${artistInfo.name}"`);
       } catch (err) {
-        console.log(`⚠️  Error fetching full catalog for "${artistInfo.name}": ${err.message}`);
-        // Fallback to legacy 10-song fetch
-        try {
-          const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, songsPerArtist);
-          const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-          for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
-            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
-          }
-        } catch (fallbackErr) {
-          console.log(`⚠️  Fallback also failed for "${artistInfo.name}": ${fallbackErr.message}`);
-        }
+        console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
       }
     }
 
