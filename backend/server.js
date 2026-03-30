@@ -353,6 +353,79 @@ async function getReccoBeatsRecommendations(seedTrackIds = [], size = 60) {
   }
 }
 
+// Genre family keywords used to validate Spotify artist genres against a requested genre.
+// If NONE of an artist's Spotify genres contain any keyword from the family, the artist
+// is considered outside that genre and their songs are filtered from the playlist.
+const SPOTIFY_GENRE_FAMILIES = {
+  'r&b':       ['r&b', 'neo soul', 'alternative r&b', 'contemporary r&b', 'trap soul', 'quiet storm', 'urban contemporary', 'southern soul'],
+  'hip hop':   ['hip hop', 'rap', 'trap', 'drill', 'grime', 'boom bap', 'crunk'],
+  'pop':       ['pop', 'synth pop', 'electropop', 'teen pop', 'indie pop', 'chamber pop'],
+  'rock':      ['rock', 'indie rock', 'alternative rock', 'punk', 'metal', 'grunge', 'emo', 'hardcore'],
+  'country':   ['country', 'americana', 'bluegrass', 'honky tonk', 'outlaw country'],
+  'jazz':      ['jazz', 'bebop', 'swing', 'bossa nova', 'smooth jazz'],
+  'classical': ['classical', 'baroque', 'romantic period', 'contemporary classical'],
+  'electronic':['electronic', 'edm', 'house', 'techno', 'trance', 'dubstep', 'drum and bass', 'ambient'],
+  'latin':     ['latin', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'corrido'],
+  'soul':      ['soul', 'neo soul', 'funk', 'motown', 'r&b'],
+  'reggae':    ['reggae', 'dancehall', 'ska'],
+  'folk':      ['folk', 'indie folk', 'singer-songwriter', 'americana'],
+};
+
+// Session-scoped cache for Spotify artist genre lookups within a single playlist generation.
+// Avoids re-fetching the same artist multiple times when many songs share the same artist.
+const _spotifyGenreCache = new Map();
+
+// Batch-fetch Spotify artist genres for a list of artist names using client credentials.
+// Returns a Map<normalizedArtistName, string[]> of genre arrays.
+// Caps at 30 unique artists to stay within reasonable API budget.
+async function batchGetSpotifyArtistGenres(artistNames) {
+  const unique = [...new Set(artistNames.map(n => n.trim()))].slice(0, 30);
+  const result = new Map();
+  const toFetch = unique.filter(name => !_spotifyGenreCache.has(name.toLowerCase()));
+
+  if (toFetch.length > 0) {
+    let token;
+    try { token = await getSpotifyClientToken(); } catch { return result; }
+
+    await Promise.allSettled(toFetch.map(async (name) => {
+      try {
+        const r = await axios.get('https://api.spotify.com/v1/search', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { q: name, type: 'artist', limit: 3 },
+          timeout: 8000,
+        });
+        const artists = r.data?.artists?.items || [];
+        const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Pick the best match: exact normalized name or highest-popularity artist
+        const match = artists.find(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm)
+          || artists.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+        const genres = match?.genres || [];
+        _spotifyGenreCache.set(name.toLowerCase(), genres);
+      } catch {
+        _spotifyGenreCache.set(name.toLowerCase(), []);
+      }
+    }));
+  }
+
+  for (const name of unique) {
+    result.set(name.toLowerCase(), _spotifyGenreCache.get(name.toLowerCase()) || []);
+  }
+  return result;
+}
+
+// Returns true if the artist's Spotify genres overlap with the requested genre family.
+// Returns true (allow) when uncertain — only rejects when there is a CLEAR genre mismatch
+// (artist has genres on Spotify but none match the family at all).
+function isArtistInGenreFamily(spotifyGenres, requestedGenre) {
+  if (!spotifyGenres || spotifyGenres.length === 0) return true; // no data → allow
+  const genreLower = (requestedGenre || '').toLowerCase();
+  // Find the matching family keywords
+  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreLower.includes(k) || k.includes(genreLower));
+  if (!familyKey) return true; // unknown genre → allow
+  const keywords = SPOTIFY_GENRE_FAMILIES[familyKey];
+  return spotifyGenres.some(g => keywords.some(kw => g.toLowerCase().includes(kw)));
+}
+
 // Get top tracks for an artist from Spotify (to use as seeds for ReccoBeats)
 async function getArtistTopTrackIds(artistName, limit = 3) {
   const token = await getSpotifyClientToken();
@@ -1480,20 +1553,15 @@ const SOUNDCHARTS_SUBGENRE_MAP = {
 };
 
 // Map lyrical theme labels → SoundCharts themes filter values
+// Only confirmed valid SC theme values — others (Introspection, Motivation, Sport, Travel,
+// Nostalgia, Summer, Spirituality) are unverified and cause 404 errors on top/songs.
 const SOUNDCHARTS_THEME_MAP = {
   'love': 'Love', 'romance': 'Love', 'romantic': 'Love',
   'heartbreak': 'Heartbreak', 'breakup': 'Heartbreak', 'heartbroken': 'Heartbreak',
   'party': 'Party', 'club': 'Party', 'nightlife': 'Party',
-  'motivational': 'Motivation', 'motivation': 'Motivation', 'empowerment': 'Motivation',
-  'workout': 'Sport', 'fitness': 'Sport', 'sport': 'Sport', 'gym': 'Sport',
-  'road trip': 'Travel', 'travel': 'Travel',
-  'nostalgia': 'Nostalgia', 'nostalgic': 'Nostalgia',
-  'summer': 'Summer', 'beach': 'Summer',
   'friendship': 'Friendship', 'friends': 'Friendship',
-  'introspective': 'Introspection', 'self-reflection': 'Introspection',
   'money': 'Success', 'success': 'Success', 'hustle': 'Success',
-  'spiritual': 'Spirituality', 'faith': 'Spirituality',
-  'protest': 'Social Issues', 'social': 'Social Issues',
+  'protest': 'Social Issues', 'social issues': 'Social Issues',
 };
 
 // Catalog-level context overrides — tracks with confirmed repeated false positives
@@ -2165,6 +2233,22 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     } catch (err) {
       if (err.response?.status === 403) {
         console.log('⚠️  SoundCharts top/songs: 403 — falling back to artist-based discovery');
+      } else if (err.response?.status === 404) {
+        // 404 = invalid filter value (e.g. unrecognised theme slug or unsupported filter type).
+        // Strip exotic filters and retry — keep only core audio/mood/genre filters.
+        const EXOTIC_TYPES = new Set(['themes', 'emotionalIntensityScore', 'imageryScore', 'complexityScore', 'rhymeSchemeScore', 'repetitivenessScore', 'liveness']);
+        const simplifiedFilters = soundchartsFilters.filter(f => !EXOTIC_TYPES.has(f.type));
+        if (simplifiedFilters.length < soundchartsFilters.length) {
+          const stripped = soundchartsFilters.filter(f => EXOTIC_TYPES.has(f.type)).map(f => f.type);
+          console.log(`⚠️  SC 404 — stripping exotic filters [${stripped.join(', ')}] and retrying`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: simplifiedFilters },
+            fetchCount,
+            confirmedArtistUuids
+          );
+        }
+        console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
+        return [];
       } else {
         console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
         return [];
@@ -6218,8 +6302,8 @@ FILTER SHAPES:
 VALID MOOD VALUES (exact strings only):
 Melancholic, Joyful, Euphoric, Sad, Happy, Calm, Energetic, Empowering, Aggressive, Dark, Romantic, Sensual, Spiritual, Peaceful, Nostalgic, Playful
 
-VALID THEME VALUES (exact strings only):
-Love, Heartbreak, Party, Relationships, Sex, Success, Power, Friendship, Money, Social Issues, Nature, Adventure, Home, Religion, Death, Youth, Dance
+VALID THEME VALUES (exact strings only — only output values from this list):
+Love, Heartbreak, Party, Friendship, Success, Social Issues
 
 AUDIO FEATURE RANGES (all 0.0–1.0 except tempo in BPM and scores 1–10):
 - energy: activity/intensity. Sleep: max 0.30. Chill/relax: max 0.45. Focus/study: max 0.55. Medium: 0.38–0.68. Workout/gym: min 0.75. Hype/intense: min 0.80.
@@ -8508,8 +8592,26 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           artistConstraints: { exclusiveMode: false, requestedArtists: [] }
         };
         const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
-        const topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
+        let topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
+
+        // Genre validation: cross-reference Spotify artist genres against the requested genre.
+        // SC sometimes mislabels pop artists (e.g. Adele) as R&B. Spotify's genre tagging is
+        // more accurate — filter out artists with no overlap with the requested genre family.
+        if (genreData.primaryGenre && topSongs.length > 0) {
+          const artistNames = [...new Set(topSongs.map(s => s.artistName).filter(Boolean))];
+          const genreMap = await batchGetSpotifyArtistGenres(artistNames).catch(() => new Map());
+          const before = topSongs.length;
+          topSongs = topSongs.filter(s => {
+            const spotifyGenres = genreMap.get((s.artistName || '').toLowerCase()) || null;
+            const ok = isArtistInGenreFamily(spotifyGenres, genreData.primaryGenre);
+            if (!ok) console.log(`🚫 Genre mismatch: "${s.artistName}" (${(spotifyGenres || []).join(', ')}) → not ${genreData.primaryGenre}`);
+            return ok;
+          });
+          if (topSongs.length < before) {
+            console.log(`🎯 Spotify genre filter: ${before} → ${topSongs.length} candidates (removed ${before - topSongs.length} off-genre songs)`);
+          }
+        }
 
         // Phase A: pre-fetch SC platform IDs for songs missing ISRC
         await prefetchPlatformIds(topSongs, platform === 'spotify' ? 'spotify' : 'applemusic');
