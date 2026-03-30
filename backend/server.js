@@ -2191,7 +2191,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         // Step 1: if moods + tight audio → 0, loosen the audio thresholds and keep moods.
         // Claude sometimes sets very tight thresholds (e.g. valence max 0.35) that combined with
         // moods produce an empty intersection. Widen by ~30% to recover songs while keeping mood quality.
-        if (moodsFilter && hasAudioFilters) {
+        // _audioLoosened flag prevents infinite recursion if the loosened query also returns 0.
+        if (moodsFilter && hasAudioFilters && !query._audioLoosened) {
           const loosenedFilters = soundchartsFilters.map(f => {
             if (f.type === 'energy' || f.type === 'valence') {
               const loosened = { ...f, data: { ...f.data } };
@@ -2203,7 +2204,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           });
           console.log(`⚠️  SoundCharts top_songs returned 0 — loosening audio thresholds and retrying with moods`);
           return executeSoundChartsStrategy(
-            { ...query, soundchartsFilters: loosenedFilters },
+            { ...query, soundchartsFilters: loosenedFilters, _audioLoosened: true },
             fetchCount,
             confirmedArtistUuids
           );
