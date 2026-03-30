@@ -2791,7 +2791,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       for (const artistInfo of allArtistInfos) {
         if (alreadyQueued.has(artistInfo.uuid)) continue;
         const catalogKey = `full_catalog:${artistInfo.uuid}`;
-        const cached = db.getCachedSC(catalogKey);
+        const cached = await db.getCachedSC(catalogKey);
         if (!cached?.songs?.length) {
           pendingEnrichment.push(artistInfo);
           alreadyQueued.add(artistInfo.uuid);
@@ -12584,7 +12584,7 @@ async function enrichTopArtistsCache() {
 
       // Skip if catalog is already cached (freshness check still runs inside getArtistFullCatalogFromSC)
       const catalogKey = `full_catalog:${artistInfo.uuid}`;
-      const cached = db.getCachedSC(catalogKey);
+      const cached = await db.getCachedSC(catalogKey);
       if (cached?.songs?.length > 0) { skipped++; continue; }
 
       await getArtistFullCatalogFromSC(artistInfo.uuid, name, genre);
