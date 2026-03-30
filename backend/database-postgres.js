@@ -120,6 +120,30 @@ async function initializeTables() {
 
       CREATE INDEX IF NOT EXISTS idx_soundcharts_cache_created ON soundcharts_cache(created_at);
 
+      CREATE TABLE IF NOT EXISTS artist_catalogs (
+        artist_uuid TEXT PRIMARY KEY,
+        artist_name TEXT NOT NULL,
+        genre TEXT,
+        song_count INTEGER,
+        latest_song_uuid TEXT,
+        cached_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS artist_songs (
+        id SERIAL PRIMARY KEY,
+        artist_uuid TEXT NOT NULL REFERENCES artist_catalogs(artist_uuid) ON DELETE CASCADE,
+        song_uuid TEXT,
+        song_name TEXT NOT NULL,
+        isrc TEXT,
+        release_date TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_artist_songs_artist_uuid ON artist_songs(artist_uuid);
+      CREATE INDEX IF NOT EXISTS idx_artist_songs_isrc ON artist_songs(isrc);
+      CREATE INDEX IF NOT EXISTS idx_artist_songs_song_uuid ON artist_songs(song_uuid);
+      CREATE INDEX IF NOT EXISTS idx_artist_catalogs_genre ON artist_catalogs(genre);
+
       CREATE TABLE IF NOT EXISTS platform_user_ids (
         email TEXT PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
         spotify_user_id TEXT,
@@ -798,6 +822,37 @@ class DatabaseService {
       );
     } catch (error) {
       console.error('Error setting SC DB cache:', error);
+    }
+  }
+
+  // Structured artist catalog storage (queryable via SQL)
+  async upsertArtistCatalog(artistUuid, artistName, songs, latestSongUuid, genre = null) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO artist_catalogs (artist_uuid, artist_name, genre, song_count, latest_song_uuid, cached_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (artist_uuid) DO UPDATE SET
+           artist_name = $2, genre = COALESCE($3, artist_catalogs.genre),
+           song_count = $4, latest_song_uuid = $5, cached_at = NOW()`,
+        [artistUuid, artistName, genre, songs.length, latestSongUuid]
+      );
+      // Replace all songs for this artist
+      await client.query(`DELETE FROM artist_songs WHERE artist_uuid = $1`, [artistUuid]);
+      for (const song of songs) {
+        await client.query(
+          `INSERT INTO artist_songs (artist_uuid, song_uuid, song_name, isrc, release_date)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [artistUuid, song.uuid || null, song.name, song.isrc || null, song.releaseDate || null]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error(`Error upserting artist catalog for ${artistName}:`, err.message);
+    } finally {
+      client.release();
     }
   }
 

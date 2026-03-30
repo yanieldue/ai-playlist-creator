@@ -837,7 +837,7 @@ async function getSoundChartsArtistSongs(artistUuid, limit = 20) {
 // Fetches ALL songs for an artist (not just top 10), caches in DB, and uses a freshness check
 // (1-song fetch) to detect new releases and trigger a repull automatically.
 
-async function getArtistFullCatalogFromSC(artistUuid, artistName) {
+async function getArtistFullCatalogFromSC(artistUuid, artistName, genre = null) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
@@ -910,6 +910,10 @@ async function getArtistFullCatalogFromSC(artistUuid, artistName) {
 
   if (allSongs.length > 0) {
     db.setCachedSC(catalogKey, { songs: allSongs, latestSongUuid, cachedAt: new Date().toISOString() });
+    // Also write to structured tables for SQL queryability
+    db.upsertArtistCatalog(artistUuid, artistName, allSongs, latestSongUuid, genre).catch(e => {
+      console.log(`⚠️  [CATALOG] Structured write failed for "${artistName}": ${e.message}`);
+    });
   }
 
   return allSongs;
@@ -12355,7 +12359,7 @@ async function enrichTopArtistsCache() {
       const cached = db.getCachedSC(catalogKey);
       if (cached?.songs?.length > 0) { skipped++; continue; }
 
-      await getArtistFullCatalogFromSC(artistInfo.uuid, name);
+      await getArtistFullCatalogFromSC(artistInfo.uuid, name, genre);
       enriched++;
     } catch (err) {
       failed++;
