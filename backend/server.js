@@ -11912,6 +11912,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// Manual enrichment trigger — POST /api/admin/enrich-cache?secret=<ADMIN_SECRET>
+// Kicks off the top-artists cache warmup job without requiring a redeploy.
+app.post('/api/admin/enrich-cache', (req, res) => {
+  const secret = req.query.secret || req.body?.secret;
+  if (!secret || secret !== process.env.ADMIN_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  res.json({ message: 'Enrichment started', timestamp: new Date().toISOString() });
+  setImmediate(() => enrichTopArtistsCache());
+});
+
 // Featured artists for login page background.
 // Refreshes monthly from Spotify's Global Top 50 playlist.
 // Persisted to disk so restarts don't trigger unnecessary re-fetches.
@@ -12646,14 +12657,11 @@ async function startServer() {
       scheduleAutoUpdates();
       console.log(`⏰ Auto-update scheduler started`);
 
-      // Proactive cache warm — only runs when ENRICH_TOP_ARTISTS=true in env.
-      // Disable this after the SC API quota period ends to preserve calls for real users.
+      // Proactive cache warm — triggered manually via POST /api/admin/enrich-cache
+      // or automatically daily at 3 AM when ENRICH_TOP_ARTISTS=true in env.
       if (process.env.ENRICH_TOP_ARTISTS === 'true') {
-        setTimeout(() => enrichTopArtistsCache(), 60000);
         cron.schedule('0 3 * * *', () => enrichTopArtistsCache());
-        console.log(`🔥 Top-artists enrichment scheduled (startup +60s, then daily at 3 AM)`);
-      } else {
-        console.log(`⏭️  Top-artists enrichment disabled (set ENRICH_TOP_ARTISTS=true to enable)`);
+        console.log(`🔥 Top-artists enrichment scheduled (daily at 3 AM)`);
       }
 
       // Clean up expired artist cache every hour
