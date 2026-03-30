@@ -1182,15 +1182,15 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
 
     if (match) {
       // When multiple SC artists share a name (e.g. two "Keffer" profiles), the title search
-      // returns whichever one SC ranks first — which may be the wrong one. If we have a
-      // confirmed Spotify ISRC, validate the match against it before committing.
-      // ISRC mismatch (or match has no ISRC while we have one) means wrong artist — fall through
-      // to the artist-candidate fallback which has Spotify-ID-based disambiguation (Priority 0).
+      // returns whichever one SC ranks first — which may be the wrong one. Reject only on
+      // an actual ISRC *conflict* (both ISRCs present and they differ = definitively wrong song).
+      // Do NOT reject when SC's ISRC field is absent — SC's song search API frequently omits
+      // the ISRC even for songs that have one (e.g. Marvin's Room USCM51100267 confirmed in SC
+      // frontend but not returned by the song search endpoint).
       const matchIsrc = match.isrc?.value || match.isrc || match.isrcs?.[0]?.value || match.isrcs?.[0] || null;
       const isrcConflict = spotifyIsrc && matchIsrc && matchIsrc !== spotifyIsrc;
-      const isrcUnverifiable = spotifyIsrc && !matchIsrc && confirmedSpotifyArtistId;
-      if (isrcConflict || isrcUnverifiable) {
-        console.log(`⚠️  SoundCharts title match for "${title}" by "${match.artists?.[0]?.name || match.creditName}" has ISRC ${matchIsrc || '(none)'} but Spotify says ${spotifyIsrc} — falling through to artist-candidate fallback to resolve ambiguity`);
+      if (isrcConflict) {
+        console.log(`⚠️  SoundCharts title match for "${title}" by "${match.artists?.[0]?.name || match.creditName}" ISRC ${matchIsrc} conflicts with Spotify ISRC ${spotifyIsrc} — falling through to artist-candidate fallback`);
         match = null; // fall through to artist-candidate fallback below
       } else {
         const artistUuid = match.artists?.[0]?.uuid || null;
@@ -2512,10 +2512,16 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       console.log(`🎨 Artist pool: ${seedInfos.length} seeds + ${allArtistInfos.length - seedInfos.length} similar = ${allArtistInfos.length} artists`);
       console.log(`🌱 Seeds: [${seedInfos.map(s => s.name).join(', ')}]`);
 
-      // Phase 2b: always expand with depth-2 similar artists (similar artists of the similar
-      // artists) for more diversity. Capped at DEPTH2_MAX new artists to keep API calls bounded.
+      // Phase 2b: expand with depth-2 similar artists only when the depth-1 pool is small.
+      // With 8+ artists depth-1 already provides enough diversity; unconditional depth-2
+      // causes graph drift (e.g. Bruno Mars and Kendrick entering a sad R&B playlist via
+      // a misidentified seed’s wrong similar-artist graph).
       const DEPTH2_MAX = 15;
-      console.log(`🔍 Phase 2b: expanding with depth-2 similar artists...`);
+      const DEPTH2_MIN_POOL = 8; // only expand when depth-1 found fewer than this many artists
+      if (allArtistInfos.length >= DEPTH2_MIN_POOL) {
+        console.log(`⏩ Skipping depth-2 expansion — depth-1 pool already has ${allArtistInfos.length} artists`);
+      } else {
+      console.log(`🔍 Phase 2b: depth-1 pool has ${allArtistInfos.length} artists (< ${DEPTH2_MIN_POOL}) — expanding with depth-2 similar artists...`);
       const depth2Candidates = [];
       for (const artistInfo of allArtistInfos) {
         for (const name of (artistInfo.similarArtists || [])) {
@@ -2555,6 +2561,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       if (depth2Added > 0) {
         console.log(`🎨 Artist pool after depth-2 expansion: ${allArtistInfos.length} total (+${depth2Added} new artists)`);
       }
+      } // end else (depth-2 expansion — only when pool < DEPTH2_MIN_POOL)
     }
 
     // Phase 3: fetch songs.
@@ -6795,6 +6802,49 @@ DO NOT include any text outside the JSON.`
             console.log(`✓ Confirmed "${result.artistName}" via "${refSong.title}" — UUID: ${result.artistUuid}`);
           } else {
             console.log(`⚠ Could not confirm "${refSong.artist}" via song "${refSong.title}" — will fall back to name search`);
+            // Step B.2: When the song lookup fails but we have a confirmed Spotify artist ID,
+            // try to verify the SC artist profile directly. This catches the case where the
+            // reference song is not in SC but we can still confirm (or reject) which SC artist
+            // profile is correct via Spotify cross-link (e.g. wrong-Dante / Russian-pop Dante).
+            if (refSpotifyArtistId && appSpotify && process.env.SOUNDCHARTS_APP_ID) {
+              try {
+                await throttleSoundCharts();
+                const artistSearchResp = await axios.get(
+                  `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(refSong.artist)}`,
+                  {
+                    headers: { 'x-app-id': process.env.SOUNDCHARTS_APP_ID, 'x-api-key': process.env.SOUNDCHARTS_API_KEY },
+                    params: { offset: 0, limit: 10 },
+                    timeout: 10000,
+                  }
+                );
+                const artistCandidates = (artistSearchResp.data?.items || []).filter(
+                  a => a.name.toLowerCase() === refSong.artist.toLowerCase()
+                );
+                let artistConfirmed = false;
+                for (const candidate of artistCandidates) {
+                  try {
+                    const scSpotifyId = await getSoundChartsArtistPlatformId(candidate.uuid, 'spotify');
+                    if (scSpotifyId && scSpotifyId === refSpotifyArtistId) {
+                      confirmedArtistUuids[refSong.artist.toLowerCase()] = candidate.uuid;
+                      console.log(`✓ Artist profile match for "${refSong.artist}" via Spotify ID ${refSpotifyArtistId} → SC UUID ${candidate.uuid}`);
+                      artistConfirmed = true;
+                      break;
+                    } else if (scSpotifyId && scSpotifyId !== refSpotifyArtistId) {
+                      console.log(`⚠️  SC artist "${candidate.name}" (UUID ${candidate.uuid}) links to wrong Spotify artist ${scSpotifyId} (want ${refSpotifyArtistId})`);
+                    }
+                  } catch (_) { /* ignore per-candidate errors */ }
+                }
+                if (!artistConfirmed && artistCandidates.length > 0) {
+                  // No SC candidate matched our Spotify artist ID — mark INVALID so the name-based
+                  // fallback in executeSoundChartsStrategy won’t silently pick the wrong profile
+                  // and contaminate the similar-artist graph.
+                  confirmedArtistUuids[refSong.artist.toLowerCase()] = 'INVALID';
+                  console.log(`⚠️  No SC artist profile matched Spotify ID for "${refSong.artist}" — marking INVALID to prevent wrong-artist contamination`);
+                }
+              } catch (artistSearchErr) {
+                console.log(`⚠️  Artist profile fallback search failed for "${refSong.artist}": ${artistSearchErr.message}`);
+              }
+            }
           }
         } catch (refErr) {
           console.log(`⚠ Reference song lookup failed for "${refSong.title}": ${refErr.message}`);
