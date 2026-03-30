@@ -7443,20 +7443,22 @@ Respond ONLY with valid JSON:
       console.log('⚠️  SOUNDCHARTS_APP_ID not configured - skipping SoundCharts discovery');
     }
 
-    // Artists marked NOSIMILAR that also have a confirmed Spotify ID have a wrong SC profile
-    // (e.g. electronic "Keffer" instead of R&B "Keffer"). We skip their SC songs here and
-    // fetch their actual top tracks from Spotify directly later (Spotify-direct injection).
-    // Also include artists where SC returned nothing at all (no UUID) but Spotify confirmed them.
+    // Artists with NO SC UUID at all but a confirmed Spotify ID use Spotify-direct injection.
+    // NOSIMILAR artists are excluded here — they already have an SC UUID and are handled by
+    // Phase 1 of artist_songs strategy (SC catalog + audio filters). Adding Spotify top tracks
+    // on top would bypass energy/valence filtering and inject wrong-mood songs (e.g. Drake's
+    // "One Dance" into a melancholic playlist when his SC sad songs like "Marvin's Room" are
+    // already fetched via the SC catalog path).
     const nosimilarWithSpotify = new Set(
       Object.entries(confirmedSpotifyArtistIds)
         .filter(([artistLower]) => {
           const scUuid = confirmedArtistUuids[artistLower];
-          return !scUuid || (typeof scUuid === 'string' && scUuid.startsWith('NOSIMILAR:'));
+          return !scUuid;  // Only artists SC couldn't find at all — NOSIMILAR handled by SC catalog path
         })
         .map(([artistLower]) => artistLower)
     );
     if (nosimilarWithSpotify.size > 0) {
-      console.log(`🎵 [SPOTIFY-DIRECT] ${nosimilarWithSpotify.size} artist(s) will use Spotify top tracks (wrong/missing SC profile): [${[...nosimilarWithSpotify].join(', ')}]`);
+      console.log(`🎵 [SPOTIFY-DIRECT] ${nosimilarWithSpotify.size} artist(s) will use Spotify top tracks (no SC profile found): [${[...nosimilarWithSpotify].join(', ')}]`);
     }
 
     // Map to recommendedTracks (ISRC + releaseDate passed through for exact lookup and era filtering)
