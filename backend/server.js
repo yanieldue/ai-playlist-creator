@@ -2103,7 +2103,7 @@ Return ONLY a JSON object mapping 1-based index to classification: {"1": "female
       const g = classifications[String(i + 1)];
       return g === targetGender || g === 'mixed';
     });
-    console.log(`🚻 Gender filter (${targetGender}): ${artistNames.length} → ${filtered.length} artists kept [${filtered.join(', ')}]`);
+    console.log(`���� Gender filter (${targetGender}): ${artistNames.length} → ${filtered.length} artists kept [${filtered.join(', ')}]`);
     // Fallback: if filter removes every seed, return originals (avoids empty pool)
     return filtered.length > 0 ? filtered : artistNames;
   } catch (err) {
@@ -2548,10 +2548,11 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     if (genreFilterForSongs) {
       try {
         const sort = soundchartsSort || { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-        // Pass ALL SC filters (genre, moods, energy, valence, themes) so the top_songs results
-        // are already mood/energy filtered — not just genre. This prevents upbeat songs from
-        // entering a sad playlist just because they're by an R&B artist.
-        const body = { sort, filters: soundchartsFilters };
+        // Use only the genre filter here. Phase 3a's job is to identify which pool artists
+        // appear in popular charts — vibe filtering (energy/valence) happens in Phase 3b's
+        // filterCatalogByVibe. Passing all filters (genre + energy + valence) causes SC to
+        // return 0 items for many niche combos, forcing all artists through Phase 3b catalog fetches.
+        const body = { sort, filters: [genreFilterForSongs] };
         await throttleSoundCharts();
         const resp = await axios.post(
           'https://customer.api.soundcharts.com/api/v2/top/songs',
@@ -7261,6 +7262,7 @@ Respond ONLY with valid JSON:
             console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — disabling Level 1/2 expansion`);
             scQuery.artists = _cappedAnchor;
             scQuery.expandToSimilar = false;
+            scQuery.strategy = 'artist_songs'; // force catalog fetch for anchor artists (top_songs ignores artists field)
           } else if (_isGenrePivot) {
             console.log(`🔀 Genre pivot detected: primaryGenre="${genreData.primaryGenre}", Claude seeds [${_claudeSeeds.join(', ')}] have 0 overlap with playlist artists — skipping anchor, using Claude's seeds`);
           }
