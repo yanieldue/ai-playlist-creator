@@ -2183,9 +2183,35 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       // If top_songs returned 0, progressively loosen filters before falling back to artist_songs.
       const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres');
       if (items.length === 0 && genreFilters.length > 0) {
-        // Step 1: if moods are present, retry without them (moods is the most restrictive filter
-        // and SC's mood tagging coverage is sparse — genre+energy+valence alone returns far more).
         const moodsFilter = soundchartsFilters.find(f => f.type === 'moods');
+        const energyFilter = soundchartsFilters.find(f => f.type === 'energy');
+        const valenceFilter = soundchartsFilters.find(f => f.type === 'valence');
+        const hasAudioFilters = energyFilter || valenceFilter;
+
+        // Step 1: if moods + tight audio → 0, loosen the audio thresholds and keep moods.
+        // Claude sometimes sets very tight thresholds (e.g. valence max 0.35) that combined with
+        // moods produce an empty intersection. Widen by ~30% to recover songs while keeping mood quality.
+        if (moodsFilter && hasAudioFilters) {
+          const loosenedFilters = soundchartsFilters.map(f => {
+            if (f.type === 'energy' || f.type === 'valence') {
+              const loosened = { ...f, data: { ...f.data } };
+              if (loosened.data.max != null) loosened.data.max = Math.min(loosened.data.max * 1.3, 1.0);
+              if (loosened.data.min != null) loosened.data.min = Math.max(loosened.data.min * 0.7, 0.0);
+              return loosened;
+            }
+            return f;
+          });
+          console.log(`⚠️  SoundCharts top_songs returned 0 — loosening audio thresholds and retrying with moods`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: loosenedFilters },
+            fetchCount,
+            confirmedArtistUuids
+          );
+        }
+
+        // Step 2: moods alone (no audio filters, or already loosened) → drop moods but keep audio.
+        // Dropping moods without audio risks pulling off-era songs (Nat King Cole, etc.)
+        // so only do this after audio-only has already been attempted.
         if (moodsFilter) {
           const filtersWithoutMoods = soundchartsFilters.filter(f => f.type !== 'moods');
           console.log(`⚠️  SoundCharts top_songs returned 0 — retrying without moods filter`);
@@ -2196,7 +2222,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 2: moods already absent (or stripped) — fall back to artist_songs with seed artists.
+        // Step 3: audio-only also returned 0 — fall back to artist_songs with seed artists.
         const seeds = query.seedArtists || [];
         if (seeds.length > 0) {
           console.log(`⚠️  SoundCharts genre filter returned 0 — falling back to artist_songs with seeds [${seeds.join(', ')}]`);
