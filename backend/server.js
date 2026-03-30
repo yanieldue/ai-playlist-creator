@@ -8364,11 +8364,37 @@ Return ONLY valid JSON:
           constraintLines.push(`Reference artists: ${seedArtistNames.join(', ')}. Remove any artist who clearly does not belong in the same musical scene (different era, unrelated genre, or totally different sound world).`);
         }
 
-        // Attach known release year to each track entry so Claude can verify era constraints
+        // Attach known release year, featured artists, and SC energy to each track entry
         const trackLines = selectedTracks.map((t, i) => {
           const yr = t.releaseYear || (t.album?.release_date ? parseInt(t.album.release_date.substring(0, 4)) : null);
-          return `${i + 1}. "${t.name}" by ${t.artist}${yr ? ` (${yr})` : ''}`;
+          const energyStr = t._scEnergy != null ? ` [energy: ${t._scEnergy.toFixed(2)}]` : '';
+          // Include featured/additional artists so Claude has full collaboration context
+          // e.g. "Fancy" by Drake becomes "Fancy" by Drake ft. T.I., Swizz Beatz
+          const extraArtists = t.artists && t.artists.length > 1
+            ? t.artists.slice(1).map(a => a.name).join(', ')
+            : null;
+          const artistStr = extraArtists ? `${t.artist} ft. ${extraArtists}` : t.artist;
+          return `${i + 1}. "${t.name}" by ${artistStr}${yr ? ` (${yr})` : ''}${energyStr}`;
         });
+
+        // Add energy-based guidance when SC energy data is present for at least some tracks
+        const tracksWithEnergy = selectedTracks.filter(t => t._scEnergy != null);
+        if (tracksWithEnergy.length > 0) {
+          const _fastUcForEnergy = genreData.contextClues?.useCase;
+          const energyGuidance = {
+            heartbreak: 'Energy scores (0–1) are from audio analysis. For this sad/late-night playlist, tracks with energy > 0.75 are almost certainly wrong vibe — flag them unless lyrics/title are clearly melancholic.',
+            sleep:      'Energy scores (0–1) are from audio analysis. For sleep music, any track with energy > 0.4 is likely too stimulating.',
+            focus:      'Energy scores (0–1) are from audio analysis. For focus/study, tracks with energy > 0.7 are likely too distracting.',
+            workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
+            party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
+            summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
+          };
+          if (energyGuidance[_fastUcForEnergy]) {
+            constraintLines.push(energyGuidance[_fastUcForEnergy]);
+          } else {
+            constraintLines.push('Energy scores (0–1) shown in [brackets] are from audio analysis — use them as an additional signal when a track feels like a vibe mismatch.');
+          }
+        }
 
         try {
           const vibeCheckResponse = await anthropic.messages.create({
