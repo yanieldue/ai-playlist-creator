@@ -6354,6 +6354,7 @@ Respond ONLY with valid JSON in this format:
 }
 
 EXTRACTION GUIDELINES:
+For each field, reason about what the user is communicating, then map it to the appropriate value. The keyword examples below illustrate typical phrasings — they are not an exhaustive lookup table, and you should populate fields based on intent even when the user's exact words don't appear in any list.
 
 ERA & TIME:
 - CRITICAL: ONLY set yearRange.min/max for EXPLICIT year specifications. NEVER set yearRange.min/max for decade descriptors — only set the decade field.
@@ -6364,8 +6365,9 @@ ERA & TIME:
 - "contemporary", "modern": Set min to ${new Date().getFullYear() - 5}, max to null
 
 POPULARITY:
-- "mainstream hits", "popular songs": min: 70
-- "underground", "indie", "deep cuts": max: 40
+Apply popularity constraints only when the user is describing song recognizability, not genre aesthetics. "Indie" describes a sound and belongs to genre extraction — do NOT treat it as a popularity signal.
+- "mainstream hits", "popular songs", "songs everyone knows": min: 70
+- "underground", "deep cuts", "not the radio stuff": max: 40
 - "hidden gems", "lesser known": max: 50
 - "mix of popular and underground": preference: "balanced"
 
@@ -6425,6 +6427,7 @@ PRODUCTION:
 - "no auto-tune": avoidAutoTune: true
 
 LYRICAL CONTENT:
+Use lyricalContent.themes and lyricalContent.avoid for explicit content/theme requests (love songs, party lyrics, etc.). Use contextClues.avoidances for everything else the user wants excluded that doesn't fit a structured field.
 - "uplifting lyrics": themes: ["uplifting"]
 - "love songs": themes: ["love", "romantic"]
 - "party themes": themes: ["party", "celebration"]
@@ -6491,12 +6494,16 @@ LANGUAGE (culturalContext.language):
 - If no language is implied → prefer: [], exclude: []
 
 AUDIENCE / SAFETY (contextClues.audience):
+Also infer audience from contextual descriptions — e.g. "for a Sunday school class" implies ["christian", "clean"], "my 7-year-old's birthday party" implies ["family", "clean"], "playing at church" implies ["christian"]. Use context, not just listed keywords.
 - "christian", "church", "worship", "faith", "gospel": audience: ["christian"]
 - "youth retreat", "youth group", "youth event": audience: ["christian", "youth"]
 - "family", "kids", "children", "all ages", "family friendly", "family-friendly": audience: ["family"]
 - "clean", "no explicit", "safe for kids", "safe for work", "no bad words", "no curse words", "no swearing", "no profanity", "pg", "pg-13", "radio edit", "radio friendly", "radio-friendly": audience: ["clean"]
 - "youth", "teenagers": audience: ["youth"]
 - If multiple apply, include all. If none apply → []
+
+AVOIDANCES (contextClues.avoidances):
+Populate contextClues.avoidances with any free-form things the user wants excluded that don't fit a more structured field — moods, sounds, characteristics, thematic content, or production qualities. Examples: "nothing too heavy", "no long intros", "avoid anything depressing", "no slow songs", "nothing cheesy". This is a catch-all for exclusions that aren't artist names, lyrical themes, or version types. If none → []
 
 REFERENCE SONGS:
 If the user mentions a specific song title + artist (e.g. "songs like Take It Slow by Dante", "similar to Need My Baby by Reo Xander"), extract them into referenceSongs. These are used to confirm the correct artist identity.
@@ -6529,6 +6536,7 @@ BPM CONSTRAINTS:
 - If no explicit BPM number mentioned → bpmConstraint: { min: null, max: null }
 
 MOOD (emotional valence — separate from energy):
+Determine mood from the emotional valence the user wants the music to carry, not from whether they use these exact words. The keyword lists below are examples of typical phrasings, not an exhaustive lookup table — infer from what the person is communicating.
 - "happy", "uplifting", "feel-good", "positive", "welcoming", "café", "bright", "cheerful", "healing", "hopeful", "good vibes", "triumphant", "euphoric", "everything works out", "happy ending", "movie ending", "breakthrough", "cathartic release" → mood: "positive"
 - "emotional but uplifting", "bittersweet but hopeful", "emotional climax that resolves well" → mood: "positive"
 - "sad", "melancholic", "heartbreak", "crying", "heavy", "gloomy", "dark emotions", "heartache", "longing" → mood: "melancholic"
@@ -6576,10 +6584,10 @@ EXCLUDED ARTISTS:
   * "songs similar to The Weeknd" → requestedArtists: ["The Weeknd"], excludedArtists: [] (seed request, NO exclusion)
 
 ENERGY TARGET:
-- "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing" → energyTarget: "low"
-- "high energy", "hype", "intense", "loud", "fast", "pump up", "hard" → energyTarget: "high"
-- "kinda hype but chill", "chill but energizing", "mid-energy", "not too slow not too fast", "background but engaging", "light energy" → energyTarget: "medium"
-- If conflicting signals are present (both chill and hype), use "medium" rather than picking one
+Infer from what the person needs the music to DO for them — energize, help focus, help relax, etc. When signals appear to conflict, read the compound phrase as a single intent (the user is describing a specific point on the spectrum, not two poles). Use "medium" only when the overall description genuinely sits between low and high.
+- "low energy", "very chill", "mellow", "slow", "sleepy", "relaxing", "something that doesn't distract me" → energyTarget: "low"
+- "high energy", "hype", "intense", "loud", "fast", "pump up", "hard", "something to get me going" → energyTarget: "high"
+- "kinda hype but chill", "chill but energizing", "mid-energy", "not too slow not too fast", "background but engaging", "light energy", "something I can move to but not intense" → energyTarget: "medium"
 - If unclear → null
 
 ENERGY PROGRESSION (gradual ramps only — no hard split):
@@ -6601,6 +6609,7 @@ RULE: If the user is describing a SPLIT or TRANSITION between distinct moods/ene
 - If no multi-phase pattern → phases: null
 
 GENRE ACCESSIBILITY (genreAccessibility):
+Infer from the user's expressed relationship to the genre — how long they've been listening, the vocabulary they use, whether they signal unfamiliarity or depth. The phrases below are examples, not the only valid triggers.
 - "just getting into X", "never listened to X", "ease me in", "good starting point for X", "where do I start with X", "I'm new to X", "jazz for beginners", "beginner [genre]", "never heard X before" → genreAccessibility: "newcomer"
 - "I've heard some X and want to explore more", "getting deeper into X", "I've listened to a bit of X", "know the basics but want more", "heard a few X artists and loved it", "getting into X lately" → genreAccessibility: "curious"
 - "deep cuts", "deep dive", "I know all the classics", "show me obscure", "advanced [genre]", "I've been listening for years", "non-obvious picks", "I know all the hits" → genreAccessibility: "enthusiast"
