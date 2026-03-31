@@ -1030,53 +1030,35 @@ IMPORTANT: Pay close attention to the original request and description to unders
         return (
         <div className="track-menu-overlay" onClick={() => setOpenMenuTrack(null)}>
           <div className="track-menu-sheet" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', top, left, width: menuWidth }}>
-            {/* Song title + artist */}
-            <div className="track-menu-header">
-              <div className="track-menu-title">{openMenuTrack.track.name}</div>
-              <div className="track-menu-artist">{openMenuTrack.track.artist}</div>
-            </div>
-
-            {/* Quick-action icon row */}
-            <div className="track-menu-quick-actions">
+            <button
+              className="track-menu-item"
+              onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsUp'); setOpenMenuTrack(null); }}
+            >
+              <Icons.Heart size={16} color={openMenuTrack.track.reaction === 'thumbsUp' ? '#ff3b30' : 'currentColor'} fill={openMenuTrack.track.reaction === 'thumbsUp'} />
+              <span>{openMenuTrack.track.reaction === 'thumbsUp' ? 'Unlike' : 'Like'}</span>
+            </button>
+            {openMenuTrack.track.reaction !== 'thumbsUp' && (
               <button
-                className="track-menu-quick-btn"
-                onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsUp'); setOpenMenuTrack(null); }}
+                className="track-menu-item"
+                onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsDown'); setOpenMenuTrack(null); }}
               >
-                <span className={`track-menu-quick-icon ${openMenuTrack.track.reaction === 'thumbsUp' ? 'active-red' : ''}`}>
-                  <Icons.Heart size={20} color={openMenuTrack.track.reaction === 'thumbsUp' ? '#ff3b30' : 'currentColor'} fill={openMenuTrack.track.reaction === 'thumbsUp'} />
-                </span>
-                <span className="track-menu-quick-label">{openMenuTrack.track.reaction === 'thumbsUp' ? 'Unlike' : 'Like'}</span>
+                <Icons.Close size={16} />
+                <span>Not for me</span>
               </button>
-              <button
-                className="track-menu-quick-btn"
-                onClick={() => { handleToggleLock(openMenuTrack.playlistId, openMenuTrack.track); setOpenMenuTrack(null); }}
-              >
-                <span className={`track-menu-quick-icon ${openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? 'active-orange' : ''}`}>
-                  <Icons.Star size={20} color={openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? '#ff9500' : 'currentColor'} fill={openMenuTrack.lockedTracks.includes(openMenuTrack.track.id)} />
-                </span>
-                <span className="track-menu-quick-label">{openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? 'Locked' : 'Lock'}</span>
-              </button>
-              {openMenuTrack.track.reaction !== 'thumbsUp' && (
-                <button
-                  className="track-menu-quick-btn"
-                  onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsDown'); setOpenMenuTrack(null); }}
-                >
-                  <span className="track-menu-quick-icon">
-                    <Icons.Close size={20} />
-                  </span>
-                  <span className="track-menu-quick-label">Not for me</span>
-                </button>
-              )}
-            </div>
-
+            )}
+            <button
+              className="track-menu-item"
+              onClick={() => { handleToggleLock(openMenuTrack.playlistId, openMenuTrack.track); setOpenMenuTrack(null); }}
+            >
+              <Icons.Star size={16} color={openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? '#ff9500' : 'currentColor'} fill={openMenuTrack.lockedTracks.includes(openMenuTrack.track.id)} />
+              <span>{openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? 'Unlock' : 'Keep on every update'}</span>
+            </button>
             <div className="track-menu-divider" />
-
-            {/* List actions */}
             <button
               className="track-menu-item track-menu-item--danger"
               onClick={() => { handleRemoveTrack(openMenuTrack.playlistId, openMenuTrack.track); setOpenMenuTrack(null); }}
             >
-              <Icons.MinusCircle size={22} /><span>Remove from Playlist</span>
+              <Icons.MinusCircle size={16} /><span>Remove from playlist</span>
             </button>
           </div>
         </div>
