@@ -1902,9 +1902,26 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     genreData.style || '',
   ].map(l => l.toLowerCase().trim()).filter(Boolean);
 
-  // NOTE: SC moods filter returns 0 when combined with genre + audio filters (valence/energy).
-  // Moods filter is unreliable for top_songs — valence/energy already capture the mood numerically.
-  // Mood labels are still used to derive audio feature ranges below.
+  // SC moods filter — build from atmosphere/style labels mapped to valid SC mood values.
+  // SC expects lowercase values (e.g. 'sensual', not 'Sensual'). Only applied for top_songs.
+  if (strategy !== 'artist_songs') {
+    const scMoodValues = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
+    // Also add useCase-level mood if present
+    const ucMood = SOUNDCHARTS_USE_CASE_MOODS[genreData.contextClues?.useCase?.toLowerCase()];
+    if (ucMood) ucMood.forEach(m => scMoodValues.includes(m) || scMoodValues.push(m));
+    if (scMoodValues.length > 0) {
+      filters.push({ type: 'moods', data: { values: scMoodValues, operator: 'in' } });
+      console.log(`🎭 SC moods filter: ${scMoodValues.join(', ')}`);
+    }
+    // SC themes filter — build from useCase
+    const scThemeValues = SOUNDCHARTS_THEME_MAP[genreData.contextClues?.useCase?.toLowerCase()] || [];
+    if (scThemeValues.length > 0) {
+      filters.push({ type: 'themes', data: { values: scThemeValues, operator: 'in' } });
+      console.log(`📚 SC themes filter: ${scThemeValues.join(', ')}`);
+    }
+  }
+
+  // Mood labels are also used to derive audio feature ranges below.
 
   // Audio feature filters.
   // For top_songs: apply all matched audio feature ranges.
@@ -2101,7 +2118,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // These replace lookup-table-derived filters of the same type, since Claude interprets
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
-  // moods is also skipped — SC moods filter returns 0 when combined with genre + audio filters
+  // moods and themes are handled server-side (built from atmosphere + useCase above), so skip Claude's versions
   const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes', 'moods']);
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
@@ -2128,21 +2145,67 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   };
 }
 
-// Map Claude atmosphere/mood labels → SoundCharts mood values
+// Map Claude atmosphere/mood labels → SoundCharts mood values (SC requires lowercase).
+// Full SC mood list: aggressive, amusing, anxious, bittersweet, bizarre, boastful, bouncy,
+// calm, cheerful, complex, confessional, confident, confrontational, controversial,
+// conversational, critical, cynical, dark, desperate, devotional, dreamy, emotional,
+// empowering, energetic, epic, euphoric, excited, frustrated, haunting, hopeful,
+// inspirational, intense, introspective, joyful, melancholic, narrative, nostalgic,
+// playful, poetic, reflective, romantic, sad, sensual, sentimental, serious, sincere, uplifting
 const SOUNDCHARTS_MOOD_MAP = {
-  'energetic': 'Energetic', 'energy': 'Energetic', 'hype': 'Energetic',
-  'chill': 'Calm', 'relaxed': 'Calm', 'calm': 'Calm', 'peaceful': 'Peaceful',
-  'happy': 'Happy', 'upbeat': 'Happy', 'feel-good': 'Happy', 'joyful': 'Joyful',
-  'sad': 'Sad', 'melancholic': 'Melancholic', 'emotional': 'Melancholic',
-  'romantic': 'Romantic', 'love': 'Romantic', 'sensual': 'Sensual',
-  'dark': 'Dark', 'aggressive': 'Aggressive', 'angry': 'Aggressive',
-  'motivational': 'Empowering', 'motivation': 'Empowering', 'empowering': 'Empowering',
-  'party': 'Euphoric', 'euphoric': 'Euphoric',
-  'melancholy': 'Melancholic', 'nostalgic': 'Nostalgic',
-  'spiritual': 'Spiritual', 'peaceful': 'Peaceful',
-  'excited': 'Energetic', 'intense': 'Aggressive', 'dreamy': 'Peaceful',
-  'rebellious': 'Aggressive', 'confident': 'Empowering', 'powerful': 'Empowering',
-  'groovy': 'Euphoric', 'fun': 'Joyful', 'playful': 'Joyful', 'summer': 'Happy',
+  // Energetic/hype
+  'energetic': 'energetic', 'energy': 'energetic', 'hype': 'energetic', 'excited': 'excited',
+  'intense': 'intense', 'epic': 'epic',
+  // Calm/dreamy
+  'chill': 'calm', 'relaxed': 'calm', 'calm': 'calm', 'peaceful': 'calm',
+  'ambient': 'calm', 'dreamy': 'dreamy',
+  // Happy/joyful/playful
+  'happy': 'joyful', 'upbeat': 'joyful', 'feel-good': 'joyful', 'joyful': 'joyful',
+  'fun': 'playful', 'playful': 'playful', 'cheerful': 'joyful', 'summer': 'joyful', 'bouncy': 'bouncy',
+  // Euphoric
+  'euphoric': 'euphoric', 'party': 'euphoric', 'groovy': 'euphoric',
+  // Uplifting/hopeful/empowering
+  'uplifting': 'uplifting', 'hopeful': 'hopeful', 'inspirational': 'inspirational',
+  'motivational': 'empowering', 'motivation': 'empowering', 'empowering': 'empowering',
+  'confident': 'confident', 'boastful': 'boastful', 'powerful': 'empowering',
+  // Romantic/sensual
+  'romantic': 'romantic', 'love': 'romantic', 'sensual': 'sensual', 'intimate': 'sensual',
+  // Sad/melancholic/bittersweet
+  'sad': 'sad', 'melancholic': 'melancholic', 'melancholy': 'melancholic',
+  'bittersweet': 'bittersweet', 'sentimental': 'sentimental', 'desperate': 'desperate',
+  'haunting': 'haunting', 'anxious': 'anxious',
+  // Introspective/reflective/emotional
+  'emotional': 'emotional', 'introspective': 'introspective', 'reflective': 'reflective',
+  'nostalgic': 'nostalgic', 'confessional': 'confessional', 'devotional': 'devotional',
+  'spiritual': 'devotional', 'sincere': 'sincere', 'serious': 'serious',
+  // Dark/aggressive
+  'dark': 'dark', 'aggressive': 'aggressive', 'angry': 'aggressive',
+  'confrontational': 'confrontational', 'rebellious': 'aggressive', 'cynical': 'cynical',
+  'frustrated': 'frustrated',
+};
+
+// SC themes per use case — used to build a themes filter for top_songs queries.
+// Full SC themes list stored in backend/sc_filters_reference.js.
+const SOUNDCHARTS_THEME_MAP = {
+  sensual:    ['intimacy', 'desire', 'sexuality', 'hedonism'],
+  heartbreak: ['heartbreak', 'longing', 'loss', 'regret'],
+  party:      ['dance and partying', 'hedonism', 'celebration'],
+  summer:     ['summer love'],
+  chill:      ['escapism'],
+  sleep:      ['escapism'],
+  workout:    ['ambition', 'overcoming adversity'],
+};
+
+// Extra moods to add per use case (beyond what atmosphere labels provide).
+const SOUNDCHARTS_USE_CASE_MOODS = {
+  sensual:    ['sensual', 'romantic'],
+  heartbreak: ['melancholic', 'sad', 'introspective'],
+  party:      ['euphoric', 'energetic'],
+  summer:     ['joyful', 'uplifting'],
+  workout:    ['energetic', 'empowering'],
+  chill:      ['calm'],
+  sleep:      ['calm'],
+  focus:      ['calm', 'introspective'],
 };
 
 // Map Claude atmosphere/characteristic labels → SoundCharts audio feature ranges.
@@ -6358,6 +6421,7 @@ When the user describes a task, activity, or situation with no genre keywords, i
 - "dinner party", "gathering", "friends over", "people coming over", "hosting" → mood: "positive", energyTarget: "medium", useCase: "background"
 - "morning routine", "getting ready", "start the day", "waking up" → mood: "positive", energyTarget: "medium", useCase: "morning"
 - "breakup", "heartbreak", "sad playlist", "crying", "missing someone", "feeling low" → mood: "melancholic", energyTarget: "low", useCase: "heartbreak"
+- "sensual", "sexy", "sex playlist", "baby making music", "make love", "intimate", "bedroom vibes", "mood music", "seductive", "slow burn", "late night vibes", "late-night vibes" → mood: "positive", energyTarget: "low", atmosphere: ["sensual", "intimate", "smooth"], useCase: "sensual", suggestedSeedArtists: ["The Weeknd", "Jeremih", "Summer Walker", "Trey Songz", "Partynextdoor", "SZA", "dvsn", "Jhené Aiko"]
 - "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
   NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
@@ -6500,7 +6564,7 @@ Use this field to directly output SoundCharts API filter objects that precisely 
 These are used VERBATIM in the SC song search — be accurate and specific.
 
 DO output filters for: energy, valence, danceability, acousticness, tempo, liveness, speechiness, instrumentalness
-DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore, themes, moods (moods filter returns 0 results in SC when combined with other filters — use valence/energy instead)
+DO NOT output filters for: songGenres, songSubGenres, languageCode, explicit, releaseDate, duration, artistCareerStages, emotionalIntensityScore, themes, moods (moods and themes are built server-side from atmosphere/useCase — do not output them here)
 
 FILTER SHAPES:
 - Numeric range: { "type": "energy", "data": { "min": 0.6 } }  — include only min, only max, or both
@@ -6543,7 +6607,7 @@ RULES:
 - Only include filters where you have HIGH CONFIDENCE in the mapping. Fewer accurate filters beat many uncertain ones.
 - Do NOT output conflicting filters for the same type (e.g. energy min 0.75 AND energy max 0.45). If signals conflict, omit that filter type.
 - Always output moods + valence together when the prompt is clearly sad or clearly happy.
-- CRITICAL: do NOT output moods filters — they are ignored. Use valence and energy to express mood instead.
+- CRITICAL: do NOT output moods or themes filters — they are built server-side from atmosphere and useCase. Use valence and energy to express mood intensity.
 - For ambiguous prompts like "vibes" or "good music" with no emotional descriptor, output [] (empty array).
 
 Use null, [], or false for any feature not mentioned.
@@ -8394,6 +8458,7 @@ Return ONLY valid JSON:
             focus:       'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
             sleep:       'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
             heartbreak:  'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
+            sensual:     'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Only smooth, slow, seductive, or softly groovy tracks belong here (think R&B slow jams, bedroom pop, late-night hip-hop). When in doubt, KEEP the track.',
           };
           if (_fastHardRules[_fastUc]) constraintLines.push(_fastHardRules[_fastUc]);
         }
@@ -8438,6 +8503,7 @@ Return ONLY valid JSON:
             workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
             party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
             summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
+            sensual:    'Energy scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 are likely too high-energy and should be flagged unless they have a clearly slow, seductive groove.',
           };
           if (energyGuidance[_fastUcForEnergy]) {
             constraintLines.push(energyGuidance[_fastUcForEnergy]);
@@ -8767,6 +8833,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               focus:      'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
               sleep:      'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
               heartbreak: 'This is a heartbreak/sad/late-night emotional playlist. REMOVE any track that is clearly upbeat, celebratory, high-energy, or would not fit a late-night feelings session. KEEP sad, melancholic, emotional, or introspective tracks even if the title sounds positive.',
+              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring — only smooth, slow, seductive, or late-night R&B/bedroom-pop tracks belong here. If a track would not work during a quiet intimate moment, REMOVE it.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           {
