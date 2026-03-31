@@ -1904,6 +1904,9 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
 
   // SC moods filter — build from atmosphere/style labels mapped to valid SC mood values.
   // SC expects lowercase values (e.g. 'sensual', not 'Sensual'). Only applied for top_songs.
+  // NOTE: SC 500s when moods/themes are combined with energy/valence audio filters.
+  // When moods are present we skip energy/valence (moods are more semantically precise anyway).
+  let scMoodsAdded = false;
   if (strategy !== 'artist_songs') {
     const scMoodValues = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
     // Also add useCase-level mood if present
@@ -1912,6 +1915,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     if (scMoodValues.length > 0) {
       filters.push({ type: 'moods', data: { values: scMoodValues, operator: 'in' } });
       console.log(`🎭 SC moods filter: ${scMoodValues.join(', ')}`);
+      scMoodsAdded = true;
     }
     // SC themes filter — build from useCase
     const scThemeValues = SOUNDCHARTS_THEME_MAP[genreData.contextClues?.useCase?.toLowerCase()] || [];
@@ -1966,6 +1970,11 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
         continue; // skip valence/danceability/acousticness etc for artist_songs
       }
     }
+    // SC 500s when moods + energy/valence are combined — skip those audio features when moods are present
+    if (scMoodsAdded && (feature === 'energy' || feature === 'valence')) {
+      console.log(`🎛️  Skipping ${feature} filter — moods filter already covers vibe (avoids SC 500)`);
+      continue;
+    }
     const filterData = {};
     if (range.min !== undefined) filterData.min = range.min;
     if (range.max !== undefined) filterData.max = range.max;
@@ -1990,7 +1999,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // Energy target — maps "low"/"medium"/"high" to an energy range.
   // Only applies when a label-derived energy range hasn't already been set,
   // or when the label-derived range is contradictory (min > max was skipped).
-  if (energyTarget) {
+  // Skipped when moods are present — SC 500s on moods + energy combinations.
+  if (energyTarget && !scMoodsAdded) {
     const energyIdx = filters.findIndex(f => f.type === 'energy');
     // Skip energy filter if moods are Sad/Melancholic — sad R&B/pop spans all energy levels,
     if (energyIdx === -1) {
@@ -2006,8 +2016,9 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   }
 
   // Mood → valence filter (positive = high valence, melancholic = low valence)
+  // Skipped when moods are present — SC 500s on moods + valence combinations.
   const mood = genreData.mood;
-  if (mood) {
+  if (mood && !scMoodsAdded) {
     const valenceIdx = filters.findIndex(f => f.type === 'valence');
     if (valenceIdx === -1) {
       if (mood === 'positive') {
@@ -2118,8 +2129,13 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // These replace lookup-table-derived filters of the same type, since Claude interprets
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
-  // moods and themes are handled server-side (built from atmosphere + useCase above), so skip Claude's versions
+  // moods and themes are handled server-side (built from atmosphere + useCase above), so skip Claude's versions.
+  // When moods are present, also skip energy/valence from Claude — SC 500s on that combo.
   const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes', 'moods']);
+  if (scMoodsAdded) {
+    CLAUDE_SC_SKIP_TYPES.add('energy');
+    CLAUDE_SC_SKIP_TYPES.add('valence');
+  }
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
@@ -2471,22 +2487,35 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       } else if (err.response?.status === 500) {
         // 500s are often caused by the songSubGenres or moods filters combining with audio filters.
         // Step 1: strip songSubGenres and retry.
-        // Step 2: if still 500, strip moods + themes too (keep energy/valence/tempo).
+        // SC 500 degradation ladder — each step strips more filters:
+        // 1. Strip songSubGenres (most common culprit)
+        // 2. Strip moods + themes (SC 500s on moods + audio combos)
+        // 3. Strip valence (SC 500s on genre + energy + valence + tempo)
+        // 4. Give up
         const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
         if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
-          console.log(`⚠️  SC 500 — stripping songSubGenres and retrying (keeping energy/valence/tempo)`);
+          console.log(`⚠️  SC 500 — stripping songSubGenres and retrying`);
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
             fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
           );
         }
-        // Still 500 after stripping subgenres — strip moods + themes too.
         if (!query._moodsStripped) {
           const filtersWithoutMoodsThemes = soundchartsFilters.filter(f => !['moods', 'themes', 'songSubGenres'].includes(f.type));
           if (filtersWithoutMoodsThemes.length < soundchartsFilters.length) {
-            console.log(`⚠️  SC 500 (second) — stripping moods + themes and retrying (keeping genre/energy/valence/tempo)`);
+            console.log(`⚠️  SC 500 (second) — stripping moods + themes and retrying`);
             return executeSoundChartsStrategy(
               { ...query, soundchartsFilters: filtersWithoutMoodsThemes, _subgenreStripped: true, _moodsStripped: true },
+              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+            );
+          }
+        }
+        if (!query._valenceStripped) {
+          const filtersWithoutValence = soundchartsFilters.filter(f => !['valence', 'moods', 'themes', 'songSubGenres'].includes(f.type));
+          if (filtersWithoutValence.length < soundchartsFilters.length) {
+            console.log(`⚠️  SC 500 (third) — stripping valence and retrying with genre + energy + tempo only`);
+            return executeSoundChartsStrategy(
+              { ...query, soundchartsFilters: filtersWithoutValence, _subgenreStripped: true, _moodsStripped: true, _valenceStripped: true },
               fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
             );
           }
