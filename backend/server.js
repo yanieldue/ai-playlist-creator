@@ -12637,8 +12637,20 @@ const scheduleAutoUpdates = () => {
         for (const playlist of autoUpdatePlaylists) {
           if (now < new Date(playlist.nextUpdate)) continue;
 
-          // Advance nextUpdate immediately so the next tick doesn't re-enqueue this playlist
-          playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+          // Advance nextUpdate immediately so the next tick doesn't re-enqueue this playlist.
+          // For weekly/monthly: add exactly 7 days/1 month to the stored nextUpdate to prevent
+          // day-of-week drift (recalculating from "now" after 5AM fires on day D gives day D+1 + offset).
+          if (playlist.updateFrequency === 'weekly' && playlist.nextUpdate) {
+            const prev = new Date(playlist.nextUpdate);
+            prev.setDate(prev.getDate() + 7);
+            playlist.nextUpdate = prev.toISOString();
+          } else if (playlist.updateFrequency === 'monthly' && playlist.nextUpdate) {
+            const prev = new Date(playlist.nextUpdate);
+            prev.setMonth(prev.getMonth() + 1);
+            playlist.nextUpdate = prev.toISOString();
+          } else {
+            playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
+          }
           savePromises.push(savePlaylist(userId, playlist));
 
           enqueuePlaylistUpdate(userId, playlist);
