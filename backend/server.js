@@ -8555,8 +8555,11 @@ Example response: [1, 2, 4, 5, 7, ...]`
             for (let ci = 0; ci < _contPool.length && selectedTracks.length < songCount; ci += BATCH_SIZE) {
               const batch = _contPool.slice(ci, ci + BATCH_SIZE).filter(song => song.name?.trim());
               const batchResults = await Promise.all(batch.map(song =>
-                findTrackOnPlatform(song, { storefront: _contStorefront, appleMusicApi: _contAppleApi, platformSvc: _contPlatformSvc })
-                  .then(result => ({ song, result }))
+                withSearchRetry(
+                  () => findTrackOnPlatform(song, { storefront: _contStorefront, appleMusicApi: _contAppleApi, platformSvc: _contPlatformSvc }),
+                  song.name || song.track,
+                  2
+                ).then(result => ({ song, result }))
                   .catch(() => ({ song, result: null }))
               ));
               for (const { song, result } of batchResults) {
