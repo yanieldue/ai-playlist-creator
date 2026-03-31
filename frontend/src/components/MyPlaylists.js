@@ -1362,9 +1362,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
                     {tempUpdateFrequency !== 'never' && (
                       <p className="form-help-text" style={{ marginTop: 4 }}>
                         {(() => {
-                          const now = new Date();
-                          const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-                          const dateNum = now.getDate();
+                          // Use the stored nextUpdate if available, otherwise fall back to today + offset
+                          const nextUpdate = editOptionsPlaylist?.nextUpdate ? new Date(editOptionsPlaylist.nextUpdate) : null;
+                          const ref = nextUpdate || new Date();
+                          const dayName = ref.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/Los_Angeles' });
+                          const dateNum = ref.getDate();
                           const dateSuffix = dateNum === 1 ? 'st' : dateNum === 2 ? 'nd' : dateNum === 3 ? 'rd' : 'th';
                           if (tempUpdateFrequency === 'daily') return 'Refreshes every day at 5 AM';
                           if (tempUpdateFrequency === 'weekly') return `Refreshes every ${dayName} at 5 AM`;

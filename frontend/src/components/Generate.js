@@ -737,8 +737,17 @@ export default function Generate() {
             <div className="generate-sheet-title">Auto-update</div>
             {(() => {
               const now = new Date();
-              const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-              const dateNum = now.getDate();
+              // Compute the first weekly fire: next 5AM + 7 days (mirrors backend calculateNextUpdate)
+              const next5AM = new Date(now);
+              next5AM.setHours(5, 0, 0, 0);
+              if (now >= next5AM) next5AM.setDate(next5AM.getDate() + 1);
+              const weeklyDate = new Date(next5AM);
+              weeklyDate.setDate(weeklyDate.getDate() + 7);
+              const dayName = weeklyDate.toLocaleDateString('en-US', { weekday: 'long' });
+              // Monthly: same logic but +1 month
+              const monthlyDate = new Date(next5AM);
+              monthlyDate.setMonth(monthlyDate.getMonth() + 1);
+              const dateNum = monthlyDate.getDate();
               const dateSuffix = dateNum === 1 ? 'st' : dateNum === 2 ? 'nd' : dateNum === 3 ? 'rd' : 'th';
               return [
                 { freq: 'never',   label: "Doesn't update", desc: 'You can still refresh manually anytime' },
