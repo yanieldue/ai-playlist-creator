@@ -51,6 +51,9 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const [refreshingMessage, setRefreshingMessage] = useState('Updating your playlist...');
   const [refreshError, setRefreshError] = useState(null);
 
+  // Track action menu (... button)
+  const [openMenuTrack, setOpenMenuTrack] = useState(null); // { playlistId, track, platform, lockedTracks }
+
   // Manual refresh settings (isolated - don't affect main settings)
   const [expandManualRefresh, setExpandManualRefresh] = useState(false);
   const [manualRefreshMode, setManualRefreshMode] = useState(null);
@@ -988,53 +991,11 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           </div>
                           <div className="track-actions">
                             <button
-                              className="track-reaction-button"
-                              onClick={() => handleRemoveTrack(playlist.playlistId, track)}
-                              title="Remove from playlist"
+                              className="track-menu-button"
+                              onClick={() => setOpenMenuTrack({ playlistId: playlist.playlistId, track, platform: playlist.platform, lockedTracks: playlist.lockedTracks || [] })}
+                              title="More options"
                             >
-                              <Icons.Minus size={16} />
-                            </button>
-                            {/* Slot 1: X outline — hidden (space reserved) when liked */}
-                            <button
-                              className="track-reaction-button"
-                              onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsDown')}
-                              title={playlist.platform === 'apple' ? "Hide from Fins & exclude similar songs · Can't remove from Apple Music app (API limitation)" : "Not for me. Exclude similar songs"}
-                              style={{ visibility: track.reaction === 'thumbsUp' ? 'hidden' : 'visible' }}
-                            >
-                              <Icons.Close size={16} />
-                            </button>
-                            {/* Slot 2: heart circle when liked, heart outline otherwise */}
-                            {track.reaction === 'thumbsUp' ? (
-                              <button
-                                className="track-reaction-button"
-                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                                title="Unlike"
-                              >
-                                <span className="track-thumb-circle">
-                                  <Icons.Heart size={14} color="white" fill={true} />
-                                </span>
-                              </button>
-                            ) : (
-                              <button
-                                className="track-reaction-button"
-                                onClick={() => handleTrackReaction(playlist.playlistId, track, 'thumbsUp')}
-                                title="I like this! Add more songs like this"
-                              >
-                                <Icons.Heart size={14} />
-                              </button>
-                            )}
-                            <button
-                              className={`track-lock-button ${(playlist.lockedTracks || []).includes(track.id) ? 'locked' : ''}`}
-                              onClick={() => handleToggleLock(playlist.playlistId, track)}
-                              title={(playlist.lockedTracks || []).includes(track.id) ? 'Unlock — song can be replaced on update' : 'Lock — keep this song on every update'}
-                            >
-                              {(playlist.lockedTracks || []).includes(track.id) ? (
-                                <span className="track-thumb-circle">
-                                  <Icons.Star size={16} color="white" fill={true} />
-                                </span>
-                              ) : (
-                                <Icons.Star size={16} />
-                              )}
+                              <Icons.MoreHorizontal size={18} />
                             </button>
                           </div>
                         </div>
@@ -1047,6 +1008,53 @@ IMPORTANT: Pay close attention to the original request and description to unders
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {openMenuTrack && (
+        <div className="track-menu-overlay" onClick={() => setOpenMenuTrack(null)}>
+          <div className="track-menu-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="track-menu-header">
+              <div className="track-menu-title">{openMenuTrack.track.name}</div>
+              <div className="track-menu-artist">{openMenuTrack.track.artist}</div>
+            </div>
+            <div className="track-menu-divider" />
+            <button
+              className="track-menu-item"
+              onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsUp'); setOpenMenuTrack(null); }}
+            >
+              {openMenuTrack.track.reaction === 'thumbsUp' ? (
+                <><Icons.Heart size={20} color="#ff3b30" fill={true} /><span>Unlike</span></>
+              ) : (
+                <><Icons.Heart size={20} /><span>Like</span></>
+              )}
+            </button>
+            {openMenuTrack.track.reaction !== 'thumbsUp' && (
+              <button
+                className="track-menu-item"
+                onClick={() => { handleTrackReaction(openMenuTrack.playlistId, openMenuTrack.track, 'thumbsDown'); setOpenMenuTrack(null); }}
+              >
+                <Icons.Close size={20} /><span>{openMenuTrack.platform === 'apple' ? 'Not for me' : 'Not for me · exclude similar'}</span>
+              </button>
+            )}
+            <button
+              className="track-menu-item"
+              onClick={() => { handleToggleLock(openMenuTrack.playlistId, openMenuTrack.track); setOpenMenuTrack(null); }}
+            >
+              {openMenuTrack.lockedTracks.includes(openMenuTrack.track.id) ? (
+                <><Icons.Star size={20} color="#ff9500" fill={true} /><span>Unlock song</span></>
+              ) : (
+                <><Icons.Star size={20} /><span>Keep on every update</span></>
+              )}
+            </button>
+            <div className="track-menu-divider" />
+            <button
+              className="track-menu-item track-menu-item--danger"
+              onClick={() => { handleRemoveTrack(openMenuTrack.playlistId, openMenuTrack.track); setOpenMenuTrack(null); }}
+            >
+              <Icons.Minus size={20} /><span>Remove from playlist</span>
+            </button>
+          </div>
         </div>
       )}
 
