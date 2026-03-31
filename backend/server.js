@@ -12646,8 +12646,16 @@ const scheduleAutoUpdates = () => {
             playlist.nextUpdate = prev.toISOString();
           } else if (playlist.updateFrequency === 'monthly' && playlist.nextUpdate) {
             const prev = new Date(playlist.nextUpdate);
-            prev.setMonth(prev.getMonth() + 1);
-            playlist.nextUpdate = prev.toISOString();
+            // Store the original target day-of-month so short months don't cause drift.
+            // e.g. Jan 31 → Feb 28 (clamped) → Mar 31 (back to original), not Mar 28.
+            if (!playlist.updateTime) playlist.updateTime = {};
+            if (!playlist.updateTime.dayOfMonth) playlist.updateTime.dayOfMonth = prev.getDate();
+            const targetDay = playlist.updateTime.dayOfMonth;
+            const next = new Date(prev);
+            next.setMonth(next.getMonth() + 1);
+            const lastDayOfMonth = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+            next.setDate(Math.min(targetDay, lastDayOfMonth));
+            playlist.nextUpdate = next.toISOString();
           } else {
             playlist.nextUpdate = calculateNextUpdate(playlist.updateFrequency, playlist.playlistId, playlist.updateTime);
           }
