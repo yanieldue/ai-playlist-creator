@@ -379,7 +379,7 @@ const _spotifyGenreCache = new Map();
 // Returns a Map<normalizedArtistName, string[]> of genre arrays.
 // Caps at 30 unique artists to stay within reasonable API budget.
 async function batchGetSpotifyArtistGenres(artistNames) {
-  const unique = [...new Set(artistNames.map(n => n.trim()))].slice(0, 60);
+  const unique = [...new Set(artistNames.map(n => n.trim()))];
   const result = new Map();
   const toFetch = unique.filter(name => !_spotifyGenreCache.has(name.toLowerCase()));
 
@@ -387,24 +387,29 @@ async function batchGetSpotifyArtistGenres(artistNames) {
     let token;
     try { token = await getSpotifyClientToken(); } catch { return result; }
 
-    await Promise.allSettled(toFetch.map(async (name) => {
-      try {
-        const r = await axios.get('https://api.spotify.com/v1/search', {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { q: name, type: 'artist', limit: 3 },
-          timeout: 8000,
-        });
-        const artists = r.data?.artists?.items || [];
-        const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        // Pick the best match: exact normalized name or highest-popularity artist
-        const match = artists.find(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm)
-          || artists.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
-        const genres = match?.genres || [];
-        _spotifyGenreCache.set(name.toLowerCase(), genres);
-      } catch {
-        // Don't cache failures — let the next request retry the lookup
-      }
-    }));
+    // Process in chunks of 20 to avoid Spotify rate limits
+    const CHUNK = 20;
+    for (let i = 0; i < toFetch.length; i += CHUNK) {
+      const chunk = toFetch.slice(i, i + CHUNK);
+      await Promise.allSettled(chunk.map(async (name) => {
+        try {
+          const r = await axios.get('https://api.spotify.com/v1/search', {
+            headers: { Authorization: `Bearer ${token}` },
+            params: { q: name, type: 'artist', limit: 3 },
+            timeout: 8000,
+          });
+          const artists = r.data?.artists?.items || [];
+          const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Pick the best match: exact normalized name or highest-popularity artist
+          const match = artists.find(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm)
+            || artists.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+          const genres = match?.genres || [];
+          _spotifyGenreCache.set(name.toLowerCase(), genres);
+        } catch {
+          // Don't cache failures — let the next request retry the lookup
+        }
+      }));
+    }
   }
 
   for (const name of unique) {
