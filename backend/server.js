@@ -1799,6 +1799,15 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['workout', 'party', 'summer', 'morning'],
     reason: 'slow sad TV-show ballad — wrong for any high-energy or summer context',
   },
+  // Added 2026-03-31. Jazz-funk/polyrhythmic neo-soul (2015). Popularity: ~50.
+  // False positive: sensual R&B playlist. SC incorrectly tags it with sensual/romantic moods.
+  // The track is a complex, cerebral jazz-funk workout — wrong for any intimate/bedroom context.
+  'hiatus kaiyote::shaolin monk motherfunk': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['sensual'],
+    reason: 'jazz-fusion / cerebral polyrhythmic track — musically complex, requires active listening, kills intimacy in a sensual playlist',
+  },
   // Added 2026-03-27. Mid-tempo tropicalia-pop (2017). Popularity: 84.
   // False positives: Prompt 86 summer — 8 of 9 runs. Enters via gap-fill top_songs. Most persistent
   // summer false positive in entire test suite. Ed Sheeran depth-2 via Bruno Mars.
@@ -8522,7 +8531,7 @@ Return ONLY valid JSON:
             focus:       'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
             sleep:       'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
             heartbreak:  'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
-            sensual:     'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Only smooth, slow, seductive, or softly groovy tracks belong here (think R&B slow jams, bedroom pop, late-night hip-hop). When in doubt, KEEP the track.',
+            sensual:     'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). Only smooth, slow, seductive tracks belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
           };
           if (_fastHardRules[_fastUc]) constraintLines.push(_fastHardRules[_fastUc]);
         }
@@ -8901,7 +8910,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               focus:      'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
               sleep:      'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
               heartbreak: 'This is a heartbreak/sad/late-night emotional playlist. REMOVE any track that is clearly upbeat, celebratory, high-energy, or would not fit a late-night feelings session. KEEP sad, melancholic, emotional, or introspective tracks even if the title sounds positive.',
-              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring — only smooth, slow, seductive, or late-night R&B/bedroom-pop tracks belong here. If a track would not work during a quiet intimate moment, REMOVE it.',
+              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward — jazz-fusion, avant-garde neo-soul, and polyrhythmic tracks require active listening and kill intimacy. Only smooth, slow, seductive, or mellow late-night R&B/bedroom-pop tracks belong here. If a track would not work during a quiet intimate moment, REMOVE it.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           {
