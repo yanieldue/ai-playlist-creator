@@ -823,27 +823,29 @@
 .track-menu-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.45);
   z-index: 1000;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
   animation: fadeIn 0.15s ease;
 }
 
 .track-menu-sheet {
-  background: #fff;
-  border-radius: 16px;
+  background: #f2f2f7;
+  border-radius: 20px;
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   overflow: hidden;
-  animation: slideUp 0.2s ease;
+  animation: slideUp 0.22s ease;
+  margin-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .track-menu-header {
-  padding: 16px 20px 12px;
+  padding: 18px 20px 14px;
   text-align: center;
+  background: #fff;
 }
 
 .track-menu-title {
@@ -858,16 +860,60 @@
 .track-menu-artist {
   font-size: 13px;
   color: #8e8e93;
-  margin-top: 2px;
+  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Quick-action icon row (Like / Lock / Not for me) */
+.track-menu-quick-actions {
+  display: flex;
+  justify-content: space-around;
+  padding: 16px 24px;
+  background: #fff;
+}
+
+.track-menu-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  flex: 1;
+}
+
+.track-menu-quick-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f2f2f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1c1c1e;
+}
+
+.track-menu-quick-icon.active-red {
+  color: #ff3b30;
+}
+
+.track-menu-quick-icon.active-orange {
+  color: #ff9500;
+}
+
+.track-menu-quick-label {
+  font-size: 12px;
+  color: #1c1c1e;
+  font-weight: 400;
+}
+
 .track-menu-divider {
-  height: 1px;
-  background: #e5e5ea;
-  margin: 0;
+  height: 8px;
+  background: #f2f2f7;
 }
 
 .track-menu-item {
@@ -875,9 +921,10 @@
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 14px 20px;
-  background: none;
+  padding: 15px 20px;
+  background: #fff;
   border: none;
+  border-top: 1px solid #e5e5ea;
   font-size: 16px;
   color: #1c1c1e;
   cursor: pointer;
@@ -885,15 +932,24 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+.track-menu-item:first-of-type {
+  border-top: none;
+}
+
 .track-menu-item:hover {
-  background: #f2f2f7;
+  background: #f9f9f9;
 }
 
 .track-menu-item--danger {
   color: #ff3b30;
 }
 
+/* Dark mode */
 :root.dark-mode .track-menu-sheet {
+  background: #1c1c1e;
+}
+
+:root.dark-mode .track-menu-header {
   background: #2c2c2e;
 }
 
@@ -901,11 +957,26 @@
   color: #fff;
 }
 
-:root.dark-mode .track-menu-divider {
+:root.dark-mode .track-menu-quick-actions {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .track-menu-quick-icon {
   background: #3a3a3c;
+  color: #fff;
+}
+
+:root.dark-mode .track-menu-quick-label {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .track-menu-divider {
+  background: #1c1c1e;
 }
 
 :root.dark-mode .track-menu-item {
+  background: #2c2c2e;
+  border-top-color: #3a3a3c;
   color: #fff;
 }
 
@@ -914,7 +985,7 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(40px); opacity: 0; }
+  from { transform: translateY(50px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
 
