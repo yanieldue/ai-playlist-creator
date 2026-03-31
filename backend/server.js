@@ -379,7 +379,7 @@ const _spotifyGenreCache = new Map();
 // Returns a Map<normalizedArtistName, string[]> of genre arrays.
 // Caps at 30 unique artists to stay within reasonable API budget.
 async function batchGetSpotifyArtistGenres(artistNames) {
-  const unique = [...new Set(artistNames.map(n => n.trim()))].slice(0, 30);
+  const unique = [...new Set(artistNames.map(n => n.trim()))].slice(0, 60);
   const result = new Map();
   const toFetch = unique.filter(name => !_spotifyGenreCache.has(name.toLowerCase()));
 
@@ -402,7 +402,7 @@ async function batchGetSpotifyArtistGenres(artistNames) {
         const genres = match?.genres || [];
         _spotifyGenreCache.set(name.toLowerCase(), genres);
       } catch {
-        _spotifyGenreCache.set(name.toLowerCase(), []);
+        // Don't cache failures — let the next request retry the lookup
       }
     }));
   }
@@ -12546,8 +12546,13 @@ async function enrichTopArtistsCache() {
 
   console.log('🔥 [ENRICHMENT] Starting daily top-artists cache warm...');
   const sort = { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-  // All SC genre slugs from SOUNDCHARTS_GENRE_MAP
-  const SC_ENRICHMENT_GENRES = ['pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african', 'jazz', 'classical', 'metal', 'reggae', 'blues'];
+  // All SC genre slugs — core genres + subgenres for broader artist discovery
+  const SC_ENRICHMENT_GENRES = [
+    // Core
+    'pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african', 'jazz', 'classical', 'metal', 'reggae', 'blues',
+    // Subgenres / regional
+    'trap', 'soul', 'funk', 'indie pop', 'indie rock', 'folk', 'dance', 'house', 'techno', 'afrobeats', 'reggaeton', 'k-pop', 'gospel', 'punk', 'rnb', 'drill', 'lo-fi',
+  ];
 
   // Step 1: collect unique artist names from top 1000 songs per genre (2 pages × 500)
   const artistQueue = new Map(); // lowerName -> { name, genre }
@@ -12613,7 +12618,69 @@ async function enrichTopArtistsCache() {
       console.log(`⚠️  [ENRICHMENT] Failed for "${name}": ${err.message}`);
     }
   }
-  console.log(`✅ [ENRICHMENT] Done — ${enriched} catalogs fetched, ${audioEnriched} audio-enriched, ${skipped} skipped, ${failed} failed`);
+  console.log(`✅ [ENRICHMENT] Step 2 done — ${enriched} catalogs fetched, ${audioEnriched} audio-enriched, ${skipped} skipped, ${failed} failed`);
+
+  // Step 3: similarity graph depth-1 expansion — enrich similar artists of all seed artists
+  console.log('🔥 [ENRICHMENT] Step 3: collecting similar artists (depth-1)...');
+  const similarQueue = new Map(); // lowerName -> { name, genre }
+  for (const [, { name, genre }] of artistQueue) {
+    try {
+      const artistInfo = await getSoundChartsArtistInfo(name, genre);
+      if (!artistInfo?._similarUuids) continue;
+      for (const [simLower, simUuid] of Object.entries(artistInfo._similarUuids)) {
+        if (artistQueue.has(simLower) || similarQueue.has(simLower)) continue;
+        // Use the display name from similarArtists array
+        const simName = (artistInfo.similarArtists || []).find(n => n.toLowerCase() === simLower) || simLower;
+        similarQueue.set(simLower, { name: simName, genre, uuid: simUuid });
+      }
+    } catch (err) {
+      // non-fatal — just skip this seed's similar list
+    }
+  }
+  console.log(`🔥 [ENRICHMENT] Step 3: ${similarQueue.size} similar artists to enrich`);
+
+  let simEnriched = 0, simAudioEnriched = 0, simSkipped = 0, simFailed = 0;
+  for (const [, { name, genre, uuid: knownUuid }] of similarQueue) {
+    try {
+      // Use knownUuid directly if available to skip the artist lookup
+      let artistUuid = knownUuid;
+      let artistName = name;
+      if (!artistUuid) {
+        const artistInfo = await getSoundChartsArtistInfo(name, genre);
+        if (!artistInfo?.uuid) { simSkipped++; continue; }
+        artistUuid = artistInfo.uuid;
+      }
+
+      const catalogKey = `full_catalog:${artistUuid}`;
+      const cached = await db.getCachedSC(catalogKey);
+
+      let songs;
+      if (cached?.songs?.length > 0) {
+        songs = cached.songs;
+      } else {
+        songs = await getArtistFullCatalogFromSC(artistUuid, artistName, genre);
+        if (songs?.length > 0) simEnriched++;
+      }
+
+      if (songs?.length > 0) {
+        let needsAudio = false;
+        for (const s of songs) {
+          if (!s.uuid) continue;
+          const sd = await db.getCachedSC(`song_detail:${s.uuid}`);
+          if (!sd?.audio || Object.keys(sd.audio).length === 0) { needsAudio = true; break; }
+        }
+        if (needsAudio) {
+          await enrichCatalogWithAudioFeatures(songs, songs.length);
+          simAudioEnriched++;
+        }
+      }
+    } catch (err) {
+      simFailed++;
+      console.log(`⚠️  [ENRICHMENT] Similar artist failed for "${name}": ${err.message}`);
+    }
+  }
+  console.log(`✅ [ENRICHMENT] Step 3 done — ${simEnriched} catalogs fetched, ${simAudioEnriched} audio-enriched, ${simSkipped} skipped, ${simFailed} failed`);
+  console.log(`✅ [ENRICHMENT] All steps complete — total artists processed: ${artistQueue.size + similarQueue.size}`);
 }
 
 // Auto-update scheduler - checks every minute for playlists that need updating.
