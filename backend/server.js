@@ -7888,6 +7888,11 @@ Return ONLY valid JSON:
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
 
+      // Sort: prioritize songs with known SC energy data so Phase B fills the early-stop
+      // buffer with checkable tracks first. Energy-null songs fall to the end and only
+      // get picked if no energy-data candidates remain.
+      recommendedTracks.sort((a, b) => (a._scEnergy != null ? 0 : 1) - (b._scEnergy != null ? 0 : 1));
+
       // ── Phase A: pre-fetch SoundCharts platform IDs (serial+throttled, one-time cost) ──
       // For songs that have no ISRC, fetch the platform ID from SC identifiers upfront so
       // Phase B can do all platform lookups in parallel without hitting the SC throttler.
@@ -8119,6 +8124,10 @@ Return ONLY valid JSON:
       const _earlyStopTarget = _hasVibeReqs && !_phases ? Math.ceil(songCount * 1.2) : songCount;
       console.log(`🎯 Track collection target: ${_earlyStopTarget} (songCount=${songCount}, vibeBuffer=${_hasVibeReqs && !_phases})`);
 
+      // Tracks the next unprocessed index in recommendedTracks after Phase B stops.
+      // Pool continuation (after vibe check) resumes from here instead of going to supplement.
+      let _phaseBStopAt = 0;
+
       if (platform === 'spotify') {
 
         // Per-song Spotify lookup (runs in parallel within each batch)
@@ -8205,6 +8214,7 @@ Return ONLY valid JSON:
 
         // ── Phase B: batched parallel Spotify lookups ──
         for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
+          _phaseBStopAt = Math.min(i + BATCH_SIZE, recommendedTracks.length);
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
@@ -8291,6 +8301,7 @@ Return ONLY valid JSON:
 
         // ── Phase B: batched parallel Apple Music lookups ──
         for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
+          _phaseBStopAt = Math.min(i + BATCH_SIZE, recommendedTracks.length);
           const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
@@ -8511,6 +8522,80 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
           // _suppUseCase hoisted here so the CATALOG-OVERRIDE check inside the supplement loop can reference it
           const _suppUseCase = genreData.contextClues.useCase;
+
+          // Pool continuation: if vibe check left us short, fill from the remaining genre-filtered
+          // SC pool before falling back to supplement. This keeps all original energy/valence/genre
+          // filters intact and avoids pulling from unrelated artist catalogs (the source of leakage
+          // like "Rollin" by Calvin Harris entering via Khalid's catalog).
+          if (selectedTracks.length < songCount && _phaseBStopAt < recommendedTracks.length) {
+            const _contNeeded = songCount - selectedTracks.length;
+            // Sort remaining pool: energy-data songs first (same as initial sort)
+            const _contPool = recommendedTracks.slice(_phaseBStopAt)
+              .sort((a, b) => (a._scEnergy != null ? 0 : 1) - (b._scEnergy != null ? 0 : 1));
+            console.log(`🔄 Pool continuation: need ${_contNeeded} more, ${_contPool.length} songs remaining in SC pool`);
+
+            const _contAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
+            const _contAppleApi = _contAppleDevToken ? new AppleMusicService(_contAppleDevToken) : null;
+            const _contStorefront = tokens.storefront || 'us';
+            const _contPlatformSvc = platform === 'apple' ? new PlatformService() : null;
+
+            for (let ci = 0; ci < _contPool.length && selectedTracks.length < songCount; ci += BATCH_SIZE) {
+              const batch = _contPool.slice(ci, ci + BATCH_SIZE).filter(song => song.name?.trim());
+              const batchResults = await Promise.all(batch.map(song =>
+                findTrackOnPlatform(song, { storefront: _contStorefront, appleMusicApi: _contAppleApi, platformSvc: _contPlatformSvc })
+                  .then(result => ({ song, result }))
+                  .catch(() => ({ song, result: null }))
+              ));
+              for (const { song, result } of batchResults) {
+                if (selectedTracks.length >= songCount) break;
+                if (!result) continue;
+                const { track } = result;
+                if (seenTrackIds.has(track.id)) continue;
+                if (!allowExplicit && track.explicit) continue;
+                // Excluded artists
+                const _contExcludedNorms = (genreData.artistConstraints?.excludedArtists || []).map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                if (_contExcludedNorms.length > 0) {
+                  const _contTrackArtistNorms = (track.artists || []).map(a => (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+                  if (_contExcludedNorms.some(exNorm => _contTrackArtistNorms.some(an => an && exNorm && (an === exNorm || an.startsWith(exNorm) || exNorm.startsWith(an))))) continue;
+                }
+                // maxPerArtist
+                const _contMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+                if (_contMaxPerArtist != null) {
+                  const ak = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+                  if ((artistTrackCount.get(ak) || 0) >= _contMaxPerArtist) continue;
+                  artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
+                }
+                // TRACK_CONTEXT_OVERRIDES
+                const _contOvKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                const _contOverride = TRACK_CONTEXT_OVERRIDES[_contOvKey];
+                if (_contOverride) {
+                  const _contMoodOk = !genreData.mood || _contOverride.requiredMoods.includes(genreData.mood);
+                  const _contEnergyOk = !genreData.energyTarget || _contOverride.requiredEnergies.includes(genreData.energyTarget);
+                  const _contUcBlocked = _suppUseCase && (_contOverride.blockedUseCases || []).includes(_suppUseCase);
+                  if (_contUcBlocked || !_contMoodOk || !_contEnergyOk) continue;
+                }
+                const _contNormKey = `${_normTitle(track.name)}::${_normArtist(track.artists?.[0]?.name || track.artist || '')}`;
+                if (seenNormKeys.has(_contNormKey)) continue;
+                seenNormKeys.add(_contNormKey);
+                seenTrackIds.add(track.id);
+                const _contEnergyTag = song._scEnergy != null ? ` [energy: ${song._scEnergy.toFixed(2)}]` : ' [energy: n/a]';
+                console.log(`🔄 [POOL-CONT] "${track.name}" by ${track.artists?.[0]?.name || track.artist}${_contEnergyTag}`);
+                selectedTracks.push({
+                  id: track.id, name: track.name,
+                  artist: track.artists?.[0]?.name || track.artist || 'Unknown',
+                  uri: track.uri,
+                  album: track.album?.name || track.album,
+                  image: track.album?.images?.[0]?.url || null,
+                  previewUrl: track.preview_url,
+                  externalUrl: track.url || track.external_urls?.spotify ||
+                    (platform === 'apple' ? `https://music.apple.com/us/song/${track.id}` : null),
+                  explicit: track.explicit || false, genres: [],
+                  _scEnergy: song._scEnergy ?? null,
+                });
+              }
+            }
+            console.log(`🔄 After pool continuation: ${selectedTracks.length}/${songCount} tracks`);
+          }
 
           // Supplement with more songs if short of target.
           const _preSupplementCount = selectedTracks.length;
