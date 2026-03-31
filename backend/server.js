@@ -12563,7 +12563,7 @@ async function enrichTopArtistsCache() {
         const items = resp.data?.items || [];
         for (const item of items) {
           const name = item.song?.creditName;
-          if (name && !artistQueue.has(name.toLowerCase())) {
+          if (name && !artistQueue.has(name.toLowerCase()) && !/\s(&|ft\.?|feat\.?)\s/i.test(name)) {
             artistQueue.set(name.toLowerCase(), { name, genre: scGenre });
           }
         }
