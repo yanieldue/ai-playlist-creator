@@ -826,9 +826,9 @@
   background: rgba(0, 0, 0, 0.45);
   z-index: 1000;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding: 24px;
   animation: fadeIn 0.15s ease;
 }
 
@@ -836,10 +836,9 @@
   background: #f2f2f7;
   border-radius: 20px;
   width: 100%;
-  max-width: 420px;
+  max-width: 320px;
   overflow: hidden;
-  animation: slideUp 0.22s ease;
-  margin-bottom: env(safe-area-inset-bottom, 0px);
+  animation: popIn 0.2s ease;
 }
 
 .track-menu-header {
@@ -984,9 +983,9 @@
   background: #3a3a3c;
 }
 
-@keyframes slideUp {
-  from { transform: translateY(50px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+@keyframes popIn {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 @keyframes fadeIn {
