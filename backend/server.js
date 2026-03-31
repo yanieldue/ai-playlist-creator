@@ -6449,24 +6449,38 @@ SONG COUNT:
 - Size descriptors: "short playlist" = 10, "quick playlist" = 10, "big playlist" = 50, "massive playlist" = 75, "full playlist" = 30
 - If no count is implied at all → null
 
-USE CASE → GENRE/MOOD DEFAULTS (when no explicit genre is given):
-When the user describes a task, activity, or situation with no genre keywords, infer the music intent from context:
-- "clean my apartment", "clean the house", "doing chores", "make time pass" → mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], useCase: "party", suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
-- "pregame", "hype playlist", "banger", "bangers", "going out tonight", "turn up", "turn up tonight", "night out", "we're going out", "hard hitting", "hard-hitting", "slap", "slaps", "absolute banger" → mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], useCase: "party", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Travis Scott, Drake, Metro Boomin, 21 Savage, Calvin Harris (upbeat era), David Guetta, Dua Lipa (upbeat tracks), Cardi B, Megan Thee Stallion, Kendrick Lamar. DO NOT pick artists whose catalogs skew soft — no Ed Sheeran, no Sia, no Olly Alexander, no Sam Smith, no OneRepublic, no Swae Lee ballads, no Khalid. If the user's prompt implies a genre (e.g. hip-hop banger vs EDM banger), skew seeds to that genre's high-energy artists.
-- "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → mood: "positive", energyTarget: "high", useCase: "workout", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents. DO NOT pick Ed Sheeran, OneRepublic, Sia, Kylie Minogue, Olly Alexander, Imagine Dragons (ballads), or any artist whose catalog skews slow/emotional.
-- "study", "focus", "deep work", "coding", "concentration", "homework" → mood: "neutral", energyTarget: "low", useCase: "focus"
-- "drive", "road trip", "long drive", "commute" → mood: "positive", energyTarget: "medium", useCase: "chill"
-- "relax", "chill out", "wind down after work", "easy listening", "lazy Sunday" → mood: "positive", energyTarget: "low", useCase: "chill"
-- "sleep", "wind down before bed", "bedtime", "falling asleep" → mood: "neutral", energyTarget: "low", useCase: "sleep"
-- "cooking", "making dinner", "in the kitchen" → mood: "positive", energyTarget: "medium", useCase: "background"
-- "dinner party", "gathering", "friends over", "people coming over", "hosting" → mood: "positive", energyTarget: "medium", useCase: "background"
-- "morning routine", "getting ready", "start the day", "waking up" → mood: "positive", energyTarget: "medium", useCase: "morning"
-- "breakup", "heartbreak", "sad playlist", "crying", "missing someone", "feeling low" → mood: "melancholic", energyTarget: "low", useCase: "heartbreak"
-- If the intent is sensual, intimate, or romantic — e.g. setting a mood for a partner, seduction, "baby making", bedroom/late-night vibes, slow burn, or any phrasing that implies physical or romantic intimacy — → mood: "positive", energyTarget: "low", atmosphere: ["sensual", "intimate", "smooth"], useCase: "sensual", suggestedSeedArtists: ["The Weeknd", "Jeremih", "Summer Walker", "Trey Songz", "Partynextdoor", "SZA", "dvsn", "Jhené Aiko"]
-- "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
+USE CASE DETECTION (ALWAYS extract — even when a genre is specified):
+Set contextClues.useCase whenever the intent is clear, regardless of whether the user also named a genre.
+- If the intent is sensual, intimate, or romantic — e.g. setting a mood for a partner, seduction, "baby making", "love making", bedroom/late-night vibes, slow burn, or any phrasing that implies physical or romantic intimacy — → useCase: "sensual"  ← ALWAYS set this, even if the user also said "r&b" or another genre
+- "pregame", "banger", "going out", "turn up", "night out", "hard hitting", "slap", "slaps" → useCase: "party"
+- "work out", "gym", "run", "running", "exercise", "lifting", "cardio" → useCase: "workout"
+- "study", "focus", "deep work", "coding", "concentration", "homework" → useCase: "focus"
+- "drive", "road trip", "long drive", "commute" → useCase: "chill"
+- "relax", "chill out", "wind down after work", "easy listening", "lazy Sunday" → useCase: "chill"
+- "sleep", "wind down before bed", "bedtime", "falling asleep" → useCase: "sleep"
+- "cooking", "making dinner", "in the kitchen" → useCase: "background"
+- "dinner party", "gathering", "friends over", "hosting" → useCase: "background"
+- "morning routine", "getting ready", "start the day", "waking up" → useCase: "morning"
+- "breakup", "heartbreak", "sad playlist", "crying", "missing someone", "feeling low" → useCase: "heartbreak"
+- "summer playlist", "beach music", "poolside", "feels like summer", "summer vibes" → useCase: "summer"
+
+USE CASE → GENRE/MOOD DEFAULTS (only when no explicit genre is given):
+When the user describes a task or activity with NO genre keywords, also infer mood/energy/atmosphere from the use case:
+- useCase "party" (clean my apartment, chores): mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
+- useCase "party" (pregame/banger/going out): mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Travis Scott, Drake, Metro Boomin, 21 Savage, Calvin Harris (upbeat era), David Guetta, Cardi B, Megan Thee Stallion, Kendrick Lamar. DO NOT pick artists whose catalogs skew soft — no Ed Sheeran, no Sia, no Olly Alexander, no Sam Smith, no OneRepublic, no Swae Lee ballads, no Khalid.
+- useCase "workout": mood: "positive", energyTarget: "high", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents.
+- useCase "focus": mood: "neutral", energyTarget: "low"
+- useCase "chill" (drive/road trip): mood: "positive", energyTarget: "medium"
+- useCase "chill" (relax/wind down): mood: "positive", energyTarget: "low"
+- useCase "sleep": mood: "neutral", energyTarget: "low"
+- useCase "background": mood: "positive", energyTarget: "medium"
+- useCase "morning": mood: "positive", energyTarget: "medium"
+- useCase "heartbreak": mood: "melancholic", energyTarget: "low"
+- useCase "sensual": mood: "positive", energyTarget: "low", atmosphere: ["sensual", "intimate", "smooth"], suggestedSeedArtists: ["The Weeknd", "Jeremih", "Summer Walker", "Trey Songz", "Partynextdoor", "SZA", "dvsn", "Jhené Aiko"]
+- useCase "summer": mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
   NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
-These are defaults only — if the user specifies a genre or mood explicitly, that takes precedence.
+These mood/energy/atmosphere/suggestedSeedArtists defaults only apply when the user did NOT specify a genre. If the user said "r&b" or another genre, use that genre and skip these defaults — but ALWAYS keep the useCase value that was set above.
 
 LANGUAGE (culturalContext.language):
 - "I want Spanish songs", "Spanish music", "songs in Spanish" → prefer: ["Spanish"], exclude: []
