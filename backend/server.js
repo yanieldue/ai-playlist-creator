@@ -2405,6 +2405,19 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         }
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
         return [];
+      } else if (err.response?.status === 500) {
+        // 500s are often caused by the songSubGenres filter combining with audio filters.
+        // Strip songSubGenres and retry — keep energy/valence/tempo intact so vibe filtering survives.
+        const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
+        if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
+          console.log(`⚠️  SC 500 — stripping songSubGenres and retrying (keeping energy/valence/tempo)`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
+            fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+          );
+        }
+        console.log(`⚠️  SoundCharts error: 500 ${err.message}`);
+        return [];
       } else {
         console.log(`⚠️  SoundCharts error: ${err.response?.status} ${err.message}`);
         return [];
