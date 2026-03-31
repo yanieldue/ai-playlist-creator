@@ -52,7 +52,7 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const [refreshError, setRefreshError] = useState(null);
 
   // Track action menu (... button)
-  const [openMenuTrack, setOpenMenuTrack] = useState(null); // { playlistId, track, platform, lockedTracks }
+  const [openMenuTrack, setOpenMenuTrack] = useState(null); // { playlistId, track, platform, lockedTracks, x, y }
 
   // Manual refresh settings (isolated - don't affect main settings)
   const [expandManualRefresh, setExpandManualRefresh] = useState(false);
@@ -992,7 +992,10 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           <div className="track-actions">
                             <button
                               className="track-menu-button"
-                              onClick={() => setOpenMenuTrack({ playlistId: playlist.playlistId, track, platform: playlist.platform, lockedTracks: playlist.lockedTracks || [] })}
+                              onClick={(e) => {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setOpenMenuTrack({ playlistId: playlist.playlistId, track, platform: playlist.platform, lockedTracks: playlist.lockedTracks || [], anchorRect: rect });
+                              }}
                               title="More options"
                             >
                               <Icons.MoreHorizontal size={18} />
@@ -1011,9 +1014,22 @@ IMPORTANT: Pay close attention to the original request and description to unders
         </div>
       )}
 
-      {openMenuTrack && (
+      {openMenuTrack && (() => {
+        const rect = openMenuTrack.anchorRect;
+        const menuWidth = 280;
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // Prefer placing to the left of the button; flip right if not enough space
+        let left = rect.left - menuWidth + rect.width;
+        if (left < 8) left = rect.right;
+        if (left + menuWidth > vw - 8) left = vw - menuWidth - 8;
+        // Prefer below; flip above if not enough space
+        let top = rect.bottom + 6;
+        const estimatedHeight = 220;
+        if (top + estimatedHeight > vh - 8) top = rect.top - estimatedHeight - 6;
+        return (
         <div className="track-menu-overlay" onClick={() => setOpenMenuTrack(null)}>
-          <div className="track-menu-sheet" onClick={(e) => e.stopPropagation()}>
+          <div className="track-menu-sheet" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', top, left, width: menuWidth }}>
             {/* Song title + artist */}
             <div className="track-menu-header">
               <div className="track-menu-title">{openMenuTrack.track.name}</div>
@@ -1064,7 +1080,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {showImportModal && (
         <div className="modal-overlay" onClick={closeImportModal}>
