@@ -7711,7 +7711,7 @@ Respond ONLY with valid JSON:
       recommendedTracks = recommendedTracks.filter(t => {
         const spGenres = scGenreMap.get((t.artist || '').toLowerCase()) || null;
         const ok = isArtistInGenreFamily(spGenres, genreData.primaryGenre);
-        if (!ok) console.log(`🚫 SC artist genre mismatch: "${t.artist}" (${(spGenres || []).join(', ')}) → not ${genreData.primaryGenre}`);
+        // Per-song mismatch logs removed — summary line below captures count
         return ok;
       });
       if (recommendedTracks.length < beforeFilter) {
@@ -8805,6 +8805,10 @@ Example response: [1, 2, 4, 5, 7, ...]`
               const seenSupplementArtists = new Set();
 
               // Phase A: pre-fetch SC platform IDs for songs missing ISRC
+              // Cap pool size before ISRC prefetch — same over-fetching risk as gap fill.
+              if (supplementPool.length > Math.max(needed * 20, 80)) {
+                supplementPool = supplementPool.slice(0, Math.max(needed * 20, 80));
+              }
               await prefetchPlatformIds(supplementPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
               // Set up Apple Music instances once (reused across all batches)
@@ -8976,8 +8980,11 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               };
               const gapQuery = buildSoundchartsQuery(gapGenreData, false, allowExplicit);
               const gfMinArtists = maxPerArtist ? Math.min(Math.ceil(gapNeeded / maxPerArtist * 1.5), 40) : 0;
-              const gapPool = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
-              console.log(`🔄 Gap fill pool: ${gapPool.length} top_songs candidates`);
+              // Cap pool before ISRC prefetch — SC top_songs returns up to 500 songs regardless
+              // of requested count, so without capping we'd fetch ISRCs for 500 songs to fill 1-3 gaps.
+              const gapPoolRaw = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
+              const gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 20, 60));
+              console.log(`🔄 Gap fill pool: ${gapPool.length}/${gapPoolRaw.length} top_songs candidates (capped for ISRC prefetch)`);
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
               const gfStorefront = tokens.storefront || 'us';
@@ -9182,7 +9189,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           topSongs = topSongs.filter(s => {
             const spotifyGenres = genreMap.get((s.artistName || '').toLowerCase()) || null;
             const ok = isArtistInGenreFamily(spotifyGenres, genreData.primaryGenre);
-            if (!ok) console.log(`🚫 Genre mismatch: "${s.artistName}" (${(spotifyGenres || []).join(', ')}) → not ${genreData.primaryGenre}`);
+            // Per-song mismatch logs removed — summary line below captures count
             return ok;
           });
           if (topSongs.length < before) {
