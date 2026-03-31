@@ -2469,8 +2469,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
         return [];
       } else if (err.response?.status === 500) {
-        // 500s are often caused by the songSubGenres filter combining with audio filters.
-        // Strip songSubGenres and retry — keep energy/valence/tempo intact so vibe filtering survives.
+        // 500s are often caused by the songSubGenres or moods filters combining with audio filters.
+        // Step 1: strip songSubGenres and retry.
+        // Step 2: if still 500, strip moods + themes too (keep energy/valence/tempo).
         const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
         if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
           console.log(`⚠️  SC 500 — stripping songSubGenres and retrying (keeping energy/valence/tempo)`);
@@ -2478,6 +2479,17 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
             fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
           );
+        }
+        // Still 500 after stripping subgenres — strip moods + themes too.
+        if (!query._moodsStripped) {
+          const filtersWithoutMoodsThemes = soundchartsFilters.filter(f => !['moods', 'themes', 'songSubGenres'].includes(f.type));
+          if (filtersWithoutMoodsThemes.length < soundchartsFilters.length) {
+            console.log(`⚠️  SC 500 (second) — stripping moods + themes and retrying (keeping genre/energy/valence/tempo)`);
+            return executeSoundChartsStrategy(
+              { ...query, soundchartsFilters: filtersWithoutMoodsThemes, _subgenreStripped: true, _moodsStripped: true },
+              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+            );
+          }
         }
         console.log(`⚠️  SoundCharts error: 500 ${err.message}`);
         return [];
@@ -6421,7 +6433,7 @@ When the user describes a task, activity, or situation with no genre keywords, i
 - "dinner party", "gathering", "friends over", "people coming over", "hosting" → mood: "positive", energyTarget: "medium", useCase: "background"
 - "morning routine", "getting ready", "start the day", "waking up" → mood: "positive", energyTarget: "medium", useCase: "morning"
 - "breakup", "heartbreak", "sad playlist", "crying", "missing someone", "feeling low" → mood: "melancholic", energyTarget: "low", useCase: "heartbreak"
-- "sensual", "sexy", "sex playlist", "baby making music", "make love", "intimate", "bedroom vibes", "mood music", "seductive", "slow burn", "late night vibes", "late-night vibes" → mood: "positive", energyTarget: "low", atmosphere: ["sensual", "intimate", "smooth"], useCase: "sensual", suggestedSeedArtists: ["The Weeknd", "Jeremih", "Summer Walker", "Trey Songz", "Partynextdoor", "SZA", "dvsn", "Jhené Aiko"]
+- "sensual", "sexy", "sex playlist", "baby making", "baby making music", "love making", "lovemaking", "make love", "intimate", "bedroom vibes", "mood music", "seductive", "slow burn", "late night vibes", "late-night vibes", "night cap", "come over playlist" → mood: "positive", energyTarget: "low", atmosphere: ["sensual", "intimate", "smooth"], useCase: "sensual", suggestedSeedArtists: ["The Weeknd", "Jeremih", "Summer Walker", "Trey Songz", "Partynextdoor", "SZA", "dvsn", "Jhené Aiko"]
 - "summer playlist", "beach music", "poolside", "feels like summer", "need summer music", "summer vibes", "make it feel like summer", "summer songs" → mood: "positive", energyTarget: "medium", atmosphere: ["carefree", "warm", "upbeat", "beachy"], useCase: "summer", suggestedSeedArtists: ["Harry Styles", "Doja Cat", "Summer Salt", "Lizzo", "Kali Uchis", "Bad Bunny", "Outkast"]
   NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
