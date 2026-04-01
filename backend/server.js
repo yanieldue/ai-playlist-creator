@@ -2471,13 +2471,11 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
         return [];
       } else if (err.response?.status === 500) {
-        // 500s are often caused by the songSubGenres or moods filters combining with audio filters.
-        // Step 1: strip songSubGenres and retry.
-        // SC 500 degradation ladder — each step strips more filters:
-        // 1. Strip songSubGenres (most common culprit)
-        // 2. Strip moods + themes (SC 500s on moods + audio combos)
-        // 3. Strip valence (SC 500s on genre + energy + valence + tempo)
-        // 4. Give up
+        // SC 500 degradation ladder:
+        // 1. Strip songSubGenres (most common culprit) and retry top_songs with moods/themes intact.
+        // 2. Pivot to LLM-anchor artist_songs — ask Haiku for 2-3 confident songs and seed from
+        //    those artists. Keeps genre/vibe tight without ever stripping mood/theme filters, which
+        //    risks returning tonally wrong songs (e.g. "What A Wonderful World" in a sensual R&B playlist).
         const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
         if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
           console.log(`⚠️  SC 500 — stripping songSubGenres and retrying`);
@@ -2486,25 +2484,41 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
           );
         }
-        if (!query._moodsStripped) {
-          const filtersWithoutMoodsThemes = soundchartsFilters.filter(f => !['moods', 'themes', 'songSubGenres'].includes(f.type));
-          if (filtersWithoutMoodsThemes.length < soundchartsFilters.length) {
-            console.log(`⚠️  SC 500 (second) — stripping moods + themes and retrying`);
-            return executeSoundChartsStrategy(
-              { ...query, soundchartsFilters: filtersWithoutMoodsThemes, _subgenreStripped: true, _moodsStripped: true },
-              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
-            );
+        if (!query._anchorUsed) {
+          // Second 500: pivot to LLM-anchor artist_songs rather than stripping mood/theme filters.
+          const _anchorPromptText = query._prompt;
+          if (_anchorPromptText) {
+            try {
+              console.log(`⚠️  SC 500 (second) — pivoting to LLM-anchor artist_songs strategy`);
+              const _anchorResp = await anthropic.messages.create({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 300,
+                messages: [{
+                  role: 'user',
+                  content: `Name 2-3 real songs you are 100% confident belong in a playlist for: "${_anchorPromptText}"\nGenre: ${query.primaryGenre || 'any'}\nUse case: ${query.useCase || 'any'}\n\nReturn ONLY a JSON array: [{"artist": "Artist Name", "title": "Song Title"}, ...]\nNo explanation.`,
+                }]
+              });
+              const _anchorRaw = _anchorResp.content[0].text.trim()
+                .replace(/^```json\n?/, '').replace(/\n?```$/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
+              const _anchorMatch = _anchorRaw.match(/\[[\s\S]*?\]/);
+              if (_anchorMatch) {
+                const _anchors = JSON.parse(_anchorMatch[0]);
+                const _anchorArtists = _anchors.map(a => a.artist).filter(Boolean);
+                if (_anchorArtists.length > 0) {
+                  console.log(`🎯 SC anchor artists: [${_anchorArtists.join(', ')}]`);
+                  return executeSoundChartsStrategy(
+                    { ...query, strategy: 'artist_songs', artists: _anchorArtists, expandToSimilar: true, _anchorUsed: true },
+                    fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+                  );
+                }
+              }
+            } catch (anchorErr) {
+              console.log(`⚠️  SC 500 anchor LLM call failed: ${anchorErr.message}`);
+            }
           }
-        }
-        if (!query._valenceStripped) {
-          const filtersWithoutValence = soundchartsFilters.filter(f => !['valence', 'moods', 'themes', 'songSubGenres'].includes(f.type));
-          if (filtersWithoutValence.length < soundchartsFilters.length) {
-            console.log(`⚠️  SC 500 (third) — stripping valence and retrying with genre + energy + tempo only`);
-            return executeSoundChartsStrategy(
-              { ...query, soundchartsFilters: filtersWithoutValence, _subgenreStripped: true, _moodsStripped: true, _valenceStripped: true },
-              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
-            );
-          }
+          // No prompt or anchor LLM failed — give up rather than returning a mood-stripped pool
+          console.log(`⚠️  SC 500 anchor unavailable — returning empty to avoid unfiltered results`);
+          return [];
         }
         console.log(`⚠️  SoundCharts error: 500 ${err.message}`);
         return [];
@@ -7630,7 +7644,7 @@ Respond ONLY with valid JSON:
         console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
         console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
         try {
-          soundChartsDiscoveredSongs = await executeSoundChartsStrategy(scQuery, fetchCount, confirmedArtistUuids, minArtistsNeeded, pendingEnrichment);
+          soundChartsDiscoveredSongs = await executeSoundChartsStrategy({ ...scQuery, _prompt: prompt }, fetchCount, confirmedArtistUuids, minArtistsNeeded, pendingEnrichment);
           console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
         } catch (scErr) {
           console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
@@ -8906,7 +8920,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
               // Request a larger pool so we have more candidates to match against
               const suppMinArtists = maxPerArtist ? Math.min(Math.ceil(needed / maxPerArtist * 1.5), 40) : 0;
-              let supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
+              let supplementPool = await executeSoundChartsStrategy({ ...supplementQuery, _prompt: prompt }, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
               const seenSupplementArtists = new Set();
@@ -9100,7 +9114,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               const gfMinArtists = maxPerArtist ? Math.min(Math.ceil(gapNeeded / maxPerArtist * 1.5), 40) : 0;
               // Cap pool before ISRC prefetch — SC top_songs returns up to 500 songs regardless
               // of requested count, so without capping we'd fetch ISRCs for 500 songs to fill 1-3 gaps.
-              const gapPoolRaw = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
+              const gapPoolRaw = await executeSoundChartsStrategy({ ...gapQuery, _prompt: prompt }, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
               let gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 10, 40));
               console.log(`🔄 Gap fill pool: ${gapPool.length}/${gapPoolRaw.length} top_songs candidates (capped for ISRC prefetch)`);
 
