@@ -12798,16 +12798,21 @@ async function enrichTopArtistsCache() {
 
   console.log('🔥 [ENRICHMENT] Starting daily top-artists cache warm...');
   const sort = { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' };
-  // All SC genre slugs — core genres + subgenres for broader artist discovery
+  // Valid SC top-level genre slugs (used with songGenres filter)
   const SC_ENRICHMENT_GENRES = [
-    // Core
-    'pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african', 'jazz', 'classical', 'metal', 'reggae', 'blues',
-    // Subgenres / regional
-    'trap', 'soul', 'funk', 'indie pop', 'indie rock', 'folk', 'dance', 'house', 'techno', 'afrobeats', 'reggaeton', 'k-pop', 'gospel', 'punk', 'rnb', 'drill', 'lo-fi',
+    'pop', 'hip hop', 'r&b', 'rock', 'alternative', 'electro', 'country', 'latin', 'african', 'jazz', 'classical', 'metal', 'reggae', 'blues', 'folk',
+  ];
+  // Valid SC subgenre slugs (used with songSubGenres filter — these return 0 artists if sent as songGenres)
+  const SC_ENRICHMENT_SUBGENRES = [
+    'soul', 'indie pop', 'indie rock', 'dance', 'techno/house', 'afrobeats', 'reggaeton', 'k-pop', 'gospel',
+    'dancehall/ragga', 'contemporary r&b', 'electronic', 'dubstep', 'grime', 'hard rock', 'disco',
+    'hip-hop & rap', 'r&b, funk & soul', 'indie pop/folk', 'indie rock/pop rock', 'singer/songwriter',
   ];
 
-  // Step 1: collect unique artist names from top 1000 songs per genre (2 pages × 500)
+  // Step 1: collect unique artist names from top 1000 songs per genre/subgenre (2 pages × 500)
   const artistQueue = new Map(); // lowerName -> { name, genre }
+
+  // Pass 1a: top-level genres via songGenres filter
   for (const scGenre of SC_ENRICHMENT_GENRES) {
     try {
       for (let page = 0; page < 2; page++) {
@@ -12824,11 +12829,36 @@ async function enrichTopArtistsCache() {
             artistQueue.set(name.toLowerCase(), { name, genre: scGenre });
           }
         }
-        if (items.length < 500) break; // no more pages
+        if (items.length < 500) break;
       }
-      console.log(`🔥 [ENRICHMENT] ${scGenre}: ${artistQueue.size} unique artists so far`);
+      console.log(`🔥 [ENRICHMENT] genre "${scGenre}": ${artistQueue.size} unique artists so far`);
     } catch (err) {
-      console.log(`⚠️  [ENRICHMENT] top/songs fetch failed for "${scGenre}": ${err.message}`);
+      console.log(`⚠️  [ENRICHMENT] top/songs fetch failed for genre "${scGenre}": ${err.message}`);
+    }
+  }
+
+  // Pass 1b: subgenres via songSubGenres filter (discovers artists like BlackPink, Doja Cat, etc.)
+  for (const scSubgenre of SC_ENRICHMENT_SUBGENRES) {
+    try {
+      for (let page = 0; page < 2; page++) {
+        await throttleSoundCharts();
+        const resp = await axios.post(
+          'https://customer.api.soundcharts.com/api/v2/top/songs',
+          { sort, filters: [{ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } }] },
+          { headers: { 'x-app-id': appId, 'x-api-key': apiKey, 'Content-Type': 'application/json' }, params: { offset: page * 500, limit: 500 }, timeout: 15000 }
+        );
+        const items = resp.data?.items || [];
+        for (const item of items) {
+          const name = item.song?.creditName;
+          if (name && !artistQueue.has(name.toLowerCase()) && !/\s(&|ft\.?|feat\.?)\s/i.test(name)) {
+            artistQueue.set(name.toLowerCase(), { name, genre: scSubgenre });
+          }
+        }
+        if (items.length < 500) break;
+      }
+      console.log(`🔥 [ENRICHMENT] subgenre "${scSubgenre}": ${artistQueue.size} unique artists so far`);
+    } catch (err) {
+      console.log(`⚠️  [ENRICHMENT] top/songs fetch failed for subgenre "${scSubgenre}": ${err.message}`);
     }
   }
 
