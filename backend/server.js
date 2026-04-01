@@ -1097,22 +1097,38 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
 
 // Filter catalog songs by energy/valence from SC query filters.
 // Songs with matching audio features are preferred; songs without features are used as fallback.
-function filterCatalogByVibe(songs, soundchartsFilters, targetCount) {
+function filterCatalogByVibe(songs, soundchartsFilters, targetCount, useCase) {
   const energyFilter = soundchartsFilters?.find(f => f.type === 'energy')?.data;
   const valenceFilter = soundchartsFilters?.find(f => f.type === 'valence')?.data;
   const moodsFilter = soundchartsFilters?.find(f => f.type === 'moods')?.data;
   const requiredMoods = moodsFilter?.values || [];
 
   // SC mood groups for conflict detection: if playlist requires sad moods, Joyful/Euphoric/etc. conflict
-  const UPBEAT_MOODS = new Set(['Joyful', 'Euphoric', 'Happy', 'Playful', 'Energetic', 'Empowering']);
-  const SAD_MOODS = new Set(['Sad', 'Melancholic', 'Dark']);
-  const hasUpbeatRequired = requiredMoods.some(m => UPBEAT_MOODS.has(m));
-  const hasSadRequired = requiredMoods.some(m => SAD_MOODS.has(m));
+  const UPBEAT_MOODS = new Set(['joyful', 'euphoric', 'happy', 'playful', 'energetic', 'empowering']);
+  const SAD_MOODS = new Set(['sad', 'melancholic', 'dark']);
+  const hasUpbeatRequired = requiredMoods.some(m => UPBEAT_MOODS.has(m.toLowerCase()));
+  const hasSadRequired = requiredMoods.some(m => SAD_MOODS.has(m.toLowerCase()));
+
+  // Use-case-specific moods that are incompatible with the playlist context.
+  // If a song has ANY of these moods, it conflicts regardless of energy/valence.
+  const USE_CASE_INCOMPATIBLE_MOODS = {
+    sensual:    new Set(['joyful', 'energetic', 'playful', 'euphoric', 'empowering', 'boastful', 'confrontational', 'aggressive', 'excited', 'bouncy']),
+    heartbreak: new Set(['joyful', 'euphoric', 'energetic', 'empowering', 'boastful', 'excited']),
+    focus:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'boastful']),
+    sleep:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'bouncy', 'empowering']),
+    workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
+    party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
+  };
+  const incompatibleMoods = USE_CASE_INCOMPATIBLE_MOODS[useCase] || new Set();
 
   function isMoodConflict(songMoods) {
     if (!songMoods || songMoods.length === 0) return false;
-    if (hasSadRequired && songMoods.some(m => UPBEAT_MOODS.has(m))) return true;
-    if (hasUpbeatRequired && songMoods.some(m => SAD_MOODS.has(m))) return true;
+    const lower = songMoods.map(m => m.toLowerCase());
+    // Use-case-specific incompatible mood check (e.g. joyful in a sensual playlist)
+    if (incompatibleMoods.size > 0 && lower.some(m => incompatibleMoods.has(m))) return true;
+    // Generic upbeat-vs-sad conflict
+    if (hasSadRequired && lower.some(m => UPBEAT_MOODS.has(m))) return true;
+    if (hasUpbeatRequired && lower.some(m => SAD_MOODS.has(m))) return true;
     return false;
   }
 
@@ -1167,7 +1183,7 @@ function filterCatalogByVibe(songs, soundchartsFilters, targetCount) {
     else unmatched.push(song);
   }
 
-  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features / ${conflicting.length} mood-conflict (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)})`);
+  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features / ${conflicting.length} mood-conflict (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)}, useCase: ${useCase || 'none'})`);
 
   for (const arr of [matched, unmatched, conflicting]) {
     shuffle(arr);
@@ -1896,6 +1912,16 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['sensual'],
     reason: 'jazz-fusion / cerebral polyrhythmic track — musically complex, requires active listening, kills intimacy in a sensual playlist',
   },
+  // Added 2026-04-01. Mid-tempo R&B (2016). Popularity: ~77.
+  // False positive: sensual R&B playlist. SC tags it with desire/romantic themes.
+  // The song is about longing for someone who is far away ("send me your location") —
+  // a distance/longing track, not a bedroom/intimate song. Wrong context entirely.
+  'khalid::location': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['sensual'],
+    reason: 'longing/distance song about missing someone far away — not intimate/bedroom context despite SC tagging it with desire themes',
+  },
   // Added 2026-03-27. Mid-tempo tropicalia-pop (2017). Popularity: 84.
   // False positives: Prompt 86 summer — 8 of 9 runs. Enters via gap-fill top_songs. Most persistent
   // summer false positive in entire test suite. Ed Sheeran depth-2 via Bruno Mars.
@@ -2255,6 +2281,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     soundchartsFilters: filters,
     soundchartsSort: { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
     primaryGenre: genreData.primaryGenre || null,
+    useCase: genreData.contextClues?.useCase?.toLowerCase() || null,
   };
 }
 
@@ -2982,7 +3009,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           const mainSongs = cachedCatalog.songs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
           const pool = mainSongs.length > 0 ? mainSongs : cachedCatalog.songs;
           const enriched = await enrichCatalogWithAudioFeatures(pool, 40);
-          const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist);
+          const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist, query.useCase);
           for (const song of vibeFiltered) {
             songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: song.audio?.energy ?? null });
           }
@@ -7798,6 +7825,10 @@ Respond ONLY with valid JSON:
         releaseDate: scSong.releaseDate || null,
         source: 'soundcharts',
         _scEnergy: scSong._scEnergy ?? null,
+        _scDanceability: scSong.audio?.danceability ?? null,
+        _scValence: scSong.audio?.valence ?? null,
+        _scMoods: scSong.moods || [],
+        _scThemes: scSong.themes || [],
         _phaseLabel: scSong._phaseLabel || null,
         _phaseIndex: scSong._phaseIndex ?? null,
       }));
@@ -8183,6 +8214,71 @@ Return ONLY valid JSON:
           return true;
         });
 
+        // Step 1.5: Data-driven mood/audio pre-filter — removes clear conflicts before the LLM sees the pool.
+        // Uses SC mood tags and audio features already returned inline with each song.
+        // Only hard-removes songs where the data is conclusive (has moods AND they conflict).
+        // Songs with no mood data are left through — the LLM handles uncertainty.
+        {
+          const _INCOMPATIBLE_MOODS = {
+            sensual:    new Set(['joyful', 'energetic', 'playful', 'euphoric', 'empowering', 'boastful', 'confrontational', 'aggressive', 'excited', 'bouncy']),
+            heartbreak: new Set(['joyful', 'euphoric', 'energetic', 'empowering', 'boastful', 'excited']),
+            focus:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'boastful']),
+            sleep:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'bouncy', 'empowering']),
+            workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
+            party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
+          };
+          const _ENERGY_HARD_LIMITS = {
+            sensual:    { max: 0.70 },
+            sleep:      { max: 0.40 },
+            focus:      { max: 0.72 },
+            workout:    { min: 0.50 },
+            party:      { min: 0.50 },
+          };
+          const _DANCEABILITY_HARD_LIMITS = {
+            sensual:    { max: 0.75 },
+            sleep:      { max: 0.55 },
+          };
+          const incompatibleMoods = _INCOMPATIBLE_MOODS[_scUseCase] || new Set();
+          const energyLimit = _ENERGY_HARD_LIMITS[_scUseCase];
+          const danceLimit = _DANCEABILITY_HARD_LIMITS[_scUseCase];
+          const beforeCount = _scPoolFiltered.length;
+          _scPoolFiltered = _scPoolFiltered.filter(song => {
+            const moods = (song._scMoods || []).map(m => m.toLowerCase());
+            const energy = song._scEnergy;
+            const dance = song._scDanceability;
+            // Mood conflict
+            if (moods.length > 0 && incompatibleMoods.size > 0) {
+              const conflict = moods.find(m => incompatibleMoods.has(m));
+              if (conflict) {
+                console.log(`🎭 [DATA-FILTER] "${song.track}" by ${song.artist} — mood "${conflict}" conflicts with ${_scUseCase}`);
+                return false;
+              }
+            }
+            // Energy hard limit
+            if (energy != null && energyLimit) {
+              if (energyLimit.max != null && energy > energyLimit.max) {
+                console.log(`⚡ [DATA-FILTER] "${song.track}" by ${song.artist} — energy ${energy.toFixed(2)} > ${energyLimit.max} for ${_scUseCase}`);
+                return false;
+              }
+              if (energyLimit.min != null && energy < energyLimit.min) {
+                console.log(`⚡ [DATA-FILTER] "${song.track}" by ${song.artist} — energy ${energy.toFixed(2)} < ${energyLimit.min} for ${_scUseCase}`);
+                return false;
+              }
+            }
+            // Danceability hard limit
+            if (dance != null && danceLimit) {
+              if (danceLimit.max != null && dance > danceLimit.max) {
+                console.log(`💃 [DATA-FILTER] "${song.track}" by ${song.artist} — danceability ${dance.toFixed(2)} > ${danceLimit.max} for ${_scUseCase}`);
+                return false;
+              }
+            }
+            return true;
+          });
+          if (_scPoolFiltered.length < beforeCount) {
+            console.log(`🎯 [DATA-FILTER] removed ${beforeCount - _scPoolFiltered.length} conflicting tracks (${_scPoolFiltered.length} remain)`);
+          }
+        }
+
         // Step 2: LLM vibe check on SC pool
         try {
           const _scConstraintLines = [];
@@ -8198,7 +8294,7 @@ Return ONLY valid JSON:
               focus:      'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
               sleep:      'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
               heartbreak: 'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
-              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here (e.g. a song about hitting on a girl at the mall is wrong, even if the artist also makes slow jams). Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
+              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here. REMOVE any track about longing for someone who is far away or absent — distance/longing songs (e.g. "Location" by Khalid, which is about missing someone from afar) do NOT fit an intimate moment. Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
             };
             if (_fastHardRules[_scUseCase]) _scConstraintLines.push(_fastHardRules[_scUseCase]);
           }
@@ -8225,7 +8321,7 @@ Return ONLY valid JSON:
               workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
               party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
               summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
-              sensual:    'Energy scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 are likely too high-energy and should be flagged unless they have a clearly slow, seductive groove.',
+              sensual:    'Energy and danceability scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 OR danceability > 0.75 are likely wrong — high danceability means upbeat/club, not bedroom. Flag these unless the song is clearly a slow, seductive groove.',
             };
             _scConstraintLines.push(_scEnergyGuidance[_scUseCase] || 'Energy scores (0–1) shown in [brackets] are from audio analysis — use them as an additional signal when a track feels like a vibe mismatch.');
           }
@@ -8233,7 +8329,9 @@ Return ONLY valid JSON:
           const _scTrackLines = _scPoolFiltered.map((song, i) => {
             const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
             const energyStr = song._scEnergy != null ? ` [energy: ${song._scEnergy.toFixed(2)}]` : '';
-            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}`;
+            const danceStr = song._scDanceability != null ? ` [dance: ${song._scDanceability.toFixed(2)}]` : '';
+            const moodStr = song._scMoods?.length > 0 ? ` [moods: ${song._scMoods.join(', ')}]` : '';
+            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}${danceStr}${moodStr}`;
           });
 
           console.log(`🎭 SC pool vibe check: reviewing ${_scPoolFiltered.length} tracks before platform lookup...`);
@@ -8972,7 +9070,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               focus:      'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
               sleep:      'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
               heartbreak: 'This is a heartbreak/sad/late-night emotional playlist. REMOVE any track that is clearly upbeat, celebratory, high-energy, or would not fit a late-night feelings session. KEEP sad, melancholic, emotional, or introspective tracks even if the title sounds positive.',
-              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward — jazz-fusion, avant-garde neo-soul, and polyrhythmic tracks require active listening and kill intimacy. REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their attention, or impressing them in public do not belong here, even if the artist also makes slow jams. Only tracks that work when two people are already alone together: slow R&B, bedroom pop, late-night hip-hop. If a track would not work during a quiet intimate moment, REMOVE it.',
+              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward — jazz-fusion, avant-garde neo-soul, and polyrhythmic tracks require active listening and kill intimacy. REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their attention, or impressing them in public do not belong here, even if the artist also makes slow jams. REMOVE any track about longing for someone who is distant or absent — distance/longing songs do not fit an intimate moment where two people are together. Only tracks that work when two people are already alone together: slow R&B, bedroom pop, late-night hip-hop. If a track would not work during a quiet intimate moment, REMOVE it.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           {
@@ -12463,11 +12561,14 @@ app.get('/api/admin/test-song/:uuid', async (req, res) => {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   try {
-    const [v2Resp, v225Resp, lyricsResp, dbRow] = await Promise.allSettled([
+    const [v2Resp, v225Resp, v28Resp, lyricsResp, dbRow] = await Promise.allSettled([
       axios.get(`https://customer.api.soundcharts.com/api/v2/song/${uuid}`, {
         headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
       }),
       axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${uuid}`, {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
+      }),
+      axios.get(`https://customer.api.soundcharts.com/api/v2.8/song/${uuid}`, {
         headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
       }),
       axios.get(`https://customer.api.soundcharts.com/api/v2/song/${uuid}/lyrics-analysis`, {
@@ -12478,6 +12579,7 @@ app.get('/api/admin/test-song/:uuid', async (req, res) => {
     res.json({
       'v2/song': v2Resp.status === 'fulfilled' ? v2Resp.value.data?.object : { error: v2Resp.reason?.message },
       'v2.25/song': v225Resp.status === 'fulfilled' ? v225Resp.value.data?.object : { error: v225Resp.reason?.message },
+      'v2.8/song': v28Resp.status === 'fulfilled' ? v28Resp.value.data?.object : { error: v28Resp.reason?.message },
       'lyrics-analysis': lyricsResp.status === 'fulfilled' ? lyricsResp.value.data : { error: lyricsResp.reason?.message },
       db: dbRow.status === 'fulfilled' ? dbRow.value : null,
     });
