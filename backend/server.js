@@ -7967,10 +7967,18 @@ Return ONLY valid JSON:
         // 3. Text search — three attempts with progressively looser queries
         const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const reqNorm = norm(artistName);
-        const checkArtistMatch = (t) => (t.artists || []).some(a => {
-          const fn = norm(a.name);
-          return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || fn.startsWith(reqNorm) || reqNorm.startsWith(fn);
-        });
+        // UUID-based ID check: if we know this SC artist's Spotify ID, match on that instead
+        // of name strings. Prevents false positives like "mustard" matching "Mustard Seed Faith".
+        const _ftpKnownId = (opts.uuidSpotifyIdMap || _uuidToSpotifyId)?.get(song.artistUuid) || null;
+        const checkArtistMatch = (t) => {
+          if (_ftpKnownId) return t.artists?.[0]?.id === _ftpKnownId;
+          // Name fallback: check all artists but use strict equality + reqNorm.startsWith(fn) only
+          // (removed fn.startsWith(reqNorm) — that direction causes "mustard" → "Mustard Seed Faith")
+          return (t.artists || []).some(a => {
+            const fn = norm(a.name);
+            return reqNorm.length < 6 ? fn === reqNorm : fn === reqNorm || reqNorm.startsWith(fn);
+          });
+        };
 
         // Strip feat. credit and mix/version suffixes for cleaner queries
         const stripTitle = (t) => t
@@ -8310,6 +8318,13 @@ Example response: [1, 2, 4, 5, 7, ...]`
         }
       }
 
+      // ── UUID → Spotify ID map: used to verify artist identity in text search ──
+      // Batch-fetch from artist_details once per generation so all three search paths
+      // (Phase B, supplement, gap fill) can do ID-based artist matching instead of
+      // the loose name-prefix check that caused false positives (e.g. "Mustard" → "Mustard Seed Faith").
+      const _allPoolUuids = [...new Set(vibePassedTracks.map(t => t.artistUuid).filter(Boolean))];
+      const _uuidToSpotifyId = await db.getArtistSpotifyIdsByUuids(_allPoolUuids).catch(() => new Map());
+
       // ── Phase A: pre-fetch SoundCharts platform IDs for vibe-passed songs ──
       // Cap at songCount×3 (min 60) — SC top_songs returns no ISRCs, so every song needs a serial
       // 300ms throttled call. Songs beyond the cap fall back to text search in Phase B (rarely needed
@@ -8599,41 +8614,27 @@ Example response: [1, 2, 4, 5, 7, ...]`
             return null;
           }
 
-          // Text search: find a track that matches the requested artist (check all artists, not just primary)
-          const requestedArtistNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Text search: verify artist via Spotify ID (UUID mapping) when available,
+          // otherwise fall back to primary-artist name token check.
+          const _phBKnownId = _uuidToSpotifyId.get(recommendedSong.artistUuid) || null;
           for (const t of items) {
-            const artistMatch = (t.artists || []).some(a => {
-              const fn = (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-              return requestedArtistNorm.length < 6 ? fn === requestedArtistNorm : fn === requestedArtistNorm || fn.startsWith(requestedArtistNorm) || requestedArtistNorm.startsWith(fn);
-            });
-            if (artistMatch) {
-              // Resolution divergence check: verify SC source artist appears in the PRIMARY
-              // Spotify artist. Catches branded/compilation tracks where a known artist is
-              // secondary but an unrelated entity is listed as primary (e.g. "FIFA Sound"
-              // when SC source is "DJ Luian").
-              // Token overlap on primary only — "DJ Luian" on "DJ Luian, Amenazzy" primary
-              // passes; "DJ Luian" on "FIFA Sound" primary fails.
-              const _primaryArtist = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-              const _scSourceTokens = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
-              // Fallback: when tokenizer produces nothing (e.g. "H.E.R." → ["h","e","r"] → filtered to []),
-              // use the full normalized name so the divergence check always runs.
-              const _scSourceNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const _tokensToCheck = _scSourceTokens.length > 0 ? _scSourceTokens : (_scSourceNorm ? [_scSourceNorm] : []);
-              if (_tokensToCheck.length > 0) {
-                const _primaryTokens = _primaryArtist.split(/\s+/);
-                const _primaryNormFull = _primaryArtist.replace(/\s+/g, '');
-                const _hasPrimaryOverlap = _tokensToCheck.some(tok =>
-                  _primaryTokens.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt)) ||
-                  _primaryNormFull === tok || _primaryNormFull.startsWith(tok) || tok.startsWith(_primaryNormFull)
-                );
-                if (!_hasPrimaryOverlap) {
-                  console.log(`❌ [ARTIST-DIVERGENCE] "${t.name}" — SC source "${recommendedSong.artist}" not in Spotify primary "${t.artists?.[0]?.name}" — trying next result`);
-                  continue;
-                }
-              }
+            if (_phBKnownId) {
+              // ID-based: require primary artist Spotify ID to match — definitive, no false positives
+              if (t.artists?.[0]?.id !== _phBKnownId) continue;
               console.log(`🔍 [TEXT] ${label}`);
               return { track: t, usedExact: false };
             }
+            // Name fallback (no UUID cached): check primary artist name with strict matching.
+            // Removed fn.startsWith(reqNorm) — that direction caused "mustard" → "Mustard Seed Faith".
+            const _reqNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _primaryName = (t.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const _nameMatch = _reqNorm.length < 6 ? _primaryName === _reqNorm : _primaryName === _reqNorm || _reqNorm.startsWith(_primaryName);
+            if (!_nameMatch) {
+              console.log(`❌ [ARTIST-DIVERGENCE] "${t.name}" — SC source "${recommendedSong.artist}" not in Spotify primary "${t.artists?.[0]?.name}" — trying next result`);
+              continue;
+            }
+            console.log(`🔍 [TEXT] ${label}`);
+            return { track: t, usedExact: false };
           }
           const topResults = items.slice(0, 3).map(t => `"${t.name}" by ${t.artists?.[0]?.name}`).join(', ');
           console.log(`❌ [TEXT-MISMATCH] ${label} — top Spotify results: ${topResults}`);
@@ -8800,7 +8801,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               const batch = _contPool.slice(ci, ci + BATCH_SIZE).filter(song => song.name?.trim());
               const batchResults = await Promise.all(batch.map(song =>
                 withSearchRetry(
-                  () => findTrackOnPlatform(song, { storefront: _contStorefront, appleMusicApi: _contAppleApi, platformSvc: _contPlatformSvc }),
+                  () => findTrackOnPlatform(song, { storefront: _contStorefront, appleMusicApi: _contAppleApi, platformSvc: _contPlatformSvc, uuidSpotifyIdMap: _uuidToSpotifyId }),
                   song.name || song.track,
                   2
                 ).then(result => ({ song, result }))
@@ -8923,7 +8924,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
                   return true;
                 });
                 const batchResults = await Promise.all(batch.map(song =>
-                  findTrackOnPlatform(song, { storefront: suppStorefront, appleMusicApi: suppAppleApi, platformSvc: suppPlatformSvc })
+                  findTrackOnPlatform(song, { storefront: suppStorefront, appleMusicApi: suppAppleApi, platformSvc: suppPlatformSvc, uuidSpotifyIdMap: _uuidToSpotifyId })
                     .then(result => ({ song, result }))
                     .catch(() => ({ song, result: null }))
                 ));
@@ -9106,7 +9107,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               for (let gi = 0; gi < gapPool.length && selectedTracks.length < songCount; gi += BATCH_SIZE) {
                 const batch = gapPool.slice(gi, gi + BATCH_SIZE).filter(s => s.name?.trim());
                 const results = await Promise.all(batch.map(song =>
-                  findTrackOnPlatform(song, { storefront: gfStorefront, appleMusicApi: gfAppleApi, platformSvc: gfPlatformSvc })
+                  findTrackOnPlatform(song, { storefront: gfStorefront, appleMusicApi: gfAppleApi, platformSvc: gfPlatformSvc, uuidSpotifyIdMap: _uuidToSpotifyId })
                     .then(r => ({ song, result: r }))
                     .catch(() => ({ song, result: null }))
                 ));
@@ -9314,7 +9315,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
         for (let fi = 0; fi < topSongs.length && allTracks.length < songCount * 3; fi += BATCH_SIZE) {
           const batch = topSongs.slice(fi, fi + BATCH_SIZE).filter(s => s.name?.trim());
           const batchResults = await Promise.all(batch.map(song =>
-            findTrackOnPlatform(song, { storefront: fbStorefront, appleMusicApi: fbAppleApi, platformSvc: fbPlatformSvc })
+            findTrackOnPlatform(song, { storefront: fbStorefront, appleMusicApi: fbAppleApi, platformSvc: fbPlatformSvc, uuidSpotifyIdMap: _uuidToSpotifyId })
               .then(result => ({ song, result }))
               .catch(() => ({ song, result: null }))
           ));

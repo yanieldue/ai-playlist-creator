@@ -1045,6 +1045,17 @@ class DatabaseService {
     return map;
   }
 
+  async getArtistSpotifyIdsByUuids(uuids) {
+    if (!uuids || uuids.length === 0) return new Map();
+    const result = await pool.query(
+      `SELECT uuid, spotify_id FROM artist_details WHERE uuid = ANY($1) AND spotify_id IS NOT NULL`,
+      [uuids]
+    );
+    const map = new Map();
+    for (const row of result.rows) map.set(row.uuid, row.spotify_id);
+    return map;
+  }
+
   async upsertArtistDetail(uuid, data) {
     const { name, careerStage, spotifyId, spotifyPopularity, spotifyGenres, scGenres, scSubgenres } = data;
     await pool.query(`
