@@ -12464,13 +12464,24 @@ app.get('/api/admin/test-song/:uuid', async (req, res) => {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   try {
-    const [scResp, dbRow] = await Promise.all([
+    const [v2Resp, v225Resp, lyricsResp, dbRow] = await Promise.allSettled([
+      axios.get(`https://customer.api.soundcharts.com/api/v2/song/${uuid}`, {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
+      }),
       axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${uuid}`, {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
+      }),
+      axios.get(`https://customer.api.soundcharts.com/api/v2/song/${uuid}/lyrics-analysis`, {
         headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
       }),
       db.getSongDetailsByUuids([uuid]).then(m => m.get(uuid) || null),
     ]);
-    res.json({ sc: scResp.data?.object || null, db: dbRow });
+    res.json({
+      'v2/song': v2Resp.status === 'fulfilled' ? v2Resp.value.data?.object : { error: v2Resp.reason?.message },
+      'v2.25/song': v225Resp.status === 'fulfilled' ? v225Resp.value.data?.object : { error: v225Resp.reason?.message },
+      'lyrics-analysis': lyricsResp.status === 'fulfilled' ? lyricsResp.value.data : { error: lyricsResp.reason?.message },
+      db: dbRow.status === 'fulfilled' ? dbRow.value : null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
