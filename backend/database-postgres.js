@@ -120,6 +120,36 @@ async function initializeTables() {
 
       CREATE INDEX IF NOT EXISTS idx_soundcharts_cache_created ON soundcharts_cache(created_at);
 
+      CREATE TABLE IF NOT EXISTS song_details (
+        uuid TEXT PRIMARY KEY,
+        name TEXT,
+        artist_name TEXT,
+        artist_uuid TEXT,
+        isrc TEXT,
+        release_date TEXT,
+        energy REAL,
+        valence REAL,
+        danceability REAL,
+        tempo REAL,
+        loudness REAL,
+        acousticness REAL,
+        instrumentalness REAL,
+        speechiness REAL,
+        liveness REAL,
+        key_signature SMALLINT,
+        mode SMALLINT,
+        time_signature SMALLINT,
+        moods TEXT[],
+        themes TEXT[],
+        genres TEXT[],
+        subgenres TEXT[],
+        fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_song_details_isrc ON song_details(isrc);
+      CREATE INDEX IF NOT EXISTS idx_song_details_artist_uuid ON song_details(artist_uuid);
+
       CREATE TABLE IF NOT EXISTS artist_catalogs (
         artist_uuid TEXT PRIMARY KEY,
         artist_name TEXT NOT NULL,
@@ -921,6 +951,71 @@ class DatabaseService {
       `UPDATE users SET allow_explicit = $1, dark_mode = $2, updated_at = NOW() WHERE email = $3`,
       [allowExplicit, darkMode, email]
     );
+  }
+
+  // Song Details
+  async getSongDetail(uuid) {
+    const result = await pool.query(`SELECT * FROM song_details WHERE uuid = $1`, [uuid]);
+    return result.rows[0] || null;
+  }
+
+  async getSongDetailsByUuids(uuids) {
+    if (!uuids || uuids.length === 0) return new Map();
+    const result = await pool.query(`SELECT * FROM song_details WHERE uuid = ANY($1)`, [uuids]);
+    const map = new Map();
+    for (const row of result.rows) map.set(row.uuid, row);
+    return map;
+  }
+
+  async upsertSongDetail(uuid, data) {
+    const {
+      name, artistName, artistUuid, isrc, releaseDate,
+      energy, valence, danceability, tempo, loudness,
+      acousticness, instrumentalness, speechiness, liveness,
+      keySignature, mode, timeSignature,
+      moods, themes, genres, subgenres,
+    } = data;
+    await pool.query(`
+      INSERT INTO song_details (
+        uuid, name, artist_name, artist_uuid, isrc, release_date,
+        energy, valence, danceability, tempo, loudness,
+        acousticness, instrumentalness, speechiness, liveness,
+        key_signature, mode, time_signature,
+        moods, themes, genres, subgenres
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+      ON CONFLICT (uuid) DO UPDATE SET
+        name            = COALESCE($2,  song_details.name),
+        artist_name     = COALESCE($3,  song_details.artist_name),
+        artist_uuid     = COALESCE($4,  song_details.artist_uuid),
+        isrc            = COALESCE($5,  song_details.isrc),
+        release_date    = COALESCE($6,  song_details.release_date),
+        energy          = COALESCE($7,  song_details.energy),
+        valence         = COALESCE($8,  song_details.valence),
+        danceability    = COALESCE($9,  song_details.danceability),
+        tempo           = COALESCE($10, song_details.tempo),
+        loudness        = COALESCE($11, song_details.loudness),
+        acousticness    = COALESCE($12, song_details.acousticness),
+        instrumentalness= COALESCE($13, song_details.instrumentalness),
+        speechiness     = COALESCE($14, song_details.speechiness),
+        liveness        = COALESCE($15, song_details.liveness),
+        key_signature   = COALESCE($16, song_details.key_signature),
+        mode            = COALESCE($17, song_details.mode),
+        time_signature  = COALESCE($18, song_details.time_signature),
+        moods           = COALESCE($19, song_details.moods),
+        themes          = COALESCE($20, song_details.themes),
+        genres          = COALESCE($21, song_details.genres),
+        subgenres       = COALESCE($22, song_details.subgenres),
+        updated_at      = NOW()
+    `, [
+      uuid, name || null, artistName || null, artistUuid || null, isrc || null, releaseDate || null,
+      energy ?? null, valence ?? null, danceability ?? null, tempo ?? null, loudness ?? null,
+      acousticness ?? null, instrumentalness ?? null, speechiness ?? null, liveness ?? null,
+      keySignature ?? null, mode ?? null, timeSignature ?? null,
+      moods?.length ? moods : null,
+      themes?.length ? themes : null,
+      genres?.length ? genres : null,
+      subgenres?.length ? subgenres : null,
+    ]);
   }
 
   // Close pool

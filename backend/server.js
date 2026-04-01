@@ -988,10 +988,35 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value.object) {
         const s = r.value.object;
-        const detail = { audio: s.audio || {}, moods: s.moods || [], themes: s.themes || [] };
+        const audio = s.audio || {};
+        const detail = { audio, moods: s.moods || [], themes: s.themes || [] };
         db.setCachedSC(`song_detail:${r.value.uuid}`, detail);
         enriched.set(r.value.uuid, detail);
-        if (Object.keys(detail.audio).length > 0) fetchCount++;
+        if (Object.keys(audio).length > 0) fetchCount++;
+        // Persist all fields to song_details for Phase A ISRC cache + future queries
+        db.upsertSongDetail(r.value.uuid, {
+          name:             s.name || null,
+          artistName:       s.creditName || null,
+          artistUuid:       s.artists?.[0]?.uuid || null,
+          isrc:             s.isrc?.value || s.isrc || null,
+          releaseDate:      s.releaseDate || null,
+          energy:           audio.energy        ?? null,
+          valence:          audio.valence       ?? null,
+          danceability:     audio.danceability  ?? null,
+          tempo:            audio.tempo         ?? null,
+          loudness:         audio.loudness      ?? null,
+          acousticness:     audio.acousticness  ?? null,
+          instrumentalness: audio.instrumentalness ?? null,
+          speechiness:      audio.speechiness   ?? null,
+          liveness:         audio.liveness      ?? null,
+          keySignature:     audio.key           ?? null,
+          mode:             audio.mode          ?? null,
+          timeSignature:    audio.time_signature ?? null,
+          moods:    s.moods    || null,
+          themes:   s.themes   || null,
+          genres:   s.genres?.map(g => (typeof g === 'string' ? g : g.name))    || null,
+          subgenres:s.subGenres?.map(g => (typeof g === 'string' ? g : g.name)) || null,
+        }).catch(() => {}); // fire-and-forget, never block enrichment
       }
       // On failure: song stays unenriched (returned as-is below)
     }
@@ -7881,6 +7906,23 @@ Return ONLY valid JSON:
       if (!process.env.SOUNDCHARTS_APP_ID) return;
       const appId = process.env.SOUNDCHARTS_APP_ID;
       const apiKey = process.env.SOUNDCHARTS_API_KEY;
+
+      // ── Step 0: batch-check song_details table for cached ISRCs (single DB query) ──
+      const uuidsWithoutIsrc = pool.filter(s => !s.isrc && s.uuid).map(s => s.uuid);
+      if (uuidsWithoutIsrc.length > 0) {
+        try {
+          const cached = await db.getSongDetailsByUuids(uuidsWithoutIsrc);
+          let dbHits = 0;
+          for (const song of pool) {
+            if (!song.isrc && song.uuid) {
+              const row = cached.get(song.uuid);
+              if (row?.isrc) { song.isrc = row.isrc; dbHits++; }
+            }
+          }
+          if (dbHits > 0) console.log(`🗄️  [Phase A] ${dbHits} ISRCs resolved from song_details cache`);
+        } catch (_) { /* fall through to SC */ }
+      }
+
       const needing = pool.filter(s => !s.isrc && s.uuid && !s.platformId);
       if (needing.length === 0) return;
       console.log(`🔍 [Phase A] Fetching ISRCs from SC for ${needing.length} songs without ISRC...`);
@@ -7894,11 +7936,19 @@ Return ONLY valid JSON:
             `https://customer.api.soundcharts.com/api/v2/song/${song.uuid}`,
             { headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 8000 }
           );
-          const detail = detailResp.data?.object || detailResp.data;
-          const isrc = detail?.isrc?.value || detail?.isrc || null;
+          const s = detailResp.data?.object || detailResp.data;
+          const isrc = s?.isrc?.value || s?.isrc || null;
           if (isrc) {
             song.isrc = isrc;
             isrcHits++;
+            // Cache to song_details so future generations don't need this SC call
+            db.upsertSongDetail(song.uuid, {
+              name: s.name || song.name || null,
+              artistName: s.creditName || song.artistName || null,
+              artistUuid: s.artists?.[0]?.uuid || song.artistUuid || null,
+              isrc,
+              releaseDate: s.releaseDate || song.releaseDate || null,
+            }).catch(() => {});
             continue; // ISRC found — no need for platform ID lookup
           }
         } catch (_) { /* fall through to platform ID */ }
@@ -8175,11 +8225,19 @@ Example response: [1, 2, 4, 5, 7, ...]`
       }
 
       // ── Phase A: pre-fetch SoundCharts platform IDs for vibe-passed songs ──
-      // No cap, no early-stop — vibe check already reduced the pool, and SC has platform IDs
-      // for virtually every song in its catalog. Platform ID lookup is ~100% reliable vs text search.
+      // Cap at songCount×3 (min 60) — SC top_songs returns no ISRCs, so every song needs a serial
+      // 300ms throttled call. Songs beyond the cap fall back to text search in Phase B (rarely needed
+      // since the first batch has near-100% hit rate and Phase B early-stops at songCount anyway).
       if (process.env.SOUNDCHARTS_APP_ID) {
         const scPlatformCode = platform === 'spotify' ? 'spotify' : 'applemusic';
-        await prefetchPlatformIds(vibePassedTracks, scPlatformCode);
+        const _phaseACap = Math.max(songCount * 3, 60);
+        const _phaseAPool = _phaseACap < vibePassedTracks.length
+          ? vibePassedTracks.slice(0, _phaseACap)
+          : vibePassedTracks;
+        if (_phaseACap < vibePassedTracks.length) {
+          console.log(`🔍 [Phase A] Capping at ${_phaseACap} of ${vibePassedTracks.length} vibe-passed songs (songCount=${songCount})`);
+        }
+        await prefetchPlatformIds(_phaseAPool, scPlatformCode);
       }
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
