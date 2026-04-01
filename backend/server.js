@@ -424,10 +424,12 @@ async function batchGetSpotifyArtistGenres(artistNames) {
 function isArtistInGenreFamily(spotifyGenres, requestedGenre) {
   if (!spotifyGenres || spotifyGenres.length === 0) return true; // no data → allow
   const genreLower = (requestedGenre || '').toLowerCase();
-  // Normalize hyphens to spaces so 'hip-hop' matches the 'hip hop' family key
+  // Normalize hyphens to spaces, then resolve through SOUNDCHARTS_GENRE_MAP so aliases like
+  // 'rap' → 'hip hop', 'hip-hop' → 'hip hop', 'neo soul' → 'r&b' all match SPOTIFY_GENRE_FAMILIES keys.
   const genreNorm = genreLower.replace(/-/g, ' ');
+  const genreResolved = SOUNDCHARTS_GENRE_MAP[genreNorm] || SOUNDCHARTS_GENRE_MAP[genreLower] || genreNorm;
   // Find the matching family keywords
-  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreNorm.includes(k) || k.includes(genreNorm));
+  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreResolved.includes(k) || k.includes(genreResolved));
   if (!familyKey) return true; // unknown genre → allow
   const keywords = SPOTIFY_GENRE_FAMILIES[familyKey];
   return spotifyGenres.some(g => keywords.some(kw => g.toLowerCase().includes(kw)));
