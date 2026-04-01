@@ -12855,10 +12855,14 @@ async function enrichTopArtistsCache() {
       if (songs?.length > 0) {
         // Check if any songs still need audio enrichment (not already cached)
         let needsAudio = false;
+        const uuidsToCheck = songs.filter(s => s.uuid).map(s => s.uuid);
+        const songDetailsMap = uuidsToCheck.length > 0 ? await db.getSongDetailsByUuids(uuidsToCheck) : new Map();
         for (const s of songs) {
           if (!s.uuid) continue;
+          // Needs audio if: missing from soundcharts_cache OR missing from song_details (new table)
           const sd = await db.getCachedSC(`song_detail:${s.uuid}`);
           if (!sd?.audio || Object.keys(sd.audio).length === 0) { needsAudio = true; break; }
+          if (!songDetailsMap.has(s.uuid)) { needsAudio = true; break; }
         }
         if (needsAudio) {
           await enrichCatalogWithAudioFeatures(songs, songs.length);
@@ -12916,10 +12920,13 @@ async function enrichTopArtistsCache() {
 
       if (songs?.length > 0) {
         let needsAudio = false;
+        const simUuidsToCheck = songs.filter(s => s.uuid).map(s => s.uuid);
+        const simSongDetailsMap = simUuidsToCheck.length > 0 ? await db.getSongDetailsByUuids(simUuidsToCheck) : new Map();
         for (const s of songs) {
           if (!s.uuid) continue;
           const sd = await db.getCachedSC(`song_detail:${s.uuid}`);
           if (!sd?.audio || Object.keys(sd.audio).length === 0) { needsAudio = true; break; }
+          if (!simSongDetailsMap.has(s.uuid)) { needsAudio = true; break; }
         }
         if (needsAudio) {
           await enrichCatalogWithAudioFeatures(songs, songs.length);
