@@ -150,6 +150,21 @@ async function initializeTables() {
       CREATE INDEX IF NOT EXISTS idx_song_details_isrc ON song_details(isrc);
       CREATE INDEX IF NOT EXISTS idx_song_details_artist_uuid ON song_details(artist_uuid);
 
+      CREATE TABLE IF NOT EXISTS artist_details (
+        uuid TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        name_lower TEXT NOT NULL,
+        career_stage TEXT,
+        spotify_id TEXT,
+        spotify_popularity SMALLINT,
+        spotify_genres TEXT[],
+        sc_genres TEXT[],
+        sc_subgenres TEXT[],
+        fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_artist_details_name_lower ON artist_details(name_lower);
+
       CREATE TABLE IF NOT EXISTS artist_catalogs (
         artist_uuid TEXT PRIMARY KEY,
         artist_name TEXT NOT NULL,
@@ -1015,6 +1030,49 @@ class DatabaseService {
       themes?.length ? themes : null,
       genres?.length ? genres : null,
       subgenres?.length ? subgenres : null,
+    ]);
+  }
+
+  async getArtistDetailsByNames(names) {
+    if (!names || names.length === 0) return new Map();
+    const lowerNames = names.map(n => n.toLowerCase());
+    const result = await pool.query(
+      `SELECT * FROM artist_details WHERE name_lower = ANY($1)`,
+      [lowerNames]
+    );
+    const map = new Map();
+    for (const row of result.rows) map.set(row.name_lower, row);
+    return map;
+  }
+
+  async upsertArtistDetail(uuid, data) {
+    const { name, careerStage, spotifyId, spotifyPopularity, spotifyGenres, scGenres, scSubgenres } = data;
+    await pool.query(`
+      INSERT INTO artist_details (
+        uuid, name, name_lower,
+        career_stage, spotify_id, spotify_popularity,
+        spotify_genres, sc_genres, sc_subgenres
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      ON CONFLICT (uuid) DO UPDATE SET
+        name               = COALESCE($2, artist_details.name),
+        name_lower         = COALESCE($3, artist_details.name_lower),
+        career_stage       = COALESCE($4, artist_details.career_stage),
+        spotify_id         = COALESCE($5, artist_details.spotify_id),
+        spotify_popularity = COALESCE($6, artist_details.spotify_popularity),
+        spotify_genres     = COALESCE($7, artist_details.spotify_genres),
+        sc_genres          = COALESCE($8, artist_details.sc_genres),
+        sc_subgenres       = COALESCE($9, artist_details.sc_subgenres),
+        updated_at         = NOW()
+    `, [
+      uuid,
+      name || null,
+      name ? name.toLowerCase() : null,
+      careerStage || null,
+      spotifyId || null,
+      spotifyPopularity ?? null,
+      spotifyGenres?.length ? spotifyGenres : null,
+      scGenres?.length ? scGenres : null,
+      scSubgenres?.length ? scSubgenres : null,
     ]);
   }
 

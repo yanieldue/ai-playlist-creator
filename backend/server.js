@@ -431,6 +431,47 @@ function isArtistInGenreFamily(spotifyGenres, requestedGenre) {
   return spotifyGenres.some(g => keywords.some(kw => g.toLowerCase().includes(kw)));
 }
 
+// Fetch Spotify artist data (genres, popularity, id) by name — used during enrichment
+// to populate artist_details. Separate from batchGetSpotifyArtistGenres which is session-scoped.
+async function fetchSpotifyArtistData(name) {
+  try {
+    const token = await getSpotifyClientToken();
+    const r = await axios.get('https://api.spotify.com/v1/search', {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { q: name, type: 'artist', limit: 3 },
+      timeout: 8000,
+    });
+    const artists = r.data?.artists?.items || [];
+    const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const match = artists.find(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm)
+      || artists.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
+    if (!match) return null;
+    return { id: match.id || null, genres: match.genres || [], popularity: match.popularity ?? null };
+  } catch { return null; }
+}
+
+// DB-first artist genre resolver — checks artist_details cache before hitting Spotify live.
+// Falls back to live Spotify for artists not yet enriched.
+async function resolveArtistGenres(artistNames) {
+  if (!artistNames || artistNames.length === 0) return new Map();
+  const dbMap = await db.getArtistDetailsByNames(artistNames).catch(() => new Map());
+  const result = new Map();
+  const misses = [];
+  for (const name of artistNames) {
+    const row = dbMap.get(name.toLowerCase());
+    if (row?.spotify_genres?.length) {
+      result.set(name.toLowerCase(), row.spotify_genres);
+    } else {
+      misses.push(name);
+    }
+  }
+  if (misses.length > 0) {
+    const liveMap = await batchGetSpotifyArtistGenres(misses).catch(() => new Map());
+    for (const [k, v] of liveMap) result.set(k, v);
+  }
+  return result;
+}
+
 // Get top tracks for an artist from Spotify (to use as seeds for ReccoBeats)
 async function getArtistTopTrackIds(artistName, limit = 3) {
   const token = await getSpotifyClientToken();
@@ -794,6 +835,8 @@ async function getSoundChartsArtistInfo(artistName, expectedGenre = null, knownU
     name: artist.name,
     uuid: artist.uuid,
     genres: [...new Set([...genres, ...subgenres])],
+    _scGenres: genres,
+    _scSubgenres: subgenres,
     similarArtists: similarArtists.map(a => a.name),
     // Map of lowercased name → SC UUID for all similar artists
     _similarUuids: Object.fromEntries(similarArtists.map(a => [a.name.toLowerCase(), a.uuid])),
@@ -7743,7 +7786,7 @@ Respond ONLY with valid JSON:
     // (e.g. Lukas Graham, Sam Smith, Arctic Monkeys). Filter by Spotify artist genres to catch these.
     if (genreData.primaryGenre && recommendedTracks.length > 0) {
       const scArtistNames = [...new Set(recommendedTracks.map(t => t.artist).filter(Boolean))];
-      const scGenreMap = await batchGetSpotifyArtistGenres(scArtistNames).catch(() => new Map());
+      const scGenreMap = await resolveArtistGenres(scArtistNames).catch(() => new Map());
       const beforeFilter = recommendedTracks.length;
       recommendedTracks = recommendedTracks.filter(t => {
         const spGenres = scGenreMap.get((t.artist || '').toLowerCase()) || null;
@@ -8799,7 +8842,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               // SC genre mislabels (e.g. Amy Winehouse, Arctic Monkeys tagged as R&B).
               if (genreData.primaryGenre && supplementPool.length > 0) {
                 const suppArtistNames = [...new Set(supplementPool.map(s => s.artistName).filter(Boolean))];
-                const suppGenreMap = await batchGetSpotifyArtistGenres(suppArtistNames).catch(() => new Map());
+                const suppGenreMap = await resolveArtistGenres(suppArtistNames).catch(() => new Map());
                 const beforeSupp = supplementPool.length;
                 supplementPool = supplementPool.filter(s => {
                   const spGenres = suppGenreMap.get((s.artistName || '').toLowerCase()) || null;
@@ -9192,7 +9235,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
         // more accurate — filter out artists with no overlap with the requested genre family.
         if (genreData.primaryGenre && topSongs.length > 0) {
           const artistNames = [...new Set(topSongs.map(s => s.artistName).filter(Boolean))];
-          const genreMap = await batchGetSpotifyArtistGenres(artistNames).catch(() => new Map());
+          const genreMap = await resolveArtistGenres(artistNames).catch(() => new Map());
           const before = topSongs.length;
           topSongs = topSongs.filter(s => {
             const spotifyGenres = genreMap.get((s.artistName || '').toLowerCase()) || null;
@@ -12868,6 +12911,19 @@ async function enrichTopArtistsCache() {
     try {
       const artistInfo = await getSoundChartsArtistInfo(name, genre);
       if (!artistInfo?.uuid) { skipped++; continue; }
+
+      // Persist artist metadata to artist_details table (Spotify genres fetched for genre validation cache)
+      fetchSpotifyArtistData(artistInfo.name).then(spotifyData => {
+        db.upsertArtistDetail(artistInfo.uuid, {
+          name: artistInfo.name,
+          careerStage: artistInfo.careerStage || null,
+          spotifyId: spotifyData?.id || null,
+          spotifyPopularity: spotifyData?.popularity ?? null,
+          spotifyGenres: spotifyData?.genres || null,
+          scGenres: artistInfo._scGenres || null,
+          scSubgenres: artistInfo._scSubgenres || null,
+        });
+      }).catch(() => {});
 
       const catalogKey = `full_catalog:${artistInfo.uuid}`;
       const cached = await db.getCachedSC(catalogKey);
