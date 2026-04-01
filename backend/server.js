@@ -424,8 +424,10 @@ async function batchGetSpotifyArtistGenres(artistNames) {
 function isArtistInGenreFamily(spotifyGenres, requestedGenre) {
   if (!spotifyGenres || spotifyGenres.length === 0) return true; // no data → allow
   const genreLower = (requestedGenre || '').toLowerCase();
+  // Normalize hyphens to spaces so 'hip-hop' matches the 'hip hop' family key
+  const genreNorm = genreLower.replace(/-/g, ' ');
   // Find the matching family keywords
-  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreLower.includes(k) || k.includes(genreLower));
+  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreNorm.includes(k) || k.includes(genreNorm));
   if (!familyKey) return true; // unknown genre → allow
   const keywords = SPOTIFY_GENRE_FAMILIES[familyKey];
   return spotifyGenres.some(g => keywords.some(kw => g.toLowerCase().includes(kw)));
@@ -1789,6 +1791,7 @@ const SOUNDCHARTS_SUBGENRE_MAP = {
   'indie pop': 'indie pop', 'art pop': 'art pop', 'dream pop': 'dream pop',
   'k-pop': 'k-pop', 'j-pop': 'j-pop',
   // Hip-hop subgenres
+  'rap': 'hip-hop & rap', 'hip-hop & rap': 'hip-hop & rap',
   'trap': 'trap', 'drill': 'drill', 'lo-fi hip hop': 'lo-fi hip hop',
   'conscious hip hop': 'conscious hip hop', 'mumble rap': 'mumble rap',
   'phonk': 'phonk', 'cloud rap': 'cloud rap',
@@ -1999,15 +2002,25 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // Genre filter (used for top_songs fallback; also passed so artist_songs can apply era filter)
   if (genreData.primaryGenre) {
     const genreLower = genreData.primaryGenre.toLowerCase().trim();
-    let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
-    if (!scGenre) {
-      for (const [key, val] of Object.entries(SOUNDCHARTS_GENRE_MAP)) {
-        if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
+    // Check SOUNDCHARTS_SUBGENRE_MAP first — if primaryGenre is a specific subgenre (e.g. 'rap',
+    // 'trap', 'neo soul', 'indie rock'), use songSubGenres for precision rather than the broad
+    // parent songGenres bucket (e.g. 'rap' → 'hip-hop & rap' instead of 'hip hop').
+    const scSubgenre = SOUNDCHARTS_SUBGENRE_MAP[genreLower] ||
+      Object.entries(SOUNDCHARTS_SUBGENRE_MAP).find(([k]) => genreLower === k || genreLower.replace(/-/g, ' ') === k)?.[1];
+    if (scSubgenre) {
+      filters.push({ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } });
+      console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → songSubGenres=${scSubgenre}`);
+    } else {
+      let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
+      if (!scGenre) {
+        for (const [key, val] of Object.entries(SOUNDCHARTS_GENRE_MAP)) {
+          if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
+        }
       }
+      // Drift diagnostic: log genre resolution so we can spot mismatches (e.g. neo-soul → r&b when SC has no neo-soul top-songs)
+      console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → scGenre=${scGenre || '(none — no SC mapping)'}`);
+      if (scGenre) filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
     }
-    // Drift diagnostic: log genre resolution so we can spot mismatches (e.g. neo-soul → r&b when SC has no neo-soul top-songs)
-    console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → scGenre=${scGenre || '(none — no SC mapping)'}`);
-    if (scGenre) filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
   }
 
   // Release year filter
@@ -8321,6 +8334,18 @@ Return ONLY valid JSON:
               sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here. REMOVE any track about longing for someone who is far away or absent — distance/longing songs (e.g. "Location" by Khalid, which is about missing someone from afar) do NOT fit an intimate moment. REMOVE any heartbreak, breakup, or post-relationship song — songs about recovering from a breakup, grieving a lost love, processing betrayal, or burning down a relationship (e.g. "Let It Burn" by Jazmine Sullivan) do NOT belong in an intimate moment even if they are slow and R&B. REMOVE any track where the dominant emotional energy is empowerment, triumph, or self-determination rather than intimacy — sensual playlists are about closeness between two people, not individual strength or resilience. REMOVE any non-English pop song that does not clearly have the intimate R&B/bedroom sound — foreign pop tracks (e.g. Filipino pop, Latin pop, K-pop) tagged with romantic themes often have a completely different sonic context and do NOT fit. Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
             };
             if (_fastHardRules[_scUseCase]) _scConstraintLines.push(_fastHardRules[_scUseCase]);
+            // Genre-specific hard rule: enforce genre when primaryGenre is a well-defined genre
+            {
+              const _pgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
+              const _genreRuleMap = {
+                'hip hop': 'GENRE HARD RULE: This is a hip-hop/rap playlist. REMOVE any track that is not rap or hip-hop — pop, rock, R&B, and other non-rap genres do not belong here even if they are high-energy.',
+                'r&b':     'GENRE HARD RULE: This is an R&B/soul playlist. REMOVE any track that is not R&B, soul, or neo-soul.',
+                'country': 'GENRE HARD RULE: This is a country playlist. REMOVE any track that is not country or Americana.',
+                'metal':   'GENRE HARD RULE: This is a metal playlist. REMOVE any track that is not metal or hard rock.',
+                'jazz':    'GENRE HARD RULE: This is a jazz playlist. REMOVE any track that is not jazz.',
+              };
+              if (_genreRuleMap[_pgNorm]) _scConstraintLines.push(_genreRuleMap[_pgNorm]);
+            }
           }
           if (eraMin || eraMax) {
             const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
@@ -9106,6 +9131,17 @@ Example response: [1, 2, 4, 5, 7, ...]`
             if (_suppUseCase && _useCaseVibeRules[_suppUseCase]) _suppConstraintRules.push(_useCaseVibeRules[_suppUseCase]);
             if (_suppVocalGender === 'female') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
             if (_suppVocalGender === 'male') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            {
+              const _suppPgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
+              const _suppGenreRuleMap = {
+                'hip hop': 'GENRE HARD RULE: This is a hip-hop/rap playlist. REMOVE any track that is not rap or hip-hop — pop, rock, R&B, and other non-rap genres do not belong here even if they are high-energy.',
+                'r&b':     'GENRE HARD RULE: This is an R&B/soul playlist. REMOVE any track that is not R&B, soul, or neo-soul.',
+                'country': 'GENRE HARD RULE: This is a country playlist. REMOVE any track that is not country or Americana.',
+                'metal':   'GENRE HARD RULE: This is a metal playlist. REMOVE any track that is not metal or hard rock.',
+                'jazz':    'GENRE HARD RULE: This is a jazz playlist. REMOVE any track that is not jazz.',
+              };
+              if (_suppGenreRuleMap[_suppPgNorm]) _suppConstraintRules.push(_suppGenreRuleMap[_suppPgNorm]);
+            }
             if (_suppConstraintRules.length > 0 && _suppNewCount > 0) {
               const suppNewTracks = selectedTracks.slice(_preSupplementCount);
               console.log(`🔍 Post-supplement filter: checking ${suppNewTracks.length} new tracks (${_suppConstraintRules.length} rules)...`);
@@ -9177,8 +9213,22 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               // Cap pool before ISRC prefetch — SC top_songs returns up to 500 songs regardless
               // of requested count, so without capping we'd fetch ISRCs for 500 songs to fill 1-3 gaps.
               const gapPoolRaw = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
-              const gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 10, 40));
+              let gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 10, 40));
               console.log(`🔄 Gap fill pool: ${gapPool.length}/${gapPoolRaw.length} top_songs candidates (capped for ISRC prefetch)`);
+
+              // Genre validation: filter gap fill pool by Spotify artist genres to block SC mislabels
+              if (genreData.primaryGenre && gapPool.length > 0) {
+                const gfArtistNames = [...new Set(gapPool.map(s => s.artistName).filter(Boolean))];
+                const gfGenreMap = await resolveArtistGenres(gfArtistNames).catch(() => new Map());
+                const beforeGf = gapPool.length;
+                gapPool = gapPool.filter(s => {
+                  const spGenres = gfGenreMap.get((s.artistName || '').toLowerCase()) || null;
+                  return isArtistInGenreFamily(spGenres, genreData.primaryGenre);
+                });
+                if (gapPool.length < beforeGf) {
+                  console.log(`🎯 Gap fill genre filter: ${beforeGf} → ${gapPool.length} songs (Spotify validation)`);
+                }
+              }
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
               const gfStorefront = tokens.storefront || 'us';
@@ -9263,6 +9313,17 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             if (_gfUseCase && _useCaseVibeRules[_gfUseCase]) _gfConstraintRules.push(_useCaseVibeRules[_gfUseCase]);
             if (_gfVocalGender === 'female') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
             if (_gfVocalGender === 'male') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            {
+              const _gfPgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
+              const _gfGenreRuleMap = {
+                'hip hop': 'GENRE HARD RULE: This is a hip-hop/rap playlist. REMOVE any track that is not rap or hip-hop — pop, rock, R&B, and other non-rap genres do not belong here even if they are high-energy.',
+                'r&b':     'GENRE HARD RULE: This is an R&B/soul playlist. REMOVE any track that is not R&B, soul, or neo-soul.',
+                'country': 'GENRE HARD RULE: This is a country playlist. REMOVE any track that is not country or Americana.',
+                'metal':   'GENRE HARD RULE: This is a metal playlist. REMOVE any track that is not metal or hard rock.',
+                'jazz':    'GENRE HARD RULE: This is a jazz playlist. REMOVE any track that is not jazz.',
+              };
+              if (_gfGenreRuleMap[_gfPgNorm]) _gfConstraintRules.push(_gfGenreRuleMap[_gfPgNorm]);
+            }
             if (_gfConstraintRules.length > 0 && _gfNewCount > 0) {
               const gfNewTracks = selectedTracks.slice(_preGapFillCount);
               console.log(`🔍 Post-gap-fill filter: checking ${gfNewTracks.length} new tracks (${_gfConstraintRules.length} rules)...`);
