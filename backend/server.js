@@ -1879,7 +1879,14 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     const slug = genreData.primaryGenre.toLowerCase().trim();
     if (SC_SUBGENRES.includes(slug)) {
       filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
-      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+      // Also add parent songGenres when slug exists in both lists (e.g. 'r&b', 'pop', 'rock').
+      // Ensures genre survives when SC 500 degrades and strips songSubGenres.
+      if (SC_GENRES.includes(slug)) {
+        filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
+        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${slug} (dual)`);
+      } else {
+        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+      }
     } else if (SC_GENRES.includes(slug)) {
       filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
       console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songGenres=${slug}`);
