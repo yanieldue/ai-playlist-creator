@@ -1025,7 +1025,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
         liveness:         audio.liveness         ?? null,
         keySignature:     audio.key              ?? null,
         mode:             audio.mode             ?? null,
-        timeSignature:    audio.time_signature   ?? null,
+        timeSignature:    audio.timeSignature ?? audio.time_signature ?? null,
         moods:  cached.moods?.length  ? cached.moods  : null,
         themes: cached.themes?.length ? cached.themes : null,
       }).catch(() => {});
@@ -1075,7 +1075,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
           liveness:         audio.liveness      ?? null,
           keySignature:     audio.key           ?? null,
           mode:             audio.mode          ?? null,
-          timeSignature:    audio.time_signature ?? null,
+          timeSignature:    audio.timeSignature ?? audio.time_signature ?? null,
           moods:    s.moods    || null,
           themes:   s.themes   || null,
           genres:   s.genres?.map(g => (typeof g === 'string' ? g : g.name))    || null,
