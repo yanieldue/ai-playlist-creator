@@ -12456,6 +12456,26 @@ app.post('/api/admin/enrich-cache', (req, res) => {
   setImmediate(() => enrichTopArtistsCache());
 });
 
+// Test endpoint — fetch a single SC song by UUID and return raw response + song_details row
+app.get('/api/admin/test-song/:uuid', async (req, res) => {
+  const secret = req.query.secret;
+  if (!secret || secret !== process.env.ADMIN_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const { uuid } = req.params;
+  const appId = process.env.SOUNDCHARTS_APP_ID;
+  const apiKey = process.env.SOUNDCHARTS_API_KEY;
+  try {
+    const [scResp, dbRow] = await Promise.all([
+      axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${uuid}`, {
+        headers: { 'x-app-id': appId, 'x-api-key': apiKey }, timeout: 10000,
+      }),
+      db.getSongDetailsByUuids([uuid]).then(m => m.get(uuid) || null),
+    ]);
+    res.json({ sc: scResp.data?.object || null, db: dbRow });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Featured artists for login page background.
 // Refreshes monthly from Spotify's Global Top 50 playlist.
 // Persisted to disk so restarts don't trigger unnecessary re-fetches.
