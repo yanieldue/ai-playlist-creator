@@ -2027,9 +2027,6 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
 
   // SC moods filter — build from atmosphere/style labels mapped to valid SC mood values.
   // SC expects lowercase values (e.g. 'sensual', not 'Sensual'). Only applied for top_songs.
-  // NOTE: SC 500s when moods/themes are combined with energy/valence audio filters.
-  // When moods are present we skip energy/valence (moods are more semantically precise anyway).
-  let scMoodsAdded = false;
   if (strategy !== 'artist_songs') {
     const scMoodValues = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
     // Also add useCase-level mood if present
@@ -2038,7 +2035,6 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     if (scMoodValues.length > 0) {
       filters.push({ type: 'moods', data: { values: scMoodValues, operator: 'in' } });
       console.log(`🎭 SC moods filter: ${scMoodValues.join(', ')}`);
-      scMoodsAdded = true;
     }
     // SC themes filter — build from useCase
     const scThemeValues = SOUNDCHARTS_THEME_MAP[genreData.contextClues?.useCase?.toLowerCase()] || [];
@@ -2092,11 +2088,6 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
       } else if (feature !== 'tempo') {
         continue; // skip valence/danceability/acousticness etc for artist_songs
       }
-    }
-    // SC 500s when moods + energy/valence are combined — skip those audio features when moods are present
-    if (scMoodsAdded && (feature === 'energy' || feature === 'valence')) {
-      console.log(`🎛️  Skipping ${feature} filter — moods filter already covers vibe (avoids SC 500)`);
-      continue;
     }
     const filterData = {};
     if (range.min !== undefined) filterData.min = range.min;
@@ -8200,8 +8191,10 @@ Return ONLY valid JSON:
         const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
 
         // Step 1: CATALOG-OVERRIDE filter (cheap dictionary lookup, no LLM)
+        // Strip feat. clause from track title so 'khalid::location' matches 'location (feat. little simz)'
+        const _normTrackTitle = (title) => (title || '').toLowerCase().replace(/\s*[\(\[]feat\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]ft\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]featuring.*?[\)\]]/i, '').trim();
         let _scPoolFiltered = recommendedTracks.filter(song => {
-          const key = `${(song.artist || '').toLowerCase()}::${(song.track || '').toLowerCase()}`;
+          const key = `${(song.artist || '').toLowerCase()}::${_normTrackTitle(song.track)}`;
           const override = TRACK_CONTEXT_OVERRIDES[key];
           if (!override) return true;
           const moodOk = !genreData.mood || override.requiredMoods.includes(genreData.mood);
@@ -8213,6 +8206,30 @@ Return ONLY valid JSON:
           }
           return true;
         });
+
+        // Step 1.5 pre-work: batch-fetch song_details for songs whose SC inline moods/audio are empty.
+        // SC top_songs API does NOT return moods inline — they're only in song_details (from lyrics-analysis enrichment).
+        {
+          const uuidsToEnrich = _scPoolFiltered.filter(s => s.uuid && (s._scMoods?.length === 0 || s._scEnergy == null)).map(s => s.uuid);
+          if (uuidsToEnrich.length > 0) {
+            try {
+              const dbDetails = await db.getSongDetailsByUuids(uuidsToEnrich);
+              let dbHits = 0;
+              for (const song of _scPoolFiltered) {
+                if (!song.uuid) continue;
+                const row = dbDetails.get(song.uuid);
+                if (!row) continue;
+                if (song._scMoods?.length === 0 && row.moods?.length > 0) { song._scMoods = row.moods; dbHits++; }
+                if (song._scEnergy == null && row.energy != null) song._scEnergy = row.energy;
+                if (song._scDanceability == null && row.danceability != null) song._scDanceability = row.danceability;
+                if (song._scValence == null && row.valence != null) song._scValence = row.valence;
+              }
+              if (dbHits > 0) console.log(`📦 [DATA-FILTER] enriched ${dbHits} songs with stored moods/audio from song_details`);
+            } catch (e) {
+              console.warn(`⚠️  [DATA-FILTER] song_details batch fetch failed: ${e.message}`);
+            }
+          }
+        }
 
         // Step 1.5: Data-driven mood/audio pre-filter — removes clear conflicts before the LLM sees the pool.
         // Uses SC mood tags and audio features already returned inline with each song.
