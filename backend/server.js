@@ -18,6 +18,7 @@ const getStripe = () => {
   return require('stripe')(process.env.STRIPE_SECRET_KEY);
 };
 const { handleCriticalError } = require('./services/errorNotificationService');
+const { SC_GENRES, SC_SUBGENRES } = require('./sc_filters_reference');
 
 // Load services with error handling
 let AppleMusicService, PlatformService;
@@ -354,87 +355,6 @@ async function getReccoBeatsRecommendations(seedTrackIds = [], size = 60) {
 }
 
 // Genre family keywords used to validate Spotify artist genres against a requested genre.
-// If NONE of an artist's Spotify genres contain any keyword from the family, the artist
-// is considered outside that genre and their songs are filtered from the playlist.
-const SPOTIFY_GENRE_FAMILIES = {
-  'r&b':       ['r&b', 'neo soul', 'alternative r&b', 'contemporary r&b', 'trap soul', 'quiet storm', 'urban contemporary', 'southern soul'],
-  'hip hop':   ['hip hop', 'rap', 'trap', 'drill', 'grime', 'boom bap', 'crunk'],
-  'pop':       ['pop', 'synth pop', 'electropop', 'teen pop', 'indie pop', 'chamber pop'],
-  'rock':      ['rock', 'indie rock', 'alternative rock', 'punk', 'metal', 'grunge', 'emo', 'hardcore'],
-  'country':   ['country', 'americana', 'bluegrass', 'honky tonk', 'outlaw country'],
-  'jazz':      ['jazz', 'bebop', 'swing', 'bossa nova', 'smooth jazz'],
-  'classical': ['classical', 'baroque', 'romantic period', 'contemporary classical'],
-  'electronic':['electronic', 'edm', 'house', 'techno', 'trance', 'dubstep', 'drum and bass', 'ambient'],
-  'latin':     ['latin', 'reggaeton', 'salsa', 'bachata', 'cumbia', 'corrido'],
-  'soul':      ['soul', 'neo soul', 'funk', 'motown', 'r&b'],
-  'reggae':    ['reggae', 'dancehall', 'ska'],
-  'folk':      ['folk', 'indie folk', 'singer-songwriter', 'americana'],
-};
-
-// Session-scoped cache for Spotify artist genre lookups within a single playlist generation.
-// Avoids re-fetching the same artist multiple times when many songs share the same artist.
-const _spotifyGenreCache = new Map();
-
-// Batch-fetch Spotify artist genres for a list of artist names using client credentials.
-// Returns a Map<normalizedArtistName, string[]> of genre arrays.
-// Caps at 30 unique artists to stay within reasonable API budget.
-async function batchGetSpotifyArtistGenres(artistNames) {
-  const unique = [...new Set(artistNames.map(n => n.trim()))];
-  const result = new Map();
-  const toFetch = unique.filter(name => !_spotifyGenreCache.has(name.toLowerCase()));
-
-  if (toFetch.length > 0) {
-    let token;
-    try { token = await getSpotifyClientToken(); } catch { return result; }
-
-    // Process in chunks of 20 to avoid Spotify rate limits
-    const CHUNK = 20;
-    for (let i = 0; i < toFetch.length; i += CHUNK) {
-      const chunk = toFetch.slice(i, i + CHUNK);
-      await Promise.allSettled(chunk.map(async (name) => {
-        try {
-          const r = await axios.get('https://api.spotify.com/v1/search', {
-            headers: { Authorization: `Bearer ${token}` },
-            params: { q: name, type: 'artist', limit: 3 },
-            timeout: 8000,
-          });
-          const artists = r.data?.artists?.items || [];
-          const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-          // Pick the best match: exact normalized name or highest-popularity artist
-          const match = artists.find(a => a.name.toLowerCase().replace(/[^a-z0-9]/g, '') === norm)
-            || artists.sort((a, b) => (b.popularity || 0) - (a.popularity || 0))[0];
-          const genres = match?.genres || [];
-          _spotifyGenreCache.set(name.toLowerCase(), genres);
-        } catch {
-          // Don't cache failures — let the next request retry the lookup
-        }
-      }));
-    }
-  }
-
-  for (const name of unique) {
-    result.set(name.toLowerCase(), _spotifyGenreCache.get(name.toLowerCase()) || []);
-  }
-  return result;
-}
-
-// Returns true if the artist's Spotify genres overlap with the requested genre family.
-// Returns true (allow) when uncertain — only rejects when there is a CLEAR genre mismatch
-// (artist has genres on Spotify but none match the family at all).
-function isArtistInGenreFamily(spotifyGenres, requestedGenre) {
-  if (!spotifyGenres || spotifyGenres.length === 0) return true; // no data → allow
-  const genreLower = (requestedGenre || '').toLowerCase();
-  // Normalize hyphens to spaces, then resolve through SOUNDCHARTS_GENRE_MAP so aliases like
-  // 'rap' → 'hip hop', 'hip-hop' → 'hip hop', 'neo soul' → 'r&b' all match SPOTIFY_GENRE_FAMILIES keys.
-  const genreNorm = genreLower.replace(/-/g, ' ');
-  const genreResolved = SOUNDCHARTS_GENRE_MAP[genreNorm] || SOUNDCHARTS_GENRE_MAP[genreLower] || genreNorm;
-  // Find the matching family keywords
-  const familyKey = Object.keys(SPOTIFY_GENRE_FAMILIES).find(k => genreResolved.includes(k) || k.includes(genreResolved));
-  if (!familyKey) return true; // unknown genre → allow
-  const keywords = SPOTIFY_GENRE_FAMILIES[familyKey];
-  return spotifyGenres.some(g => keywords.some(kw => g.toLowerCase().includes(kw)));
-}
-
 // Fetch Spotify artist data (genres, popularity, id) by name — used during enrichment
 // to populate artist_details. Separate from batchGetSpotifyArtistGenres which is session-scoped.
 async function fetchSpotifyArtistData(name) {
@@ -1765,54 +1685,6 @@ async function getSoundChartsSongDetails(songUuid, options = {}) {
   }
 }
 
-// Map Claude genre names → SoundCharts genre slugs
-// Genre slugs verified against SoundCharts top/songs API — these are the actual root values
-// the API accepts. Invalid slugs silently return 0 results.
-const SOUNDCHARTS_GENRE_MAP = {
-  'pop': 'pop', 'dance pop': 'pop', 'synth-pop': 'pop', 'electropop': 'pop',
-  'k-pop': 'pop', 'kpop': 'pop', 'korean pop': 'pop',
-  'hip hop': 'hip hop', 'hip-hop': 'hip hop', 'rap': 'hip hop', 'trap': 'hip hop',
-  'drill': 'hip hop', 'underground hip hop': 'hip hop',
-  'r&b': 'r&b', 'rnb': 'r&b', 'neo soul': 'r&b', 'soul': 'r&b', 'funk': 'r&b',
-  'rock': 'rock', 'indie rock': 'rock', 'pop rock': 'rock', 'punk': 'rock',
-  'alternative': 'alternative', 'indie': 'alternative', 'indie pop': 'alternative',
-  'electronic': 'electro', 'edm': 'electro', 'house': 'electro',
-  'techno': 'electro', 'dance': 'electro', 'lo-fi': 'electro', 'ambient': 'electro',
-  'country': 'country', 'country pop': 'country',
-  'latin': 'latin', 'reggaeton': 'latin', 'latin pop': 'latin',
-  'jazz': 'jazz', 'classical': 'classical',
-  'metal': 'metal',
-  'afrobeats': 'african', 'afro pop': 'african', 'afro': 'african',
-  'reggae': 'reggae', 'blues': 'blues', 'gospel': 'r&b',
-};
-
-// Map Claude subgenre labels → SoundCharts sub-genre slugs
-const SOUNDCHARTS_SUBGENRE_MAP = {
-  // Pop subgenres
-  'dance pop': 'dance pop', 'electropop': 'electropop', 'synth-pop': 'synth pop',
-  'indie pop': 'indie pop', 'art pop': 'art pop', 'dream pop': 'dream pop',
-  'k-pop': 'k-pop', 'j-pop': 'j-pop',
-  // Hip-hop subgenres
-  'rap': 'hip-hop & rap', 'hip-hop & rap': 'hip-hop & rap',
-  'trap': 'trap', 'drill': 'drill', 'lo-fi hip hop': 'lo-fi hip hop',
-  'conscious hip hop': 'conscious hip hop', 'mumble rap': 'mumble rap',
-  'phonk': 'phonk', 'cloud rap': 'cloud rap',
-  // R&B subgenres
-  'neo soul': 'neo soul', 'contemporary r&b': 'contemporary r&b',
-  'alternative r&b': 'alternative r&b',
-  // Electronic subgenres
-  'house': 'house', 'deep house': 'deep house', 'tech house': 'tech house',
-  'techno': 'techno', 'dubstep': 'dubstep', 'drum and bass': 'drum and bass',
-  'ambient': 'ambient', 'lo-fi': 'lo-fi', 'chillout': 'chillout',
-  'trance': 'trance', 'future bass': 'future bass',
-  // Rock subgenres
-  'indie rock': 'indie rock', 'alternative rock': 'alternative rock',
-  'punk rock': 'punk rock', 'hard rock': 'hard rock', 'emo': 'emo',
-  'shoegaze': 'shoegaze', 'grunge': 'grunge',
-  // Latin subgenres
-  'reggaeton': 'reggaeton', 'latin pop': 'latin pop', 'bachata': 'bachata',
-  'salsa': 'salsa', 'dembow': 'dembow',
-};
 
 
 // Catalog-level context overrides — tracks with confirmed repeated false positives
@@ -2001,27 +1873,18 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
 
   const filters = [];
 
-  // Genre filter (used for top_songs fallback; also passed so artist_songs can apply era filter)
+  // Genre filter — Claude now returns exact SC slugs, so check directly against SC lists.
+  // Subgenre takes priority (more precise); fall back to genre if no subgenre match.
   if (genreData.primaryGenre) {
-    const genreLower = genreData.primaryGenre.toLowerCase().trim();
-    // Check SOUNDCHARTS_SUBGENRE_MAP first — if primaryGenre is a specific subgenre (e.g. 'rap',
-    // 'trap', 'neo soul', 'indie rock'), use songSubGenres for precision rather than the broad
-    // parent songGenres bucket (e.g. 'rap' → 'hip-hop & rap' instead of 'hip hop').
-    const scSubgenre = SOUNDCHARTS_SUBGENRE_MAP[genreLower] ||
-      Object.entries(SOUNDCHARTS_SUBGENRE_MAP).find(([k]) => genreLower === k || genreLower.replace(/-/g, ' ') === k)?.[1];
-    if (scSubgenre) {
-      filters.push({ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } });
-      console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → songSubGenres=${scSubgenre}`);
+    const slug = genreData.primaryGenre.toLowerCase().trim();
+    if (SC_SUBGENRES.includes(slug)) {
+      filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
+      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+    } else if (SC_GENRES.includes(slug)) {
+      filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
+      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songGenres=${slug}`);
     } else {
-      let scGenre = SOUNDCHARTS_GENRE_MAP[genreLower];
-      if (!scGenre) {
-        for (const [key, val] of Object.entries(SOUNDCHARTS_GENRE_MAP)) {
-          if (genreLower.includes(key) || key.includes(genreLower)) { scGenre = val; break; }
-        }
-      }
-      // Drift diagnostic: log genre resolution so we can spot mismatches (e.g. neo-soul → r&b when SC has no neo-soul top-songs)
-      console.log(`🎵 SC genre resolution: primaryGenre="${genreData.primaryGenre}" → scGenre=${scGenre || '(none — no SC mapping)'}`);
-      if (scGenre) filters.push({ type: 'songGenres', data: { values: [scGenre], operator: 'in' } });
+      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → no SC match, skipping genre filter`);
     }
   }
 
@@ -2194,16 +2057,14 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     console.log(`⏱️  SoundCharts duration filter: ${JSON.stringify(durData)}s`);
   }
 
-  // Subgenre filter
+  // Subgenre filter — Claude returns exact SC slugs, check directly against SC_SUBGENRES
   if (genreData.subgenre) {
-    const subLower = genreData.subgenre.toLowerCase().trim();
-    const scSubgenre = SOUNDCHARTS_SUBGENRE_MAP[subLower] ||
-      Object.entries(SOUNDCHARTS_SUBGENRE_MAP).find(([k]) => subLower.includes(k) || k.includes(subLower))?.[1];
-    // Drift diagnostic: log subgenre resolution (critical for neo-soul — maps to 'neo soul' subgenre filter on top of r&b genre)
-    console.log(`🎸 SC subgenre resolution: subgenre="${genreData.subgenre}" → scSubgenre=${scSubgenre || '(none — no SC mapping)'}`);
-    if (scSubgenre) {
-      filters.push({ type: 'songSubGenres', data: { values: [scSubgenre], operator: 'in' } });
-      console.log(`🎸 SoundCharts subgenre filter: ${scSubgenre}`);
+    const subSlug = genreData.subgenre.toLowerCase().trim();
+    if (SC_SUBGENRES.includes(subSlug)) {
+      filters.push({ type: 'songSubGenres', data: { values: [subSlug], operator: 'in' } });
+      console.log(`🎸 SC subgenre filter: "${genreData.subgenre}" → songSubGenres=${subSlug}`);
+    } else {
+      console.log(`🎸 SC subgenre: "${genreData.subgenre}" → no SC match, skipping`);
     }
   }
 
@@ -2556,16 +2417,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             pendingEnrichment
           );
         }
-        // No seed artists — last resort: retry without genre filter
-        const filtersWithoutGenre = soundchartsFilters.filter(f => f.type !== 'songGenres');
-        console.log(`⚠️  SoundCharts genre filter returned 0 and no seed artists — retrying without genre filter`);
-        return executeSoundChartsStrategy(
-          { ...query, soundchartsFilters: filtersWithoutGenre },
-          fetchCount,
-          confirmedArtistUuids,
-          minArtists,
-          pendingEnrichment
-        );
+        // No seed artists and top_songs returned 0 — return empty rather than stripping the genre
+        // filter, which would let off-genre songs in (e.g. Beat It in a rap playlist).
+        console.log(`⚠️  SoundCharts top_songs returned 0 and no seed artists — returning empty (genre filter preserved)`);
+        return [];
       }
 
       const mappedItems = items
@@ -6413,10 +6268,26 @@ Never drop any constraint from the original request for any reason. If the user 
 
 Prompt: "${prompt}"
 
+For "primaryGenre" and "subgenre", you MUST use exact slugs from these SoundCharts lists. Do not invent values.
+
+SC genres (use for primaryGenre when the request is broad): african, alternative, asian, blues, classical, country, electro, european, folk, hip hop, holiday, instrumental, jazz, kids, latin, mena, metal, others, pop, r&b, reggae, religious, rock, soundtrack, spoken, sports
+
+SC subgenres (use for primaryGenre or subgenre when the request is specific): acoustic blues, african, afrikaans, afrobeats, alternative, amapiano, anime, arabesque, arabic, asian, audiobooks, baile funk, banda/grupero, baroque, bluegrass, blues, bolero, bollywood, bossa, brasilian music, cantonese pop, chicago blues, children's music, chill out/trip-hop/lounge, christian, christmas, classical, classical period, comedy, contemporary r&b, contemporary soul, corridos, country, cumbia, dance, dancehall/ragga, dirty south, disco, dub, dubstep, east coast, electronic, electro pop/electro rock, film ost, flamenco, folk, forro, french chanson, french pop, french rap, french rock, german pop, gospel, grime, hard rock, hip-hop & rap, indian music, indie pop, indie pop/folk, indie rock, indie rock/pop rock, international folklore, international pop, jazz, jazz instrumental, jazz vocal, j-pop, k-pop, latin, mandarin pop, metal, middle eastern, musical theater, norteño, old school r&b, opera, ost, pop, pop in spanish, r&b, r&b, funk & soul, reggae, reggaeton, rock, rock & roll/rockabilly, salsa, singer/songwriter, ska, soul, spoken word, techno/house, trance, traditional mexicano, urbano latino, west coast, worldwide
+
+Rules:
+- If user says "rap" → primaryGenre: "hip-hop & rap" (subgenre)
+- If user says "hip hop" → primaryGenre: "hip hop" (genre)
+- If user says "k-pop" → primaryGenre: "k-pop" (subgenre)
+- If user says "techno" or "house" → primaryGenre: "techno/house" (subgenre)
+- If user says "r&b" → primaryGenre: "r&b" (genre)
+- If user says "soul" → primaryGenre: "soul" (subgenre)
+- If user says "trap" → primaryGenre: "hip-hop & rap" (subgenre), subgenre: null (trap is not a standalone SC slug)
+- Always prefer the most specific matching slug. Use a subgenre slug when it exists, genre slug as fallback.
+
 Respond ONLY with valid JSON in this format:
 {
-  "primaryGenre": "the main genre or null",
-  "subgenre": "specific subgenre or null",
+  "primaryGenre": "exact SC genre or subgenre slug, or null",
+  "subgenre": "exact SC subgenre slug for further specificity, or null",
   "secondaryGenres": ["related genres"],
   "keyCharacteristics": ["soulful", "upbeat", etc.],
   "style": "overall vibe/style",
@@ -7832,23 +7703,6 @@ Respond ONLY with valid JSON:
         _phaseIndex: scSong._phaseIndex ?? null,
       }));
 
-    // Artist-level genre filter — SC sometimes tags songs as R&B whose artist is clearly not
-    // (e.g. Lukas Graham, Sam Smith, Arctic Monkeys). Filter by Spotify artist genres to catch these.
-    if (genreData.primaryGenre && recommendedTracks.length > 0) {
-      const scArtistNames = [...new Set(recommendedTracks.map(t => t.artist).filter(Boolean))];
-      const scGenreMap = await resolveArtistGenres(scArtistNames).catch(() => new Map());
-      const beforeFilter = recommendedTracks.length;
-      recommendedTracks = recommendedTracks.filter(t => {
-        const spGenres = scGenreMap.get((t.artist || '').toLowerCase()) || null;
-        const ok = isArtistInGenreFamily(spGenres, genreData.primaryGenre);
-        // Per-song mismatch logs removed — summary line below captures count
-        return ok;
-      });
-      if (recommendedTracks.length < beforeFilter) {
-        console.log(`🎯 SC artist genre filter: ${beforeFilter} → ${recommendedTracks.length} songs (removed ${beforeFilter - recommendedTracks.length} off-genre)`);
-      }
-    }
-
     console.log(`📋 Total songs to search: ${recommendedTracks.length} from SoundCharts (${soundChartsDiscoveredSongs.length - recommendedTracks.length} pre-filtered by era)`);
 
     // Safety: if era filtering was too aggressive (dropped >60% of songs and we have fewer than 2x target),
@@ -9008,21 +8862,6 @@ Example response: [1, 2, 4, 5, 7, ...]`
               let supplementPool = await executeSoundChartsStrategy(supplementQuery, Math.max(needed * 4, 60), confirmedArtistUuids, suppMinArtists);
               console.log(`🔁 Supplement pool: ${supplementPool.length} songs`);
 
-              // Genre validation: filter supplement pool by Spotify artist genres to block
-              // SC genre mislabels (e.g. Amy Winehouse, Arctic Monkeys tagged as R&B).
-              if (genreData.primaryGenre && supplementPool.length > 0) {
-                const suppArtistNames = [...new Set(supplementPool.map(s => s.artistName).filter(Boolean))];
-                const suppGenreMap = await resolveArtistGenres(suppArtistNames).catch(() => new Map());
-                const beforeSupp = supplementPool.length;
-                supplementPool = supplementPool.filter(s => {
-                  const spGenres = suppGenreMap.get((s.artistName || '').toLowerCase()) || null;
-                  return isArtistInGenreFamily(spGenres, genreData.primaryGenre);
-                });
-                if (supplementPool.length < beforeSupp) {
-                  console.log(`🎯 Supplement genre filter: ${beforeSupp} → ${supplementPool.length} songs (Spotify validation)`);
-                }
-              }
-
               const seenSupplementArtists = new Set();
 
               // Phase A: pre-fetch SC platform IDs for songs missing ISRC
@@ -9218,19 +9057,6 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               let gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 10, 40));
               console.log(`🔄 Gap fill pool: ${gapPool.length}/${gapPoolRaw.length} top_songs candidates (capped for ISRC prefetch)`);
 
-              // Genre validation: filter gap fill pool by Spotify artist genres to block SC mislabels
-              if (genreData.primaryGenre && gapPool.length > 0) {
-                const gfArtistNames = [...new Set(gapPool.map(s => s.artistName).filter(Boolean))];
-                const gfGenreMap = await resolveArtistGenres(gfArtistNames).catch(() => new Map());
-                const beforeGf = gapPool.length;
-                gapPool = gapPool.filter(s => {
-                  const spGenres = gfGenreMap.get((s.artistName || '').toLowerCase()) || null;
-                  return isArtistInGenreFamily(spGenres, genreData.primaryGenre);
-                });
-                if (gapPool.length < beforeGf) {
-                  console.log(`🎯 Gap fill genre filter: ${beforeGf} → ${gapPool.length} songs (Spotify validation)`);
-                }
-              }
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
               const gfStorefront = tokens.storefront || 'us';
@@ -9435,24 +9261,6 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
         const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
         let topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
-
-        // Genre validation: cross-reference Spotify artist genres against the requested genre.
-        // SC sometimes mislabels pop artists (e.g. Adele) as R&B. Spotify's genre tagging is
-        // more accurate — filter out artists with no overlap with the requested genre family.
-        if (genreData.primaryGenre && topSongs.length > 0) {
-          const artistNames = [...new Set(topSongs.map(s => s.artistName).filter(Boolean))];
-          const genreMap = await resolveArtistGenres(artistNames).catch(() => new Map());
-          const before = topSongs.length;
-          topSongs = topSongs.filter(s => {
-            const spotifyGenres = genreMap.get((s.artistName || '').toLowerCase()) || null;
-            const ok = isArtistInGenreFamily(spotifyGenres, genreData.primaryGenre);
-            // Per-song mismatch logs removed — summary line below captures count
-            return ok;
-          });
-          if (topSongs.length < before) {
-            console.log(`🎯 Spotify genre filter: ${before} → ${topSongs.length} candidates (removed ${before - topSongs.length} off-genre songs)`);
-          }
-        }
 
         // Phase A: pre-fetch SC platform IDs for songs missing ISRC
         await prefetchPlatformIds(topSongs, platform === 'spotify' ? 'spotify' : 'applemusic');
