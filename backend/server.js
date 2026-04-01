@@ -1000,7 +1000,7 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   const enriched = new Map(); // uuid → { audio, moods, themes }
   let fetchCount = 0;
 
-  // Pass 1: serve from cache (instant)
+  // Pass 1: serve from cache (instant) + backfill song_details from soundcharts_cache
   const needsFetch = [];
   for (const song of songs) {
     if (!song.uuid) continue;
@@ -1008,6 +1008,27 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
     // Treat empty audio as stale — entries cached before the enrichment fix had audio: {}
     if (cached?.audio && Object.keys(cached.audio).length > 0) {
       enriched.set(song.uuid, { audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
+      // Backfill song_details — soundcharts_cache was populated before song_details existed
+      const audio = cached.audio;
+      db.upsertSongDetail(song.uuid, {
+        name:             song.name       || null,
+        artistName:       song.artistName || null,
+        artistUuid:       song.artistUuid || null,
+        energy:           audio.energy           ?? null,
+        valence:          audio.valence          ?? null,
+        danceability:     audio.danceability     ?? null,
+        tempo:            audio.tempo            ?? null,
+        loudness:         audio.loudness         ?? null,
+        acousticness:     audio.acousticness     ?? null,
+        instrumentalness: audio.instrumentalness ?? null,
+        speechiness:      audio.speechiness      ?? null,
+        liveness:         audio.liveness         ?? null,
+        keySignature:     audio.key              ?? null,
+        mode:             audio.mode             ?? null,
+        timeSignature:    audio.time_signature   ?? null,
+        moods:  cached.moods?.length  ? cached.moods  : null,
+        themes: cached.themes?.length ? cached.themes : null,
+      }).catch(() => {});
     } else {
       needsFetch.push(song);
     }
