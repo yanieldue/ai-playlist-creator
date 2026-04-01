@@ -2113,8 +2113,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // Energy target — maps "low"/"medium"/"high" to an energy range.
   // Only applies when a label-derived energy range hasn't already been set,
   // or when the label-derived range is contradictory (min > max was skipped).
-  // Skipped when moods are present — SC 500s on moods + energy combinations.
-  if (energyTarget && !scMoodsAdded) {
+  if (energyTarget) {
     const energyIdx = filters.findIndex(f => f.type === 'energy');
     // Skip energy filter if moods are Sad/Melancholic — sad R&B/pop spans all energy levels,
     if (energyIdx === -1) {
@@ -2130,9 +2129,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   }
 
   // Mood → valence filter (positive = high valence, melancholic = low valence)
-  // Skipped when moods are present — SC 500s on moods + valence combinations.
   const mood = genreData.mood;
-  if (mood && !scMoodsAdded) {
+  if (mood) {
     const valenceIdx = filters.findIndex(f => f.type === 'valence');
     if (valenceIdx === -1) {
       if (mood === 'positive') {
@@ -2244,12 +2242,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // the prompt more dynamically than static keyword maps can.
   // Skip types that need server-side slug/code mapping (handled above by existing logic).
   // moods and themes are handled server-side (built from atmosphere + useCase above), so skip Claude's versions.
-  // When moods are present, also skip energy/valence from Claude — SC 500s on that combo.
   const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes', 'moods']);
-  if (scMoodsAdded) {
-    CLAUDE_SC_SKIP_TYPES.add('energy');
-    CLAUDE_SC_SKIP_TYPES.add('valence');
-  }
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
     if (!cf || !cf.type || CLAUDE_SC_SKIP_TYPES.has(cf.type)) continue;
