@@ -2461,6 +2461,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           artistName: item.song.creditName || 'Unknown',
           isrc: item.song?.isrc?.value || item.song?.isrc || null,
           uuid: item.song?.uuid,
+          artistUuid: item.song?.artists?.[0]?.uuid || null,
           releaseDate: item.song?.releaseDate || null,
           source: strategy,
           _scEnergy: item.song?.audio?.energy ?? null,
@@ -7705,8 +7706,10 @@ Respond ONLY with valid JSON:
         artist: scSong.artistName,
         isrc: scSong.isrc || null,
         uuid: scSong.uuid || null,
+        artistUuid: scSong.artistUuid || null,
         releaseDate: scSong.releaseDate || null,
         source: 'soundcharts',
+        _scEnergy: scSong._scEnergy ?? null,
         _phaseLabel: scSong._phaseLabel || null,
         _phaseIndex: scSong._phaseIndex ?? null,
       }));
@@ -7746,8 +7749,10 @@ Respond ONLY with valid JSON:
             artist: scSong.artistName,
             isrc: scSong.isrc || null,
             uuid: scSong.uuid || null,
+            artistUuid: scSong.artistUuid || null,
             releaseDate: scSong.releaseDate || null,
-            source: 'soundcharts'
+            source: 'soundcharts',
+            _scEnergy: scSong._scEnergy ?? null,
           }));
         console.log(`📋 After relaxing era filter: ${recommendedTracks.length} songs available`);
       }
@@ -8038,31 +8043,143 @@ Return ONLY valid JSON:
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
 
-      // Sort: prioritize songs with known SC energy data so Phase B fills the early-stop
-      // buffer with checkable tracks first. Energy-null songs fall to the end and only
-      // get picked if no energy-data candidates remain.
+      // Sort: energy-data songs first so the vibe check has the richest signal at the top.
       recommendedTracks.sort((a, b) => (a._scEnergy != null ? 0 : 1) - (b._scEnergy != null ? 0 : 1));
 
-      // ── Phase A: pre-fetch SoundCharts platform IDs (serial+throttled, one-time cost) ──
-      // For songs that have no ISRC, fetch the platform ID from SC identifiers upfront so
-      // Phase B can do all platform lookups in parallel without hitting the SC throttler.
+      // ── SC pool vibe check: filter before any platform lookup ──
+      // Runs entirely on SC metadata (name, artist, year, energy) — no Spotify/Apple calls.
+      // Only songs passing this check get platform IDs fetched and matched in Phase B.
+      // For multi-phase playlists skip this — phases have distinct energy targets and the
+      // per-phase SC queries already constrain vibes sufficiently.
+      let vibePassedTracks = recommendedTracks;
+      if (!_phases && recommendedTracks.length >= 5) {
+        const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
+
+        // Step 1: CATALOG-OVERRIDE filter (cheap dictionary lookup, no LLM)
+        let _scPoolFiltered = recommendedTracks.filter(song => {
+          const key = `${(song.artist || '').toLowerCase()}::${(song.track || '').toLowerCase()}`;
+          const override = TRACK_CONTEXT_OVERRIDES[key];
+          if (!override) return true;
+          const moodOk = !genreData.mood || override.requiredMoods.includes(genreData.mood);
+          const energyOk = !genreData.energyTarget || override.requiredEnergies.includes(genreData.energyTarget);
+          const ucBlocked = _scUseCase && (override.blockedUseCases || []).includes(_scUseCase);
+          if (ucBlocked || !moodOk || !energyOk) {
+            console.log(`🚫 [CATALOG-OVERRIDE] "${song.track}" by ${song.artist} — ${override.reason}`);
+            return false;
+          }
+          return true;
+        });
+
+        // Step 2: LLM vibe check on SC pool
+        try {
+          const _scConstraintLines = [];
+          if (genreData.primaryGenre) _scConstraintLines.push(`Genre: ${genreData.primaryGenre}`);
+          if (genreData.style) _scConstraintLines.push(`Style/Vibe: ${genreData.style}`);
+          if (genreData.atmosphere?.length > 0) _scConstraintLines.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
+          if (genreData.contextClues.useCase) _scConstraintLines.push(`Use case: ${genreData.contextClues.useCase}`);
+          {
+            const _fastHardRules = {
+              summer:     'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
+              party:      'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
+              workout:    'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
+              focus:      'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
+              sleep:      'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
+              heartbreak: 'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
+              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here (e.g. a song about hitting on a girl at the mall is wrong, even if the artist also makes slow jams). Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
+            };
+            if (_fastHardRules[_scUseCase]) _scConstraintLines.push(_fastHardRules[_scUseCase]);
+          }
+          if (eraMin || eraMax) {
+            const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
+            _scConstraintLines.push(`Era: songs must be from ${eraDesc}. REMOVE any song originally recorded/released outside this range, even if it was recently repackaged or re-released.`);
+          }
+          if (genreData.contextClues.avoidances?.length > 0) _scConstraintLines.push(`AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
+          const _scWantsUnderground = genreData.trackConstraints.popularity.preference === 'underground' ||
+            (genreData.trackConstraints.popularity.max !== null && genreData.trackConstraints.popularity.max !== undefined && genreData.trackConstraints.popularity.max <= 50);
+          if (_scWantsUnderground) _scConstraintLines.push(`Popularity: UNDERGROUND/INDIE only — remove mainstream chart artists`);
+          const _scVocalGender = genreData.artistConstraints?.vocalGender;
+          if (_scVocalGender === 'female') _scConstraintLines.push(`GENDER — HARD RULE: This playlist requires FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. No exceptions — even if the music fits the vibe perfectly.`);
+          if (_scVocalGender === 'male') _scConstraintLines.push(`GENDER — HARD RULE: This playlist requires MALE artists only. REMOVE any track by a female solo artist or female-fronted band. No exceptions.`);
+          if (hasRequestedArtists && !genreData.artistConstraints.exclusiveMode) {
+            _scConstraintLines.push(`Reference artists: ${genreData.artistConstraints.requestedArtists.join(', ')}. Remove any artist who clearly does not belong in the same musical scene (different era, unrelated genre, or totally different sound world).`);
+          }
+          const _scTracksWithEnergy = _scPoolFiltered.filter(s => s._scEnergy != null);
+          if (_scTracksWithEnergy.length > 0) {
+            const _scEnergyGuidance = {
+              heartbreak: 'Energy scores (0–1) are from audio analysis. For this sad/late-night playlist, tracks with energy > 0.75 are almost certainly wrong vibe — flag them unless lyrics/title are clearly melancholic.',
+              sleep:      'Energy scores (0–1) are from audio analysis. For sleep music, any track with energy > 0.4 is likely too stimulating.',
+              focus:      'Energy scores (0–1) are from audio analysis. For focus/study, tracks with energy > 0.7 are likely too distracting.',
+              workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
+              party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
+              summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
+              sensual:    'Energy scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 are likely too high-energy and should be flagged unless they have a clearly slow, seductive groove.',
+            };
+            _scConstraintLines.push(_scEnergyGuidance[_scUseCase] || 'Energy scores (0–1) shown in [brackets] are from audio analysis — use them as an additional signal when a track feels like a vibe mismatch.');
+          }
+
+          const _scTrackLines = _scPoolFiltered.map((song, i) => {
+            const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
+            const energyStr = song._scEnergy != null ? ` [energy: ${song._scEnergy.toFixed(2)}]` : '';
+            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}`;
+          });
+
+          console.log(`🎭 SC pool vibe check: reviewing ${_scPoolFiltered.length} tracks before platform lookup...`);
+          const _scVibeResp = await anthropic.messages.create({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1200,
+            messages: [{
+              role: 'user',
+              content: `You are doing a quality check on a pool of candidate songs before they are added to a playlist. Filter out songs that clearly do not match what the user asked for.
+
+User's full request: "${prompt}"
+
+Constraints every song must satisfy:
+${_scConstraintLines.map(l => `- ${l}`).join('\n')}
+${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (use as style reference):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}` : ''}
+Candidate songs:
+${_scTrackLines.join('\n')}
+
+Return ONLY a JSON array of 1-based indices to KEEP — no explanation.
+
+Rules:
+- KEEP songs that match the user's request and all constraints above.
+- REMOVE songs that clearly violate any constraint (wrong era, wrong genre, wrong vibe, explicitly avoided).
+- When uncertain about a song, KEEP it. Only remove songs you are confident are mismatches.
+- Aim to keep at least 75% of tracks. Do not over-filter.
+
+Example response: [1, 2, 4, 5, 7, ...]`
+            }]
+          });
+
+          const _scVibeContent = _scVibeResp.content[0].text.trim()
+            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+            .replace(/^```\n?/, '').replace(/\n?```$/, '');
+          const _scKeepMatch = _scVibeContent.match(/\[[\d,\s]*\]/);
+          if (_scKeepMatch) {
+            const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
+            const _scFiltered = _scKeepIndices.map(idx => _scPoolFiltered[idx - 1]).filter(Boolean);
+            const _isMelancholicSC = genreData.mood === 'melancholic' || _scUseCase === 'heartbreak';
+            const _scMinKeep = Math.ceil(_scPoolFiltered.length * (_isMelancholicSC ? 0.85 : 0.75));
+            vibePassedTracks = _scFiltered.length >= _scMinKeep
+              ? _scFiltered
+              : _scPoolFiltered.slice(0, Math.max(_scFiltered.length, _scMinKeep));
+            const _scRemoved = _scPoolFiltered.length - vibePassedTracks.length;
+            if (_scRemoved > 0) console.log(`✂️  SC pool vibe check: ${_scPoolFiltered.length} → ${vibePassedTracks.length} tracks (removed ${_scRemoved})`);
+          } else {
+            vibePassedTracks = _scPoolFiltered;
+          }
+        } catch (_scVibeErr) {
+          console.log(`⚠️  SC pool vibe check failed, using full pool: ${_scVibeErr.message}`);
+          vibePassedTracks = _scPoolFiltered;
+        }
+      }
+
+      // ── Phase A: pre-fetch SoundCharts platform IDs for vibe-passed songs ──
+      // No cap, no early-stop — vibe check already reduced the pool, and SC has platform IDs
+      // for virtually every song in its catalog. Platform ID lookup is ~100% reliable vs text search.
       if (process.env.SOUNDCHARTS_APP_ID) {
         const scPlatformCode = platform === 'spotify' ? 'spotify' : 'applemusic';
-        const songsNeedingId = recommendedTracks.filter(s => !s.isrc && s.uuid).slice(0, songCount * 2);
-        if (songsNeedingId.length > 0) {
-          console.log(`🔍 [Phase A] Pre-fetching SC identifiers for ${songsNeedingId.length} songs without ISRC...`);
-          let phaseAConsecFails = 0;
-          for (const song of songsNeedingId) {
-            song.platformId = await getSoundChartsSongPlatformId(song.uuid, scPlatformCode);
-            if (song.platformId) { phaseAConsecFails = 0; }
-            else if (++phaseAConsecFails >= 2) {
-              console.log(`🔍 [Phase A] Stopping early — 2 consecutive misses`);
-              break;
-            }
-          }
-          const found = songsNeedingId.filter(s => s.platformId).length;
-          console.log(`🔍 [Phase A] Got platform IDs for ${found}/${songsNeedingId.length} songs`);
-        }
+        await prefetchPlatformIds(vibePassedTracks, scPlatformCode);
       }
 
       // ── Shared post-lookup validator (runs sequentially after each parallel batch) ──
@@ -8267,12 +8384,9 @@ Return ONLY valid JSON:
         return String(err);
       };
 
-      // Collect 20% more tracks than needed when vibe check will run, so it has a buffer
-      // to trim bad tracks without falling back to supplement. Mirrors the selectionTarget
-      // logic at line ~7828 — keep in sync if that formula changes.
-      const _hasVibeReqs = (genreData.atmosphere.length > 0 || genreData.contextClues.useCase || genreData.era.decade || genreData.subgenre || genreData.trackConstraints.popularity.preference === 'underground' || genreData.energyTarget || genreData.mood || (genreData.contextClues.avoidances || []).length > 0 || genreData.genreAccessibility === 'newcomer' || (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any'));
-      const _earlyStopTarget = _hasVibeReqs && !_phases ? Math.ceil(songCount * 1.2) : songCount;
-      console.log(`🎯 Track collection target: ${_earlyStopTarget} (songCount=${songCount}, vibeBuffer=${_hasVibeReqs && !_phases})`);
+      // Vibe check now runs on the SC pool before platform lookup, so no buffer needed here.
+      const _earlyStopTarget = songCount;
+      console.log(`🎯 Track collection target: ${_earlyStopTarget} (vibe check already applied to SC pool)`);
 
       // Tracks the next unprocessed index in recommendedTracks after Phase B stops.
       // Pool continuation (after vibe check) resumes from here instead of going to supplement.
@@ -8284,7 +8398,19 @@ Return ONLY valid JSON:
         const findSpotifyTrack = async (recommendedSong) => {
           const label = `"${recommendedSong.track}" by ${recommendedSong.artist}`;
 
-          // 1st: ISRC exact match
+          // 1st: direct Spotify ID from SC identifiers (pre-fetched in Phase A) — most reliable
+          if (recommendedSong.platformId) {
+            const result = await Promise.race([
+              userSpotifyApi.getTrack(recommendedSong.platformId),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Track lookup timeout')), 5000))
+            ]);
+            if (result.body?.id) {
+              console.log(`🎯 [SC-ID] ${label} → ${recommendedSong.platformId}`);
+              return { track: result.body, usedExact: true };
+            }
+          }
+
+          // 2nd: ISRC exact match
           if (recommendedSong.isrc) {
             const result = await Promise.race([
               userSpotifyApi.searchTracks(`isrc:${recommendedSong.isrc}`, { limit: 5 }),
@@ -8296,18 +8422,6 @@ Return ONLY valid JSON:
               return { track: items[0], usedExact: true };
             }
             console.log(`⚠️  [ISRC-MISS] ${label} — ISRC ${recommendedSong.isrc} returned no results, trying fallback`);
-          }
-
-          // 2nd: direct Spotify ID from SC identifiers (pre-fetched in Phase A)
-          if (recommendedSong.platformId) {
-            const result = await Promise.race([
-              userSpotifyApi.getTrack(recommendedSong.platformId),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Track lookup timeout')), 5000))
-            ]);
-            if (result.body?.id) {
-              console.log(`🎯 [SC-ID] ${label} → ${recommendedSong.platformId}`);
-              return { track: result.body, usedExact: true };
-            }
           }
 
           // 3rd: text search fallback
@@ -8363,9 +8477,9 @@ Return ONLY valid JSON:
         };
 
         // ── Phase B: batched parallel Spotify lookups ──
-        for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
-          _phaseBStopAt = Math.min(i + BATCH_SIZE, recommendedTracks.length);
-          const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < vibePassedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
+          _phaseBStopAt = Math.min(i + BATCH_SIZE, vibePassedTracks.length);
+          const batch = vibePassedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
               const found = await withSearchRetry(() => findSpotifyTrack(recommendedSong), recommendedSong.track);
@@ -8407,26 +8521,26 @@ Return ONLY valid JSON:
 
         // Per-song Apple Music lookup (runs in parallel within each batch)
         const findAppleTrack = async (recommendedSong) => {
-          // 1st: ISRC exact match
+          // 1st: direct Apple Music ID from SC identifiers (pre-fetched in Phase A) — most reliable
+          if (recommendedSong.platformId && appleMusicApiForSearch) {
+            try {
+              const result = await appleMusicApiForSearch.getTrack(recommendedSong.platformId, storefront);
+              if (result) {
+                console.log(`🎯 [SC-ID] "${recommendedSong.track}" by ${recommendedSong.artist} → ${recommendedSong.platformId}`);
+                return { track: result, usedExact: true };
+              }
+            } catch (idErr) {
+              console.log(`⚠️  Direct Apple Music ID lookup failed for ${recommendedSong.platformId}: ${idErr.message}`);
+            }
+          }
+
+          // 2nd: ISRC exact match
           if (recommendedSong.isrc && appleMusicApiForSearch) {
             try {
               const result = await appleMusicApiForSearch.lookupByIsrc(recommendedSong.isrc, storefront);
               if (result) return { track: result, usedExact: true };
             } catch (isrcErr) {
               console.log(`ISRC lookup failed for ${recommendedSong.isrc}, falling back`);
-            }
-          }
-
-          // 2nd: direct Apple Music ID from SC identifiers (pre-fetched in Phase A)
-          if (recommendedSong.platformId && appleMusicApiForSearch) {
-            try {
-              const result = await appleMusicApiForSearch.getTrack(recommendedSong.platformId, storefront);
-              if (result) {
-                console.log(`🎯 SC identifiers match: "${recommendedSong.track}" by ${recommendedSong.artist} → ${recommendedSong.platformId}`);
-                return { track: result, usedExact: true };
-              }
-            } catch (idErr) {
-              console.log(`⚠️  Direct Apple Music ID lookup failed for ${recommendedSong.platformId}: ${idErr.message}`);
             }
           }
 
@@ -8450,9 +8564,9 @@ Return ONLY valid JSON:
         };
 
         // ── Phase B: batched parallel Apple Music lookups ──
-        for (let i = 0; i < recommendedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
-          _phaseBStopAt = Math.min(i + BATCH_SIZE, recommendedTracks.length);
-          const batch = recommendedTracks.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < vibePassedTracks.length && allTracks.length < _earlyStopTarget; i += BATCH_SIZE) {
+          _phaseBStopAt = Math.min(i + BATCH_SIZE, vibePassedTracks.length);
+          const batch = vibePassedTracks.slice(i, i + BATCH_SIZE);
           const batchResults = await Promise.all(batch.map(async (recommendedSong) => {
             try {
               const found = await withSearchRetry(() => findAppleTrack(recommendedSong), recommendedSong.track);
@@ -8473,184 +8587,11 @@ Return ONLY valid JSON:
         }
       }
 
-      console.log(`📊 Successfully found ${allTracks.length} out of ${recommendedTracks.length} SoundCharts-discovered songs`);
+      console.log(`📊 Matched ${allTracks.length}/${vibePassedTracks.length} vibe-passed songs on ${platform} (${recommendedTracks.length} total SC pool)`);
 
       if (allTracks.length >= 5) {
         let selectedTracks = [...allTracks];
-
-        // CATALOG-OVERRIDE — apply context overrides before vibe check (mirrors Path B step 3.5)
-        if (selectedTracks.length > 0) {
-          const _pathAUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
-          const _pathAMood = genreData.mood;
-          const _pathAEnergy = genreData.energyTarget;
-          const _pathABefore = selectedTracks.length;
-          selectedTracks = selectedTracks.filter(track => {
-            const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
-            const override = TRACK_CONTEXT_OVERRIDES[key];
-            if (!override) return true;
-            const moodOk = !_pathAMood || override.requiredMoods.includes(_pathAMood);
-            const energyOk = !_pathAEnergy || override.requiredEnergies.includes(_pathAEnergy);
-            const useCaseBlocked = _pathAUseCase && (override.blockedUseCases || []).includes(_pathAUseCase);
-            if (useCaseBlocked || !moodOk || !energyOk) {
-              console.log(`🚫 [CATALOG-OVERRIDE] Removing "${track.name}" by ${track.artist} — ${override.reason}`);
-              return false;
-            }
-            return true;
-          });
-          if (selectedTracks.length < _pathABefore) {
-            console.log(`🚫 [CATALOG-OVERRIDE] Removed ${_pathABefore - selectedTracks.length} track(s) via context overrides`);
-          }
-        }
-
-        // Vibe check — only run when we actually have tracks to review
-        if (selectedTracks.length >= 5) {
-
-        const hasAvoidances = genreData.contextClues.avoidances && genreData.contextClues.avoidances.length > 0;
-        const wantsUndergroundFilter = genreData.trackConstraints.popularity.preference === 'underground' ||
-                                        (genreData.trackConstraints.popularity.max !== null &&
-                                         genreData.trackConstraints.popularity.max !== undefined &&
-                                         genreData.trackConstraints.popularity.max <= 50);
-
-        console.log(`🎭 Running vibe check on ${selectedTracks.length} tracks...`);
-
-        // Build constraint lines for the prompt
-        const constraintLines = [];
-        if (genreData.primaryGenre) constraintLines.push(`Genre: ${genreData.primaryGenre}`);
-        if (genreData.style) constraintLines.push(`Style/Vibe: ${genreData.style}`);
-        if (genreData.atmosphere?.length > 0) constraintLines.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
-        if (genreData.contextClues.useCase) constraintLines.push(`Use case: ${genreData.contextClues.useCase}`);
-        // UseCase hard rules — mirror the Sonnet vibe check rules so this fast Haiku pass
-        // catches the same contextual mismatches (it only sees "Use case: summer" otherwise,
-        // which is too vague to catch emotionally mismatched tracks in the right genre).
-        {
-          const _fastUc = (genreData.contextClues.useCase || '').toLowerCase();
-          const _fastHardRules = {
-            summer:      'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
-            party:       'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
-            workout:     'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
-            focus:       'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
-            sleep:       'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
-            heartbreak:  'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
-            sensual:     'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). Only smooth, slow, seductive tracks belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
-          };
-          if (_fastHardRules[_fastUc]) constraintLines.push(_fastHardRules[_fastUc]);
-        }
-        if (eraMin || eraMax) {
-          const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
-          constraintLines.push(`Era: songs must be from ${eraDesc}. REMOVE any song originally recorded/released outside this range, even if it was recently repackaged or re-released.`);
-        }
-        if (hasAvoidances) constraintLines.push(`AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
-        if (wantsUndergroundFilter) constraintLines.push(`Popularity: UNDERGROUND/INDIE only — remove mainstream chart artists`);
-        const _fastVocalGender = genreData.artistConstraints?.vocalGender;
-        if (_fastVocalGender === 'female') constraintLines.push(`GENDER — HARD RULE: This playlist requires FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. No exceptions — even if the music fits the vibe perfectly.`);
-        if (_fastVocalGender === 'male') constraintLines.push(`GENDER — HARD RULE: This playlist requires MALE artists only. REMOVE any track by a female solo artist or female-fronted band. No exceptions.`);
-
-        const seedArtistNames = hasRequestedArtists && !genreData.artistConstraints.exclusiveMode
-          ? genreData.artistConstraints.requestedArtists
-          : [];
-        if (seedArtistNames.length > 0) {
-          constraintLines.push(`Reference artists: ${seedArtistNames.join(', ')}. Remove any artist who clearly does not belong in the same musical scene (different era, unrelated genre, or totally different sound world).`);
-        }
-
-        // Attach known release year, featured artists, and SC energy to each track entry
-        const trackLines = selectedTracks.map((t, i) => {
-          const yr = t.releaseYear || (t.album?.release_date ? parseInt(t.album.release_date.substring(0, 4)) : null);
-          const energyStr = t._scEnergy != null ? ` [energy: ${t._scEnergy.toFixed(2)}]` : '';
-          // Include featured/additional artists so Claude has full collaboration context
-          // e.g. "Fancy" by Drake becomes "Fancy" by Drake ft. T.I., Swizz Beatz
-          const extraArtists = t.artists && t.artists.length > 1
-            ? t.artists.slice(1).map(a => a.name).join(', ')
-            : null;
-          const artistStr = extraArtists ? `${t.artist} ft. ${extraArtists}` : t.artist;
-          return `${i + 1}. "${t.name}" by ${artistStr}${yr ? ` (${yr})` : ''}${energyStr}`;
-        });
-
-        // Add energy-based guidance when SC energy data is present for at least some tracks
-        const tracksWithEnergy = selectedTracks.filter(t => t._scEnergy != null);
-        if (tracksWithEnergy.length > 0) {
-          const _fastUcForEnergy = genreData.contextClues?.useCase;
-          const energyGuidance = {
-            heartbreak: 'Energy scores (0–1) are from audio analysis. For this sad/late-night playlist, tracks with energy > 0.75 are almost certainly wrong vibe — flag them unless lyrics/title are clearly melancholic.',
-            sleep:      'Energy scores (0–1) are from audio analysis. For sleep music, any track with energy > 0.4 is likely too stimulating.',
-            focus:      'Energy scores (0–1) are from audio analysis. For focus/study, tracks with energy > 0.7 are likely too distracting.',
-            workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
-            party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
-            summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
-            sensual:    'Energy scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 are likely too high-energy and should be flagged unless they have a clearly slow, seductive groove.',
-          };
-          if (energyGuidance[_fastUcForEnergy]) {
-            constraintLines.push(energyGuidance[_fastUcForEnergy]);
-          } else {
-            constraintLines.push('Energy scores (0–1) shown in [brackets] are from audio analysis — use them as an additional signal when a track feels like a vibe mismatch.');
-          }
-        }
-
-        try {
-          const vibeCheckResponse = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 800,
-            messages: [{
-              role: 'user',
-              content: `You are doing a final quality check on a playlist to make sure every song truly matches what the user asked for.
-
-User's full request (including any refinements): "${prompt}"
-
-Constraints that every song must satisfy:
-${constraintLines.map(l => `- ${l}`).join('\n')}
-${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (use as style reference — new songs should fit alongside these):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}` : ''}
-Songs to review:
-${trackLines.join('\n')}
-
-Return ONLY a JSON array of 1-based indices to KEEP — no explanation.
-
-Rules:
-- KEEP songs that genuinely match the user's request and all constraints above.
-- REMOVE songs that clearly violate any constraint (wrong era, wrong genre, wrong vibe, explicitly avoided).
-- When uncertain about a song, KEEP it. Only remove songs you are confident are mismatches.
-- Aim to keep at least 75% of tracks. Do not over-filter.
-
-Example response: [1, 2, 4, 5, 7, ...]`
-            }]
-          });
-
-          const vibeContent = vibeCheckResponse.content[0].text.trim()
-            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
-            .replace(/^```\n?/, '').replace(/\n?```$/, '');
-
-          const keepMatch = vibeContent.match(/\[[\d,\s]*\]/);
-          if (keepMatch) {
-            const keepIndices = JSON.parse(keepMatch[0]);
-            const filteredTracks = keepIndices
-              .map(idx => selectedTracks[idx - 1])
-              .filter(t => t !== undefined);
-
-            // For melancholic/heartbreak playlists the risk is almost exclusively upbeat songs
-            // sneaking in — never missing sad ones. Raise the floor to 85% so Haiku can only
-            // cut 15% of tracks, preventing good songs like "White Ferrari" / "Nights" being
-            // removed because their titles don't signal sadness clearly enough.
-            const _isMelancholic = genreData.mood === 'melancholic' || (genreData.contextClues?.useCase || '') === 'heartbreak';
-            const minKeep = Math.ceil(selectedTracks.length * (_isMelancholic ? 0.85 : 0.75));
-            const finalTracks = filteredTracks.length >= minKeep
-              ? filteredTracks
-              : selectedTracks.slice(0, Math.max(filteredTracks.length, minKeep));
-            if (finalTracks.length >= 5) {
-              const finalIds = new Set(finalTracks.map(t => t.id));
-              const removedTracks = selectedTracks.filter(t => !finalIds.has(t.id));
-              if (removedTracks.length > 0) {
-                console.log(`✂️ Vibe check (fast) removed ${removedTracks.length} mismatched tracks:`);
-                removedTracks.forEach(t => {
-                  const _rsrc = t._source || 'unknown-source';
-                  const _ren = t._scEnergy != null ? ` energy: ${t._scEnergy.toFixed(2)}` : ' energy: n/a';
-                  console.log(`  ❌ VIBE_CHECK removed: "${t.name}" by ${t.artist} [source: ${_rsrc},${_ren}]`);
-                });
-              }
-              selectedTracks = finalTracks;
-            }
-          }
-        } catch (error) {
-          console.log('Vibe check failed, using tracks as-is:', error.message);
-        }
-        } // end if (selectedTracks.length >= 5)
+        // Vibe check and CATALOG-OVERRIDE already applied to SC pool before platform lookup.
 
 
         // Return the final tracks
@@ -8679,10 +8620,10 @@ Example response: [1, 2, 4, 5, 7, ...]`
           // SC pool before falling back to supplement. This keeps all original energy/valence/genre
           // filters intact and avoids pulling from unrelated artist catalogs (the source of leakage
           // like "Rollin" by Calvin Harris entering via Khalid's catalog).
-          if (selectedTracks.length < songCount && _phaseBStopAt < recommendedTracks.length) {
+          if (selectedTracks.length < songCount && _phaseBStopAt < vibePassedTracks.length) {
             const _contNeeded = songCount - selectedTracks.length;
             // Sort remaining pool: energy-data songs first (same as initial sort)
-            const _contPool = recommendedTracks.slice(_phaseBStopAt)
+            const _contPool = vibePassedTracks.slice(_phaseBStopAt)
               .sort((a, b) => (a._scEnergy != null ? 0 : 1) - (b._scEnergy != null ? 0 : 1));
             console.log(`🔄 Pool continuation: need ${_contNeeded} more, ${_contPool.length} songs remaining in SC pool`);
 
@@ -8815,8 +8756,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
 
               // Phase A: pre-fetch SC platform IDs for songs missing ISRC
               // Cap pool size before ISRC prefetch — same over-fetching risk as gap fill.
-              if (supplementPool.length > Math.max(needed * 20, 80)) {
-                supplementPool = supplementPool.slice(0, Math.max(needed * 20, 80));
+              if (supplementPool.length > Math.max(needed * 10, 40)) {
+                supplementPool = supplementPool.slice(0, Math.max(needed * 10, 40));
               }
               await prefetchPlatformIds(supplementPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
@@ -8910,7 +8851,7 @@ Example response: [1, 2, 4, 5, 7, ...]`
               focus:      'This playlist is for focus or study. REMOVE any track that is high-energy, hype, aggressive, or attention-grabbing.',
               sleep:      'This playlist is for sleeping. REMOVE any track that is energetic, upbeat, or attention-grabbing.',
               heartbreak: 'This is a heartbreak/sad/late-night emotional playlist. REMOVE any track that is clearly upbeat, celebratory, high-energy, or would not fit a late-night feelings session. KEEP sad, melancholic, emotional, or introspective tracks even if the title sounds positive.',
-              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward — jazz-fusion, avant-garde neo-soul, and polyrhythmic tracks require active listening and kill intimacy. Only smooth, slow, seductive, or mellow late-night R&B/bedroom-pop tracks belong here. If a track would not work during a quiet intimate moment, REMOVE it.',
+              sensual:    'This playlist is for a sensual, intimate, or "baby-making" context. REMOVE any track that is high-energy, hype, aggressive, upbeat party music, or contextually jarring. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward — jazz-fusion, avant-garde neo-soul, and polyrhythmic tracks require active listening and kill intimacy. REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their attention, or impressing them in public do not belong here, even if the artist also makes slow jams. Only tracks that work when two people are already alone together: slow R&B, bedroom pop, late-night hip-hop. If a track would not work during a quiet intimate moment, REMOVE it.',
             };
           const _suppNewCount = selectedTracks.length - _preSupplementCount;
           {
@@ -8992,7 +8933,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               // Cap pool before ISRC prefetch — SC top_songs returns up to 500 songs regardless
               // of requested count, so without capping we'd fetch ISRCs for 500 songs to fill 1-3 gaps.
               const gapPoolRaw = await executeSoundChartsStrategy(gapQuery, Math.max(gapNeeded * 5, 60), {}, gfMinArtists);
-              const gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 20, 60));
+              const gapPool = gapPoolRaw.slice(0, Math.max(gapNeeded * 10, 40));
               console.log(`🔄 Gap fill pool: ${gapPool.length}/${gapPoolRaw.length} top_songs candidates (capped for ISRC prefetch)`);
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
