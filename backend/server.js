@@ -7929,10 +7929,29 @@ Return ONLY valid JSON:
           ]);
           const items = r.body.tracks.items;
           if (items.length > 0) {
-            console.log(`🔑 [ISRC] ${fLabel}`);
-            return { track: items[0], usedExact: true };
+            // Divergence check: reject if SC source artist is not the Spotify primary
+            // (e.g. ISRC for "Bon Appétit" resolves to Katy Perry ft. Migos when SC source is Migos)
+            const isrcTrack = items[0];
+            const isrcPrimary = (isrcTrack.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+            const srcTokens = artistName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
+            const srcNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const toks = srcTokens.length > 0 ? srcTokens : (srcNorm ? [srcNorm] : []);
+            const primaryToks = isrcPrimary.split(/\s+/);
+            const primaryFull = isrcPrimary.replace(/\s+/g, '');
+            const hasOverlap = toks.length === 0 || toks.some(tok =>
+              primaryToks.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt)) ||
+              primaryFull === tok || primaryFull.startsWith(tok) || tok.startsWith(primaryFull)
+            );
+            if (!hasOverlap) {
+              console.log(`⚠️  [ISRC-DIVERGENCE] "${isrcTrack.name}" — SC source "${artistName}" is not Spotify primary "${isrcTrack.artists?.[0]?.name}" — falling through to text search`);
+              // fall through to text search below
+            } else {
+              console.log(`🔑 [ISRC] ${fLabel}`);
+              return { track: isrcTrack, usedExact: true };
+            }
+          } else {
+            console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
           }
-          console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
         }
         // 2. SC platform ID (pre-fetched)
         if (song.platformId) {
@@ -8543,10 +8562,30 @@ Example response: [1, 2, 4, 5, 7, ...]`
             ]);
             const items = result.body.tracks.items;
             if (items.length > 0) {
-              console.log(`🔑 [ISRC] ${label}`);
-              return { track: items[0], usedExact: true };
+              // Divergence check: if SC source artist is not the Spotify primary, this ISRC
+              // resolved to a feature version (e.g. "Bon Appétit" ISRC → Katy Perry ft. Migos
+              // when SC source is Migos). Fall through to text search to find the right version.
+              const isrcTrack = items[0];
+              const isrcPrimary = (isrcTrack.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+              const isrcSourceTokens = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
+              const isrcSourceNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
+              const tokensToCheck = isrcSourceTokens.length > 0 ? isrcSourceTokens : (isrcSourceNorm ? [isrcSourceNorm] : []);
+              const primaryTokens = isrcPrimary.split(/\s+/);
+              const primaryNormFull = isrcPrimary.replace(/\s+/g, '');
+              const hasPrimaryOverlap = tokensToCheck.length === 0 || tokensToCheck.some(tok =>
+                primaryTokens.some(pt => pt === tok || pt.startsWith(tok) || tok.startsWith(pt)) ||
+                primaryNormFull === tok || primaryNormFull.startsWith(tok) || tok.startsWith(primaryNormFull)
+              );
+              if (!hasPrimaryOverlap) {
+                console.log(`⚠️  [ISRC-DIVERGENCE] "${isrcTrack.name}" — SC source "${recommendedSong.artist}" is not Spotify primary "${isrcTrack.artists?.[0]?.name}" — falling through to text search`);
+                // fall through to text search below
+              } else {
+                console.log(`🔑 [ISRC] ${label}`);
+                return { track: isrcTrack, usedExact: true };
+              }
+            } else {
+              console.log(`⚠️  [ISRC-MISS] ${label} — ISRC ${recommendedSong.isrc} returned no results, trying fallback`);
             }
-            console.log(`⚠️  [ISRC-MISS] ${label} — ISRC ${recommendedSong.isrc} returned no results, trying fallback`);
           }
 
           // 3rd: text search fallback
