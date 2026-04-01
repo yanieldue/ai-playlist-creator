@@ -1000,35 +1000,21 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
   const enriched = new Map(); // uuid → { audio, moods, themes }
   let fetchCount = 0;
 
-  // Pass 1: serve from cache (instant) + backfill song_details from soundcharts_cache
+  // Pass 1: check song_details first — if fully populated, skip re-fetch
+  const songDetailsMap = songs.filter(s => s.uuid).length > 0
+    ? await db.getSongDetailsByUuids(songs.filter(s => s.uuid).map(s => s.uuid))
+    : new Map();
   const needsFetch = [];
   for (const song of songs) {
     if (!song.uuid) continue;
-    const cached = await db.getCachedSC(`song_detail:${song.uuid}`);
-    // Treat empty audio as stale — entries cached before the enrichment fix had audio: {}
-    if (cached?.audio && Object.keys(cached.audio).length > 0) {
-      enriched.set(song.uuid, { audio: cached.audio, moods: cached.moods || [], themes: cached.themes || [] });
-      // Backfill song_details — soundcharts_cache was populated before song_details existed
-      const audio = cached.audio;
-      db.upsertSongDetail(song.uuid, {
-        name:             song.name       || null,
-        artistName:       song.artistName || null,
-        artistUuid:       song.artistUuid || null,
-        energy:           audio.energy           ?? null,
-        valence:          audio.valence          ?? null,
-        danceability:     audio.danceability     ?? null,
-        tempo:            audio.tempo            ?? null,
-        loudness:         audio.loudness         ?? null,
-        acousticness:     audio.acousticness     ?? null,
-        instrumentalness: audio.instrumentalness ?? null,
-        speechiness:      audio.speechiness      ?? null,
-        liveness:         audio.liveness         ?? null,
-        keySignature:     audio.key              ?? null,
-        mode:             audio.mode             ?? null,
-        timeSignature:    audio.timeSignature ?? audio.time_signature ?? null,
-        moods:  cached.moods?.length  ? cached.moods  : null,
-        themes: cached.themes?.length ? cached.themes : null,
-      }).catch(() => {});
+    const row = songDetailsMap.get(song.uuid);
+    // Only skip fetch if song_details already has audio AND moods AND genres
+    if (row?.energy != null && row?.moods?.length && row?.genres?.length) {
+      const audio = { energy: row.energy, valence: row.valence, danceability: row.danceability,
+        tempo: row.tempo, loudness: row.loudness, acousticness: row.acousticness,
+        instrumentalness: row.instrumentalness, speechiness: row.speechiness,
+        liveness: row.liveness, key: row.key_signature, mode: row.mode, timeSignature: row.time_signature };
+      enriched.set(song.uuid, { audio, moods: row.moods || [], themes: row.themes || [] });
     } else {
       needsFetch.push(song);
     }
