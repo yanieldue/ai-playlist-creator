@@ -8213,6 +8213,7 @@ Return ONLY valid JSON:
                 const row = dbDetails.get(song.uuid);
                 if (!row) continue;
                 if (song._scMoods?.length === 0 && row.moods?.length > 0) { song._scMoods = row.moods; dbHits++; }
+                if (song._scThemes?.length === 0 && row.themes?.length > 0) { song._scThemes = row.themes; }
                 if (song._scEnergy == null && row.energy != null) song._scEnergy = row.energy;
                 if (song._scDanceability == null && row.danceability != null) song._scDanceability = row.danceability;
                 if (song._scValence == null && row.valence != null) song._scValence = row.valence;
@@ -8237,6 +8238,9 @@ Return ONLY valid JSON:
             workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
             party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
           };
+          const _INCOMPATIBLE_THEMES = {
+            sensual: new Set(['heartbreak', 'anger', 'conflict', 'grief', 'violence', 'betrayal', 'depression', 'despair', 'breakup']),
+          };
           const _ENERGY_HARD_LIMITS = {
             sensual:    { max: 0.70 },
             sleep:      { max: 0.40 },
@@ -8249,11 +8253,13 @@ Return ONLY valid JSON:
             sleep:      { max: 0.55 },
           };
           const incompatibleMoods = _INCOMPATIBLE_MOODS[_scUseCase] || new Set();
+          const incompatibleThemes = _INCOMPATIBLE_THEMES[_scUseCase] || new Set();
           const energyLimit = _ENERGY_HARD_LIMITS[_scUseCase];
           const danceLimit = _DANCEABILITY_HARD_LIMITS[_scUseCase];
           const beforeCount = _scPoolFiltered.length;
           _scPoolFiltered = _scPoolFiltered.filter(song => {
             const moods = (song._scMoods || []).map(m => m.toLowerCase());
+            const themes = (song._scThemes || []).map(t => t.toLowerCase());
             const energy = song._scEnergy;
             const dance = song._scDanceability;
             // Mood conflict
@@ -8261,6 +8267,14 @@ Return ONLY valid JSON:
               const conflict = moods.find(m => incompatibleMoods.has(m));
               if (conflict) {
                 console.log(`🎭 [DATA-FILTER] "${song.track}" by ${song.artist} — mood "${conflict}" conflicts with ${_scUseCase}`);
+                return false;
+              }
+            }
+            // Theme conflict
+            if (themes.length > 0 && incompatibleThemes.size > 0) {
+              const conflict = themes.find(t => incompatibleThemes.has(t));
+              if (conflict) {
+                console.log(`🎭 [DATA-FILTER] "${song.track}" by ${song.artist} — theme "${conflict}" conflicts with ${_scUseCase}`);
                 return false;
               }
             }
@@ -8304,7 +8318,7 @@ Return ONLY valid JSON:
               focus:      'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
               sleep:      'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
               heartbreak: 'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
-              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here. REMOVE any track about longing for someone who is far away or absent — distance/longing songs (e.g. "Location" by Khalid, which is about missing someone from afar) do NOT fit an intimate moment. Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
+              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here. REMOVE any track about longing for someone who is far away or absent — distance/longing songs (e.g. "Location" by Khalid, which is about missing someone from afar) do NOT fit an intimate moment. REMOVE any heartbreak, breakup, or post-relationship song — songs about recovering from a breakup, grieving a lost love, processing betrayal, or burning down a relationship (e.g. "Let It Burn" by Jazmine Sullivan) do NOT belong in an intimate moment even if they are slow and R&B. REMOVE any track where the dominant emotional energy is empowerment, triumph, or self-determination rather than intimacy — sensual playlists are about closeness between two people, not individual strength or resilience. REMOVE any non-English pop song that does not clearly have the intimate R&B/bedroom sound — foreign pop tracks (e.g. Filipino pop, Latin pop, K-pop) tagged with romantic themes often have a completely different sonic context and do NOT fit. Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
             };
             if (_fastHardRules[_scUseCase]) _scConstraintLines.push(_fastHardRules[_scUseCase]);
           }
@@ -8341,7 +8355,8 @@ Return ONLY valid JSON:
             const energyStr = song._scEnergy != null ? ` [energy: ${song._scEnergy.toFixed(2)}]` : '';
             const danceStr = song._scDanceability != null ? ` [dance: ${song._scDanceability.toFixed(2)}]` : '';
             const moodStr = song._scMoods?.length > 0 ? ` [moods: ${song._scMoods.join(', ')}]` : '';
-            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}${danceStr}${moodStr}`;
+            const themeStr = song._scThemes?.length > 0 ? ` [themes: ${song._scThemes.join(', ')}]` : '';
+            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}${danceStr}${moodStr}${themeStr}`;
           });
 
           console.log(`🎭 SC pool vibe check: reviewing ${_scPoolFiltered.length} tracks before platform lookup...`);
