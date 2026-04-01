@@ -1042,18 +1042,31 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
 
     const results = await Promise.allSettled(
       batch.map(song =>
-        axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`, {
-          headers: { 'x-app-id': appId, 'x-api-key': apiKey },
-          timeout: 8000,
-        }).then(resp => ({ uuid: song.uuid, object: resp.data?.object }))
+        Promise.all([
+          axios.get(`https://customer.api.soundcharts.com/api/v2.25/song/${song.uuid}`, {
+            headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+            timeout: 8000,
+          }),
+          axios.get(`https://customer.api.soundcharts.com/api/v2/song/${song.uuid}/lyrics-analysis`, {
+            headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+            timeout: 8000,
+          }).catch(() => null), // lyrics-analysis may not exist for all songs
+        ]).then(([songResp, lyricsResp]) => ({
+          uuid: song.uuid,
+          object: songResp.data?.object,
+          lyricsAnalysis: lyricsResp?.data?.lyricsAnalysis || null,
+        }))
       )
     );
 
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value.object) {
         const s = r.value.object;
+        const la = r.value.lyricsAnalysis;
         const audio = s.audio || {};
-        const detail = { audio, moods: s.moods || [], themes: s.themes || [] };
+        const moods = la?.moods?.map(m => m.toLowerCase()) || [];
+        const themes = la?.themes?.map(t => t.toLowerCase()) || [];
+        const detail = { audio, moods, themes };
         db.setCachedSC(`song_detail:${r.value.uuid}`, detail);
         enriched.set(r.value.uuid, detail);
         if (Object.keys(audio).length > 0) fetchCount++;
@@ -1076,8 +1089,8 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
           keySignature:     audio.key           ?? null,
           mode:             audio.mode          ?? null,
           timeSignature:    audio.timeSignature ?? audio.time_signature ?? null,
-          moods:    s.moods    || null,
-          themes:   s.themes   || null,
+          moods:  moods.length  ? moods  : null,
+          themes: themes.length ? themes : null,
           genres:   s.genres?.map(g => (typeof g === 'string' ? g : g.name))    || null,
           subgenres:s.subGenres?.map(g => (typeof g === 'string' ? g : g.name)) || null,
         }).catch(() => {}); // fire-and-forget, never block enrichment
