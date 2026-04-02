@@ -8143,6 +8143,8 @@ Return ONLY valid JSON:
               role: 'user',
               content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks. For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
 
+When the user's request references a specific brand, franchise, studio, or universe (e.g. "Disney", "Pixar", "Studio Ghibli", "DreamWorks", "Marvel"), ONLY select songs that actually belong to that brand. Do NOT include songs from competing or unrelated franchises — e.g. a DreamWorks song does NOT belong in a Disney playlist, a Fox movie song does NOT belong in a Pixar playlist. Use your knowledge of which studio/franchise each song or soundtrack belongs to.
+
 User's request: "${prompt}"
 ${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (match this style):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}\n` : ''}
 Candidates:
@@ -9640,6 +9642,7 @@ For example:
 - If era is "90s", songs from 2020s should be removed
 - If subgenre is "neo-soul", trap songs should be removed even if both are R&B
 - If use case is "sensual" or "intimate", songs that are lyrically about heartbreak, breakups, nostalgia, or loss should be removed EVEN IF they sound smooth/mellow/slow — lyrical content overrides production style
+- If the user specified a brand/franchise/studio (e.g. "Disney classics", "Pixar songs", "Studio Ghibli"), remove any song that does NOT belong to that brand — a DreamWorks song in a Disney playlist is wrong, a Fox film song in a Pixar playlist is wrong, etc.
 - If popularity preference is "underground", BE EXTREMELY STRICT - remove ANY artist that:
   * Has had radio hits or chart success (Top 40, Hot 100, etc.)
   * Has millions of monthly listeners on streaming platforms
