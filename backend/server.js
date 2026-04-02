@@ -2507,37 +2507,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
               fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
             );
           }
-          const _anchorPromptText = query._prompt;
-          if (_anchorPromptText) {
-            try {
-              console.log(`⚠️  SC 500 (third) — no suggestedSeedArtists, falling back to Haiku anchor`);
-              const _anchorResp = await anthropic.messages.create({
-                model: 'claude-haiku-4-5-20251001',
-                max_tokens: 300,
-                messages: [{
-                  role: 'user',
-                  content: `Name 2-3 real songs you are 100% confident belong in a playlist for: "${_anchorPromptText}"\nGenre: ${query.primaryGenre || 'any'}\nUse case: ${query.useCase || 'any'}\n\nReturn ONLY a JSON array: [{"artist": "Artist Name", "title": "Song Title"}, ...]\nNo explanation.`,
-                }]
-              });
-              const _anchorRaw = _anchorResp.content[0].text.trim()
-                .replace(/^```json\n?/, '').replace(/\n?```$/, '').replace(/^```\n?/, '').replace(/\n?```$/, '');
-              const _anchorMatch = _anchorRaw.match(/\[[\s\S]*?\]/);
-              if (_anchorMatch) {
-                const _anchors = JSON.parse(_anchorMatch[0]);
-                const _anchorArtists = _anchors.map(a => a.artist).filter(Boolean);
-                if (_anchorArtists.length > 0) {
-                  console.log(`🎯 SC anchor artists (Haiku): [${_anchorArtists.join(', ')}]`);
-                  return executeSoundChartsStrategy(
-                    { ...query, strategy: 'artist_songs', artists: _anchorArtists, expandToSimilar: true, _anchorUsed: true },
-                    fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
-                  );
-                }
-              }
-            } catch (anchorErr) {
-              console.log(`⚠️  SC 500 anchor LLM call failed: ${anchorErr.message}`);
-            }
-          }
-          console.log(`⚠️  SC 500 anchor unavailable — returning empty to avoid unfiltered results`);
+          console.log(`⚠️  SC 500 (third) — no suggestedSeedArtists available, returning empty so user is prompted to be more specific`);
           return [];
         }
         console.log(`⚠️  SoundCharts error: 500 ${err.message}`);
@@ -10228,6 +10198,12 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       } catch (histErr) {
         console.log('[MANUAL-REFRESH] Failed to update song history:', histErr.message);
       }
+    }
+
+    if (selectedTracks.length === 0) {
+      return res.status(422).json({
+        error: "We couldn't find songs matching your request. Try adding an artist name, a genre, or a reference track to help narrow it down."
+      });
     }
 
     res.json({
