@@ -2428,7 +2428,21 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 4: all filter combinations returned 0 — fall back to artist_songs with seed artists.
+        // Step 4: strip themes — themes like 'escapism' drastically narrow the pool
+        // (e.g. songGenres=folk + themes=escapism + audio → 0).
+        const filtersWithoutThemes = soundchartsFilters.filter(f => f.type !== 'themes');
+        if (filtersWithoutThemes.length < soundchartsFilters.length && !query._themesStripped) {
+          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping themes and retrying`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: filtersWithoutThemes, _themesStripped: true },
+            fetchCount,
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
+          );
+        }
+
+        // Step 5: all filter combinations returned 0 — fall back to artist_songs with seed artists.
         // Prefer user-requested artists; fall back to Claude's suggested seeds as last resort.
         const seeds = (query.seedArtists || []).length > 0
           ? query.seedArtists
