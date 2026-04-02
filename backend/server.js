@@ -8274,6 +8274,11 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
             console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
+            // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool
+            if (vibePassedTracks.length < _targetCount * 0.4) {
+              console.warn(`⚠️  Sonnet curation too aggressive (${vibePassedTracks.length}/${_targetCount}), falling back to full pool`);
+              vibePassedTracks = _sonnetInputPool;
+            }
           } else {
             vibePassedTracks = _sonnetInputPool;
           }
