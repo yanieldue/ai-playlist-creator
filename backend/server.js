@@ -2429,7 +2429,10 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         }
 
         // Step 4: all filter combinations returned 0 — fall back to artist_songs with seed artists.
-        const seeds = query.seedArtists || [];
+        // Prefer user-requested artists; fall back to Claude's suggested seeds as last resort.
+        const seeds = (query.seedArtists || []).length > 0
+          ? query.seedArtists
+          : (query.suggestedSeedArtists || []);
         if (seeds.length > 0) {
           console.log(`⚠️  SoundCharts genre filter returned 0 — falling back to artist_songs with seeds [${seeds.join(', ')}]`);
           return executeSoundChartsStrategy(
@@ -2534,7 +2537,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     }
 
     // Artist-based fallback (used when top/songs is unavailable)
-    const seeds = query.seedArtists || [];
+    const seeds = (query.seedArtists || []).length > 0
+      ? query.seedArtists
+      : (query.suggestedSeedArtists || []);
     if (seeds.length === 0) {
       console.log('⚠️  top/songs fallback: no seed artists provided, cannot fall back to artist_songs — returning empty');
       return [];
@@ -8145,6 +8150,10 @@ Return ONLY valid JSON:
       return null;
     };
 
+    // UUID → Spotify ID map — initialised empty, populated inside the SC block below.
+    // Declared here so the broad fallback path (line ~9274) can always reference it.
+    let _uuidToSpotifyId = new Map();
+
     // If we have songs from SoundCharts, search for them on the user's platform
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
@@ -8229,7 +8238,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
       // (Phase B, supplement, gap fill) can do ID-based artist matching instead of
       // the loose name-prefix check that caused false positives (e.g. "Mustard" → "Mustard Seed Faith").
       const _allPoolUuids = [...new Set(vibePassedTracks.map(t => t.artistUuid).filter(Boolean))];
-      const _uuidToSpotifyId = await db.getArtistSpotifyIdsByUuids(_allPoolUuids).catch(() => new Map());
+      _uuidToSpotifyId = await db.getArtistSpotifyIdsByUuids(_allPoolUuids).catch(() => new Map());
 
       // ── Phase A: pre-fetch SoundCharts platform IDs for vibe-passed songs ──
       // Cap at songCount×3 (min 60) — SC top_songs returns no ISRCs, so every song needs a serial
