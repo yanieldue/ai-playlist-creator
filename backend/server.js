@@ -8110,202 +8110,28 @@ Return ONLY valid JSON:
           return true;
         });
 
-        // Step 1.5 pre-work: batch-fetch song_details for songs whose SC inline moods/audio are empty.
-        // SC top_songs API does NOT return moods inline — they're only in song_details (from lyrics-analysis enrichment).
-        {
-          const uuidsToEnrich = _scPoolFiltered.filter(s => s.uuid && (s._scMoods?.length === 0 || s._scEnergy == null)).map(s => s.uuid);
-          if (uuidsToEnrich.length > 0) {
-            try {
-              const dbDetails = await db.getSongDetailsByUuids(uuidsToEnrich);
-              let dbHits = 0;
-              for (const song of _scPoolFiltered) {
-                if (!song.uuid) continue;
-                const row = dbDetails.get(song.uuid);
-                if (!row) continue;
-                if (song._scMoods?.length === 0 && row.moods?.length > 0) { song._scMoods = row.moods; dbHits++; }
-                if (song._scThemes?.length === 0 && row.themes?.length > 0) { song._scThemes = row.themes; }
-                if (song._scEnergy == null && row.energy != null) song._scEnergy = row.energy;
-                if (song._scDanceability == null && row.danceability != null) song._scDanceability = row.danceability;
-                if (song._scValence == null && row.valence != null) song._scValence = row.valence;
-              }
-              if (dbHits > 0) console.log(`📦 [DATA-FILTER] enriched ${dbHits} songs with stored moods/audio from song_details`);
-            } catch (e) {
-              console.warn(`⚠️  [DATA-FILTER] song_details batch fetch failed: ${e.message}`);
-            }
-          }
-        }
-
-        // Step 1.5: Data-driven mood/audio pre-filter — removes clear conflicts before the LLM sees the pool.
-        // Uses SC mood tags and audio features already returned inline with each song.
-        // Only hard-removes songs where the data is conclusive (has moods AND they conflict).
-        // Songs with no mood data are left through — the LLM handles uncertainty.
-        {
-          const _INCOMPATIBLE_MOODS = {
-            sensual:    new Set(['joyful', 'energetic', 'playful', 'euphoric', 'empowering', 'boastful', 'confrontational', 'aggressive', 'excited', 'bouncy']),
-            heartbreak: new Set(['joyful', 'euphoric', 'energetic', 'empowering', 'boastful', 'excited']),
-            focus:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'boastful']),
-            sleep:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'bouncy', 'empowering']),
-            workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
-            party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
-          };
-          const _INCOMPATIBLE_THEMES = {
-            sensual: new Set(['heartbreak', 'anger', 'conflict', 'grief', 'violence', 'betrayal', 'depression', 'despair', 'breakup']),
-          };
-          const _ENERGY_HARD_LIMITS = {
-            sensual:    { max: 0.70 },
-            sleep:      { max: 0.40 },
-            focus:      { max: 0.72 },
-            workout:    { min: 0.50 },
-            party:      { min: 0.50 },
-          };
-          const _DANCEABILITY_HARD_LIMITS = {
-            sensual:    { max: 0.75 },
-            sleep:      { max: 0.55 },
-          };
-          const incompatibleMoods = _INCOMPATIBLE_MOODS[_scUseCase] || new Set();
-          const incompatibleThemes = _INCOMPATIBLE_THEMES[_scUseCase] || new Set();
-          const energyLimit = _ENERGY_HARD_LIMITS[_scUseCase];
-          const danceLimit = _DANCEABILITY_HARD_LIMITS[_scUseCase];
-          const beforeCount = _scPoolFiltered.length;
-          _scPoolFiltered = _scPoolFiltered.filter(song => {
-            const moods = (song._scMoods || []).map(m => m.toLowerCase());
-            const themes = (song._scThemes || []).map(t => t.toLowerCase());
-            const energy = song._scEnergy;
-            const dance = song._scDanceability;
-            // Mood conflict
-            if (moods.length > 0 && incompatibleMoods.size > 0) {
-              const conflict = moods.find(m => incompatibleMoods.has(m));
-              if (conflict) {
-                console.log(`🎭 [DATA-FILTER] "${song.track}" by ${song.artist} — mood "${conflict}" conflicts with ${_scUseCase}`);
-                return false;
-              }
-            }
-            // Theme conflict
-            if (themes.length > 0 && incompatibleThemes.size > 0) {
-              const conflict = themes.find(t => incompatibleThemes.has(t));
-              if (conflict) {
-                console.log(`🎭 [DATA-FILTER] "${song.track}" by ${song.artist} — theme "${conflict}" conflicts with ${_scUseCase}`);
-                return false;
-              }
-            }
-            // Energy hard limit
-            if (energy != null && energyLimit) {
-              if (energyLimit.max != null && energy > energyLimit.max) {
-                console.log(`⚡ [DATA-FILTER] "${song.track}" by ${song.artist} — energy ${energy.toFixed(2)} > ${energyLimit.max} for ${_scUseCase}`);
-                return false;
-              }
-              if (energyLimit.min != null && energy < energyLimit.min) {
-                console.log(`⚡ [DATA-FILTER] "${song.track}" by ${song.artist} — energy ${energy.toFixed(2)} < ${energyLimit.min} for ${_scUseCase}`);
-                return false;
-              }
-            }
-            // Danceability hard limit
-            if (dance != null && danceLimit) {
-              if (danceLimit.max != null && dance > danceLimit.max) {
-                console.log(`💃 [DATA-FILTER] "${song.track}" by ${song.artist} — danceability ${dance.toFixed(2)} > ${danceLimit.max} for ${_scUseCase}`);
-                return false;
-              }
-            }
-            return true;
-          });
-          if (_scPoolFiltered.length < beforeCount) {
-            console.log(`🎯 [DATA-FILTER] removed ${beforeCount - _scPoolFiltered.length} conflicting tracks (${_scPoolFiltered.length} remain)`);
-          }
-        }
-
-        // Step 2: LLM vibe check on SC pool
+        // Step 2: Sonnet song selection — pick the best candidates from the SC pool
         try {
-          const _scConstraintLines = [];
-          if (genreData.primaryGenre) _scConstraintLines.push(`Genre: ${genreData.primaryGenre}`);
-          if (genreData.style) _scConstraintLines.push(`Style/Vibe: ${genreData.style}`);
-          if (genreData.atmosphere?.length > 0) _scConstraintLines.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
-          if (genreData.contextClues.useCase) _scConstraintLines.push(`Use case: ${genreData.contextClues.useCase}`);
-          {
-            const _fastHardRules = {
-              summer:     'SUMMER — HARD RULE: REMOVE any track that is slow, mellow, low-energy, melancholic, anxious, or emotionally heavy. No breakup ballads, no late-night sad R&B, no emotionally heavy slow jams. Examples that are WRONG: "A Lonely Night" (The Weeknd), "30 For 30" (SZA), "\'tis the damn season" (Taylor Swift), "8" (Billie Eilish), "All I Want" (Olivia Rodrigo), "All This Madness" (Sam Smith), "Someone You Loved" (Lewis Capaldi). Every track must feel warm, bright, and carefree.',
-              party:      'PARTY/PREGAME — HARD RULE: REMOVE any track that is mid-tempo, emotional, melancholic, or would not work on a dancefloor — even if the artist is generally upbeat. Test: would a DJ play this to keep a crowd dancing? If not, remove it.',
-              workout:    'WORKOUT — HARD RULE: REMOVE any slow, emotional, sad, mellow, or mid-tempo songs. Every track must be pump-up and high-energy. If it would not make you want to sprint, cut it.',
-              focus:      'FOCUS/STUDY — HARD RULE: REMOVE any high-energy, hype, aggressive, or distracting track. Only calm, background-friendly music.',
-              sleep:      'SLEEP — HARD RULE: REMOVE anything with a strong beat, energetic production, or that could keep someone awake.',
-              heartbreak: 'HEARTBREAK/SAD — HARD RULE: This is a sad, emotional, late-night playlist. KEEP any track that is melancholic, introspective, emotional, vulnerable, or bittersweet — even if the title sounds positive (e.g. "Good Days", "Best Part", "Godspeed" are all deeply emotional songs that BELONG here). ONLY remove tracks that are clearly high-energy, upbeat, celebratory, or would be out of place in a late-night feelings session (e.g. hype rap, dance-pop bangers, aggressive production). When in doubt, KEEP the track.',
-              sensual:    'SENSUAL/INTIMATE — HARD RULE: This is a bedroom/intimate playlist. REMOVE any track that is high-energy, aggressive, hype, party-coded, or would kill the mood — no pump-up rap, no loud EDM, no aggressive beats. Also REMOVE any track that is too cerebral, musically complex, or jazz-forward to work as background music (e.g. jazz-fusion, avant-garde neo-soul, polyrhythmic tracks — these require active listening and kill intimacy). REMOVE any track that is approach/pickup-coded — flirtatious songs about meeting someone, getting their number, or impressing them in public do NOT belong here. REMOVE any track about longing for someone who is far away or absent — distance/longing songs (e.g. "Location" by Khalid, which is about missing someone from afar) do NOT fit an intimate moment. REMOVE any heartbreak, breakup, or post-relationship song — songs about recovering from a breakup, grieving a lost love, processing betrayal, or burning down a relationship (e.g. "Let It Burn" by Jazmine Sullivan) do NOT belong in an intimate moment even if they are slow and R&B. REMOVE any track where the dominant emotional energy is empowerment, triumph, or self-determination rather than intimacy — sensual playlists are about closeness between two people, not individual strength or resilience. REMOVE any non-English pop song that does not clearly have the intimate R&B/bedroom sound — foreign pop tracks (e.g. Filipino pop, Latin pop, K-pop, Desi pop, Hindi pop, Indian pop) tagged with romantic themes often have a completely different sonic context and do NOT fit. Only tracks that work *after* two people are already alone together belong here: R&B slow jams, mellow bedroom pop, late-night hip-hop. When in doubt, REMOVE the track.',
-            };
-            if (_fastHardRules[_scUseCase]) _scConstraintLines.push(_fastHardRules[_scUseCase]);
-            // Genre-specific hard rule: enforce genre when primaryGenre is a well-defined genre
-            {
-              const _pgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
-              const _genreRuleMap = {
-                'hip hop': 'GENRE HARD RULE: This is a hip-hop/rap playlist. REMOVE any track that is not rap or hip-hop — pop, rock, R&B, and other non-rap genres do not belong here even if they are high-energy.',
-                'r&b':     'GENRE HARD RULE: This is an R&B/soul playlist. REMOVE any track that is not R&B, soul, or neo-soul.',
-                'country': 'GENRE HARD RULE: This is a country playlist. REMOVE any track that is not country or Americana.',
-                'metal':   'GENRE HARD RULE: This is a metal playlist. REMOVE any track that is not metal or hard rock.',
-                'jazz':    'GENRE HARD RULE: This is a jazz playlist. REMOVE any track that is not jazz.',
-              };
-              if (_genreRuleMap[_pgNorm]) _scConstraintLines.push(_genreRuleMap[_pgNorm]);
-            }
-          }
-          if (eraMin || eraMax) {
-            const eraDesc = eraMin && eraMax ? `${eraMin}–${eraMax}` : eraMin ? `${eraMin} or later` : `${eraMax} or earlier`;
-            _scConstraintLines.push(`Era: songs must be from ${eraDesc}. REMOVE any song originally recorded/released outside this range, even if it was recently repackaged or re-released.`);
-          }
-          if (genreData.contextClues.avoidances?.length > 0) _scConstraintLines.push(`AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
-          const _scWantsUnderground = genreData.trackConstraints.popularity.preference === 'underground' ||
-            (genreData.trackConstraints.popularity.max !== null && genreData.trackConstraints.popularity.max !== undefined && genreData.trackConstraints.popularity.max <= 50);
-          if (_scWantsUnderground) _scConstraintLines.push(`Popularity: UNDERGROUND/INDIE only — remove mainstream chart artists`);
-          const _scVocalGender = genreData.artistConstraints?.vocalGender;
-          if (_scVocalGender === 'female') _scConstraintLines.push(`GENDER — HARD RULE: This playlist requires FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. No exceptions — even if the music fits the vibe perfectly.`);
-          if (_scVocalGender === 'male') _scConstraintLines.push(`GENDER — HARD RULE: This playlist requires MALE artists only. REMOVE any track by a female solo artist or female-fronted band. No exceptions.`);
-          if (hasRequestedArtists && !genreData.artistConstraints.exclusiveMode) {
-            _scConstraintLines.push(`Reference artists: ${genreData.artistConstraints.requestedArtists.join(', ')}. Remove any artist who clearly does not belong in the same musical scene (different era, unrelated genre, or totally different sound world).`);
-          }
-          const _scTracksWithEnergy = _scPoolFiltered.filter(s => s._scEnergy != null);
-          if (_scTracksWithEnergy.length > 0) {
-            const _scEnergyGuidance = {
-              heartbreak: 'Energy scores (0–1) are from audio analysis. For this sad/late-night playlist, tracks with energy > 0.75 are almost certainly wrong vibe — flag them unless lyrics/title are clearly melancholic.',
-              sleep:      'Energy scores (0–1) are from audio analysis. For sleep music, any track with energy > 0.4 is likely too stimulating.',
-              focus:      'Energy scores (0–1) are from audio analysis. For focus/study, tracks with energy > 0.7 are likely too distracting.',
-              workout:    'Energy scores (0–1) are from audio analysis. For a workout playlist, tracks with energy < 0.5 are likely too low-energy.',
-              party:      'Energy scores (0–1) are from audio analysis. For a party/pregame playlist, tracks with energy < 0.55 are likely too mellow for a dancefloor.',
-              summer:     'Energy scores (0–1) are from audio analysis. For a summer playlist, tracks with energy < 0.45 are likely too slow/mellow.',
-              sensual:    'Energy and danceability scores (0–1) are from audio analysis. For a sensual/intimate playlist, tracks with energy > 0.65 OR danceability > 0.75 are likely wrong — high danceability means upbeat/club, not bedroom. Flag these unless the song is clearly a slow, seductive groove.',
-            };
-            _scConstraintLines.push(_scEnergyGuidance[_scUseCase] || 'Energy scores (0–1) shown in [brackets] are from audio analysis — use them as an additional signal when a track feels like a vibe mismatch.');
-          }
-
+          const _targetCount = Math.min(songCount * 3, _scPoolFiltered.length);
           const _scTrackLines = _scPoolFiltered.map((song, i) => {
             const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
-            const energyStr = song._scEnergy != null ? ` [energy: ${song._scEnergy.toFixed(2)}]` : '';
-            const danceStr = song._scDanceability != null ? ` [dance: ${song._scDanceability.toFixed(2)}]` : '';
-            const moodStr = song._scMoods?.length > 0 ? ` [moods: ${song._scMoods.join(', ')}]` : '';
-            const themeStr = song._scThemes?.length > 0 ? ` [themes: ${song._scThemes.join(', ')}]` : '';
-            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${energyStr}${danceStr}${moodStr}${themeStr}`;
+            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}`;
           });
 
-          console.log(`🎭 SC pool vibe check: reviewing ${_scPoolFiltered.length} tracks before platform lookup...`);
+          console.log(`🎵 SC pool curation: Sonnet selecting ${_targetCount} from ${_scPoolFiltered.length} candidates...`);
           const _scVibeResp = await anthropic.messages.create({
-            model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1200,
+            model: 'claude-sonnet-4-6',
+            max_tokens: 800,
             messages: [{
               role: 'user',
-              content: `You are doing a quality check on a pool of candidate songs before they are added to a playlist. Filter out songs that clearly do not match what the user asked for.
+              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context — to make the best picks.
 
-User's full request: "${prompt}"
-
-Constraints every song must satisfy:
-${_scConstraintLines.map(l => `- ${l}`).join('\n')}
-${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (use as style reference):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}` : ''}
-Candidate songs:
+User's request: "${prompt}"
+${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (match this style):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}\n` : ''}
+Candidates:
 ${_scTrackLines.join('\n')}
 
-Return ONLY a JSON array of 1-based indices to KEEP — no explanation.
-
-Rules:
-- KEEP songs that match the user's request and all constraints above.
-- REMOVE songs that clearly violate any constraint (wrong era, wrong genre, wrong vibe, explicitly avoided).
-- When uncertain about a song, REMOVE it. Only keep songs you are confident belong — a wrong track ruins the playlist.
-- Be aggressive: filter out any track you are not confident belongs. A tight, on-vibe pool of 30–50 tracks is better than a bloated pool of 200 with off-vibe songs.
-
-Example response: [1, 2, 4, 5, 7, ...]`
+Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             }]
           });
 
@@ -8315,18 +8141,13 @@ Example response: [1, 2, 4, 5, 7, ...]`
           const _scKeepMatch = _scVibeContent.match(/\[[\d,\s]*\]/);
           if (_scKeepMatch) {
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
-            const _scFiltered = _scKeepIndices.map(idx => _scPoolFiltered[idx - 1]).filter(Boolean);
-            const _scMinKeep = Math.max(songCount * 2, 15);
-            vibePassedTracks = _scFiltered.length >= _scMinKeep
-              ? _scFiltered
-              : _scPoolFiltered.slice(0, Math.max(_scFiltered.length, _scMinKeep));
-            const _scRemoved = _scPoolFiltered.length - vibePassedTracks.length;
-            if (_scRemoved > 0) console.log(`✂️  SC pool vibe check: ${_scPoolFiltered.length} → ${vibePassedTracks.length} tracks (removed ${_scRemoved})`);
+            vibePassedTracks = _scKeepIndices.map(idx => _scPoolFiltered[idx - 1]).filter(Boolean);
+            console.log(`✂️  SC pool curation: ${_scPoolFiltered.length} → ${vibePassedTracks.length} tracks selected`);
           } else {
             vibePassedTracks = _scPoolFiltered;
           }
         } catch (_scVibeErr) {
-          console.log(`⚠️  SC pool vibe check failed, using full pool: ${_scVibeErr.message}`);
+          console.log(`⚠️  SC pool curation failed, using full pool: ${_scVibeErr.message}`);
           vibePassedTracks = _scPoolFiltered;
         }
       }
