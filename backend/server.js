@@ -8112,13 +8112,15 @@ Return ONLY valid JSON:
 
         // Step 2: Sonnet song selection — pick the best candidates from the SC pool
         try {
-          const _targetCount = Math.min(songCount * 3, _scPoolFiltered.length);
-          const _scTrackLines = _scPoolFiltered.map((song, i) => {
+          // Cap candidates sent to Sonnet at 5x the requested song count (SC returns by popularity desc)
+          const _sonnetInputPool = _scPoolFiltered.slice(0, songCount * 5);
+          const _targetCount = Math.min(songCount * 3, _sonnetInputPool.length);
+          const _scTrackLines = _sonnetInputPool.map((song, i) => {
             const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
             return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}`;
           });
 
-          console.log(`🎵 SC pool curation: Sonnet selecting ${_targetCount} from ${_scPoolFiltered.length} candidates...`);
+          console.log(`🎵 SC pool curation: Sonnet selecting ${_targetCount} from ${_sonnetInputPool.length} candidates (${_scPoolFiltered.length} total in SC pool)...`);
           const _scVibeResp = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 800,
@@ -8141,14 +8143,14 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
           const _scKeepMatch = _scVibeContent.match(/\[[\d,\s]*\]/);
           if (_scKeepMatch) {
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
-            vibePassedTracks = _scKeepIndices.map(idx => _scPoolFiltered[idx - 1]).filter(Boolean);
-            console.log(`✂️  SC pool curation: ${_scPoolFiltered.length} → ${vibePassedTracks.length} tracks selected`);
+            vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
+            console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
           } else {
-            vibePassedTracks = _scPoolFiltered;
+            vibePassedTracks = _sonnetInputPool;
           }
         } catch (_scVibeErr) {
-          console.log(`⚠️  SC pool curation failed, using full pool: ${_scVibeErr.message}`);
-          vibePassedTracks = _scPoolFiltered;
+          console.log(`⚠️  SC pool curation failed, using capped pool: ${_scVibeErr.message}`);
+          vibePassedTracks = _scPoolFiltered.slice(0, songCount * 5);
         }
       }
 
