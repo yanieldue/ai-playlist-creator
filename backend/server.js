@@ -8141,7 +8141,7 @@ Return ONLY valid JSON:
             max_tokens: 800,
             messages: [{
               role: 'user',
-              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context — to make the best picks.
+              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks. For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
 
 User's request: "${prompt}"
 ${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (match this style):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}\n` : ''}
@@ -9632,13 +9632,14 @@ ${_vibeHardRules.map(r => `• ${r}`).join('\n')}
 Selected tracks:
 ${selectedTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist || 'Unknown Artist'}`).join('\n')}
 
-Review this track list and identify any songs that are TECHNICALLY correct (right genre) but EMOTIONALLY WRONG (don't fit the vibe/atmosphere/context).
+Review this track list and identify any songs that are TECHNICALLY correct (right genre/production style) but EMOTIONALLY OR LYRICALLY WRONG (don't fit the vibe/atmosphere/context). Use your knowledge of each song's actual lyrical content, not just its sound.
 
 For example:
 - If use case is "focus" or "study", songs that are too intense/distracting should be removed
 - If atmosphere is "melancholic" or "dreamy", upbeat party songs should be removed
 - If era is "90s", songs from 2020s should be removed
 - If subgenre is "neo-soul", trap songs should be removed even if both are R&B
+- If use case is "sensual" or "intimate", songs that are lyrically about heartbreak, breakups, nostalgia, or loss should be removed EVEN IF they sound smooth/mellow/slow — lyrical content overrides production style
 - If popularity preference is "underground", BE EXTREMELY STRICT - remove ANY artist that:
   * Has had radio hits or chart success (Top 40, Hot 100, etc.)
   * Has millions of monthly listeners on streaming platforms
