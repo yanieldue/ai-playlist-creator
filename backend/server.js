@@ -8233,7 +8233,11 @@ Return ONLY valid JSON:
             max_tokens: 800,
             messages: [{
               role: 'user',
-              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks. For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
+              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks.
+
+CRITICAL — Genre/style accuracy: These candidates come from a music database whose genre tags are sometimes wrong. A song tagged "indie folk" might actually be synth-pop, a movie soundtrack song, electronic, or mainstream pop. You MUST use your own knowledge of what each song actually sounds like to reject tracks that don't genuinely fit the requested genre/style. If you don't recognize a song, err on the side of including it — but if you DO recognize it and it doesn't match the genre/vibe, leave it out even if it's popular.
+
+For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
 
 When the user's request references a specific brand, franchise, studio, or universe (e.g. "Disney", "Pixar", "Studio Ghibli", "DreamWorks", "Marvel"), ONLY select songs that actually belong to that brand. Do NOT include songs from competing or unrelated franchises — e.g. a DreamWorks song does NOT belong in a Disney playlist, a Fox movie song does NOT belong in a Pixar playlist. Use your knowledge of which studio/franchise each song or soundtrack belongs to.
 
