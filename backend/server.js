@@ -9247,6 +9247,34 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             return true;
           });
 
+          // Artist diversity enforcement — cap tracks per artist (default 2)
+          if (!genreData.artistConstraints.exclusiveMode) {
+            const _divMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
+            const _divNormArtist = (name) => (name || '').toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+            const _divReqArtists = (genreData.artistConstraints?.requestedArtists || [])
+              .map(a => _divNormArtist(a));
+            const _divArtistTrackMap = new Map();
+            selectedTracks.forEach(t => {
+              const key = _divNormArtist(t.artist);
+              if (!_divArtistTrackMap.has(key)) _divArtistTrackMap.set(key, []);
+              _divArtistTrackMap.get(key).push(t);
+            });
+            const _divLimited = [];
+            _divArtistTrackMap.forEach((tracks, normName) => {
+              const isReq = _divReqArtists.some(r => r === normName);
+              const limit = isReq ? Math.max(_divMaxPerArtist * 3, 6) : _divMaxPerArtist;
+              if (tracks.length > limit) {
+                console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks${isReq ? ' (requested artist)' : ''}`);
+              }
+              _divLimited.push(...tracks.slice(0, limit));
+            });
+            if (_divLimited.length < selectedTracks.length) {
+              console.log(`📊 Artist diversity: ${selectedTracks.length} → ${_divLimited.length} tracks (max ${_divMaxPerArtist} per artist)`);
+              selectedTracks = _divLimited;
+            }
+          }
+
           // Update song history and playlist.tracks so future refreshes anchor to the new track list.
           // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.
           if (playlistId && userId && !internalCall) {
