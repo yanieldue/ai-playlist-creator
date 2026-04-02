@@ -8249,6 +8249,10 @@ These candidates come from a music database whose genre tags are sometimes wrong
 
 For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
 
+Language matching: When the user's request references artists who perform in a specific language (e.g. English-language American or British artists), strongly prefer songs in that same language. Do NOT fill the playlist with French, Portuguese, Spanish, Korean, or other non-matching language tracks just to reach the target count. Only include non-English songs if the user explicitly requests international/multilingual content or names non-English artists.
+
+Anchor artist interpretation: When the user says "like [Artist A] and [Artist B]", they want the specific SUBGENRE and STYLE those artists represent, not just the broad genre. For example, "like Kendrick Lamar and J. Cole" means conscious, lyrical, introspective hip hop — NOT commercial pop-rap, trap bangers, or party tracks from the same broad hip hop genre. Artists who share the same genre but have a fundamentally different style/approach should be deprioritized even if they're commercially associated with the named anchors.
+
 When the user's request references a specific brand, franchise, studio, or universe (e.g. "Disney", "Pixar", "Studio Ghibli", "DreamWorks", "Marvel"), ONLY select songs that actually belong to that brand. Do NOT include songs from competing or unrelated franchises — e.g. a DreamWorks song does NOT belong in a Disney playlist, a Fox movie song does NOT belong in a Pixar playlist. Use your knowledge of which studio/franchise each song or soundtrack belongs to.
 
 User's request: "${prompt}"
