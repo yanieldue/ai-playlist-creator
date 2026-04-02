@@ -1874,30 +1874,22 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   const filters = [];
 
   // Genre filter — Claude now returns exact SC slugs, so check directly against SC lists.
-  // Subgenre takes priority (more precise); fall back to genre if no subgenre match.
+  // Genre takes priority (bigger pool, more reliable); subgenre only if no genre match.
   if (genreData.primaryGenre) {
     const slug = genreData.primaryGenre.toLowerCase().trim();
-    if (SC_SUBGENRES.includes(slug)) {
-      filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
-      // Also add parent songGenres when slug exists in both lists (e.g. 'r&b', 'pop', 'rock').
-      // Ensures genre survives when SC 500 degrades and strips songSubGenres.
-      if (SC_GENRES.includes(slug)) {
-        filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
-        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${slug} (dual)`);
-      } else {
-        // Subgenre-only match (e.g. "contemporary r&b" → not in SC_GENRES).
-        // Add the closest parent songGenres so genre survives after the 500 ladder strips subgenres.
-        const parentGenre = SC_GENRES.find(g => slug.includes(g));
-        if (parentGenre) {
-          filters.push({ type: 'songGenres', data: { values: [parentGenre], operator: 'in' } });
-          console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${parentGenre} (parent fallback)`);
-        } else {
-          console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
-        }
-      }
-    } else if (SC_GENRES.includes(slug)) {
+    if (SC_GENRES.includes(slug)) {
       filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
       console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songGenres=${slug}`);
+    } else if (SC_SUBGENRES.includes(slug)) {
+      filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
+      // Add the closest parent songGenres so genre survives after the 500 ladder strips subgenres.
+      const parentGenre = SC_GENRES.find(g => slug.includes(g));
+      if (parentGenre) {
+        filters.push({ type: 'songGenres', data: { values: [parentGenre], operator: 'in' } });
+        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${parentGenre} (parent fallback)`);
+      } else {
+        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+      }
     } else {
       console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → no SC match, skipping genre filter`);
     }
@@ -2376,7 +2368,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       console.log(`✓ SoundCharts returned ${items.length} songs (${Math.ceil(items.length / PAGE_SIZE)} page(s))`);
 
       // If top_songs returned 0, progressively loosen filters before falling back to artist_songs.
-      const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres');
+      const genreFilters = soundchartsFilters.filter(f => f.type === 'songGenres' || f.type === 'songSubGenres');
       if (items.length === 0 && genreFilters.length > 0) {
         const moodsFilter = soundchartsFilters.find(f => f.type === 'moods');
         const energyFilter = soundchartsFilters.find(f => f.type === 'energy');
@@ -2421,7 +2413,22 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 3: audio-only also returned 0 — fall back to artist_songs with seed artists.
+        // Step 3: strip songSubGenres — the subgenre intersection is often too narrow
+        // (e.g. songSubGenres=folk + songSubGenres=indie pop/folk + audio filters → 0).
+        // Keep songGenres so we stay on-genre.
+        const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
+        if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
+          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping songSubGenres and retrying`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
+            fetchCount,
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
+          );
+        }
+
+        // Step 4: all filter combinations returned 0 — fall back to artist_songs with seed artists.
         const seeds = query.seedArtists || [];
         if (seeds.length > 0) {
           console.log(`⚠️  SoundCharts genre filter returned 0 — falling back to artist_songs with seeds [${seeds.join(', ')}]`);
@@ -8044,7 +8051,7 @@ Return ONLY valid JSON:
         const reqNorm = norm(artistName);
         // UUID-based ID check: if we know this SC artist's Spotify ID, match on that instead
         // of name strings. Prevents false positives like "mustard" matching "Mustard Seed Faith".
-        const _ftpKnownId = (opts.uuidSpotifyIdMap || _uuidToSpotifyId)?.get(song.artistUuid) || null;
+        const _ftpKnownId = (opts.uuidSpotifyIdMap || new Map()).get(song.artistUuid) || null;
         const checkArtistMatch = (t) => {
           if (_ftpKnownId) return t.artists?.[0]?.id === _ftpKnownId;
           // Name fallback: check all artists but use strict equality + reqNorm.startsWith(fn) only
