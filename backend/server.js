@@ -1885,7 +1885,15 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
         filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
         console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${slug} (dual)`);
       } else {
-        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+        // Subgenre-only match (e.g. "contemporary r&b" → not in SC_GENRES).
+        // Add the closest parent songGenres so genre survives after the 500 ladder strips subgenres.
+        const parentGenre = SC_GENRES.find(g => slug.includes(g));
+        if (parentGenre) {
+          filters.push({ type: 'songGenres', data: { values: [parentGenre], operator: 'in' } });
+          console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${parentGenre} (parent fallback)`);
+        } else {
+          console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+        }
       }
     } else if (SC_GENRES.includes(slug)) {
       filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
