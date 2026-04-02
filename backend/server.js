@@ -8411,6 +8411,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
         allTracks.push({
           ...track,
           artist: track.artists?.[0]?.name || track.artist || 'Unknown Artist',
+          album: track.album?.name || (typeof track.album === 'string' ? track.album : null),
           image: track.album?.images?.[0]?.url || null,
           externalUrl,
           _phaseLabel: recommendedSong._phaseLabel || null,
@@ -8789,7 +8790,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
                   id: track.id, name: track.name,
                   artist: track.artists?.[0]?.name || track.artist || 'Unknown',
                   uri: track.uri,
-                  album: track.album?.name || track.album,
+                  album: track.album?.name || (typeof track.album === 'string' ? track.album : null),
                   image: track.album?.images?.[0]?.url || null,
                   previewUrl: track.preview_url,
                   externalUrl: track.url || track.external_urls?.spotify ||
@@ -8969,7 +8970,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
                     id: track.id, name: track.name,
                     artist: track.artists?.[0]?.name || track.artist || 'Unknown',
                     uri: track.uri,
-                    album: track.album?.name || track.album,
+                    album: track.album?.name || (typeof track.album === 'string' ? track.album : null),
                     image: track.album?.images?.[0]?.url || null,
                     previewUrl: track.preview_url,
                     externalUrl: track.url || track.external_urls?.spotify ||
@@ -9151,7 +9152,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                     id: track.id, name: track.name,
                     artist: track.artists?.[0]?.name || track.artist || 'Unknown',
                     uri: track.uri,
-                    album: track.album?.name || track.album,
+                    album: track.album?.name || (typeof track.album === 'string' ? track.album : null),
                     image: track.album?.images?.[0]?.url || null,
                     previewUrl: track.preview_url,
                     externalUrl: track.url || track.external_urls?.spotify ||
@@ -9323,7 +9324,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               id: track.id, name: track.name,
               artist: track.artists?.[0]?.name || track.artist || 'Unknown',
               uri: track.uri,
-              album: track.album?.name || track.album,
+              album: track.album?.name || (typeof track.album === 'string' ? track.album : null),
               image: track.album?.images?.[0]?.url || null,
               previewUrl: track.preview_url,
               externalUrl: track.url || track.external_urls?.spotify ||
