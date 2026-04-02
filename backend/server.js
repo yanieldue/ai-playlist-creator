@@ -2149,6 +2149,7 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     soundchartsSort: { type: 'metric', platform: 'spotify', metricType: 'streams', period: 'month', sortBy: 'total', order: 'desc' },
     primaryGenre: genreData.primaryGenre || null,
     useCase: genreData.contextClues?.useCase?.toLowerCase() || null,
+    suggestedSeedArtists: genreData.artistConstraints?.suggestedSeedArtists || [],
   };
 }
 
@@ -2471,11 +2472,12 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
         return [];
       } else if (err.response?.status === 500) {
-        // SC 500 degradation ladder:
-        // 1. Strip songSubGenres (most common culprit) and retry top_songs with moods/themes intact.
-        // 2. Pivot to LLM-anchor artist_songs — ask Haiku for 2-3 confident songs and seed from
-        //    those artists. Keeps genre/vibe tight without ever stripping mood/theme filters, which
-        //    risks returning tonally wrong songs (e.g. "What A Wonderful World" in a sensual R&B playlist).
+        // SC 500 degradation ladder — mood/theme filters are NEVER stripped (they define the vibe):
+        // 1. Strip songSubGenres — most common 500 trigger.
+        // 2. Strip energy + valence — small intersections (e.g. sensual r&b) cause SC index errors;
+        //    moods/themes/genre/tempo survive so the vibe stays tight.
+        // 3. Pivot to artist_songs seeded from suggestedSeedArtists (already extracted by the main
+        //    Claude call, so consistent across runs). Haiku fallback if none available.
         const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
         if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
           console.log(`⚠️  SC 500 — stripping songSubGenres and retrying`);
@@ -2484,12 +2486,31 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
           );
         }
+        if (!query._audioStripped) {
+          const filtersWithoutAudio = soundchartsFilters.filter(f => !['energy', 'valence', 'songSubGenres'].includes(f.type));
+          if (filtersWithoutAudio.length < soundchartsFilters.length) {
+            console.log(`⚠️  SC 500 (second) — stripping energy + valence, keeping moods/themes/genre/tempo`);
+            return executeSoundChartsStrategy(
+              { ...query, soundchartsFilters: filtersWithoutAudio, _subgenreStripped: true, _audioStripped: true },
+              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+            );
+          }
+        }
         if (!query._anchorUsed) {
-          // Second 500: pivot to LLM-anchor artist_songs rather than stripping mood/theme filters.
+          // Third 500: pivot to artist_songs. Use suggestedSeedArtists from the main Claude extraction
+          // first — they're context-aware and consistent. Fall back to a Haiku call only if empty.
+          const _suggestedArtists = (query.suggestedSeedArtists || []).filter(Boolean);
+          if (_suggestedArtists.length > 0) {
+            console.log(`⚠️  SC 500 (third) — pivoting to artist_songs with suggestedSeedArtists: [${_suggestedArtists.join(', ')}]`);
+            return executeSoundChartsStrategy(
+              { ...query, strategy: 'artist_songs', artists: _suggestedArtists, expandToSimilar: true, _anchorUsed: true },
+              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+            );
+          }
           const _anchorPromptText = query._prompt;
           if (_anchorPromptText) {
             try {
-              console.log(`⚠️  SC 500 (second) — pivoting to LLM-anchor artist_songs strategy`);
+              console.log(`⚠️  SC 500 (third) — no suggestedSeedArtists, falling back to Haiku anchor`);
               const _anchorResp = await anthropic.messages.create({
                 model: 'claude-haiku-4-5-20251001',
                 max_tokens: 300,
@@ -2505,7 +2526,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
                 const _anchors = JSON.parse(_anchorMatch[0]);
                 const _anchorArtists = _anchors.map(a => a.artist).filter(Boolean);
                 if (_anchorArtists.length > 0) {
-                  console.log(`🎯 SC anchor artists: [${_anchorArtists.join(', ')}]`);
+                  console.log(`🎯 SC anchor artists (Haiku): [${_anchorArtists.join(', ')}]`);
                   return executeSoundChartsStrategy(
                     { ...query, strategy: 'artist_songs', artists: _anchorArtists, expandToSimilar: true, _anchorUsed: true },
                     fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
@@ -2516,7 +2537,6 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
               console.log(`⚠️  SC 500 anchor LLM call failed: ${anchorErr.message}`);
             }
           }
-          // No prompt or anchor LLM failed — give up rather than returning a mood-stripped pool
           console.log(`⚠️  SC 500 anchor unavailable — returning empty to avoid unfiltered results`);
           return [];
         }
