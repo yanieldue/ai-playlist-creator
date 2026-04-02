@@ -8273,7 +8273,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
           const _reqArtists = (genreData.artistConstraints?.requestedArtists || [])
             .map(a => a.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim());
           const isRequested = _reqArtists.some(r => r === artistKey);
-          const artistLimit = isRequested ? Math.max(_effectiveMax * 3, 6) : _effectiveMax;
+          const artistLimit = isRequested ? Math.max(_effectiveMax + 1, 3) : _effectiveMax;
           if (currentCount >= artistLimit) {
             console.log(`[ARTIST-LIMIT] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${currentCount}/${artistLimit} per artist${isRequested ? ', requested' : ''})`);
             return false;
@@ -9134,7 +9134,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             const _divLimited = [];
             _divArtistTrackMap.forEach((tracks, normName) => {
               const isReq = _divReqArtists.some(r => r === normName);
-              const limit = isReq ? Math.max(_divMaxPerArtist * 3, 6) : _divMaxPerArtist;
+              const limit = isReq ? Math.max(_divMaxPerArtist + 1, 3) : _divMaxPerArtist;
               if (tracks.length > limit) {
                 console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks${isReq ? ' (requested artist)' : ''}`);
               }
@@ -9332,7 +9332,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
       const limitedTracks = [];
       artistTrackMap.forEach((tracks, normalizedName) => {
         const isRequested = _reqArtists.some(req => req === normalizedName);
-        const limit = isRequested ? Math.max(maxTracksPerArtist * 3, 6) : maxTracksPerArtist;
+        const limit = isRequested ? Math.max(maxTracksPerArtist + 1, 3) : maxTracksPerArtist;
 
         if (tracks.length > limit) {
           console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks${isRequested ? ' (requested artist)' : ''}`);
