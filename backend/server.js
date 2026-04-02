@@ -2413,14 +2413,16 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 3: strip songSubGenres — the subgenre intersection is often too narrow
-        // (e.g. songSubGenres=folk + songSubGenres=indie pop/folk + audio filters → 0).
-        // Keep songGenres so we stay on-genre.
-        const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
-        if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
-          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping songSubGenres and retrying`);
+        // Step 3: strip audio filters — audio is often the most restrictive filter.
+        // Keep subgenres/genres/themes so we stay on-genre and on-vibe.
+        // (e.g. songSubGenres=indie pop/folk + songGenres=folk + themes=escapism → specific pool,
+        //  vs. just songGenres=folk → 3.2M songs dominated by pop-folk like Ed Sheeran).
+        const AUDIO_TYPES = new Set(['energy', 'valence', 'acousticness', 'danceability', 'speechiness', 'instrumentalness', 'liveness']);
+        const filtersWithoutAudio = soundchartsFilters.filter(f => !AUDIO_TYPES.has(f.type));
+        if (filtersWithoutAudio.length < soundchartsFilters.length && !query._audioStripped) {
+          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping audio filters and retrying (keeping genre/subgenre/themes)`);
           return executeSoundChartsStrategy(
-            { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
+            { ...query, soundchartsFilters: filtersWithoutAudio, _audioStripped: true },
             fetchCount,
             confirmedArtistUuids,
             minArtists,
@@ -2428,8 +2430,8 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 4: strip themes — themes like 'escapism' drastically narrow the pool
-        // (e.g. songGenres=folk + themes=escapism + audio → 0).
+        // Step 4: strip themes — themes like 'escapism' can still narrow too much
+        // even without audio filters.
         const filtersWithoutThemes = soundchartsFilters.filter(f => f.type !== 'themes');
         if (filtersWithoutThemes.length < soundchartsFilters.length && !query._themesStripped) {
           console.log(`⚠️  SoundCharts top_songs returned 0 — stripping themes and retrying`);
@@ -2442,14 +2444,13 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 5: strip audio filters — genre-only query should return results
-        // (e.g. songGenres=folk has 3.2M songs but folk + energy≤0.58 + acousticness≥0.6 → 0).
-        const AUDIO_TYPES = new Set(['energy', 'valence', 'acousticness', 'danceability', 'speechiness', 'instrumentalness', 'liveness']);
-        const filtersWithoutAudio = soundchartsFilters.filter(f => !AUDIO_TYPES.has(f.type));
-        if (filtersWithoutAudio.length < soundchartsFilters.length && !query._audioStripped) {
-          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping audio filters and retrying (genre-only)`);
+        // Step 5: strip songSubGenres — last resort before artist fallback.
+        // (e.g. songSubGenres=indie pop/folk → only 236K songs; songGenres=folk → 3.2M).
+        const filtersWithoutSubgenre = soundchartsFilters.filter(f => f.type !== 'songSubGenres');
+        if (filtersWithoutSubgenre.length < soundchartsFilters.length && !query._subgenreStripped) {
+          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping songSubGenres and retrying`);
           return executeSoundChartsStrategy(
-            { ...query, soundchartsFilters: filtersWithoutAudio, _audioStripped: true },
+            { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
             fetchCount,
             confirmedArtistUuids,
             minArtists,
