@@ -2599,12 +2599,19 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     if (expandToSimilar && seedInfos.length > 0) {
       const seenNames = new Set(seedInfos.map(a => a.name.toLowerCase()));
       const similarNames = []; // { name, uuid } pairs — uuid may be null
-      // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10, max 20.
-      // Cap at 20 to avoid runaway serial SC calls for large song counts (each call is ~300ms).
+      // Scale similar-artist target with pool size: ~1 artist per 8 songs needed, min 10, max 30.
+      // When seeds are few (1-3), raise the cap so SC's similarity graph can fan out wider —
+      // otherwise 2 seeds × 10 similar = only 12 artists total, causing repetitive playlists.
+      // Cap at 30 to avoid runaway serial SC calls for large song counts (each call is ~300ms).
       // minArtists overrides the cap when per-artist diversity requires more unique artists.
+      // When seeds are few (1-3), raise both floor and cap so SC's similarity graph fans out
+      // wider — otherwise 2 seeds × 5 similar = only 12 artists total, causing repetitive playlists.
+      const _fewSeeds = seedInfos.length <= 3;
+      const _similarFloor = _fewSeeds ? 15 : 10;
+      const _similarCap = _fewSeeds ? 30 : 20;
       const similarTarget = Math.max(
         minArtists > 0 ? minArtists : 0,
-        Math.min(Math.max(10, Math.ceil(fetchCount / 8)), 20)
+        Math.min(Math.max(_similarFloor, Math.ceil(fetchCount / 8)), _similarCap)
       );
       const similarPerSeed = Math.max(2, Math.ceil(similarTarget / seedInfos.length));
       for (const seedInfo of seedInfos) {
@@ -7654,6 +7661,45 @@ Respond ONLY with valid JSON:
         try {
           soundChartsDiscoveredSongs = await executeSoundChartsStrategy({ ...scQuery, _prompt: prompt }, fetchCount, confirmedArtistUuids, minArtistsNeeded, pendingEnrichment);
           console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
+
+          // ── Hybrid artist seeding: supplement top_songs with artist_songs from suggestedSeedArtists ──
+          // top_songs returns popularity-sorted songs matching genre+mood filters, but perfect deep
+          // cuts may sit beyond the 1000-song cap. suggestedSeedArtists (inferred by Claude from the
+          // prompt) let us pull songs directly from vibe-appropriate artists, bypassing the popularity
+          // ceiling. The two pools are deduped and merged before Sonnet curation picks the best fits.
+          const _seedArtists = (genreData.artistConstraints?.suggestedSeedArtists || []).filter(Boolean);
+          if (scQuery.strategy === 'top_songs' && _seedArtists.length > 0) {
+            try {
+              const _seedFetchCount = Math.min(songCount * 2, 100);
+              console.log(`🌱 Hybrid seeding: supplementing top_songs with artist_songs from [${_seedArtists.join(', ')}] (fetching ${_seedFetchCount})...`);
+              const _seedQuery = buildSoundchartsQuery(genreData, allowExplicit);
+              _seedQuery.strategy = 'artist_songs';
+              _seedQuery.artists = _seedArtists;
+              _seedQuery.expandToSimilar = true;
+              const _seedSongs = await executeSoundChartsStrategy(
+                { ..._seedQuery, _prompt: prompt },
+                _seedFetchCount, confirmedArtistUuids, 0, pendingEnrichment
+              );
+              if (_seedSongs.length > 0) {
+                // Dedupe by lowercase "artist::track" key — prefer existing top_songs entries
+                const _existingKeys = new Set(
+                  soundChartsDiscoveredSongs.map(s =>
+                    `${(s.artistName || '').toLowerCase()}::${(s.name || '').toLowerCase()}`
+                  )
+                );
+                const _newSongs = _seedSongs.filter(s => {
+                  const key = `${(s.artistName || '').toLowerCase()}::${(s.name || '').toLowerCase()}`;
+                  return !_existingKeys.has(key);
+                });
+                soundChartsDiscoveredSongs.push(..._newSongs);
+                console.log(`🌱 Hybrid seeding: +${_newSongs.length} unique songs from artist_songs (${_seedSongs.length} total, ${_seedSongs.length - _newSongs.length} dupes skipped)`);
+              } else {
+                console.log(`🌱 Hybrid seeding: artist_songs returned 0 songs`);
+              }
+            } catch (_seedErr) {
+              console.log(`⚠️  Hybrid seeding failed (non-fatal): ${_seedErr.message}`);
+            }
+          }
         } catch (scErr) {
           console.log(`⚠️  SoundCharts strategy failed: ${scErr.message}`);
         }
@@ -9313,7 +9359,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
       // For non-exclusive mode, limit tracks per artist to maintain discovery balance
       if (!genreData.artistConstraints.exclusiveMode) {
-        const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
+        const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
 
         // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
         const artistTrackMap = new Map();
