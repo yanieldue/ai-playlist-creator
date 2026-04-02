@@ -2854,6 +2854,9 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
               releaseDate: item.song?.releaseDate || null,
               source: 'artist_pool_top',
               _scEnergy: item.song?.audio?.energy ?? null,
+              audio: item.song?.audio || {},
+              moods: item.song?.moods || [],
+              themes: item.song?.themes || [],
             });
           }
         }
