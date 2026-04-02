@@ -8221,7 +8221,7 @@ Return ONLY valid JSON:
         try {
           // Cap candidates sent to Sonnet at 5x the requested song count (SC returns by popularity desc)
           const _sonnetInputPool = _scPoolFiltered.slice(0, songCount * 5);
-          const _targetCount = Math.min(songCount * 3, _sonnetInputPool.length);
+          const _targetCount = Math.min(songCount * 2, _sonnetInputPool.length);
           const _scTrackLines = _sonnetInputPool.map((song, i) => {
             const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
             const moods = (song._scMoods || []).slice(0, 3).join(', ');
@@ -8241,7 +8241,9 @@ Return ONLY valid JSON:
 
 Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
 
-CRITICAL — Genre/style accuracy: These candidates come from a music database whose genre tags are sometimes wrong. A song tagged "${_curationGenre || 'indie folk'}" might actually be synth-pop, a movie soundtrack song, electronic, devotional/kirtan, or mainstream pop. You MUST use your own knowledge of what each song actually sounds like to reject tracks that don't genuinely fit the target genre/style above. If you don't recognize a song, err on the side of including it — but if you DO recognize it and it doesn't match the genre/vibe, leave it out even if it's popular. The mood tags in brackets (e.g. [calm, reflective]) come from the database and can help you spot mismatches — for example a "devotional" mood on an indie folk playlist is a red flag.
+CRITICAL — Genre accuracy is your PRIMARY filter. You must reject any song whose actual genre doesn't match the target above, regardless of how well it matches the mood or vibe. A chill pop song does NOT belong in an indie folk playlist. A mellow R&B track does NOT belong in an acoustic singer-songwriter playlist. An electronic/synth track does NOT belong in a folk playlist. Genre match comes FIRST — only then consider mood, era, and vibe among the genre-appropriate candidates.
+
+These candidates come from a music database whose genre tags are sometimes wrong. A song tagged "${_curationGenre || 'indie folk'}" might actually be synth-pop, a movie soundtrack song, electronic, devotional/kirtan, or mainstream pop. You MUST use your own knowledge of what each song actually sounds like to reject tracks that don't genuinely fit the target genre/style above. If you don't recognize a song, err on the side of including it — but if you DO recognize it and it doesn't match the genre, leave it out even if it's popular or matches the mood. The mood tags in brackets (e.g. [calm, reflective]) come from the database and can help you spot mismatches.
 
 For songs you recognize, consider what the lyrics are actually about: a smooth-sounding breakup or heartbreak song does NOT belong in a sensual/intimate/romantic playlist even if it has low tempo and mellow production. Lyrical context overrides production style when they conflict.
 
