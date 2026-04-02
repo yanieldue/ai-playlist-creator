@@ -6207,7 +6207,7 @@ Rules:
 - If user says "soul" → primaryGenre: "soul" (subgenre)
 - If user says "trap" → primaryGenre: "hip-hop & rap" (subgenre), subgenre: null (trap is not a standalone SC slug)
 - Always prefer the most specific matching slug. Use a subgenre slug when it exists, genre slug as fallback.
-- ALWAYS set primaryGenre — even for genre-agnostic prompts like "studying music" or "calm background music", pick the best-fit broad genre. Use "pop" as the default for generic/ambient/study/focus/background contexts (13M songs — mood+energy filters will narrow it to the right vibe). Use "folk" for acoustic requests. NEVER use "chill out/trip-hop/lounge" as a default — despite the name, it is a niche trip-hop/lounge subgenre (260K songs), NOT generic chill music. Only set null if truly impossible to determine.
+- ALWAYS set primaryGenre — even for genre-agnostic prompts. When the user doesn't name a genre, pick the broadest genre that fits. Prefer top-level genres with large catalogs (pop 13M, rock 9.8M, alternative 6.9M, hip hop 13M, electro 10.3M, r&b 3.4M, folk 3.2M) — the scMoods, scThemes, and audio filters will narrow the results to the right vibe. Subgenres are smaller and more niche than their names suggest (e.g. "chill out/trip-hop/lounge" is 260K trip-hop songs, NOT generic chill; "dance" is 6.5M EDM, NOT general danceable music). Only set null if truly impossible to determine.
 
 Respond ONLY with valid JSON in this format:
 {
