@@ -2442,7 +2442,22 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           );
         }
 
-        // Step 5: all filter combinations returned 0 — fall back to artist_songs with seed artists.
+        // Step 5: strip audio filters — genre-only query should return results
+        // (e.g. songGenres=folk has 3.2M songs but folk + energy≤0.58 + acousticness≥0.6 → 0).
+        const AUDIO_TYPES = new Set(['energy', 'valence', 'acousticness', 'danceability', 'speechiness', 'instrumentalness', 'liveness']);
+        const filtersWithoutAudio = soundchartsFilters.filter(f => !AUDIO_TYPES.has(f.type));
+        if (filtersWithoutAudio.length < soundchartsFilters.length && !query._audioStripped) {
+          console.log(`⚠️  SoundCharts top_songs returned 0 — stripping audio filters and retrying (genre-only)`);
+          return executeSoundChartsStrategy(
+            { ...query, soundchartsFilters: filtersWithoutAudio, _audioStripped: true },
+            fetchCount,
+            confirmedArtistUuids,
+            minArtists,
+            pendingEnrichment
+          );
+        }
+
+        // Step 6: all filter combinations returned 0 — fall back to artist_songs with seed artists.
         // Prefer user-requested artists; fall back to Claude's suggested seeds as last resort.
         const seeds = (query.seedArtists || []).length > 0
           ? query.seedArtists
