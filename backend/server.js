@@ -1021,100 +1021,6 @@ async function enrichCatalogWithAudioFeatures(songs, maxSongs = 40) {
 
 // Filter catalog songs by energy/valence from SC query filters.
 // Songs with matching audio features are preferred; songs without features are used as fallback.
-function filterCatalogByVibe(songs, soundchartsFilters, targetCount, useCase) {
-  const energyFilter = soundchartsFilters?.find(f => f.type === 'energy')?.data;
-  const valenceFilter = soundchartsFilters?.find(f => f.type === 'valence')?.data;
-  const moodsFilter = soundchartsFilters?.find(f => f.type === 'moods')?.data;
-  const requiredMoods = moodsFilter?.values || [];
-
-  // SC mood groups for conflict detection: if playlist requires sad moods, Joyful/Euphoric/etc. conflict
-  const UPBEAT_MOODS = new Set(['joyful', 'euphoric', 'happy', 'playful', 'energetic', 'empowering']);
-  const SAD_MOODS = new Set(['sad', 'melancholic', 'dark']);
-  const hasUpbeatRequired = requiredMoods.some(m => UPBEAT_MOODS.has(m.toLowerCase()));
-  const hasSadRequired = requiredMoods.some(m => SAD_MOODS.has(m.toLowerCase()));
-
-  // Use-case-specific moods that are incompatible with the playlist context.
-  // If a song has ANY of these moods, it conflicts regardless of energy/valence.
-  const USE_CASE_INCOMPATIBLE_MOODS = {
-    sensual:    new Set(['joyful', 'energetic', 'playful', 'euphoric', 'empowering', 'boastful', 'confrontational', 'aggressive', 'excited', 'bouncy']),
-    heartbreak: new Set(['joyful', 'euphoric', 'energetic', 'empowering', 'boastful', 'excited']),
-    focus:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'boastful']),
-    sleep:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'bouncy', 'empowering']),
-    workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
-    party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
-  };
-  const incompatibleMoods = USE_CASE_INCOMPATIBLE_MOODS[useCase] || new Set();
-
-  function isMoodConflict(songMoods) {
-    if (!songMoods || songMoods.length === 0) return false;
-    const lower = songMoods.map(m => m.toLowerCase());
-    // Use-case-specific incompatible mood check (e.g. joyful in a sensual playlist)
-    if (incompatibleMoods.size > 0 && lower.some(m => incompatibleMoods.has(m))) return true;
-    // Generic upbeat-vs-sad conflict
-    if (hasSadRequired && lower.some(m => UPBEAT_MOODS.has(m))) return true;
-    if (hasUpbeatRequired && lower.some(m => SAD_MOODS.has(m))) return true;
-    return false;
-  }
-
-  function shuffle(arr) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-  }
-
-  if (!energyFilter && !valenceFilter) {
-    const good = [];
-    const bad = [];
-    for (const song of songs) {
-      (isMoodConflict(song.moods) ? bad : good).push(song);
-    }
-    shuffle(good);
-    shuffle(bad);
-    if (bad.length > 0) {
-      console.log(`🎭 [MOOD-FILTER] no audio filters — ${good.length} OK / ${bad.length} mood-conflict songs deprioritized`);
-    }
-    return [...good, ...bad].slice(0, targetCount);
-  }
-
-  const matched = [];
-  const unmatched = [];
-  const conflicting = [];
-
-  for (const song of songs) {
-    const e = song.audio?.energy;
-    const v = song.audio?.valence;
-    const hasFeatures = e !== undefined && e !== null;
-    const moodConflict = isMoodConflict(song.moods);
-
-    if (!hasFeatures) {
-      (moodConflict ? conflicting : unmatched).push(song);
-      continue;
-    }
-
-    let passes = true;
-    if (energyFilter) {
-      if (energyFilter.min !== undefined && e < energyFilter.min) passes = false;
-      if (energyFilter.max !== undefined && e > energyFilter.max) passes = false;
-    }
-    if (valenceFilter && passes) {
-      if (valenceFilter.min !== undefined && v !== undefined && v < valenceFilter.min) passes = false;
-      if (valenceFilter.max !== undefined && v !== undefined && v > valenceFilter.max) passes = false;
-    }
-
-    if (passes) matched.push(song);
-    else if (moodConflict) conflicting.push(song);
-    else unmatched.push(song);
-  }
-
-  console.log(`🎛️  [VIBE] ${matched.length} matched / ${unmatched.length} no-features / ${conflicting.length} mood-conflict (energy: ${JSON.stringify(energyFilter)}, valence: ${JSON.stringify(valenceFilter)}, useCase: ${useCase || 'none'})`);
-
-  for (const arr of [matched, unmatched, conflicting]) {
-    shuffle(arr);
-  }
-
-  return [...matched, ...unmatched, ...conflicting].slice(0, targetCount);
-}
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
 // Helper function to search for a specific song on SoundCharts by title + artist
@@ -1903,29 +1809,30 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
     filters.push(rdf);
   }
 
-  // Mood filter — collect unique SC mood values from atmosphere + style + keyCharacteristics
+  // Mood filter — use Claude's scMoods (picked from valid SC values during extraction).
+  // Falls back to atmosphere label mapping for backward compatibility with cached genreData.
   const moodLabels = [
     ...(genreData.atmosphere || []),
     ...(genreData.keyCharacteristics || []),
     genreData.style || '',
   ].map(l => l.toLowerCase().trim()).filter(Boolean);
 
-  // SC moods filter — build from atmosphere/style labels mapped to valid SC mood values.
-  // SC expects lowercase values (e.g. 'sensual', not 'Sensual'). Only applied for top_songs.
+  // SC moods and themes filters — only applied for top_songs.
   if (strategy !== 'artist_songs') {
-    const scMoodValues = [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
-    // Also add useCase-level mood if present
-    const ucMood = SOUNDCHARTS_USE_CASE_MOODS[genreData.contextClues?.useCase?.toLowerCase()];
-    if (ucMood) ucMood.forEach(m => scMoodValues.includes(m) || scMoodValues.push(m));
+    // Prefer Claude's direct SC mood picks; fall back to atmosphere label mapping
+    const claudeScMoods = (genreData.scMoods || []).map(m => m.toLowerCase()).filter(Boolean);
+    const scMoodValues = claudeScMoods.length > 0
+      ? [...new Set(claudeScMoods)]
+      : [...new Set(moodLabels.map(l => SOUNDCHARTS_MOOD_MAP[l]).filter(Boolean))];
     if (scMoodValues.length > 0) {
       filters.push({ type: 'moods', data: { values: scMoodValues, operator: 'in' } });
-      console.log(`🎭 SC moods filter: ${scMoodValues.join(', ')}`);
+      console.log(`🎭 SC moods filter: ${scMoodValues.join(', ')}${claudeScMoods.length > 0 ? ' (Claude-selected)' : ' (label-mapped)'}`);
     }
-    // SC themes filter — build from useCase
-    const scThemeValues = SOUNDCHARTS_THEME_MAP[genreData.contextClues?.useCase?.toLowerCase()] || [];
-    if (scThemeValues.length > 0) {
-      filters.push({ type: 'themes', data: { values: scThemeValues, operator: 'in' } });
-      console.log(`📚 SC themes filter: ${scThemeValues.join(', ')}`);
+    // Prefer Claude's direct SC theme picks
+    const claudeScThemes = (genreData.scThemes || []).map(t => t.toLowerCase()).filter(Boolean);
+    if (claudeScThemes.length > 0) {
+      filters.push({ type: 'themes', data: { values: claudeScThemes, operator: 'in' } });
+      console.log(`📚 SC themes filter: ${claudeScThemes.join(', ')} (Claude-selected)`);
     }
   }
 
@@ -2123,8 +2030,8 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   // Merge Claude's directly-output SC filters (audio, mood, lyrical).
   // These replace lookup-table-derived filters of the same type, since Claude interprets
   // the prompt more dynamically than static keyword maps can.
-  // Skip types that need server-side slug/code mapping (handled above by existing logic).
-  // moods and themes are handled server-side (built from atmosphere + useCase above), so skip Claude's versions.
+  // Skip types handled by dedicated fields: genres/subgenres via primaryGenre, language via culturalContext,
+  // moods/themes via scMoods/scThemes, and other server-side mappings.
   const CLAUDE_SC_SKIP_TYPES = new Set(['songGenres', 'songSubGenres', 'languageCode', 'explicit', 'releaseDate', 'duration', 'artistCareerStages', 'emotionalIntensityScore', 'themes', 'moods']);
   const claudeScFilters = Array.isArray(genreData.soundchartsFilters) ? genreData.soundchartsFilters : [];
   for (const cf of claudeScFilters) {
@@ -2190,30 +2097,6 @@ const SOUNDCHARTS_MOOD_MAP = {
   'dark': 'dark', 'aggressive': 'aggressive', 'angry': 'aggressive',
   'confrontational': 'confrontational', 'rebellious': 'aggressive', 'cynical': 'cynical',
   'frustrated': 'frustrated',
-};
-
-// SC themes per use case — used to build a themes filter for top_songs queries.
-// Full SC themes list stored in backend/sc_filters_reference.js.
-const SOUNDCHARTS_THEME_MAP = {
-  sensual:    ['intimacy', 'desire', 'sexuality', 'hedonism'],
-  heartbreak: ['heartbreak', 'longing', 'loss', 'regret'],
-  party:      ['dance and partying', 'hedonism', 'celebration'],
-  summer:     ['summer love'],
-  chill:      ['escapism'],
-  sleep:      ['escapism'],
-  workout:    ['ambition', 'overcoming adversity'],
-};
-
-// Extra moods to add per use case (beyond what atmosphere labels provide).
-const SOUNDCHARTS_USE_CASE_MOODS = {
-  sensual:    ['sensual', 'romantic'],
-  heartbreak: ['melancholic', 'sad', 'introspective'],
-  party:      ['euphoric', 'energetic'],
-  summer:     ['joyful', 'uplifting'],
-  workout:    ['energetic', 'empowering'],
-  chill:      ['calm'],
-  sleep:      ['calm'],
-  focus:      ['calm', 'introspective'],
 };
 
 // Map Claude atmosphere/characteristic labels → SoundCharts audio feature ranges.
@@ -2320,7 +2203,7 @@ Return ONLY a JSON object mapping 1-based index to classification: {"1": "female
 // ───────���──────────────────────────────────────────────────���──────────────────
 
 // Cached flag: once we know top/songs returns 403 on this plan, skip the call.
-async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0, pendingEnrichment = null) {
+async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuids = {}, minArtists = 0) {
   const appId = process.env.SOUNDCHARTS_APP_ID;
   const apiKey = process.env.SOUNDCHARTS_API_KEY;
   if (!appId || !apiKey) return [];
@@ -2393,8 +2276,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: loosenedFilters, _audioLoosened: true },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
 
@@ -2408,8 +2290,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: filtersWithoutMoods },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
 
@@ -2425,8 +2306,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: filtersWithoutAudio, _audioStripped: true },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
 
@@ -2439,8 +2319,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: filtersWithoutThemes, _themesStripped: true },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
 
@@ -2453,8 +2332,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
 
@@ -2469,8 +2347,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
         // No seed artists and top_songs returned 0 — return empty rather than stripping the genre
@@ -2513,8 +2390,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             { ...query, soundchartsFilters: simplifiedFilters },
             fetchCount,
             confirmedArtistUuids,
-            minArtists,
-            pendingEnrichment
+            minArtists
           );
         }
         console.log(`⚠️  SoundCharts error: 404 (no exotic filters to strip) ${err.message}`);
@@ -2531,7 +2407,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           console.log(`⚠️  SC 500 — stripping songSubGenres and retrying`);
           return executeSoundChartsStrategy(
             { ...query, soundchartsFilters: filtersWithoutSubgenre, _subgenreStripped: true },
-            fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+            fetchCount, confirmedArtistUuids, minArtists
           );
         }
         if (!query._audioStripped) {
@@ -2540,7 +2416,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             console.log(`⚠️  SC 500 (second) — stripping energy + valence, keeping moods/themes/genre/tempo`);
             return executeSoundChartsStrategy(
               { ...query, soundchartsFilters: filtersWithoutAudio, _subgenreStripped: true, _audioStripped: true },
-              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+              fetchCount, confirmedArtistUuids, minArtists
             );
           }
         }
@@ -2552,7 +2428,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
             console.log(`⚠️  SC 500 (third) — pivoting to artist_songs with suggestedSeedArtists: [${_suggestedArtists.join(', ')}]`);
             return executeSoundChartsStrategy(
               { ...query, strategy: 'artist_songs', artists: _suggestedArtists, expandToSimilar: true, _anchorUsed: true },
-              fetchCount, confirmedArtistUuids, minArtists, pendingEnrichment
+              fetchCount, confirmedArtistUuids, minArtists
             );
           }
           console.log(`⚠️  SC 500 (third) — no suggestedSeedArtists available, returning empty so user is prompted to be more specific`);
@@ -2578,8 +2454,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       { ...query, strategy: 'artist_songs', artists: seeds, expandToSimilar: true },
       fetchCount,
       confirmedArtistUuids,
-      minArtists,
-      pendingEnrichment
+      minArtists
     );
     // Apply release date filter if the original query had one
     const rdFilter = soundchartsFilters.find(f => f.type === 'releaseDate');
@@ -2925,49 +2800,14 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
     const songsPerArtist = Math.max(Math.ceil(fetchCount / Math.max(unrepresented.length, 1)), 10);
     for (const artistInfo of unrepresented) {
       try {
-        // Check DB cache for a previously enriched full catalog (populated by background enrichment).
-        // Cache hit: vibe-filter with energy/valence so we don't return upbeat songs for sad prompts.
-        // Cache miss: quick fetch for now, schedule background enrichment for next time.
-        const catalogKey = `full_catalog:${artistInfo.uuid}`;
-        const cachedCatalog = await db.getCachedSC(catalogKey);
-        if (cachedCatalog?.songs?.length > 0) {
-          const mainSongs = cachedCatalog.songs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-          const pool = mainSongs.length > 0 ? mainSongs : cachedCatalog.songs;
-          const enriched = await enrichCatalogWithAudioFeatures(pool, 40);
-          const vibeFiltered = filterCatalogByVibe(enriched, query.soundchartsFilters, songsPerArtist, query.useCase);
-          for (const song of vibeFiltered) {
-            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: song.audio?.energy ?? null });
-          }
-          console.log(`✓ [CACHED] ${vibeFiltered.length}/${pool.length} vibe-filtered songs for "${artistInfo.name}"`);
-        } else {
-          // No cache: quick fetch so the user isn't blocked, then enrich in the background.
-          const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.max(songsPerArtist, 20));
-          const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
-          for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
-            songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
-          }
-          console.log(`✓ [QUICK] ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs for "${artistInfo.name}" — queued for background enrichment`);
-          // Queue for enrichment after res.json() — caller drains pendingEnrichment post-response.
-          if (pendingEnrichment) pendingEnrichment.push(artistInfo);
+        const artistSongs = await getSoundChartsArtistSongs(artistInfo.uuid, Math.max(songsPerArtist, 20));
+        const mainSongs = artistSongs.filter(s => !/\b(live|remix|karaoke|instrumental|bonus|interlude|skit|intro|outro)\b/i.test(s.name));
+        for (const song of (mainSongs.length > 0 ? mainSongs : artistSongs).slice(0, songsPerArtist)) {
+          songs.push({ ...song, artistName: artistInfo.name, source: 'artist_songs', _scEnergy: null });
         }
+        console.log(`✓ ${Math.min((mainSongs.length > 0 ? mainSongs : artistSongs).length, songsPerArtist)} songs for "${artistInfo.name}"`);
       } catch (err) {
         console.log(`⚠️  Error fetching songs for "${artistInfo.name}": ${err.message}`);
-      }
-    }
-
-    // Queue all uncached pool artists (including Phase 3a ones and similar artists from
-    // depth-1/depth-2 expansion) for background enrichment. This warms the cache for
-    // future requests so Phase 3b hits the fast vibe-filtered path next time.
-    if (pendingEnrichment) {
-      const alreadyQueued = new Set(pendingEnrichment.map(a => a.uuid));
-      for (const artistInfo of allArtistInfos) {
-        if (alreadyQueued.has(artistInfo.uuid)) continue;
-        const catalogKey = `full_catalog:${artistInfo.uuid}`;
-        const cached = await db.getCachedSC(catalogKey);
-        if (!cached?.songs?.length) {
-          pendingEnrichment.push(artistInfo);
-          alreadyQueued.add(artistInfo.uuid);
-        }
       }
     }
 
@@ -6414,10 +6254,21 @@ Respond ONLY with valid JSON in this format:
   "energyProgression": "ramp_up" | "ramp_down" | null,
   "phases": [{"label": "string", "energy": "low"|"medium"|"high", "mood": "positive"|"neutral"|"melancholic"|null, "fraction": 0.0-1.0}] or null,
   "genreAccessibility": "newcomer" | "curious" | "enthusiast" | null,
+  "scMoods": ["calm", "reflective"],
+  "scThemes": ["escapism"],
   "soundchartsFilters": [
     { "type": "filterType", "data": {} }
   ]
 }
+
+SC MOODS — pick 1-4 values from this exact list that best match the prompt's emotional tone:
+[aggressive, amusing, anxious, bittersweet, bizarre, boastful, bouncy, calm, cheerful, complex, confessional, confident, confrontational, controversial, conversational, critical, cynical, dark, desperate, devotional, dreamy, emotional, empowering, energetic, epic, euphoric, excited, frustrated, haunting, hopeful, inspirational, intense, introspective, joyful, melancholic, narrative, nostalgic, playful, poetic, reflective, romantic, sad, sensual, sentimental, serious, sincere, uplifting]
+Examples: workout → ["energetic", "empowering"], study/focus → ["calm", "introspective"], heartbreak → ["melancholic", "sad"], party → ["euphoric", "energetic"], chill/relax → ["calm", "dreamy"], sensual → ["sensual", "romantic"], sleep → ["calm", "dreamy"]
+
+SC THEMES — pick 0-4 values from this exact list that match the prompt's subject matter:
+[acceptance, addiction, adventure, alcohol use, ambition, anger, beauty, betrayal, celebration, change, childhood, coming of age, commitment, communication, community, conflict, confusion, connection, control, controversy, criticism, cultural appropriation, dance and partying, danger, deception, dependency, depression, desire, despair, desperation, destiny, destruction, disappointment, distance, dreams and aspirations, drug use, education, empathy, empowerment, environmentalism, escapism, euphoria, excitement, existentialism, exploration, faith, fame, family, fear, forgiveness, freedom, friendship, frustration, gender roles, global issues, gratitude, greed, grief, happiness, healing, health, heartbreak, hedonism, hip-hop rivalry, history, home and belonging, hope, humor, identity, industry criticism, innocence, insecurity, inspiration, intimacy, jealousy, journey, justice, karma, liberation, life and existence, loneliness, longing, loss, love, loyalty, magic, materialism, media criticism, melancholy, memories, memory, mental health, money, moving on, music, mystery, nationalism, nature, nostalgia, obsession, oppression, overcoming adversity, pain, passion, patriotism, peace, perseverance, politics, poverty, power, pride, racism, rebellion, redemption, regret, relationships, religion, revenge, romantic disappointment, sacrifice, searching, seasons, secrets, self-discovery, self-expression, separation, sexuality, social change, spirituality, struggle, success, summer love, support, survival, technology, temptation, time, tradition, transformation, travel and adventure, trust, uncertainty, unity, urban life, violence, vulnerability, waiting, war, wealth, wealth inequality, work, worship, youth culture]
+Examples: heartbreak → ["heartbreak", "longing", "loss"], party → ["dance and partying", "celebration"], sensual → ["intimacy", "desire", "sexuality"], workout → ["ambition", "overcoming adversity"], studying/focus → ["escapism"], summer → ["summer love"]
+Leave empty [] if no specific thematic filter would help (e.g. generic genre requests).
 
 EXTRACTION GUIDELINES:
 For each field, reason about what the user is communicating, then map it to the appropriate value. The keyword examples below illustrate typical phrasings — they are not an exhaustive lookup table, and you should populate fields based on intent even when the user's exact words don't appear in any list.
@@ -6559,7 +6410,8 @@ LANGUAGE (culturalContext.language):
 - "French music" → prefer: ["French"], exclude: []
 - If ALL named/referenced artists perform primarily in English (e.g. Kendrick Lamar, Taylor Swift, Coldplay) → prefer: ["English"], exclude: []
 - If the named artists perform in DIFFERENT languages (e.g. Bad Bunny + Drake) → prefer: [], exclude: [] (mixed)
-- If no artists are named AND no language is implied → prefer: [], exclude: []
+- If no artists are named AND no language is implied AND the prompt is written in English → prefer: ["English"], exclude: []
+- If no artists are named AND no language is implied AND the prompt is written in a non-English language (e.g. Spanish, French, Korean) → prefer: [that language], exclude: []
 
 AUDIENCE / SAFETY (contextClues.audience):
 Also infer audience from contextual descriptions — e.g. "for a Sunday school class" implies ["christian", "clean"], "my 7-year-old's birthday party" implies ["family", "clean"], "playing at church" implies ["christian"]. Use context, not just listed keywords.
@@ -7541,31 +7393,6 @@ Respond ONLY with valid JSON:
     // Discover songs via SoundCharts — direct attribute-based query (no similarity tree)
     let soundChartsDiscoveredSongs = [];
     const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
-    // Collects Phase 3b cache-miss artists + all uncached pool artists for background enrichment.
-    // Drained via setImmediate after res.json() so enrichment never blocks the response.
-    const pendingEnrichment = [];
-
-    // Enriches artists discovered via top_songs strategy (no UUID available — needs name lookup).
-    // Also used for artist_songs pool artists passed via pendingEnrichment.
-    const drainEnrichmentQueue = (extraArtistNames = []) => {
-      const toEnrich = [...pendingEnrichment];
-      const genre = genreData.primaryGenre || null;
-      setImmediate(async () => {
-        // Phase 3b cache-miss artists (have UUID already)
-        for (const artistInfo of toEnrich) {
-          await getArtistFullCatalogFromSC(artistInfo.uuid, artistInfo.name, genre).catch(() => {});
-        }
-        // top_songs strategy artists (only have name — need UUID lookup first)
-        for (const artistName of extraArtistNames) {
-          try {
-            const info = await getSoundChartsArtistInfo(artistName, genre);
-            if (info?.uuid) {
-              await getArtistFullCatalogFromSC(info.uuid, artistName, genre).catch(() => {});
-            }
-          } catch (e) { /* skip */ }
-        }
-      });
-    };
     const _phases = Array.isArray(genreData.phases) && genreData.phases.length >= 2 ? genreData.phases : null;
 
     if (process.env.SOUNDCHARTS_APP_ID) {
@@ -7703,7 +7530,7 @@ Respond ONLY with valid JSON:
         console.log(`🎵 SoundCharts strategy: "${scQuery.strategy}" (fetching ${fetchCount} candidates for ${songCount} target${minArtistsNeeded ? `, min ${minArtistsNeeded} artists` : ''})`);
         console.log(`   Filters: [${scQuery.soundchartsFilters.map(f => f.type).join(', ')}]`);
         try {
-          soundChartsDiscoveredSongs = await executeSoundChartsStrategy({ ...scQuery, _prompt: prompt }, fetchCount, confirmedArtistUuids, minArtistsNeeded, pendingEnrichment);
+          soundChartsDiscoveredSongs = await executeSoundChartsStrategy({ ...scQuery, _prompt: prompt }, fetchCount, confirmedArtistUuids, minArtistsNeeded);
           console.log(`✓ SoundCharts returned ${soundChartsDiscoveredSongs.length} songs`);
 
           // ── Hybrid artist seeding: supplement top_songs with artist_songs from suggestedSeedArtists ──
@@ -7722,7 +7549,7 @@ Respond ONLY with valid JSON:
               _seedQuery.expandToSimilar = true;
               const _seedSongs = await executeSoundChartsStrategy(
                 { ..._seedQuery, _prompt: prompt },
-                _seedFetchCount, confirmedArtistUuids, 0, pendingEnrichment
+                _seedFetchCount, confirmedArtistUuids, 0
               );
               if (_seedSongs.length > 0) {
                 // Dedupe by lowercase "artist::track" key — prefer existing top_songs entries
@@ -9334,8 +9161,6 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             tracks: selectedTracks,
             trackCount: selectedTracks.length
           });
-          const _topSongsArtists = [...new Set(soundChartsDiscoveredSongs.map(s => s.artistName).filter(Boolean))];
-          drainEnrichmentQueue(_topSongsArtists);
           return; // Done
         }
         console.log(`⚠️ Only ${selectedTracks.length}/${songCount} tracks found, trying fallback...`);
@@ -10263,9 +10088,6 @@ Return ONLY a valid JSON array of track numbers to KEEP (underground tracks only
       tracks: selectedTracks,
       trackCount: selectedTracks.length
     });
-    const _topSongsArtists = [...new Set(soundChartsDiscoveredSongs.map(s => s.artistName).filter(Boolean))];
-    drainEnrichmentQueue(_topSongsArtists);
-
   } catch (error) {
     console.error('Error generating playlist:', error);
     res.status(500).json({ 
