@@ -8400,11 +8400,20 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
           return false;
         }
         const maxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
-        if (maxPerArtist !== null && maxPerArtist !== undefined) {
-          const artistKey = (track.artists?.[0]?.name || track.artist || '').toLowerCase();
+        const _effectiveMax = (maxPerArtist !== null && maxPerArtist !== undefined)
+          ? maxPerArtist
+          : (!genreData.artistConstraints.exclusiveMode ? 2 : null);
+        if (_effectiveMax !== null) {
+          const artistKey = (track.artists?.[0]?.name || track.artist || '').toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
           const currentCount = artistTrackCount.get(artistKey) || 0;
-          if (currentCount >= maxPerArtist) {
-            console.log(`[ARTIST-LIMIT] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${currentCount}/${maxPerArtist} per artist)`);
+          // Requested artists get 3x the limit
+          const _reqArtists = (genreData.artistConstraints?.requestedArtists || [])
+            .map(a => a.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim());
+          const isRequested = _reqArtists.some(r => r === artistKey);
+          const artistLimit = isRequested ? Math.max(_effectiveMax * 3, 6) : _effectiveMax;
+          if (currentCount >= artistLimit) {
+            console.log(`[ARTIST-LIMIT] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} (${currentCount}/${artistLimit} per artist${isRequested ? ', requested' : ''})`);
             return false;
           }
           artistTrackCount.set(artistKey, currentCount + 1);
