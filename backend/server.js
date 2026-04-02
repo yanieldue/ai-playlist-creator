@@ -6557,7 +6557,9 @@ LANGUAGE (culturalContext.language):
 - "no English songs", "not in English" → prefer: [], exclude: ["English"]
 - "Korean pop", "K-pop" → prefer: ["Korean"], exclude: []
 - "French music" → prefer: ["French"], exclude: []
-- If no language is implied → prefer: [], exclude: []
+- If ALL named/referenced artists perform primarily in English (e.g. Kendrick Lamar, Taylor Swift, Coldplay) → prefer: ["English"], exclude: []
+- If the named artists perform in DIFFERENT languages (e.g. Bad Bunny + Drake) → prefer: [], exclude: [] (mixed)
+- If no artists are named AND no language is implied → prefer: [], exclude: []
 
 AUDIENCE / SAFETY (contextClues.audience):
 Also infer audience from contextual descriptions — e.g. "for a Sunday school class" implies ["christian", "clean"], "my 7-year-old's birthday party" implies ["family", "clean"], "playing at church" implies ["christian"]. Use context, not just listed keywords.
