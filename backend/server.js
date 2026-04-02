@@ -1781,23 +1781,36 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
 
   // Genre filter — Claude now returns exact SC slugs, so check directly against SC lists.
   // Genre takes priority (bigger pool, more reliable); subgenre only if no genre match.
-  if (genreData.primaryGenre) {
-    const slug = genreData.primaryGenre.toLowerCase().trim();
+  // When primaryGenre is null, fall back to the first secondaryGenre that matches an SC slug
+  // to avoid genre-less queries that pull random calm tracks from every genre.
+  let genreSlugSource = genreData.primaryGenre;
+  if (!genreSlugSource && Array.isArray(genreData.secondaryGenres)) {
+    for (const sg of genreData.secondaryGenres) {
+      const sgSlug = sg.toLowerCase().trim();
+      if (SC_GENRES.includes(sgSlug) || SC_SUBGENRES.includes(sgSlug)) {
+        genreSlugSource = sg;
+        console.log(`🎵 No primaryGenre — falling back to secondaryGenre "${sg}"`);
+        break;
+      }
+    }
+  }
+  if (genreSlugSource) {
+    const slug = genreSlugSource.toLowerCase().trim();
     if (SC_GENRES.includes(slug)) {
       filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
-      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songGenres=${slug}`);
+      console.log(`🎵 SC genre resolution: "${genreSlugSource}" → songGenres=${slug}`);
     } else if (SC_SUBGENRES.includes(slug)) {
       filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
       // Add the closest parent songGenres so genre survives after the 500 ladder strips subgenres.
       const parentGenre = SC_GENRES.find(g => slug.includes(g));
       if (parentGenre) {
         filters.push({ type: 'songGenres', data: { values: [parentGenre], operator: 'in' } });
-        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug} + songGenres=${parentGenre} (parent fallback)`);
+        console.log(`🎵 SC genre resolution: "${genreSlugSource}" → songSubGenres=${slug} + songGenres=${parentGenre} (parent fallback)`);
       } else {
-        console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → songSubGenres=${slug}`);
+        console.log(`🎵 SC genre resolution: "${genreSlugSource}" → songSubGenres=${slug}`);
       }
     } else {
-      console.log(`🎵 SC genre resolution: "${genreData.primaryGenre}" → no SC match, skipping genre filter`);
+      console.log(`🎵 SC genre resolution: "${genreSlugSource}" → no SC match, skipping genre filter`);
     }
   }
 
@@ -6194,6 +6207,7 @@ Rules:
 - If user says "soul" → primaryGenre: "soul" (subgenre)
 - If user says "trap" → primaryGenre: "hip-hop & rap" (subgenre), subgenre: null (trap is not a standalone SC slug)
 - Always prefer the most specific matching slug. Use a subgenre slug when it exists, genre slug as fallback.
+- ALWAYS set primaryGenre — even for genre-agnostic prompts like "studying music" or "calm background music", pick the best-fit genre (e.g. "pop" for generic modern music, "chill out/trip-hop/lounge" for background/ambient/study contexts, "folk" for acoustic requests). Only set null if truly impossible to determine.
 
 Respond ONLY with valid JSON in this format:
 {
