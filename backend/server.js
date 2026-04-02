@@ -7602,23 +7602,30 @@ Respond ONLY with valid JSON:
           scQuery.expandToSimilar = false;
           console.log(`⚡ Refresh: 0-song playlist — switching to top_songs (no anchor artists available)`);
         } else if (existingPlaylistData?.tracks?.length > 0 && !genreData.artistConstraints?.exclusiveMode) {
-          // Anchor seeds to the top 8 most-represented artists already in the playlist.
-          // This keeps refresh/auto-update grounded in what the playlist actually sounds like.
-          const _anchorArtists = [...new Set(
-            existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
-          )];
-          if (_anchorArtists.length > 0) {
-            const _artistFreq = {};
-            existingPlaylistData.tracks.forEach(t => {
-              if (t.artist) _artistFreq[t.artist] = (_artistFreq[t.artist] || 0) + 1;
-            });
-            const _cappedAnchor = _anchorArtists
-              .sort((a, b) => (_artistFreq[b] || 0) - (_artistFreq[a] || 0))
-              .slice(0, 8);
-            console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — disabling Level 1/2 expansion`);
-            scQuery.artists = _cappedAnchor;
-            scQuery.expandToSimilar = false;
-            scQuery.strategy = 'artist_songs';
+          // Only anchor to existing playlist artists if the user explicitly requested specific
+          // artists. If no artists were specified, let top_songs run with SC's own filters
+          // (genre + mood + era etc.) so refinements like "last 5 years" don't get trapped
+          // inside a stale artist pool.
+          const _hasRequestedArtists = (genreData.artistConstraints?.requestedArtists || []).length > 0;
+          if (_hasRequestedArtists) {
+            const _anchorArtists = [...new Set(
+              existingPlaylistData.tracks.map(t => t.artist).filter(Boolean)
+            )];
+            if (_anchorArtists.length > 0) {
+              const _artistFreq = {};
+              existingPlaylistData.tracks.forEach(t => {
+                if (t.artist) _artistFreq[t.artist] = (_artistFreq[t.artist] || 0) + 1;
+              });
+              const _cappedAnchor = _anchorArtists
+                .sort((a, b) => (_artistFreq[b] || 0) - (_artistFreq[a] || 0))
+                .slice(0, 8);
+              console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — disabling Level 1/2 expansion`);
+              scQuery.artists = _cappedAnchor;
+              scQuery.expandToSimilar = false;
+              scQuery.strategy = 'artist_songs';
+            }
+          } else {
+            console.log(`🔄 Refresh: no artists specified — using top_songs with SC filters (not anchoring to playlist artists)`);
           }
         }
         // Gender filter at seed selection — happens before the SC similarity graph expands.
