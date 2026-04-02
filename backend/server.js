@@ -8302,8 +8302,8 @@ Return ONLY a JSON array of 1-based indices to KEEP — no explanation.
 Rules:
 - KEEP songs that match the user's request and all constraints above.
 - REMOVE songs that clearly violate any constraint (wrong era, wrong genre, wrong vibe, explicitly avoided).
-- When uncertain about a song, KEEP it. Only remove songs you are confident are mismatches.
-- Aim to keep at least 75% of tracks. Do not over-filter.
+- When uncertain about a song, REMOVE it. Only keep songs you are confident belong — a wrong track ruins the playlist.
+- Aim to keep 55–65% of tracks. Strict filtering is expected and desired.
 
 Example response: [1, 2, 4, 5, 7, ...]`
             }]
@@ -8316,8 +8316,8 @@ Example response: [1, 2, 4, 5, 7, ...]`
           if (_scKeepMatch) {
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
             const _scFiltered = _scKeepIndices.map(idx => _scPoolFiltered[idx - 1]).filter(Boolean);
-            const _isMelancholicSC = genreData.mood === 'melancholic' || _scUseCase === 'heartbreak';
-            const _scMinKeep = Math.ceil(_scPoolFiltered.length * (_isMelancholicSC ? 0.85 : 0.75));
+            const _scMinKeepRate = 0.55;
+            const _scMinKeep = Math.ceil(_scPoolFiltered.length * _scMinKeepRate);
             vibePassedTracks = _scFiltered.length >= _scMinKeep
               ? _scFiltered
               : _scPoolFiltered.slice(0, Math.max(_scFiltered.length, _scMinKeep));
@@ -8979,6 +8979,56 @@ Example response: [1, 2, 4, 5, 7, ...]`
                       console.log(`🚫 [CATALOG-OVERRIDE/SUPP] Skipping "${track.name}" by ${track.artists?.[0]?.name || track.artist} — ${_suppOverride.reason}`);
                       continue;
                     }
+                  }
+                  // DATA-FILTER: same mood/theme/energy checks as main pool
+                  {
+                    const _suppIncompatibleMoods = {
+                      sensual:    new Set(['joyful', 'energetic', 'playful', 'euphoric', 'empowering', 'boastful', 'confrontational', 'aggressive', 'excited', 'bouncy']),
+                      heartbreak: new Set(['joyful', 'euphoric', 'energetic', 'empowering', 'boastful', 'excited']),
+                      focus:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'boastful']),
+                      sleep:      new Set(['energetic', 'aggressive', 'confrontational', 'euphoric', 'excited', 'bouncy', 'empowering']),
+                      workout:    new Set(['calm', 'dreamy', 'melancholic', 'sad', 'dark', 'desperate', 'haunting']),
+                      party:      new Set(['melancholic', 'sad', 'dark', 'desperate', 'haunting', 'anxious']),
+                    };
+                    const _suppIncompatibleThemes = {
+                      sensual: new Set(['heartbreak', 'anger', 'conflict', 'grief', 'violence', 'betrayal', 'depression', 'despair', 'breakup']),
+                    };
+                    const _suppEnergyLimits = {
+                      sensual:    { max: 0.70 },
+                      sleep:      { max: 0.40 },
+                      focus:      { max: 0.72 },
+                      workout:    { min: 0.50 },
+                      party:      { min: 0.50 },
+                    };
+                    const _suppDanceLimits = {
+                      sensual:    { max: 0.75 },
+                      sleep:      { max: 0.55 },
+                    };
+                    const _sdMoods = (song.moods || []).map(m => m.toLowerCase());
+                    const _sdThemes = (song.themes || []).map(t => t.toLowerCase());
+                    const _sdEnergy = song._scEnergy;
+                    const _sdDance = song.audio?.danceability ?? null;
+                    const _sdIncompatMoods = _suppIncompatibleMoods[_suppUseCase] || new Set();
+                    const _sdIncompatThemes = _suppIncompatibleThemes[_suppUseCase] || new Set();
+                    const _sdEnergyLimit = _suppEnergyLimits[_suppUseCase];
+                    const _sdDanceLimit = _suppDanceLimits[_suppUseCase];
+                    let _sdBlocked = false;
+                    if (_sdMoods.length > 0 && _sdIncompatMoods.size > 0) {
+                      const conflict = _sdMoods.find(m => _sdIncompatMoods.has(m));
+                      if (conflict) { console.log(`🎭 [DATA-FILTER/SUPP] "${song.track || song.name}" — mood "${conflict}" conflicts with ${_suppUseCase}`); _sdBlocked = true; }
+                    }
+                    if (!_sdBlocked && _sdThemes.length > 0 && _sdIncompatThemes.size > 0) {
+                      const conflict = _sdThemes.find(t => _sdIncompatThemes.has(t));
+                      if (conflict) { console.log(`🎭 [DATA-FILTER/SUPP] "${song.track || song.name}" — theme "${conflict}" conflicts with ${_suppUseCase}`); _sdBlocked = true; }
+                    }
+                    if (!_sdBlocked && _sdEnergy != null && _sdEnergyLimit) {
+                      if (_sdEnergyLimit.max != null && _sdEnergy > _sdEnergyLimit.max) { console.log(`⚡ [DATA-FILTER/SUPP] "${song.track || song.name}" — energy ${_sdEnergy.toFixed(2)} > ${_sdEnergyLimit.max}`); _sdBlocked = true; }
+                      if (_sdEnergyLimit.min != null && _sdEnergy < _sdEnergyLimit.min) { console.log(`⚡ [DATA-FILTER/SUPP] "${song.track || song.name}" — energy ${_sdEnergy.toFixed(2)} < ${_sdEnergyLimit.min}`); _sdBlocked = true; }
+                    }
+                    if (!_sdBlocked && _sdDance != null && _sdDanceLimit?.max != null && _sdDance > _sdDanceLimit.max) {
+                      console.log(`💃 [DATA-FILTER/SUPP] "${song.track || song.name}" — danceability ${_sdDance.toFixed(2)} > ${_sdDanceLimit.max}`); _sdBlocked = true;
+                    }
+                    if (_sdBlocked) continue;
                   }
                   const _suppNormKey = `${_normTitle(track.name)}::${_normArtist(track.artists?.[0]?.name || track.artist || '')}`;
                   if (seenNormKeys.has(_suppNormKey)) continue;
