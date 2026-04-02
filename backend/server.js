@@ -9357,40 +9357,45 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
       });
       console.log('');
 
-      // For non-exclusive mode, limit tracks per artist to maintain discovery balance
-      if (!genreData.artistConstraints.exclusiveMode) {
-        const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
+    }
 
-        // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
-        const artistTrackMap = new Map();
+    // For non-exclusive mode, limit tracks per artist to maintain discovery balance
+    // Runs for ALL playlists (not just those with requested artists) to prevent
+    // any single artist from dominating the track list.
+    if (!genreData.artistConstraints.exclusiveMode) {
+      const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
 
-        allTracks.forEach(track => {
-          const finalNormalizedArtist = normalizeArtistForComparison(track.artist);
+      // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
+      const artistTrackMap = new Map();
 
-          if (!artistTrackMap.has(finalNormalizedArtist)) {
-            artistTrackMap.set(finalNormalizedArtist, []);
-          }
-          artistTrackMap.get(finalNormalizedArtist).push(track);
-        });
+      allTracks.forEach(track => {
+        const finalNormalizedArtist = normalizeArtistForComparison(track.artist);
 
-        // Filter to keep only first N tracks per artist
-        const limitedTracks = [];
-        artistTrackMap.forEach((tracks, artist) => {
-          const isRequestedArtist = requestedArtists.some(req => normalizeArtistForComparison(req) === artist);
-          const limit = isRequestedArtist ? maxTracksPerArtist : maxTracksPerArtist;
+        if (!artistTrackMap.has(finalNormalizedArtist)) {
+          artistTrackMap.set(finalNormalizedArtist, []);
+        }
+        artistTrackMap.get(finalNormalizedArtist).push(track);
+      });
 
-          if (tracks.length > limit) {
-            console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks`);
-          }
+      // Filter to keep only first N tracks per artist
+      // Requested artists get a higher allowance — user explicitly asked for them
+      const _reqArtists = (genreData.artistConstraints?.requestedArtists || [])
+        .map(a => normalizeArtistForComparison(a));
+      const limitedTracks = [];
+      artistTrackMap.forEach((tracks, normalizedName) => {
+        const isRequested = _reqArtists.some(req => req === normalizedName);
+        const limit = isRequested ? Math.max(maxTracksPerArtist * 3, 6) : maxTracksPerArtist;
 
-          limitedTracks.push(...tracks.slice(0, limit));
-        });
+        if (tracks.length > limit) {
+          console.log(`  ✂️  Limiting ${tracks[0].artist} from ${tracks.length} to ${limit} tracks${isRequested ? ' (requested artist)' : ''}`);
+        }
 
-        const beforeCount = allTracks.length;
-        allTracks.splice(0, allTracks.length, ...limitedTracks);
-        console.log(`\n📊 Artist diversity enforcement: ${beforeCount} -> ${allTracks.length} tracks (max ${maxTracksPerArtist} per artist)\n`);
-      }
+        limitedTracks.push(...tracks.slice(0, limit));
+      });
 
+      const beforeCount = allTracks.length;
+      allTracks.splice(0, allTracks.length, ...limitedTracks);
+      console.log(`\n📊 Artist diversity enforcement: ${beforeCount} -> ${allTracks.length} tracks (max ${maxTracksPerArtist} per artist)\n`);
     }
 
     // Step 2.5: Apply metadata-based filters (year, duration, version exclusions, language, album diversity)
