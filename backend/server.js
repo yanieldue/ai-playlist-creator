@@ -9249,8 +9249,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
         // e.g. focus+instrumental: try "classical", "chill out/trip-hop/lounge" which are
         // naturally instrumental, rather than generic "electro" top songs (mainstream vocal EDM).
         const _fallbackGenreAlternatives = {
-          focus: ['classical', 'chill out/trip-hop/lounge', 'electro'],
-          sleep: ['classical', 'chill out/trip-hop/lounge', 'electro'],
+          focus: ['classical', 'soundtrack', 'chill out/trip-hop/lounge', 'instrumental', 'electro'],
+          sleep: ['classical', 'chill out/trip-hop/lounge', 'instrumental', 'electro'],
         };
         const _altGenres = _fallbackGenreAlternatives[_scUseCase] || [genreData.primaryGenre];
         // If primary genre is already first in the alt list, skip it to avoid duplicate queries
@@ -9278,10 +9278,10 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           const _fbSongsRaw = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
           // Cap per-genre results — SC can return 1000 but we only need a fraction
           const _fbSongs = _fbSongsRaw.slice(0, Math.max(songCount * 2 - topSongs.length, 50));
-          // Deduplicate by song name+artist
-          const _existingKeys = new Set(topSongs.map(s => `${(s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`));
+          // Deduplicate by song name+artist (SC songs use artistName, not artist)
+          const _existingKeys = new Set(topSongs.map(s => `${(s.artistName || s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`));
           for (const s of _fbSongs) {
-            const k = `${(s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`;
+            const k = `${(s.artistName || s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`;
             if (!_existingKeys.has(k)) {
               topSongs.push(s);
               _existingKeys.add(k);
@@ -9297,6 +9297,61 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           topSongs = topSongs.slice(0, _fallbackCap);
         }
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
+
+        // ── Sonnet curation on fallback pool ──
+        // The fallback pool (classical, ambient, soundtrack, etc.) can contain junk like
+        // solfeggio healing tones, ASMR, or meditation drones that scored high on
+        // instrumentalness but aren't real music. Run Sonnet to filter them out.
+        if (_scUseCase && topSongs.length > 20) {
+          try {
+            const _fbTargetCount = Math.min(songCount * 2, topSongs.length);
+            const _fbTrackLines = topSongs.map((song, i) => {
+              const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
+              return `${i + 1}. "${song.name || song.track}" by ${song.artistName || song.artist}${yr ? ` (${yr})` : ''}`;
+            });
+            const _fbUseCaseRules = {
+              focus: 'USE CASE: FOCUS/DEEP WORK — Only include real musical compositions suitable for sustained concentration. Reject: solfeggio frequency tones (e.g. "528 Hz", "432 Hz", "Healing Tone"), binaural beats, ASMR, meditation drones, sound therapy, white noise, and nature sounds — these are NOT music. Also reject anything with prominent vocals, high energy, or catchy hooks. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, film scores, classical compositions, and other genuine instrumental music.',
+              sleep: 'USE CASE: SLEEP — Only include real musical compositions suitable for falling asleep. Reject: solfeggio frequency tones, binaural beats, ASMR, sound therapy, white noise. Also reject anything with a noticeable beat or vocals. Keep: ultra-calm, minimal, soothing instrumental music.',
+            };
+            const _fbRule = _fbUseCaseRules[_scUseCase] || '';
+            console.log(`🎵 Fallback pool curation: Sonnet selecting ~${_fbTargetCount} from ${topSongs.length} candidates...`);
+            const _fbCurationResp = await anthropic.messages.create({
+              model: 'claude-sonnet-4-6',
+              max_tokens: 800,
+              messages: [{
+                role: 'user',
+                content: `You are curating a playlist. From the candidates below, select the best songs that match the user's request.
+
+${_fbRule}
+
+User's request: "${prompt}"
+
+Candidates:
+${_fbTrackLines.join('\n')}
+
+Select up to ${_fbTargetCount} songs. Reject anything that isn't genuine music (frequency tones, healing sounds, binaural beats, etc.) and anything that violates the use case rules above.
+
+Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
+              }]
+            });
+            const _fbCurationText = _fbCurationResp.content[0].text.trim()
+              .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+              .replace(/^```\n?/, '').replace(/\n?```$/, '');
+            const _fbKeepMatch = _fbCurationText.match(/\[[\d,\s]*\]/);
+            if (_fbKeepMatch) {
+              const _fbKeepIndices = JSON.parse(_fbKeepMatch[0]);
+              const _fbCurated = _fbKeepIndices.map(idx => topSongs[idx - 1]).filter(Boolean);
+              console.log(`✂️  Fallback pool curation: ${topSongs.length} → ${_fbCurated.length} tracks`);
+              if (_fbCurated.length >= 10) {
+                topSongs = _fbCurated;
+              } else {
+                console.log(`⚠️  Fallback curation too aggressive (${_fbCurated.length}), keeping full pool`);
+              }
+            }
+          } catch (_fbCurationErr) {
+            console.log(`⚠️  Fallback pool curation failed, using uncurated pool: ${_fbCurationErr.message}`);
+          }
+        }
 
         // Phase A: pre-fetch SC platform IDs for songs missing ISRC
         await prefetchPlatformIds(topSongs, platform === 'spotify' ? 'spotify' : 'applemusic');
