@@ -1701,8 +1701,6 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['sensual'],
     reason: 'jazz-fusion / cerebral polyrhythmic track — musically complex, requires active listening, kills intimacy in a sensual playlist',
   },
-  // Scatman John removed — handled by Sonnet curation useCase context instead of hardcoded override
-  },
   // Added 2026-04-01. Mid-tempo R&B (2016). Popularity: ~77.
   // False positive: sensual R&B playlist. SC tags it with desire/romantic themes.
   // The song is about longing for someone who is far away ("send me your location") —
