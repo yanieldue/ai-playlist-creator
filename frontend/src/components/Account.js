@@ -534,7 +534,7 @@ const Account = ({ onBack, showToast }) => {
             <button className="account-list-item" onClick={handleManageBilling}>
               <span className="account-list-label">Plan</span>
               <div className="account-list-value">
-                <span className="account-plan-badge account-plan-badge-pro">Pro</span>
+                <span className="account-plan-badge account-plan-badge-pro">{localStorage.getItem('isAdmin') === 'true' ? 'Admin' : 'Pro'}</span>
                 <span style={{ fontSize: 13, color: '#8e8e93' }}>Manage Billing</span>
                 <Icons.ChevronRight size={20} color="#c7c7cc" />
               </div>

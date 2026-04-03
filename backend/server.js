@@ -3649,6 +3649,7 @@ app.get('/api/account/:email', async (req, res) => {
       spotifyUserId: platformUserIds?.spotify_user_id || memUser?.spotifyUserId,
       appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
       plan: isAdminUser(normalizedEmail) ? 'paid' : (dbUser.plan || 'free'),
+      isAdmin: isAdminUser(normalizedEmail),
       trialUsed: dbUser.trialUsed || false,
       productTourCompleted: dbUser.productTourCompleted || false,
       allowExplicit: dbUser.allowExplicit !== false,
@@ -9126,7 +9127,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
           // Artist diversity enforcement — cap tracks per artist (default 2)
           if (!genreData.artistConstraints.exclusiveMode) {
-            const _divMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
+            const _divMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
             const _divNormArtist = (name) => (name || '').toLowerCase()
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
             const _divReqArtists = (genreData.artistConstraints?.requestedArtists || [])
@@ -9317,7 +9318,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
     // Runs for ALL playlists (not just those with requested artists) to prevent
     // any single artist from dominating the track list.
     if (!genreData.artistConstraints.exclusiveMode) {
-      const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 2;
+      const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
 
       // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
       const artistTrackMap = new Map();

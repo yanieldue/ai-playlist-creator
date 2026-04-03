@@ -296,6 +296,7 @@ const PlaylistGenerator = () => {
         playlistService.getAccountInfo(storedEmail)
           .then(accountInfo => {
             if (accountInfo?.plan) localStorage.setItem('userPlan', accountInfo.plan);
+            if (accountInfo?.isAdmin) localStorage.setItem('isAdmin', 'true'); else localStorage.removeItem('isAdmin');
           })
           .catch(() => {})
           .finally(() => showToast('Welcome to Pro! All features are now unlocked.', 'success'));
@@ -468,6 +469,7 @@ const PlaylistGenerator = () => {
             setConnectedPlatforms(accountInfo.connectedPlatforms);
             localStorage.setItem('connectedPlatforms', JSON.stringify(accountInfo.connectedPlatforms));
             if (accountInfo.plan) localStorage.setItem('userPlan', accountInfo.plan);
+            if (accountInfo.isAdmin) localStorage.setItem('isAdmin', 'true'); else localStorage.removeItem('isAdmin');
 
             // Sync settings from DB (so they work across devices)
             if (accountInfo.allowExplicit !== undefined) {
@@ -1255,9 +1257,15 @@ const PlaylistGenerator = () => {
         return;
       }
 
-      // Only retry on network errors or 502/503/504 (infra blips), not on 4xx/500 server errors
-      const isRetryable = !err.response || [502, 503, 504].includes(err.response?.status);
+      // Only retry on 502/503/504 (infra blips), not on timeouts or 4xx/500 server errors.
+      // Timeouts mean the backend is still working — retrying would pile up concurrent requests.
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
+      const isRetryable = !isTimeout && (!err.response || [502, 503, 504].includes(err.response?.status));
       if (isRetryable && retryCount < maxRetries) {
+        // Abort previous in-flight request before retrying
+        if (generationAbortControllerRef.current) {
+          generationAbortControllerRef.current.abort();
+        }
         const waitTime = Math.pow(2, retryCount) * 1000; // 1s, 2s
         console.log(`Playlist generation failed, retrying in ${waitTime}ms... (attempt ${retryCount + 1}/${maxRetries})`);
 

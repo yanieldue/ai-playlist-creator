@@ -128,7 +128,10 @@ export const playlistService = {
       songCount,
       excludeTrackUris,
       playlistId,
-    }, signal ? { signal } : {});
+    }, {
+      ...(signal ? { signal } : {}),
+      timeout: 300000, // 5 min — niche genre discovery can be slow
+    });
     return response.data;
   },
 
