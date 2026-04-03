@@ -6334,6 +6334,7 @@ ALBUM DIVERSITY:
 
 ARTIST DIVERSITY:
 - "each song by different artist", "one song per artist", "no repeats by same artist", "every song different artist", "no artist twice": maxPerArtist: 1
+- "no repeats" (without mentioning artists) means no duplicate SONGS, NOT maxPerArtist — leave maxPerArtist: null
 - "no more than 2 songs per artist", "max 2 per artist": maxPerArtist: 2
 - "more diversity" (without specific artist count): maxPerArtist: 2
 
@@ -9175,9 +9176,14 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             return true;
           });
 
-          // Artist diversity enforcement — cap tracks per artist (default 2)
+          // Artist diversity enforcement — cap tracks per artist (default 3)
+          // For large playlists (40+ songs), allow more per artist since having multiple
+          // pieces by the same composer/artist is natural (e.g. 3 Einaudi pieces in a 65-song focus playlist).
           if (!genreData.artistConstraints.exclusiveMode) {
-            const _divMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
+            const _divRawMax = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+            const _divMaxPerArtist = (_divRawMax !== null && _divRawMax !== undefined)
+              ? Math.max(_divRawMax, songCount >= 40 ? 3 : _divRawMax)
+              : 3;
             const _divNormArtist = (name) => (name || '').toLowerCase()
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
             const _divReqArtists = (genreData.artistConstraints?.requestedArtists || [])
