@@ -13268,12 +13268,42 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
 
     let clientSecret;
     if (trial) {
+      // Try expanded object first, fall back to manual retrieval
       clientSecret = subscription.pending_setup_intent?.client_secret;
+      if (!clientSecret && subscription.pending_setup_intent) {
+        const setupIntentId = typeof subscription.pending_setup_intent === 'string'
+          ? subscription.pending_setup_intent
+          : subscription.pending_setup_intent.id;
+        if (setupIntentId) {
+          const si = await stripe.setupIntents.retrieve(setupIntentId);
+          clientSecret = si.client_secret;
+        }
+      }
     } else {
+      // Try expanded object first
       clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+      // Fall back: manually retrieve invoice → payment_intent
+      if (!clientSecret) {
+        const invoiceId = typeof subscription.latest_invoice === 'string'
+          ? subscription.latest_invoice
+          : subscription.latest_invoice?.id;
+        console.log(`[STRIPE] Subscription created: ${subscription.id}, status: ${subscription.status}, invoice: ${invoiceId}, latest_invoice type: ${typeof subscription.latest_invoice}`);
+        if (invoiceId) {
+          const invoice = await stripe.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
+          clientSecret = invoice.payment_intent?.client_secret;
+          if (!clientSecret && invoice.payment_intent) {
+            const piId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent.id;
+            if (piId) {
+              const pi = await stripe.paymentIntents.retrieve(piId);
+              clientSecret = pi.client_secret;
+            }
+          }
+        }
+      }
     }
 
     if (!clientSecret) {
+      console.error(`[STRIPE] No client_secret. Sub: ${subscription.id}, status: ${subscription.status}, trial: ${trial}, latest_invoice: ${JSON.stringify(subscription.latest_invoice)?.substring(0, 200)}`);
       return res.status(500).json({ error: 'Failed to get client secret from Stripe' });
     }
 
