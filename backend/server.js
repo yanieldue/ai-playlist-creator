@@ -1701,14 +1701,7 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['sensual'],
     reason: 'jazz-fusion / cerebral polyrhythmic track — musically complex, requires active listening, kills intimacy in a sensual playlist',
   },
-  // Added 2026-04-03. Novelty Eurodance (1994). Popularity: ~70.
-  // False positives: Prompt 126 running (2/2 runs). Scat-singing novelty hit — the opposite of
-  // a steady-pace running track. High energy on paper but disruptive and comedic in a workout context.
-  'scatman john::scatman (ski-ba-bop-ba-dop-bop)': {
-    requiredMoods: [],
-    requiredEnergies: [],
-    blockedUseCases: ['workout', 'focus', 'sleep'],
-    reason: 'novelty Eurodance scat-singing hit — disruptive in workout/focus contexts',
+  // Scatman John removed — handled by Sonnet curation useCase context instead of hardcoded override
   },
   // Added 2026-04-01. Mid-tempo R&B (2016). Popularity: ~77.
   // False positive: sensual R&B playlist. SC tags it with desire/romantic themes.
@@ -8103,7 +8096,21 @@ Return ONLY valid JSON:
               content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks.
 
 Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
-${_scUseCase === 'workout' ? `\nUSE CASE: WORKOUT/RUNNING — Every song must have genuine pump-up energy suitable for physical exercise. Reject novelty hits (Scatman John), retro curiosities (Yazz, Big Brovaz), sport event anthems (FIFA World Cup songs), and anything with inconsistent or comedic energy. Only include songs you would genuinely hear in a gym or on a running playlist.` : ''}${_scUseCase === 'focus' ? `\nUSE CASE: FOCUS/DEEP WORK — Only include songs suitable for concentration. Reject anything with prominent vocals, high energy, or distracting elements. The user needs background music for work, not party hits.` : ''}${_scUseCase === 'sleep' ? `\nUSE CASE: SLEEP — Only ultra-calm, soothing tracks. Reject anything with a beat or energy.` : ''}
+${(() => {
+  const _useCaseRules = {
+    workout: 'USE CASE: WORKOUT/RUNNING — Every song must have genuine, sustained pump-up energy suitable for physical exercise. Ask yourself: would this song keep someone moving on a treadmill or during a run? Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real drive (Yazz "The Only Way Is Up"), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, and anything with inconsistent energy or comedic tone. Keep: songs with driving beats, motivational energy, and consistent tempo throughout.',
+    focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
+    sleep: 'USE CASE: SLEEP — Only ultra-calm, minimal, soothing tracks suitable for falling asleep. Reject: anything with a noticeable beat, energy above whisper-level, vocals that demand attention, or dynamic range that could wake someone up.',
+    party: 'USE CASE: PARTY/PREGAME — Every song must work on a dancefloor or at a party. Reject: ballads, slow jams, emotional/introspective tracks, and mid-tempo songs that kill momentum — even from otherwise upbeat artists. Keep: high-energy, danceable, crowd-pleasing tracks.',
+    summer: 'USE CASE: SUMMER — Every song must feel warm, bright, and carefree. Reject: winter-coded songs, breakup ballads, melancholic tracks, dark/moody songs, and anything emotionally heavy. Keep: upbeat, feel-good, sun-soaked tracks that belong on a beach or summer road trip.',
+    sensual: 'USE CASE: SENSUAL/INTIMATE — Every song must create a romantic, intimate atmosphere. Reject: breakup/heartbreak songs (even if slow and smooth), upbeat party tracks, and anything emotionally negative. Lyrical content matters more than production — a smooth-sounding song about loss or cheating does NOT belong here.',
+    heartbreak: 'USE CASE: HEARTBREAK/SAD — Every song should resonate with emotional pain, loss, or longing. Reject: upbeat, happy, or motivational tracks. Keep: melancholic, vulnerable, emotionally raw songs.',
+    chill: 'USE CASE: CHILL/RELAXATION — Songs should be laid-back and easy-going. Reject: high-energy, aggressive, or attention-demanding tracks. Keep: mellow, smooth, and relaxed-feeling music.',
+    morning: 'USE CASE: MORNING/GETTING READY — Songs should feel fresh, optimistic, and gently energizing. Reject: dark, heavy, aggressive, or sad songs. Keep: bright, warm, positive tracks that ease into the day.',
+    background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant and unobtrusive. Reject: loud, attention-grabbing, or emotionally intense tracks. Keep: smooth, conversational-volume-friendly music.',
+  };
+  return _useCaseRules[_scUseCase] ? `\n${_useCaseRules[_scUseCase]}` : '';
+})()}
 
 IMPORTANT — You MUST select close to ${_targetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.
 
