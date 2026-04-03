@@ -8090,7 +8090,7 @@ Return ONLY valid JSON:
           const _curationStyle = genreData.style || '';
           const _curationSecondary = (genreData.secondaryGenres || []).join(', ');
           console.log(`🎵 SC pool curation: Sonnet selecting ${_targetCount} from ${_sonnetInputPool.length} candidates (${_scPoolFiltered.length} total in SC pool)...`);
-          const _scVibeResp = await anthropic.messages.create({
+          const _scCurationCall = async () => anthropic.messages.create({
             model: 'claude-sonnet-4-6',
             max_tokens: 800,
             messages: [{
@@ -8157,6 +8157,22 @@ ${_scTrackLines.join('\n')}
 Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             }]
           });
+          // Retry with exponential backoff on overloaded errors
+          let _scVibeResp;
+          for (let _retry = 0; _retry < 3; _retry++) {
+            try {
+              _scVibeResp = await _scCurationCall();
+              break;
+            } catch (_retryErr) {
+              if (_retryErr.error?.type === 'overloaded_error' && _retry < 2) {
+                const _delay = Math.pow(2, _retry) * 1000; // 1s, 2s
+                console.log(`⏳ SC curation overloaded, retrying in ${_delay / 1000}s (attempt ${_retry + 2}/3)...`);
+                await new Promise(r => setTimeout(r, _delay));
+              } else {
+                throw _retryErr;
+              }
+            }
+          }
 
           const _scVibeContent = _scVibeResp.content[0].text.trim()
             .replace(/^```json\n?/, '').replace(/\n?```$/, '')
@@ -9264,12 +9280,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           ? _altGenres
           : [genreData.primaryGenre, ..._altGenres];
 
-        let topSongs = [];
-        for (const _fbGenre of _fallbackGenres) {
-          // Don't break early — SC genre tags are noisy (e.g. "classical" includes Hamilton,
-          // Bollywood, Christmas), so we need multiple genres and Sonnet curation to filter.
-          if (topSongs.length >= songCount * 4) break;
-          console.log(`🔄 Fallback: trying genre "${_fbGenre}"...`);
+        // Fire all fallback genre queries in parallel for speed
+        const _fbQueryPromises = _fallbackGenres.map(_fbGenre => {
+          console.log(`🔄 Fallback: querying genre "${_fbGenre}"...`);
           const fallbackGenreData = {
             primaryGenre: _fbGenre,
             atmosphere: [],
@@ -9277,17 +9290,22 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             trackConstraints: {},
             artistConstraints: { exclusiveMode: false, requestedArtists: [] }
           };
-          // For focus/sleep, preserve the instrumentalness filter in the fallback query
           if (_scUseCase === 'focus' || _scUseCase === 'sleep') {
             fallbackGenreData.soundchartsFilters = (genreData.soundchartsFilters || [])
               .filter(f => f.type === 'instrumentalness' || f.type === 'speechiness');
           }
           const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
-          const _fbSongsRaw = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
-          // Cap per-genre results — SC can return 1000 but we only need a fraction
+          return executeSoundChartsStrategy(fallbackQuery, songCount * 2)
+            .then(raw => ({ genre: _fbGenre, songs: raw }))
+            .catch(err => { console.log(`⚠️ Fallback genre "${_fbGenre}" failed: ${err.message}`); return { genre: _fbGenre, songs: [] }; });
+        });
+        const _fbResults = await Promise.all(_fbQueryPromises);
+
+        // Merge results with dedup
+        let topSongs = [];
+        const _existingKeys = new Set();
+        for (const { genre: _fbGenre, songs: _fbSongsRaw } of _fbResults) {
           const _fbSongs = _fbSongsRaw.slice(0, Math.max(songCount * 2 - topSongs.length, 50));
-          // Deduplicate by song name+artist (SC songs use artistName, not artist)
-          const _existingKeys = new Set(topSongs.map(s => `${(s.artistName || s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`));
           for (const s of _fbSongs) {
             const k = `${(s.artistName || s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`;
             if (!_existingKeys.has(k)) {
@@ -9296,6 +9314,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             }
           }
           console.log(`🔄 Fallback genre "${_fbGenre}": ${_fbSongs.length} candidates (${topSongs.length} total)`);
+          if (topSongs.length >= songCount * 4) break;
         }
         // Cap fallback pool — resolving ISRCs for 1000 songs takes minutes.
         // We only need songCount*3 candidates (Phase B stops at that limit anyway).
@@ -9348,7 +9367,7 @@ KEEP only:
             };
             const _fbRule = _fbUseCaseRules[_scUseCase] || '';
             console.log(`🎵 Fallback pool curation: Sonnet selecting ~${_fbTargetCount} from ${topSongs.length} candidates...`);
-            const _fbCurationResp = await anthropic.messages.create({
+            const _fbCurationCall = async () => anthropic.messages.create({
               model: 'claude-sonnet-4-6',
               max_tokens: 2000,
               messages: [{
@@ -9367,6 +9386,22 @@ Select up to ${_fbTargetCount} songs. Quality over quantity — reject anything 
 Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ...]`
               }]
             });
+            // Retry with exponential backoff on overloaded errors
+            let _fbCurationResp;
+            for (let _retry = 0; _retry < 3; _retry++) {
+              try {
+                _fbCurationResp = await _fbCurationCall();
+                break;
+              } catch (_retryErr) {
+                if (_retryErr.error?.type === 'overloaded_error' && _retry < 2) {
+                  const _delay = Math.pow(2, _retry) * 1000;
+                  console.log(`⏳ Fallback curation overloaded, retrying in ${_delay / 1000}s (attempt ${_retry + 2}/3)...`);
+                  await new Promise(r => setTimeout(r, _delay));
+                } else {
+                  throw _retryErr;
+                }
+              }
+            }
             const _fbCurationText = _fbCurationResp.content[0].text.trim()
               .replace(/^```json\n?/, '').replace(/\n?```$/, '')
               .replace(/^```\n?/, '').replace(/\n?```$/, '');
