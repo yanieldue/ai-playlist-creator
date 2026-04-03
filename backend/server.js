@@ -6242,7 +6242,7 @@ Respond ONLY with valid JSON in this format:
     "language": { "prefer": ["list of preferred languages, e.g. 'Spanish', 'Korean'"], "exclude": ["list of excluded languages"] }
   },
   "contextClues": {
-    "useCase": "canonical activity/context — MUST be one of: party | workout | focus | chill | sleep | summer | heartbreak | background | morning | null. Never invent new values. Map semantically using these examples: party (pregame, hype, banger, bangers, turn up, turn up tonight, going out, we're going out, night out, club, dance, bar, tailgate, hard hitting, slaps, absolute banger) | workout (gym, run, running, exercise, training, cardio, lifting) | focus (study, deep work, coding, concentration, homework, productivity) | chill (relax, winding down, lazy, easy listening, background, drive, road trip) | sleep (bedtime, falling asleep, wind down, nap, meditation) | summer (beach, sunny, warm, pool, tropical, vacation, july, august) | heartbreak (sad, breakup, crying, missing someone, emotional) | background (dinner, cooking, hosting, ambient, gathering, friends over) | morning (waking up, commute, getting ready, start the day). If genuinely ambiguous between two categories, return null — falling through to genre/mood is better than a wrong useCase.",
+    "useCase": "canonical activity/context — MUST be one of: party | workout | focus | chill | sleep | summer | heartbreak | background | morning | driving | rage | wedding | null. Never invent new values. Map semantically using these examples: party (pregame, hype, banger, bangers, turn up, turn up tonight, going out, we're going out, night out, club, dance, bar, tailgate, hard hitting, slaps, absolute banger) | workout (gym, run, running, exercise, training, cardio, lifting) | focus (study, deep work, coding, concentration, homework, productivity) | chill (relax, winding down, lazy, easy listening) | sleep (bedtime, falling asleep, wind down, nap, meditation) | summer (beach, sunny, warm, pool, tropical, vacation, july, august) | heartbreak (sad, breakup, crying, missing someone, emotional) | background (dinner, cooking, hosting, ambient, gathering, friends over) | morning (waking up, commute, getting ready, start the day) | driving (road trip, long drive, night drive, cruising, highway) | rage (angry, rage, furious, frustrated, pissed off, scream, aggressive workout) | wedding (wedding, reception, first dance, ceremony, bridal). If genuinely ambiguous between two categories, return null — falling through to genre/mood is better than a wrong useCase.",
     "audience": ["christian", "family", "youth", "clean"] or [],
     "avoidances": ["what NOT to include"]
   },
@@ -8124,11 +8124,16 @@ ${(() => {
     chill: 'USE CASE: CHILL/RELAXATION — Songs should be laid-back and easy-going. Reject: high-energy, aggressive, or attention-demanding tracks. Keep: mellow, smooth, and relaxed-feeling music.',
     morning: 'USE CASE: MORNING/GETTING READY — Songs should feel fresh, optimistic, and gently energizing. Reject: dark, heavy, aggressive, or sad songs. Keep: bright, warm, positive tracks that ease into the day.',
     background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant and unobtrusive. Reject: loud, attention-grabbing, or emotionally intense tracks. Keep: smooth, conversational-volume-friendly music.',
+    driving: 'USE CASE: DRIVING/ROAD TRIP — Every song must feel great in a car. The energy can range from cruising to anthemic depending on the user\'s request, but it must have forward momentum and a sense of movement. Reject: sleepy, ambient, or contemplative tracks with no groove or pulse. Reject novelty/comedy songs. Keep: songs with a driving beat, singalong quality, or open-road energy.',
+    rage: 'USE CASE: RAGE/ANGER — Every song must channel real aggression, frustration, or intensity. Reject: soft, positive, uplifting, or chill tracks — even from otherwise edgy artists. Reject mid-tempo songs that lack genuine bite. Keep: high-energy, aggressive, raw, confrontational music with hard-hitting production.',
+    wedding: 'USE CASE: WEDDING/CELEBRATION — Every song must be appropriate for a wedding celebration. Reject: breakup songs, songs about cheating/infidelity/loss even if they sound upbeat (e.g. "Before He Cheats"), sad ballads, explicit/crude lyrics, and songs with dark themes. Keep: love songs, celebration songs, feel-good anthems, and romantic tracks.',
   };
   return _useCaseRules[_scUseCase] ? `\n${_useCaseRules[_scUseCase]}` : '';
 })()}
 
-IMPORTANT — You MUST select close to ${_targetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.
+${_scUseCase
+  ? `IMPORTANT — Your USE CASE rules above are the HIGHEST priority filter. A song that violates the use-case rules MUST be rejected regardless of genre match, popularity, or how many songs you have left. Quality over quantity: it is better to return ${Math.ceil(_targetCount * 0.3)} excellent picks than ${_targetCount} mediocre ones. After enforcing use-case rules, aim to select close to ${_targetCount} songs from the remaining candidates — but NEVER pad by including tracks that violate the use case.`
+  : `IMPORTANT — You MUST select close to ${_targetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.`}
 
 CRITICAL — Genre accuracy is your PRIMARY filter. Reject songs whose actual genre doesn't match the target above. A chill pop song does NOT belong in an indie folk playlist. A mellow R&B track does NOT belong in an acoustic singer-songwriter playlist. An electronic/synth track does NOT belong in a folk playlist. Genre match comes FIRST — only then consider mood, era, and vibe among the genre-appropriate candidates. However, if the pool is already genre-appropriate (e.g. all hip hop candidates for a hip hop request), focus your filtering on the style/vibe/lyrical aspects instead.
 
@@ -8160,11 +8165,10 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
             console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
             // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool.
-            // EXCEPTION: for focus/sleep useCases, trust Sonnet's judgment — the pool is likely
-            // genuinely wrong (e.g. party pop in a focus+instrumental request after audio filter
-            // fallback stripped instrumentalness). Overriding Sonnet here produces completely
-            // wrong playlists (Chainsmokers in a focus playlist).
-            const _trustSonnetUseCases = ['focus', 'sleep'];
+            // EXCEPTION: when a useCase is present, Sonnet has strict use-case rules and is
+            // explicitly told quality > quantity. Trust its judgment — overriding it produces
+            // wrong playlists (e.g. Chainsmokers in a focus playlist, comedy hits in a workout).
+            const _trustSonnetUseCases = ['focus', 'sleep', 'workout', 'party', 'sensual', 'heartbreak', 'morning', 'summer', 'chill', 'background', 'driving', 'rage', 'wedding'];
             const _trustSonnet = _trustSonnetUseCases.includes(_scUseCase);
             if (vibePassedTracks.length < _targetCount * 0.4 && !_trustSonnet) {
               console.warn(`⚠️  Sonnet curation too aggressive (${vibePassedTracks.length}/${_targetCount}), falling back to full pool`);
