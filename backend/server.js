@@ -20,6 +20,12 @@ const getStripe = () => {
 const { handleCriticalError } = require('./services/errorNotificationService');
 const { SC_GENRES, SC_SUBGENRES } = require('./sc_filters_reference');
 
+// Admin users — get Pro for free (comma-separated emails in env var)
+const ADMIN_USERS = new Set(
+  (process.env.ADMIN_USERS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+);
+const isAdminUser = (email) => email && ADMIN_USERS.has(email.trim().toLowerCase());
+
 // Load services with error handling
 let AppleMusicService, PlatformService;
 try {
@@ -3642,7 +3648,7 @@ app.get('/api/account/:email', async (req, res) => {
       userId: memUser?.userId || dbUser.userId,
       spotifyUserId: platformUserIds?.spotify_user_id || memUser?.spotifyUserId,
       appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
-      plan: dbUser.plan || 'free',
+      plan: isAdminUser(normalizedEmail) ? 'paid' : (dbUser.plan || 'free'),
       trialUsed: dbUser.trialUsed || false,
       productTourCompleted: dbUser.productTourCompleted || false,
       allowExplicit: dbUser.allowExplicit !== false,
@@ -5908,7 +5914,7 @@ app.post('/api/generate-playlist', async (req, res) => {
       const requestEmail = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
       if (requestEmail) {
         const userRecord = await db.getUser(requestEmail);
-        if (userRecord && userRecord.plan !== 'paid') {
+        if (userRecord && userRecord.plan !== 'paid' && !isAdminUser(requestEmail)) {
           const now = new Date();
           const resetAt = userRecord.weeklyResetAt ? new Date(userRecord.weeklyResetAt) : null;
           const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
