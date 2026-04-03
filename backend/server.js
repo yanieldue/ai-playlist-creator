@@ -13251,7 +13251,10 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
       customer: stripeCustomerId,
       items: [{ price: priceId }],
       payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
+      payment_settings: {
+        save_default_payment_method: 'on_subscription',
+        payment_method_types: ['card'],
+      },
       metadata: { email },
     };
 
