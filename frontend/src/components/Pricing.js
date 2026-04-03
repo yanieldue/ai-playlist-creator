@@ -27,9 +27,6 @@ const PAID_FEATURES = [
 const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   const navigate = useNavigate();
   const [billingPeriod, setBillingPeriod] = useState('monthly');
-  const [loading, setLoading] = useState(false);
-  const [trialLoading, setTrialLoading] = useState(false);
-  const [error, setError] = useState(null);
   // Initialize from cache so the button renders correctly on refresh without waiting for API
   const [trialUsed, setTrialUsed] = useState(() => {
     const cached = localStorage.getItem('trialUsed');
@@ -54,44 +51,20 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
       .catch(() => setTrialUsed(true)); // on error, don't show trial
   }, [userId, alreadyPaid]);
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = () => {
     if (!userId) { navigate('/'); return; }
     if (alreadyPaid) return;
     mp.track('Upgrade Clicked', { plan: 'pro', billing_period: billingPeriod });
-    setLoading(true);
-    setError(null);
-    try {
-      const { data } = await axios.post(`${API_BASE}/api/stripe/create-checkout-session`, {
-        userId,
-        billingPeriod,
-      });
-      mp.track('Upgrade Succeeded', { plan: 'pro', billing_period: billingPeriod });
-      localStorage.setItem('seenPricingPage', 'true');
-      window.location.href = data.url;
-    } catch (err) {
-      setError('Something went wrong. Please try again.');
-      setLoading(false);
-    }
+    localStorage.setItem('seenPricingPage', 'true');
+    navigate('/checkout', { state: { billingPeriod, trial: false } });
   };
 
-  const handleStartTrial = async () => {
+  const handleStartTrial = () => {
     if (!userId) { navigate('/'); return; }
     mp.track('Upgrade Clicked', { plan: 'trial', billing_period: 'annual' });
-    setTrialLoading(true);
-    setError(null);
-    try {
-      const { data } = await axios.post(`${API_BASE}/api/stripe/create-checkout-session`, {
-        userId,
-        trial: true,
-      });
-      mp.track('Upgrade Succeeded', { plan: 'trial', billing_period: 'annual' });
-      localStorage.setItem('seenPricingPage', 'true');
-      localStorage.setItem('trialUsed', 'true');
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err.response?.data?.error || 'Something went wrong. Please try again.');
-      setTrialLoading(false);
-    }
+    localStorage.setItem('seenPricingPage', 'true');
+    localStorage.setItem('trialUsed', 'true');
+    navigate('/checkout', { state: { billingPeriod: 'annual', trial: true } });
   };
 
   return (
@@ -182,24 +155,21 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
             ))}
           </ul>
 
-          {error && <p className="pricing-error">{error}</p>}
-
           {showTrial && (
             <button
               className="pricing-cta pricing-cta-trial"
               onClick={handleStartTrial}
-              disabled={trialLoading}
             >
-              {trialLoading ? 'Loading…' : 'Start 7-Day Free Trial'}
+              Start 7-Day Free Trial
             </button>
           )}
 
           <button
             className="pricing-cta pricing-cta-pro"
             onClick={handleUpgrade}
-            disabled={loading || alreadyPaid}
+            disabled={alreadyPaid}
           >
-            {alreadyPaid ? 'Current Plan' : loading ? 'Loading…' : `Get Pro — ${billingPeriod === 'annual' ? '$24.99/yr' : '$2.99/mo'}`}
+            {alreadyPaid ? 'Current Plan' : `Get Pro — ${billingPeriod === 'annual' ? '$24.99/yr' : '$2.99/mo'}`}
           </button>
 
           {showTrial && (
@@ -209,7 +179,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
       </div>
 
       <p className="pricing-footer-note">
-        Secure payments via Stripe · Cancel anytime · No hidden fees
+        Secure payments · Cancel anytime · No hidden fees
       </p>
 
       {isOnboarding && (

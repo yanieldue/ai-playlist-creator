@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import playlistService from '../services/api';
 import musicKitService from '../services/musicKit';
 import Icons from './Icons';
@@ -9,8 +8,6 @@ import ConfirmModal from './ConfirmModal';
 import { isPaid } from '../utils/plan';
 import '../styles/Account.css';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-
 const Account = ({ onBack, showToast }) => {
   const navigate = useNavigate();
   const [accountEmail, setAccountEmail] = useState('');
@@ -18,7 +15,6 @@ const Account = ({ onBack, showToast }) => {
   const [showEditEmailModal, setShowEditEmailModal] = useState(false);
   const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
   const [showPlatformsDropdown, setShowPlatformsDropdown] = useState(false);
-  const [billingLoading, setBillingLoading] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailPassword, setEmailPassword] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -193,19 +189,8 @@ const Account = ({ onBack, showToast }) => {
     setShowPlatformsDropdown(!showPlatformsDropdown);
   };
 
-  const handleManageBilling = async () => {
-    const userId = localStorage.getItem('userId');
-    if (!userId) return;
-    setBillingLoading(true);
-    try {
-      const { data } = await axios.get(`${API_BASE}/api/stripe/billing-portal/${encodeURIComponent(userId)}`);
-      window.location.href = data.url;
-    } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Could not open billing portal.';
-      console.error('Billing portal error:', msg, err);
-      setAccountError(msg);
-      setBillingLoading(false);
-    }
+  const handleManageBilling = () => {
+    navigate('/billing');
   };
 
   const handleTogglePlatform = async (platform) => {
@@ -510,11 +495,11 @@ const Account = ({ onBack, showToast }) => {
           </button>
 
           {isPaid() ? (
-            <button className="account-list-item" onClick={handleManageBilling} disabled={billingLoading}>
+            <button className="account-list-item" onClick={handleManageBilling}>
               <span className="account-list-label">Plan</span>
               <div className="account-list-value">
                 <span className="account-plan-badge account-plan-badge-pro">Pro</span>
-                <span style={{ fontSize: 13, color: '#8e8e93' }}>{billingLoading ? 'Loading…' : 'Manage Billing'}</span>
+                <span style={{ fontSize: 13, color: '#8e8e93' }}>Manage Billing</span>
                 <Icons.ChevronRight size={20} color="#c7c7cc" />
               </div>
             </button>

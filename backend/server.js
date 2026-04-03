@@ -13189,6 +13189,86 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
+// GET /api/stripe/config — return publishable key so frontend can init Stripe Elements
+app.get('/api/stripe/config', (req, res) => {
+  const key = process.env.STRIPE_PUBLISHABLE_KEY;
+  if (!key) return res.status(500).json({ error: 'Stripe publishable key not configured' });
+  res.json({ publishableKey: key });
+});
+
+// POST /api/stripe/create-subscription — embedded checkout via Stripe Elements
+app.post('/api/stripe/create-subscription', async (req, res) => {
+  try {
+    const { userId, billingPeriod, trial } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const effectivePeriod = trial ? 'annual' : billingPeriod;
+    const priceId = effectivePeriod === 'annual'
+      ? process.env.STRIPE_PRICE_ANNUAL
+      : process.env.STRIPE_PRICE_MONTHLY;
+    if (!priceId) return res.status(500).json({ error: 'Stripe price not configured' });
+
+    // Prevent double-trials
+    if (trial) {
+      const userRecord = await db.getUser(email);
+      if (userRecord?.trialUsed) {
+        return res.status(400).json({ error: 'Free trial already used' });
+      }
+    }
+
+    const stripe = getStripe();
+    const userRecord = await db.getUser(email);
+    let stripeCustomerId = userRecord?.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({ email, metadata: { email } });
+      stripeCustomerId = customer.id;
+      await db.updateStripeCustomer(email, stripeCustomerId);
+    }
+
+    const subscriptionParams = {
+      customer: stripeCustomerId,
+      items: [{ price: priceId }],
+      payment_behavior: 'default_incomplete',
+      payment_settings: { save_default_payment_method: 'on_subscription' },
+      metadata: { email },
+    };
+
+    if (trial) {
+      subscriptionParams.trial_period_days = 7;
+      await db.markTrialUsed(email);
+    }
+
+    // Expand the right intent: trials use setup_intent, paid uses payment_intent
+    const expand = trial
+      ? ['pending_setup_intent']
+      : ['latest_invoice.payment_intent'];
+    const subscription = await stripe.subscriptions.create(subscriptionParams, { expand });
+
+    let clientSecret;
+    if (trial) {
+      clientSecret = subscription.pending_setup_intent?.client_secret;
+    } else {
+      clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+    }
+
+    if (!clientSecret) {
+      return res.status(500).json({ error: 'Failed to get client secret from Stripe' });
+    }
+
+    res.json({
+      subscriptionId: subscription.id,
+      clientSecret,
+      type: trial ? 'setup' : 'payment',
+    });
+  } catch (error) {
+    console.error('Stripe create-subscription error:', error);
+    res.status(500).json({ error: 'Failed to create subscription' });
+  }
+});
+
 // POST /api/stripe/webhook
 app.post('/api/stripe/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -13240,7 +13320,176 @@ app.post('/api/stripe/webhook', async (req, res) => {
   }
 });
 
-// GET /api/stripe/billing-portal/:userId
+// GET /api/stripe/subscription/:userId — get subscription details for in-app billing page
+app.get('/api/stripe/subscription/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeCustomerId) {
+      return res.json({ subscription: null });
+    }
+
+    const stripe = getStripe();
+    const subscriptions = await stripe.subscriptions.list({
+      customer: userRecord.stripeCustomerId,
+      status: 'all',
+      limit: 1,
+      expand: ['data.default_payment_method'],
+    });
+
+    const sub = subscriptions.data[0];
+    if (!sub) return res.json({ subscription: null });
+
+    const pm = sub.default_payment_method;
+    const card = pm?.card || null;
+    const price = sub.items?.data?.[0]?.price;
+
+    res.json({
+      subscription: {
+        id: sub.id,
+        status: sub.status,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        currentPeriodEnd: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null,
+        plan: {
+          amount: price?.unit_amount || null,
+          currency: price?.currency || 'usd',
+          interval: price?.recurring?.interval || null,
+        },
+        paymentMethod: card ? {
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.exp_month,
+          expYear: card.exp_year,
+        } : null,
+      },
+    });
+  } catch (error) {
+    console.error('Stripe subscription info error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch subscription info' });
+  }
+});
+
+// POST /api/stripe/cancel-subscription — cancel at period end
+app.post('/api/stripe/cancel-subscription', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription' });
+    }
+
+    const stripe = getStripe();
+    await stripe.subscriptions.update(userRecord.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    });
+
+    console.log(`✓ Stripe: ${email} set to cancel at period end`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Stripe cancel subscription error:', error.message);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// POST /api/stripe/resume-subscription — undo cancel-at-period-end
+app.post('/api/stripe/resume-subscription', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeSubscriptionId) {
+      return res.status(400).json({ error: 'No active subscription' });
+    }
+
+    const stripe = getStripe();
+    await stripe.subscriptions.update(userRecord.stripeSubscriptionId, {
+      cancel_at_period_end: false,
+    });
+
+    console.log(`✓ Stripe: ${email} resumed subscription`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Stripe resume subscription error:', error.message);
+    res.status(500).json({ error: 'Failed to resume subscription' });
+  }
+});
+
+// POST /api/stripe/update-payment-method — create SetupIntent for card update
+app.post('/api/stripe/update-payment-method', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeCustomerId) {
+      return res.status(400).json({ error: 'No billing account found' });
+    }
+
+    const stripe = getStripe();
+    const setupIntent = await stripe.setupIntents.create({
+      customer: userRecord.stripeCustomerId,
+      payment_method_types: ['card'],
+      metadata: { email },
+    });
+
+    res.json({ clientSecret: setupIntent.client_secret });
+  } catch (error) {
+    console.error('Stripe update payment method error:', error.message);
+    res.status(500).json({ error: 'Failed to initiate payment method update' });
+  }
+});
+
+// POST /api/stripe/confirm-payment-method — after SetupIntent confirms, attach to subscription
+app.post('/api/stripe/confirm-payment-method', async (req, res) => {
+  try {
+    const { userId, setupIntentId } = req.body;
+    if (!userId || !setupIntentId) return res.status(400).json({ error: 'Missing required fields' });
+
+    const email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+    if (!email) return res.status(400).json({ error: 'User not found' });
+
+    const userRecord = await db.getUser(email);
+    if (!userRecord?.stripeSubscriptionId || !userRecord?.stripeCustomerId) {
+      return res.status(400).json({ error: 'No active subscription' });
+    }
+
+    const stripe = getStripe();
+    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+    const paymentMethodId = setupIntent.payment_method;
+
+    // Set as default on customer and subscription
+    await stripe.customers.update(userRecord.stripeCustomerId, {
+      invoice_settings: { default_payment_method: paymentMethodId },
+    });
+    await stripe.subscriptions.update(userRecord.stripeSubscriptionId, {
+      default_payment_method: paymentMethodId,
+    });
+
+    console.log(`✓ Stripe: ${email} updated payment method`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Stripe confirm payment method error:', error.message);
+    res.status(500).json({ error: 'Failed to update payment method' });
+  }
+});
+
+// GET /api/stripe/billing-portal/:userId (kept for backward compatibility)
 app.get('/api/stripe/billing-portal/:userId', async (req, res) => {
   try {
     const { userId } = req.params;

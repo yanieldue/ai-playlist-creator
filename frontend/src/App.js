@@ -5,6 +5,8 @@ import PlatformSelection from './components/PlatformSelection';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import Pricing from './components/Pricing';
+import Checkout from './components/Checkout';
+import ManageBilling from './components/ManageBilling';
 import Generate from './components/Generate';
 import FromMix from './components/FromMix';
 import AppleMusicRedirect from './components/AppleMusicRedirect';
@@ -40,6 +42,8 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/billing" element={<ManageBilling />} />
           <Route path="/generate" element={<Generate />} />
           <Route path="/from-mix" element={<FromMix />} />
           <Route path="/apple-music-redirect" element={<AppleMusicRedirect />} />
