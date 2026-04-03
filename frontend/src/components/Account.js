@@ -8,7 +8,6 @@ import ConfirmModal from './ConfirmModal';
 import { isPaid } from '../utils/plan';
 import mp from '../utils/mixpanel';
 import '../styles/Account.css';
-import '../styles/Settings.css';
 
 const Account = ({ onBack, showToast }) => {
   const navigate = useNavigate();
@@ -498,15 +497,14 @@ const Account = ({ onBack, showToast }) => {
         onConfirm={confirmModal?.onConfirm}
         onCancel={() => setConfirmModal(null)}
       />
-      <div className="account-header">
+      <div className="account-header-wrap">
         <button
           className="account-back-btn"
           onClick={() => onBack ? onBack() : navigate('/')}
-          aria-label="Back"
         >
-          <Icons.ChevronLeft size={20} />
+          <Icons.ChevronLeft size={18} /> Back
         </button>
-        <h1>Account</h1>
+        <h1 className="account-title">Account</h1>
       </div>
 
       <div className="account-content">
@@ -621,10 +619,8 @@ const Account = ({ onBack, showToast }) => {
         </div>
 
         {/* Preferences */}
-        <div className="account-list" style={{ marginTop: 24 }}>
-          <div className="account-list-item account-section-header">
-            <span className="account-list-label" style={{ fontWeight: 600, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8e8e93' }}>Preferences</span>
-          </div>
+        <p className="account-section-title">Preferences</p>
+        <div className="account-list">
           <div className="settings-item" style={{ borderBottom: '0.5px solid #e5e5ea' }}>
             <div className="settings-item-left">
               <span className="settings-label">Explicit Content</span>
