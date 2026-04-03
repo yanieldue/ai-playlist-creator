@@ -13228,6 +13228,25 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
       await db.updateStripeCustomer(email, stripeCustomerId);
     }
 
+    // Check for existing active/trialing subscription — can't create a second one
+    const existingSubs = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      status: 'active',
+      limit: 1,
+    });
+    if (existingSubs.data.length === 0) {
+      const trialSubs = await stripe.subscriptions.list({
+        customer: stripeCustomerId,
+        status: 'trialing',
+        limit: 1,
+      });
+      if (trialSubs.data.length > 0) {
+        return res.status(400).json({ error: 'You already have an active subscription' });
+      }
+    } else {
+      return res.status(400).json({ error: 'You already have an active subscription' });
+    }
+
     const subscriptionParams = {
       customer: stripeCustomerId,
       items: [{ price: priceId }],
@@ -13242,10 +13261,10 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
     }
 
     // Expand the right intent: trials use setup_intent, paid uses payment_intent
-    const expand = trial
+    subscriptionParams.expand = trial
       ? ['pending_setup_intent']
       : ['latest_invoice.payment_intent'];
-    const subscription = await stripe.subscriptions.create(subscriptionParams, { expand });
+    const subscription = await stripe.subscriptions.create(subscriptionParams);
 
     let clientSecret;
     if (trial) {
@@ -13264,8 +13283,13 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
       type: trial ? 'setup' : 'payment',
     });
   } catch (error) {
-    console.error('Stripe create-subscription error:', error);
-    res.status(500).json({ error: 'Failed to create subscription' });
+    console.error('Stripe create-subscription error:', error.message || error);
+    const msg = error.type === 'StripeCardError'
+      ? error.message
+      : error.message?.includes('already has')
+        ? 'You already have an active subscription'
+        : 'Failed to create subscription';
+    res.status(error.statusCode || 500).json({ error: msg });
   }
 });
 
