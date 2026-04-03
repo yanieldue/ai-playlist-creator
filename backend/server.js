@@ -9266,7 +9266,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
         let topSongs = [];
         for (const _fbGenre of _fallbackGenres) {
-          if (topSongs.length >= songCount * 2) break;
+          // Don't break early — SC genre tags are noisy (e.g. "classical" includes Hamilton,
+          // Bollywood, Christmas), so we need multiple genres and Sonnet curation to filter.
+          if (topSongs.length >= songCount * 4) break;
           console.log(`🔄 Fallback: trying genre "${_fbGenre}"...`);
           const fallbackGenreData = {
             primaryGenre: _fbGenre,
@@ -9316,17 +9318,42 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               return `${i + 1}. "${song.name || song.track}" by ${song.artistName || song.artist}${yr ? ` (${yr})` : ''}`;
             });
             const _fbUseCaseRules = {
-              focus: 'USE CASE: FOCUS/DEEP WORK — Only include real musical compositions suitable for sustained concentration. Reject: solfeggio frequency tones (e.g. "528 Hz", "432 Hz", "Healing Tone"), binaural beats, ASMR, meditation drones, sound therapy, white noise, and nature sounds — these are NOT music. Also reject anything with prominent vocals, high energy, or catchy hooks. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, film scores, classical compositions, and other genuine instrumental music.',
-              sleep: 'USE CASE: SLEEP — Only include real musical compositions suitable for falling asleep. Reject: solfeggio frequency tones, binaural beats, ASMR, sound therapy, white noise. Also reject anything with a noticeable beat or vocals. Keep: ultra-calm, minimal, soothing instrumental music.',
+              focus: `USE CASE: FOCUS/DEEP WORK — The user wants INSTRUMENTAL music for concentration.
+
+REJECT ALL of these (be aggressive):
+- Any song with vocals or lyrics (pop songs, musicals, Bollywood, Christmas songs with singing, opera arias with singing, etc.)
+- Solfeggio frequency tones (e.g. "528 Hz", "432 Hz", "Healing Tone"), binaural beats, ASMR, sound therapy
+- High-energy or attention-grabbing pieces (rock anthems, dramatic film climaxes)
+- Holiday/Christmas songs, musical theater, Broadway cast recordings
+- Songs primarily known as vocal pop/rock hits even if performed by an orchestra
+
+KEEP only genuine instrumental compositions:
+- Classical pieces (symphonies, sonatas, nocturnes, preludes, suites)
+- Neoclassical piano (Einaudi, Tiersen, Yiruma, etc.)
+- Ambient/electronic instrumentals
+- Film scores and soundtrack instrumentals (NOT songs with lyrics FROM films)
+- Solo instrument pieces (cello suites, piano études, guitar instrumentals)`,
+              sleep: `USE CASE: SLEEP — The user wants ultra-calm instrumental music for sleeping.
+
+REJECT ALL of these:
+- Any song with vocals or lyrics
+- Solfeggio frequency tones, binaural beats, ASMR, sound therapy
+- Anything with noticeable energy, beat, or dramatic dynamics
+- Holiday songs, musical theater, Bollywood, pop
+
+KEEP only:
+- Ultra-calm classical and neoclassical pieces
+- Ambient instrumentals
+- Gentle solo piano or strings`,
             };
             const _fbRule = _fbUseCaseRules[_scUseCase] || '';
             console.log(`🎵 Fallback pool curation: Sonnet selecting ~${_fbTargetCount} from ${topSongs.length} candidates...`);
             const _fbCurationResp = await anthropic.messages.create({
               model: 'claude-sonnet-4-6',
-              max_tokens: 800,
+              max_tokens: 2000,
               messages: [{
                 role: 'user',
-                content: `You are curating a playlist. From the candidates below, select the best songs that match the user's request.
+                content: `You are curating a playlist. From the candidates below, select ONLY the songs that match the user's request. Be strict — it is better to return fewer high-quality picks than to include songs that don't belong.
 
 ${_fbRule}
 
@@ -9335,9 +9362,9 @@ User's request: "${prompt}"
 Candidates:
 ${_fbTrackLines.join('\n')}
 
-Select up to ${_fbTargetCount} songs. Reject anything that isn't genuine music (frequency tones, healing sounds, binaural beats, etc.) and anything that violates the use case rules above.
+Select up to ${_fbTargetCount} songs. Quality over quantity — reject anything that doesn't clearly belong.
 
-Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
+Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ...]`
               }]
             });
             const _fbCurationText = _fbCurationResp.content[0].text.trim()
@@ -9353,6 +9380,8 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
               } else {
                 console.log(`⚠️  Fallback curation too aggressive (${_fbCurated.length}), keeping full pool`);
               }
+            } else {
+              console.log(`⚠️  Fallback curation response didn't match JSON array regex, keeping full pool. Response: ${_fbCurationText.substring(0, 200)}`);
             }
           } catch (_fbCurationErr) {
             console.log(`⚠️  Fallback pool curation failed, using uncurated pool: ${_fbCurationErr.message}`);
