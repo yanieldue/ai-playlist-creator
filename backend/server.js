@@ -8038,6 +8038,10 @@ Return ONLY valid JSON:
     // Declared here so the broad fallback path (line ~9274) can always reference it.
     let _uuidToSpotifyId = new Map();
 
+    // UseCase context — needed by Sonnet curation, fallback genre selection, and vibe check guard.
+    // Defined here (outside the SC block) so it's accessible in the fallback path too.
+    const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
+
     // If we have songs from SoundCharts, search for them on the user's platform
     if (recommendedTracks.length > 0) {
       console.log(`🔍 Searching ${platform} for ${recommendedTracks.length} SoundCharts-discovered songs...`);
@@ -8051,7 +8055,6 @@ Return ONLY valid JSON:
       // For multi-phase playlists skip this — phases have distinct energy targets and the
       // per-phase SC queries already constrain vibes sufficiently.
       let vibePassedTracks = recommendedTracks;
-      const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
       if (!_phases && recommendedTracks.length >= 5) {
 
         // Step 1: CATALOG-OVERRIDE filter (cheap dictionary lookup, no LLM)
