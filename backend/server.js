@@ -13260,61 +13260,63 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
       await db.markTrialUsed(email);
     }
 
-    // Expand the right intent: trials use setup_intent, paid uses payment_intent
-    subscriptionParams.expand = trial
-      ? ['pending_setup_intent']
-      : ['latest_invoice.payment_intent'];
+    // Expand all possible sources of client_secret
+    subscriptionParams.expand = [
+      'latest_invoice.payment_intent',
+      'pending_setup_intent',
+    ];
     const subscription = await stripe.subscriptions.create(subscriptionParams);
 
-    let clientSecret;
-    if (trial) {
-      // Try expanded object first, fall back to manual retrieval
-      clientSecret = subscription.pending_setup_intent?.client_secret;
-      if (!clientSecret && subscription.pending_setup_intent) {
-        const setupIntentId = typeof subscription.pending_setup_intent === 'string'
-          ? subscription.pending_setup_intent
-          : subscription.pending_setup_intent.id;
-        if (setupIntentId) {
-          const si = await stripe.setupIntents.retrieve(setupIntentId);
-          clientSecret = si.client_secret;
-        }
-      }
-    } else {
-      // Try expanded object first
-      clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-      // Fall back: get the payment_intent ID and retrieve it directly
-      if (!clientSecret) {
-        const invoice = subscription.latest_invoice;
-        const piRef = typeof invoice === 'object' ? invoice?.payment_intent : null;
-        const piId = typeof piRef === 'string' ? piRef : piRef?.id;
-        console.log(`[STRIPE] Sub: ${subscription.id}, status: ${subscription.status}, pi ref type: ${typeof piRef}, piId: ${piId}`);
+    // Try every known location for the client_secret:
+    // 1. Subscription.client_secret (newer Stripe API versions 2023-11+)
+    // 2. pending_setup_intent.client_secret (trials)
+    // 3. latest_invoice.payment_intent.client_secret (older API versions)
+    // 4. Manual retrieval as last resort
+    let clientSecret = subscription.client_secret
+      || subscription.pending_setup_intent?.client_secret
+      || subscription.latest_invoice?.payment_intent?.client_secret;
+
+    // Determine intent type for frontend confirmation
+    let intentType = subscription.pending_setup_intent ? 'setup' : 'payment';
+
+    // Fallback: manually retrieve payment intent from invoice
+    if (!clientSecret) {
+      const invoice = subscription.latest_invoice;
+      const invoiceId = typeof invoice === 'string' ? invoice : invoice?.id;
+      if (invoiceId) {
+        const fullInvoice = await stripe.invoices.retrieve(invoiceId);
+        const piId = typeof fullInvoice.payment_intent === 'string'
+          ? fullInvoice.payment_intent : fullInvoice.payment_intent?.id;
         if (piId) {
           const pi = await stripe.paymentIntents.retrieve(piId);
           clientSecret = pi.client_secret;
-        } else if (typeof invoice === 'object' && invoice?.id) {
-          // payment_intent might not be on the invoice object — retrieve it fresh
-          const freshInvoice = await stripe.invoices.retrieve(invoice.id);
-          const freshPiId = typeof freshInvoice.payment_intent === 'string'
-            ? freshInvoice.payment_intent
-            : freshInvoice.payment_intent?.id;
-          console.log(`[STRIPE] Fresh invoice pi: ${freshPiId}`);
-          if (freshPiId) {
-            const pi = await stripe.paymentIntents.retrieve(freshPiId);
-            clientSecret = pi.client_secret;
-          }
+          intentType = 'payment';
         }
       }
     }
 
+    // Fallback: retrieve pending_setup_intent manually
     if (!clientSecret) {
-      console.error(`[STRIPE] No client_secret. Sub: ${subscription.id}, status: ${subscription.status}, trial: ${trial}, latest_invoice: ${JSON.stringify(subscription.latest_invoice)?.substring(0, 200)}`);
+      const siRef = subscription.pending_setup_intent;
+      const siId = typeof siRef === 'string' ? siRef : siRef?.id;
+      if (siId) {
+        const si = await stripe.setupIntents.retrieve(siId);
+        clientSecret = si.client_secret;
+        intentType = 'setup';
+      }
+    }
+
+    console.log(`[STRIPE] Sub: ${subscription.id}, status: ${subscription.status}, has client_secret: ${!!clientSecret}, intentType: ${intentType}, sub.client_secret: ${!!subscription.client_secret}, pi on invoice: ${typeof subscription.latest_invoice?.payment_intent}`);
+
+    if (!clientSecret) {
+      console.error(`[STRIPE] No client_secret found anywhere. Sub keys: ${Object.keys(subscription).join(', ')}`);
       return res.status(500).json({ error: 'Failed to get client secret from Stripe' });
     }
 
     res.json({
       subscriptionId: subscription.id,
       clientSecret,
-      type: trial ? 'setup' : 'payment',
+      type: intentType,
     });
   } catch (error) {
     console.error('Stripe create-subscription error:', error.message || error);
