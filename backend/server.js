@@ -8051,8 +8051,8 @@ Return ONLY valid JSON:
       // For multi-phase playlists skip this — phases have distinct energy targets and the
       // per-phase SC queries already constrain vibes sufficiently.
       let vibePassedTracks = recommendedTracks;
+      const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
       if (!_phases && recommendedTracks.length >= 5) {
-        const _scUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
 
         // Step 1: CATALOG-OVERRIDE filter (cheap dictionary lookup, no LLM)
         // Strip feat. clause from track title so 'khalid::location' matches 'location (feat. little simz)'
