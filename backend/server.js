@@ -8112,7 +8112,7 @@ ${(() => {
 })()}
 ${(() => {
   const _useCaseRules = {
-    workout: 'USE CASE: WORKOUT/RUNNING — Every song must have genuine, sustained pump-up energy suitable for physical exercise. Ask yourself: would this song keep someone moving on a treadmill or during a run? Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real drive (Yazz "The Only Way Is Up"), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, and anything with inconsistent energy or comedic tone. Keep: songs with driving beats, motivational energy, and consistent tempo throughout.',
+    workout: 'USE CASE: WORKOUT/RUNNING — Every song must have genuine, sustained pump-up energy suitable for physical exercise. Ask yourself: would this song keep someone moving on a treadmill or during a run? The beat should make you want to MOVE, not just tap your foot. Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real rhythmic drive (Billy Joel, The Clash "London Calling" — classic rock anthems but wrong BPM feel for running), classic rock storytelling songs (John Mellencamp, Gloria Estefan — the energy is performative, not physical), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, anything with inconsistent energy or comedic tone, and old-school tracks whose energy comes from crowd sing-along rather than rhythmic drive (Gloria Gaynor "I Will Survive"). Keep: songs with strong, steady, modern-feeling rhythmic pulse — EDM, pop bangers, hip hop with hard beats, and high-energy tracks where the production drives the energy (not just the lyrics or crowd appeal).',
     focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
     sleep: 'USE CASE: SLEEP — Only ultra-calm, minimal, soothing tracks suitable for falling asleep. Reject: anything with a noticeable beat, energy above whisper-level, vocals that demand attention, or dynamic range that could wake someone up.',
     party: 'USE CASE: PARTY/PREGAME — Every song must work on a dancefloor or at a party. Reject: ballads, slow jams, emotional/introspective tracks, and mid-tempo songs that kill momentum — even from otherwise upbeat artists. Keep: high-energy, danceable, crowd-pleasing tracks.',
@@ -9241,16 +9241,49 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
     if (needsFallback && process.env.SOUNDCHARTS_APP_ID) {
       console.log(`🔄 Fallback: Only ${allTracks.length} songs resolved. Expanding with SoundCharts top songs...`);
       try {
-        // Build a genre+era query (no mood) using the new direct endpoint
-        const fallbackGenreData = {
-          primaryGenre: genreData.primaryGenre,
-          atmosphere: [],
-          era: genreData.era,
-          trackConstraints: {},
-          artistConstraints: { exclusiveMode: false, requestedArtists: [] }
+        // For useCases with strict audio requirements (focus, sleep), try alternative genres
+        // that naturally match the requirement before falling back to generic top songs.
+        // e.g. focus+instrumental: try "classical", "chill out/trip-hop/lounge" which are
+        // naturally instrumental, rather than generic "electro" top songs (mainstream vocal EDM).
+        const _fallbackGenreAlternatives = {
+          focus: ['classical', 'chill out/trip-hop/lounge', 'electro'],
+          sleep: ['classical', 'chill out/trip-hop/lounge', 'electro'],
         };
-        const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
-        let topSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
+        const _altGenres = _fallbackGenreAlternatives[_scUseCase] || [genreData.primaryGenre];
+        // If primary genre is already first in the alt list, skip it to avoid duplicate queries
+        const _fallbackGenres = _altGenres.includes(genreData.primaryGenre)
+          ? _altGenres
+          : [genreData.primaryGenre, ..._altGenres];
+
+        let topSongs = [];
+        for (const _fbGenre of _fallbackGenres) {
+          if (topSongs.length >= songCount * 2) break;
+          console.log(`🔄 Fallback: trying genre "${_fbGenre}"...`);
+          const fallbackGenreData = {
+            primaryGenre: _fbGenre,
+            atmosphere: [],
+            era: genreData.era,
+            trackConstraints: {},
+            artistConstraints: { exclusiveMode: false, requestedArtists: [] }
+          };
+          // For focus/sleep, preserve the instrumentalness filter in the fallback query
+          if (_scUseCase === 'focus' || _scUseCase === 'sleep') {
+            fallbackGenreData.soundchartsFilters = (genreData.soundchartsFilters || [])
+              .filter(f => f.type === 'instrumentalness' || f.type === 'speechiness');
+          }
+          const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
+          const _fbSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
+          // Deduplicate by song name+artist
+          const _existingKeys = new Set(topSongs.map(s => `${(s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`));
+          for (const s of _fbSongs) {
+            const k = `${(s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`;
+            if (!_existingKeys.has(k)) {
+              topSongs.push(s);
+              _existingKeys.add(k);
+            }
+          }
+          console.log(`🔄 Fallback genre "${_fbGenre}": ${_fbSongs.length} candidates (${topSongs.length} total)`);
+        }
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
 
         // Phase A: pre-fetch SC platform IDs for songs missing ISRC
@@ -9758,9 +9791,16 @@ DO NOT include any text outside the JSON.`;
 
           // If vibe check was too aggressive (removed more than half), fall back to
           // the pre-vibe-check selection so we don't end up with far too few songs.
-          if (tracksAfterVibeCheck.length < songCount / 2 && tracksAfterVibeCheck.length < selectedTracks.length) {
+          // EXCEPTION: when a useCase is present, the vibe check is enforcing useCase rules
+          // (e.g. rejecting vocal tracks for a focus+instrumental request). Overriding it
+          // would produce completely wrong playlists (party pop in a focus playlist).
+          const _vibeCheckTrustUseCase = !!_scUseCase;
+          if (tracksAfterVibeCheck.length < songCount / 2 && tracksAfterVibeCheck.length < selectedTracks.length && !_vibeCheckTrustUseCase) {
             console.warn(`Vibe check too aggressive (${tracksAfterVibeCheck.length}/${songCount}), reverting to pre-vibe-check selection`);
             selectedTracks = selectedTracks.slice(0, songCount);
+          } else if (tracksAfterVibeCheck.length < songCount / 2 && tracksAfterVibeCheck.length < selectedTracks.length && _vibeCheckTrustUseCase) {
+            console.log(`ℹ️  Vibe check strict (${tracksAfterVibeCheck.length}/${songCount}) but useCase="${_scUseCase}" — trusting vibe check`);
+            selectedTracks = tracksAfterVibeCheck;
           } else if (tracksAfterVibeCheck.length > songCount) {
             selectedTracks = tracksAfterVibeCheck.slice(0, songCount);
             console.log(`Trimmed to target count: ${selectedTracks.length} songs (${tracksAfterVibeCheck.length - selectedTracks.length} extra removed)`);
