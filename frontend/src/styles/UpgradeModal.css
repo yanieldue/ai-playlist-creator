@@ -157,6 +157,10 @@
   background: #424245;
 }
 
+:root.dark-mode .upgrade-feature-name {
+  color: #ffffff;
+}
+
 :root.dark-mode .upgrade-description {
   color: #a0a0a0;
 }

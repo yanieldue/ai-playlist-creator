@@ -7525,9 +7525,9 @@ Respond ONLY with valid JSON:
               const _cappedAnchor = _anchorArtists
                 .sort((a, b) => (_artistFreq[b] || 0) - (_artistFreq[a] || 0))
                 .slice(0, 8);
-              console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — disabling Level 1/2 expansion`);
+              console.log(`🔒 Refresh: anchoring seeds to top ${_cappedAnchor.length} playlist artists [${_cappedAnchor.join(', ')}] — expanding to similar artists for variety`);
               scQuery.artists = _cappedAnchor;
-              scQuery.expandToSimilar = false;
+              scQuery.expandToSimilar = true;
               scQuery.strategy = 'artist_songs';
             }
           } else {
@@ -13037,7 +13037,7 @@ const scheduleAutoUpdates = () => {
   // Drain the queue every 10 seconds (picks up items when all slots were busy)
   setInterval(drainUpdateQueue, 10000);
 
-  const checkDuePlaylists = () => {
+  const checkDuePlaylists = async () => {
     try {
       const allUsers = Array.from(userPlaylists.entries());
       const now = new Date();
@@ -13047,6 +13047,23 @@ const scheduleAutoUpdates = () => {
         const autoUpdatePlaylists = playlists.filter(p =>
           p.updateFrequency && p.updateFrequency !== 'never' && p.nextUpdate
         );
+        if (autoUpdatePlaylists.length === 0) continue;
+
+        // Plan gate: skip all auto-updates for users no longer on Pro
+        const _email = isEmailBasedUserId(userId) ? userId : await getEmailUserIdFromPlatform(userId);
+        if (_email) {
+          const _user = await db.getUser(_email.trim().toLowerCase());
+          const _isPaid = _user?.plan === 'paid' || isAdminUser(_email);
+          if (!_isPaid) {
+            console.log(`[AUTO-UPDATE] User ${_email} is no longer on Pro — disabling auto-updates for ${autoUpdatePlaylists.length} playlist(s)`);
+            for (const p of autoUpdatePlaylists) {
+              p.updateFrequency = 'never';
+              delete p.nextUpdate;
+              savePromises.push(savePlaylist(userId, p));
+            }
+            continue;
+          }
+        }
 
         for (const playlist of autoUpdatePlaylists) {
           if (now < new Date(playlist.nextUpdate)) continue;

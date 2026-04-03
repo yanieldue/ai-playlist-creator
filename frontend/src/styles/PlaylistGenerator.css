@@ -4144,11 +4144,16 @@
 :root.dark-mode .upgrade-locked-row {
   background: #2c2c2e;
   border-color: #424245;
-  color: #888;
+  color: #aeaeb2;
 }
 
 :root.dark-mode .upgrade-locked-row:hover {
   background: #333336;
+}
+
+:root.dark-mode .upgrade-locked-badge {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* ── Generation Screen (Spotify-style) ────────────────────── */
@@ -4422,4 +4427,395 @@
 :root.dark-mode .gen-screen-ai-summary { background: #1e1e1e; color: #b3b3b3; }
 :root.dark-mode .gen-screen-footer { border-top-color: rgba(255,255,255,0.08); }
 :root.dark-mode .gen-screen-refine-btn { border-color: #535353; color: #ffffff; }
+
+/* ── Dark mode: top nav, search, dropdowns ─────────────────── */
+:root.dark-mode .top-nav {
+  background: rgba(28, 28, 30, 0.95);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+:root.dark-mode .search-input {
+  background: #2c2c2e;
+  border-color: #424245;
+  color: #ffffff;
+}
+
+:root.dark-mode .search-input:focus {
+  border-color: #ffffff;
+}
+
+:root.dark-mode .search-input::placeholder {
+  color: #8e8e93;
+}
+
+:root.dark-mode .search-results-dropdown {
+  background: #2c2c2e;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+:root.dark-mode .search-result-item:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .search-result-name {
+  color: #ffffff;
+}
+
+:root.dark-mode .search-result-meta {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .search-loading {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .search-no-results {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .search-results-title {
+  color: #8e8e93;
+}
+
+:root.dark-mode .search-section-results:not(:last-child) {
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .profile-dropdown-topnav {
+  background: #2c2c2e;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+:root.dark-mode .dropdown-divider {
+  background: #424245;
+}
+
+:root.dark-mode .dropdown-item {
+  color: #ffffff;
+}
+
+:root.dark-mode .dropdown-item:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .dropdown-item.logout {
+  color: #ff453a;
+  border-top-color: #424245;
+}
+
+:root.dark-mode .dropdown-item.logout:hover {
+  background: rgba(255, 69, 58, 0.1);
+}
+
+/* ── Dark mode: auth card ──────────────────────────────────── */
+:root.dark-mode .auth-card {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .auth-card h2 {
+  color: #ffffff;
+}
+
+:root.dark-mode .auth-card p {
+  color: #aeaeb2;
+}
+
+/* ── Dark mode: top artists ────────────────────────────────── */
+:root.dark-mode .top-artists-section,
+:root.dark-mode .top-artists-section-full {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .top-artists-header h3,
+:root.dark-mode .top-artists-sidebar .top-artists-header h3,
+:root.dark-mode .top-artists-section-full .top-artists-header h3 {
+  color: #ffffff;
+}
+
+:root.dark-mode .top-artists-description,
+:root.dark-mode .top-artists-sidebar .top-artists-description,
+:root.dark-mode .top-artists-section-full .top-artists-description {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .top-artists-loading,
+:root.dark-mode .top-artists-loading-sidebar {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .top-artists-loading p,
+:root.dark-mode .top-artists-loading-sidebar p {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .top-artists-sidebar {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .top-artist-tile {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .top-artist-tile:hover {
+  background: #424245;
+}
+
+:root.dark-mode .artist-tile-name h4 {
+  color: #ffffff;
+}
+
+:root.dark-mode .top-artist-name,
+:root.dark-mode .top-artist-name-small {
+  color: #ffffff;
+}
+
+:root.dark-mode .top-artist-genres,
+:root.dark-mode .top-artist-genres-small {
+  color: #8e8e93;
+}
+
+:root.dark-mode .top-artist-card {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .top-artist-card:hover {
+  background: #424245;
+}
+
+:root.dark-mode .close-top-artists-button {
+  background: #3a3a3c;
+  color: #aeaeb2;
+}
+
+:root.dark-mode .close-top-artists-button:hover {
+  background: #424245;
+  color: #ffffff;
+}
+
+:root.dark-mode .carousel-arrow {
+  background: #3a3a3c;
+  color: #ffffff;
+}
+
+/* ── Dark mode: input section ──────────────────────────────── */
+:root.dark-mode .input-section {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .input-section h2 {
+  color: #ffffff;
+}
+
+:root.dark-mode .form-label {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .prompt-input,
+:root.dark-mode .description-input {
+  background: #3a3a3c;
+  border-color: #424245;
+  color: #ffffff;
+}
+
+:root.dark-mode .prompt-input:focus,
+:root.dark-mode .description-input:focus {
+  border-color: #ffffff;
+}
+
+:root.dark-mode .checkbox-text {
+  color: #ffffff;
+}
+
+:root.dark-mode .checkbox-hint {
+  color: #8e8e93;
+}
+
+:root.dark-mode .reference-input {
+  background: #3a3a3c;
+  border-color: #424245;
+  color: #ffffff;
+}
+
+:root.dark-mode .reference-input:focus {
+  border-color: #ffffff;
+}
+
+:root.dark-mode .reference-results {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .reference-results-label {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .reference-result-item {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .reference-result-item:hover {
+  background: #424245;
+}
+
+:root.dark-mode .reference-name {
+  color: #ffffff;
+}
+
+:root.dark-mode .reference-artist {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .selected-references-label {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .selected-reference-chip {
+  background: #3a3a3c;
+  border-color: #636366;
+}
+
+:root.dark-mode .selected-reference-chip:hover {
+  background: #424245;
+}
+
+:root.dark-mode .reference-chip-name {
+  color: #ffffff;
+}
+
+:root.dark-mode .remove-reference-button {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .examples-label {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .example-chip {
+  background: #3a3a3c;
+  border-color: #424245;
+  color: #aeaeb2;
+}
+
+:root.dark-mode .example-chip:hover {
+  background: #424245;
+  color: #ffffff;
+  border-color: #636366;
+}
+
+/* ── Dark mode: results section ────────────────────────────── */
+:root.dark-mode .results-section {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .playlist-header {
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .playlist-header h2 {
+  color: #ffffff;
+}
+
+:root.dark-mode .playlist-description {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .track-count {
+  color: #ffffff;
+}
+
+/* ── Dark mode: bottom input ───────────────────────────────── */
+:root.dark-mode .input-container {
+  background: #2c2c2e;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+:root.dark-mode .bottom-prompt-input {
+  color: #ffffff;
+}
+
+:root.dark-mode .bottom-prompt-input::placeholder {
+  color: #8e8e93;
+}
+
+/* ── Dark mode: options dropdown ───────────────────────────── */
+:root.dark-mode .options-menu-button {
+  background: #2c2c2e;
+  border-color: #424245;
+  color: #aeaeb2;
+}
+
+:root.dark-mode .options-menu-button:hover {
+  background: #3a3a3c;
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
+:root.dark-mode .options-dropdown {
+  background: #2c2c2e;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+}
+
+:root.dark-mode .options-dropdown-header {
+  background: #3a3a3c;
+  border-bottom-color: #424245;
+}
+
+:root.dark-mode .option-item {
+  background: #2c2c2e;
+}
+
+:root.dark-mode .option-item:hover {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .option-item.active {
+  background: #3a3a3c;
+}
+
+:root.dark-mode .song-count-input {
+  background: #3a3a3c;
+  border-color: #424245;
+  color: #ffffff;
+}
+
+:root.dark-mode .song-count-input:focus {
+  border-color: #ffffff;
+}
+
+/* ── Dark mode: draft widget ───────────────────────────────── */
+:root.dark-mode .draft-playlist-widget {
+  background: linear-gradient(135deg, #3a2e1e 0%, #2c2c2e 100%);
+  border-left-color: #ff9800;
+}
+
+:root.dark-mode .draft-widget-name {
+  color: #ffffff;
+}
+
+:root.dark-mode .draft-widget-meta {
+  color: #aeaeb2;
+}
+
+:root.dark-mode .discard-button {
+  background: #3a3a3c;
+  color: #aeaeb2;
+  border-color: #424245;
+}
+
+:root.dark-mode .discard-button:hover {
+  background: #424245;
+  color: #ffffff;
+}
+
+/* ── Dark mode: error messages ─────────────────────────────── */
+:root.dark-mode .error-message {
+  background: rgba(255, 69, 58, 0.1);
+  color: #ff453a;
+  border-left-color: #ff453a;
+}
+
+:root.dark-mode .error-message-bottom {
+  background: rgba(44, 44, 46, 0.95);
+  color: #ff453a;
+  border-left-color: #ff453a;
+}
 

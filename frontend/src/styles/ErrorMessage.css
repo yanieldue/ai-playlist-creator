@@ -163,6 +163,15 @@
   border-color: #555558;
 }
 
+:root.dark-mode .retry-button {
+  background: #ffffff;
+  color: #000000;
+}
+
+:root.dark-mode .retry-button:hover {
+  background: #e5e5ea;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .error-message-container {
