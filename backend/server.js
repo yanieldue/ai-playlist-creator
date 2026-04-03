@@ -9275,7 +9275,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               .filter(f => f.type === 'instrumentalness' || f.type === 'speechiness');
           }
           const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
-          const _fbSongs = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
+          const _fbSongsRaw = await executeSoundChartsStrategy(fallbackQuery, songCount * 2);
+          // Cap per-genre results — SC can return 1000 but we only need a fraction
+          const _fbSongs = _fbSongsRaw.slice(0, Math.max(songCount * 2 - topSongs.length, 50));
           // Deduplicate by song name+artist
           const _existingKeys = new Set(topSongs.map(s => `${(s.artist || '').toLowerCase()}::${(s.name || '').toLowerCase()}`));
           for (const s of _fbSongs) {
@@ -9286,6 +9288,13 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             }
           }
           console.log(`🔄 Fallback genre "${_fbGenre}": ${_fbSongs.length} candidates (${topSongs.length} total)`);
+        }
+        // Cap fallback pool — resolving ISRCs for 1000 songs takes minutes.
+        // We only need songCount*3 candidates (Phase B stops at that limit anyway).
+        const _fallbackCap = songCount * 3;
+        if (topSongs.length > _fallbackCap) {
+          console.log(`🔄 Capping fallback pool from ${topSongs.length} to ${_fallbackCap}`);
+          topSongs = topSongs.slice(0, _fallbackCap);
         }
         console.log(`🔄 SoundCharts top songs: ${topSongs.length} candidates`);
 
