@@ -6,7 +6,9 @@ import Icons from './Icons';
 import UpgradeModal from './UpgradeModal';
 import ConfirmModal from './ConfirmModal';
 import { isPaid } from '../utils/plan';
+import mp from '../utils/mixpanel';
 import '../styles/Account.css';
+import '../styles/Settings.css';
 
 const Account = ({ onBack, showToast }) => {
   const navigate = useNavigate();
@@ -26,6 +28,16 @@ const Account = ({ onBack, showToast }) => {
   const [showPasswords, setShowPasswords] = useState(false);
   const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
+
+  // Preferences (moved from Settings page)
+  const [allowExplicit, setAllowExplicit] = useState(() => {
+    const saved = localStorage.getItem('allowExplicit');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
 
   // Fallback toast function if not provided
   const toast = showToast || ((message, type) => {
@@ -191,6 +203,32 @@ const Account = ({ onBack, showToast }) => {
 
   const handleManageBilling = () => {
     navigate('/billing');
+  };
+
+  const persistSettings = (newAllowExplicit, newDarkMode) => {
+    localStorage.setItem('allowExplicit', JSON.stringify(newAllowExplicit));
+    localStorage.setItem('darkMode', JSON.stringify(newDarkMode));
+    const email = localStorage.getItem('userEmail');
+    if (email) {
+      playlistService.updateSettings(email, { allowExplicit: newAllowExplicit, darkMode: newDarkMode }).catch(() => {});
+    }
+  };
+
+  const handleToggleExplicit = (newValue) => {
+    mp.track('Setting Changed', { setting: 'explicit_content', value: newValue });
+    setAllowExplicit(newValue);
+    persistSettings(newValue, darkMode);
+  };
+
+  const handleToggleDarkMode = (newValue) => {
+    mp.track('Setting Changed', { setting: 'dark_mode', value: newValue });
+    setDarkMode(newValue);
+    if (newValue) {
+      document.documentElement.classList.add('dark-mode');
+    } else {
+      document.documentElement.classList.remove('dark-mode');
+    }
+    persistSettings(allowExplicit, newValue);
   };
 
   const handleTogglePlatform = async (platform) => {
@@ -580,6 +618,41 @@ const Account = ({ onBack, showToast }) => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Preferences */}
+        <div className="account-list" style={{ marginTop: 24 }}>
+          <div className="account-list-item account-section-header">
+            <span className="account-list-label" style={{ fontWeight: 600, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, color: '#8e8e93' }}>Preferences</span>
+          </div>
+          <div className="settings-item" style={{ borderBottom: '0.5px solid #e5e5ea' }}>
+            <div className="settings-item-left">
+              <span className="settings-label">Explicit Content</span>
+              <span className="settings-description">Allow songs with explicit lyrics</span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={allowExplicit}
+                onChange={(e) => handleToggleExplicit(e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
+          <div className="settings-item">
+            <div className="settings-item-left">
+              <span className="settings-label">Dark Mode</span>
+              <span className="settings-description">Use dark theme</span>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={(e) => handleToggleDarkMode(e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
         </div>
       </div>
 

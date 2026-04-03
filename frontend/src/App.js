@@ -33,7 +33,6 @@ function App() {
           <Route path="/" element={<PlaylistGenerator />} />
           <Route path="/login" element={<PlaylistGenerator />} />
           <Route path="/playlists" element={<PlaylistGenerator />} />
-          <Route path="/settings" element={<PlaylistGenerator />} />
           <Route path="/account" element={<PlaylistGenerator />} />
           <Route path="/faq" element={<PlaylistGenerator />} />
           <Route path="/reactions" element={<PlaylistGenerator />} />

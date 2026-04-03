@@ -8,7 +8,6 @@ import { playlistsCache } from '../utils/cache';
 import { categorizeError, ERROR_CATEGORIES } from '../utils/errorHandler';
 import UpgradeModal from './UpgradeModal';
 import MyPlaylists from './MyPlaylists';
-import Settings from './Settings';
 import Account from './Account';
 import SongReactions from './SongReactions';
 import FAQ from './FAQ';
@@ -180,11 +179,11 @@ const PlaylistGenerator = () => {
   const location = useLocation();
 
   const pathToTab = (path) => {
-    const map = { '/playlists': 'playlists', '/settings': 'settings', '/account': 'account', '/faq': 'faq', '/reactions': 'reactions', '/feedback': 'feedback' };
+    const map = { '/playlists': 'playlists', '/account': 'account', '/faq': 'faq', '/reactions': 'reactions', '/feedback': 'feedback' };
     return map[path] || 'home';
   };
   const tabToPath = (tab) => {
-    const map = { playlists: '/playlists', settings: '/settings', account: '/account', faq: '/faq', reactions: '/reactions', feedback: '/feedback' };
+    const map = { playlists: '/playlists', account: '/account', faq: '/faq', reactions: '/reactions', feedback: '/feedback' };
     return map[tab] || '/';
   };
   const activeTab = pathToTab(location.pathname);
@@ -2479,13 +2478,6 @@ const PlaylistGenerator = () => {
                   )}
                   <button className="dropdown-item" onClick={() => {
                     setShowProfileDropdown(false);
-                    setActiveTab('settings');
-                  }}>
-                    <span className="dropdown-icon"><Icons.Settings size={18} /></span>
-                    Settings
-                  </button>
-                  <button className="dropdown-item" onClick={() => {
-                    setShowProfileDropdown(false);
                     setActiveTab('reactions');
                   }}>
                     <span className="dropdown-icon">
@@ -2688,12 +2680,6 @@ const PlaylistGenerator = () => {
                     });
                   }}
                 />
-              </>
-            )}
-
-            {activeTab === 'settings' && (
-              <>
-                <Settings onBack={() => setActiveTab('home')} />
               </>
             )}
 
