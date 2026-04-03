@@ -9500,7 +9500,10 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
     // Runs for ALL playlists (not just those with requested artists) to prevent
     // any single artist from dominating the track list.
     if (!genreData.artistConstraints.exclusiveMode) {
-      const maxTracksPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist ?? 3;
+      const _rawMaxPerArtist = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
+      const maxTracksPerArtist = (_rawMaxPerArtist !== null && _rawMaxPerArtist !== undefined)
+        ? Math.max(_rawMaxPerArtist, songCount >= 40 ? 4 : _rawMaxPerArtist)
+        : 3;
 
       // Group tracks by normalized artist name (simple case/punctuation dedup — no Claude call needed)
       const artistTrackMap = new Map();
