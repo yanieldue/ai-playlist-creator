@@ -9182,7 +9182,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           if (!genreData.artistConstraints.exclusiveMode) {
             const _divRawMax = genreData.trackConstraints?.artistDiversity?.maxPerArtist;
             const _divMaxPerArtist = (_divRawMax !== null && _divRawMax !== undefined)
-              ? Math.max(_divRawMax, songCount >= 40 ? 3 : _divRawMax)
+              ? Math.max(_divRawMax, songCount >= 40 ? 4 : _divRawMax)
               : 3;
             const _divNormArtist = (name) => (name || '').toLowerCase()
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
