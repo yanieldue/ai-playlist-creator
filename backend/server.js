@@ -8097,6 +8097,22 @@ Return ONLY valid JSON:
 
 Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
 ${(() => {
+  // Build structured context block from extraction data so Sonnet sees all the signals
+  const _ctx = [];
+  if (genreData.energyTarget) _ctx.push(`Energy: ${genreData.energyTarget}`);
+  if (genreData.mood) _ctx.push(`Mood: ${genreData.mood}`);
+  if ((genreData.atmosphere || []).length > 0) _ctx.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
+  if ((genreData.contextClues?.avoidances || []).length > 0) _ctx.push(`User wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
+  if (genreData.era?.decade) _ctx.push(`Era: ${genreData.era.decade}`);
+  if (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) _ctx.push(`Year range: ${genreData.era.yearRange.min || 'any'}–${genreData.era.yearRange.max || 'any'}`);
+  if ((genreData.lyricalContent?.themes || []).length > 0) _ctx.push(`Lyrical themes: ${genreData.lyricalContent.themes.join(', ')}`);
+  if ((genreData.lyricalContent?.avoid || []).length > 0) _ctx.push(`Lyrical avoid: ${genreData.lyricalContent.avoid.join(', ')}`);
+  if (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any') _ctx.push(`Vocal preference: ${genreData.artistConstraints.vocalGender}`);
+  if (genreData.trackConstraints?.artistDiversity?.maxPerArtist) _ctx.push(`Max per artist: ${genreData.trackConstraints.artistDiversity.maxPerArtist}`);
+  if (genreData.trackConstraints?.popularity?.preference) _ctx.push(`Popularity: ${genreData.trackConstraints.popularity.preference}`);
+  return _ctx.length > 0 ? `\nPlaylist context:\n${_ctx.map(c => `- ${c}`).join('\n')}\n` : '';
+})()}
+${(() => {
   const _useCaseRules = {
     workout: 'USE CASE: WORKOUT/RUNNING — Every song must have genuine, sustained pump-up energy suitable for physical exercise. Ask yourself: would this song keep someone moving on a treadmill or during a run? Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real drive (Yazz "The Only Way Is Up"), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, and anything with inconsistent energy or comedic tone. Keep: songs with driving beats, motivational energy, and consistent tempo throughout.',
     focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
