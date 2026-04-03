@@ -1701,6 +1701,15 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['sensual'],
     reason: 'jazz-fusion / cerebral polyrhythmic track — musically complex, requires active listening, kills intimacy in a sensual playlist',
   },
+  // Added 2026-04-03. Novelty Eurodance (1994). Popularity: ~70.
+  // False positives: Prompt 126 running (2/2 runs). Scat-singing novelty hit — the opposite of
+  // a steady-pace running track. High energy on paper but disruptive and comedic in a workout context.
+  'scatman john::scatman (ski-ba-bop-ba-dop-bop)': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout', 'focus', 'sleep'],
+    reason: 'novelty Eurodance scat-singing hit — disruptive in workout/focus contexts',
+  },
   // Added 2026-04-01. Mid-tempo R&B (2016). Popularity: ~77.
   // False positive: sensual R&B playlist. SC tags it with desire/romantic themes.
   // The song is about longing for someone who is far away ("send me your location") —
@@ -8094,6 +8103,7 @@ Return ONLY valid JSON:
               content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks.
 
 Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
+${_scUseCase === 'workout' ? `\nUSE CASE: WORKOUT/RUNNING — Every song must have genuine pump-up energy suitable for physical exercise. Reject novelty hits (Scatman John), retro curiosities (Yazz, Big Brovaz), sport event anthems (FIFA World Cup songs), and anything with inconsistent or comedic energy. Only include songs you would genuinely hear in a gym or on a running playlist.` : ''}${_scUseCase === 'focus' ? `\nUSE CASE: FOCUS/DEEP WORK — Only include songs suitable for concentration. Reject anything with prominent vocals, high energy, or distracting elements. The user needs background music for work, not party hits.` : ''}${_scUseCase === 'sleep' ? `\nUSE CASE: SLEEP — Only ultra-calm, soothing tracks. Reject anything with a beat or energy.` : ''}
 
 IMPORTANT — You MUST select close to ${_targetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.
 
@@ -8126,10 +8136,18 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
             console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
-            // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool
-            if (vibePassedTracks.length < _targetCount * 0.4) {
+            // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool.
+            // EXCEPTION: for focus/sleep useCases, trust Sonnet's judgment — the pool is likely
+            // genuinely wrong (e.g. party pop in a focus+instrumental request after audio filter
+            // fallback stripped instrumentalness). Overriding Sonnet here produces completely
+            // wrong playlists (Chainsmokers in a focus playlist).
+            const _trustSonnetUseCases = ['focus', 'sleep'];
+            const _trustSonnet = _trustSonnetUseCases.includes(_scUseCase);
+            if (vibePassedTracks.length < _targetCount * 0.4 && !_trustSonnet) {
               console.warn(`⚠️  Sonnet curation too aggressive (${vibePassedTracks.length}/${_targetCount}), falling back to full pool`);
               vibePassedTracks = _sonnetInputPool;
+            } else if (vibePassedTracks.length < _targetCount * 0.4 && _trustSonnet) {
+              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) but useCase="${_scUseCase}" — trusting Sonnet's picks`);
             }
           } else {
             vibePassedTracks = _sonnetInputPool;
