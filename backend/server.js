@@ -13196,7 +13196,7 @@ app.get('/api/stripe/config', (req, res) => {
   res.json({ publishableKey: key });
 });
 
-// POST /api/stripe/create-subscription — embedded checkout via Stripe Elements
+// POST /api/stripe/create-subscription — embedded checkout session
 app.post('/api/stripe/create-subscription', async (req, res) => {
   try {
     const { userId, billingPeriod, trial } = req.body;
@@ -13228,107 +13228,46 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
       await db.updateStripeCustomer(email, stripeCustomerId);
     }
 
-    // Check for existing active/trialing subscription — can't create a second one
+    // Check for existing active/trialing subscription
     const existingSubs = await stripe.subscriptions.list({
       customer: stripeCustomerId,
       status: 'active',
       limit: 1,
     });
-    if (existingSubs.data.length === 0) {
-      const trialSubs = await stripe.subscriptions.list({
-        customer: stripeCustomerId,
-        status: 'trialing',
-        limit: 1,
-      });
-      if (trialSubs.data.length > 0) {
-        return res.status(400).json({ error: 'You already have an active subscription' });
-      }
-    } else {
+    if (existingSubs.data.length > 0) {
+      return res.status(400).json({ error: 'You already have an active subscription' });
+    }
+    const trialSubs = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      status: 'trialing',
+      limit: 1,
+    });
+    if (trialSubs.data.length > 0) {
       return res.status(400).json({ error: 'You already have an active subscription' });
     }
 
-    const subscriptionParams = {
+    // Use embedded checkout — works reliably across all Stripe API versions
+    const frontendUrl = FRONTEND_URL;
+    const sessionParams = {
+      mode: 'subscription',
       customer: stripeCustomerId,
-      items: [{ price: priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: {
-        save_default_payment_method: 'on_subscription',
-        payment_method_types: ['card'],
-      },
+      line_items: [{ price: priceId, quantity: 1 }],
+      ui_mode: 'embedded',
+      return_url: `${frontendUrl}/?payment=success`,
       metadata: { email },
     };
 
     if (trial) {
-      subscriptionParams.trial_period_days = 7;
+      sessionParams.subscription_data = { trial_period_days: 7 };
       await db.markTrialUsed(email);
     }
 
-    // Expand all possible sources of client_secret
-    subscriptionParams.expand = [
-      'latest_invoice.payment_intent',
-      'pending_setup_intent',
-    ];
-    const subscription = await stripe.subscriptions.create(subscriptionParams);
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
-    // Try every known location for the client_secret:
-    // 1. Subscription.client_secret (newer Stripe API versions 2023-11+)
-    // 2. pending_setup_intent.client_secret (trials)
-    // 3. latest_invoice.payment_intent.client_secret (older API versions)
-    // 4. Manual retrieval as last resort
-    let clientSecret = subscription.client_secret
-      || subscription.pending_setup_intent?.client_secret
-      || subscription.latest_invoice?.payment_intent?.client_secret;
-
-    // Determine intent type for frontend confirmation
-    let intentType = subscription.pending_setup_intent ? 'setup' : 'payment';
-
-    // Fallback: manually retrieve payment intent from invoice
-    if (!clientSecret) {
-      const invoice = subscription.latest_invoice;
-      const invoiceId = typeof invoice === 'string' ? invoice : invoice?.id;
-      if (invoiceId) {
-        const fullInvoice = await stripe.invoices.retrieve(invoiceId);
-        const piId = typeof fullInvoice.payment_intent === 'string'
-          ? fullInvoice.payment_intent : fullInvoice.payment_intent?.id;
-        if (piId) {
-          const pi = await stripe.paymentIntents.retrieve(piId);
-          clientSecret = pi.client_secret;
-          intentType = 'payment';
-        }
-      }
-    }
-
-    // Fallback: retrieve pending_setup_intent manually
-    if (!clientSecret) {
-      const siRef = subscription.pending_setup_intent;
-      const siId = typeof siRef === 'string' ? siRef : siRef?.id;
-      if (siId) {
-        const si = await stripe.setupIntents.retrieve(siId);
-        clientSecret = si.client_secret;
-        intentType = 'setup';
-      }
-    }
-
-    console.log(`[STRIPE] Sub: ${subscription.id}, status: ${subscription.status}, has client_secret: ${!!clientSecret}, intentType: ${intentType}, sub.client_secret: ${!!subscription.client_secret}, pi on invoice: ${typeof subscription.latest_invoice?.payment_intent}`);
-
-    if (!clientSecret) {
-      console.error(`[STRIPE] No client_secret found anywhere. Sub keys: ${Object.keys(subscription).join(', ')}`);
-      return res.status(500).json({ error: 'Failed to get client secret from Stripe' });
-    }
-
-    res.json({
-      subscriptionId: subscription.id,
-      clientSecret,
-      type: intentType,
-    });
+    res.json({ clientSecret: session.client_secret });
   } catch (error) {
     console.error('Stripe create-subscription error:', error.message || error);
-    const msg = error.type === 'StripeCardError'
-      ? error.message
-      : error.message?.includes('already has')
-        ? 'You already have an active subscription'
-        : 'Failed to create subscription';
-    res.status(error.statusCode || 500).json({ error: msg });
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to create subscription' });
   }
 });
 
