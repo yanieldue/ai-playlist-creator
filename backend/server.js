@@ -13282,21 +13282,25 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
     } else {
       // Try expanded object first
       clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-      // Fall back: manually retrieve invoice → payment_intent
+      // Fall back: get the payment_intent ID and retrieve it directly
       if (!clientSecret) {
-        const invoiceId = typeof subscription.latest_invoice === 'string'
-          ? subscription.latest_invoice
-          : subscription.latest_invoice?.id;
-        console.log(`[STRIPE] Subscription created: ${subscription.id}, status: ${subscription.status}, invoice: ${invoiceId}, latest_invoice type: ${typeof subscription.latest_invoice}`);
-        if (invoiceId) {
-          const invoice = await stripe.invoices.retrieve(invoiceId, { expand: ['payment_intent'] });
-          clientSecret = invoice.payment_intent?.client_secret;
-          if (!clientSecret && invoice.payment_intent) {
-            const piId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent.id;
-            if (piId) {
-              const pi = await stripe.paymentIntents.retrieve(piId);
-              clientSecret = pi.client_secret;
-            }
+        const invoice = subscription.latest_invoice;
+        const piRef = typeof invoice === 'object' ? invoice?.payment_intent : null;
+        const piId = typeof piRef === 'string' ? piRef : piRef?.id;
+        console.log(`[STRIPE] Sub: ${subscription.id}, status: ${subscription.status}, pi ref type: ${typeof piRef}, piId: ${piId}`);
+        if (piId) {
+          const pi = await stripe.paymentIntents.retrieve(piId);
+          clientSecret = pi.client_secret;
+        } else if (typeof invoice === 'object' && invoice?.id) {
+          // payment_intent might not be on the invoice object — retrieve it fresh
+          const freshInvoice = await stripe.invoices.retrieve(invoice.id);
+          const freshPiId = typeof freshInvoice.payment_intent === 'string'
+            ? freshInvoice.payment_intent
+            : freshInvoice.payment_intent?.id;
+          console.log(`[STRIPE] Fresh invoice pi: ${freshPiId}`);
+          if (freshPiId) {
+            const pi = await stripe.paymentIntents.retrieve(freshPiId);
+            clientSecret = pi.client_secret;
           }
         }
       }
