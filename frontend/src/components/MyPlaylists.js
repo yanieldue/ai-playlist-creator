@@ -271,6 +271,8 @@ const [upgradeModal, setUpgradeModal] = useState({ open: false, feature: '' });
     } else if (action === 'open') {
       const url = playlist.spotifyUrl;
       if (url) window.open(url, '_blank');
+    } else if (action === 'edit') {
+      openEditOptionsModal(playlist);
     }
   };
 
@@ -883,6 +885,18 @@ IMPORTANT: Pay close attention to the original request and description to unders
                             Open in Spotify
                           </button>
                         )}
+                        {!playlist.isReadOnly && (
+                          <button
+                            className="playlist-dropdown-item"
+                            onClick={(e) => handleMenuAction('edit', playlist, e)}
+                          >
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            Edit Playlist
+                          </button>
+                        )}
                         <button
                           className="playlist-dropdown-item delete-item"
                           onClick={(e) => handleMenuAction('delete', playlist, e)}
@@ -949,12 +963,7 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 <div className="playlist-details">
                   <div className="playlist-controls">
                     {editingPlaylistId !== playlist.playlistId ? (
-                      <button
-                        onClick={() => openEditOptionsModal(playlist)}
-                        className="edit-button"
-                      >
-                        Edit Playlist
-                      </button>
+                      null
                     ) : (
                       <div className="edit-controls">
                         <button onClick={() => { setEditingPlaylistId(null); setSelectedTracksToRemove(new Set()); }} className="cancel-button">
