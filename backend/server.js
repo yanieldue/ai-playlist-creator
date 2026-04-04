@@ -8239,7 +8239,26 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
               console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) — trusting Sonnet's picks (supplement will backfill)`);
             }
           } else {
-            vibePassedTracks = _sonnetInputPool;
+            // Curation response didn't parse — retry once before falling back
+            console.warn(`⚠️  SC curation response didn't parse as JSON array, retrying once... Response: ${_scVibeContent.substring(0, 200)}`);
+            try {
+              const _retryResp = await _scCurationCall();
+              const _retryContent = _retryResp.content[0].text.trim()
+                .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+                .replace(/^```\n?/, '').replace(/\n?```$/, '');
+              const _retryMatch = _retryContent.match(/\[[\d,\s]*\]/);
+              if (_retryMatch) {
+                const _retryIndices = JSON.parse(_retryMatch[0]);
+                vibePassedTracks = _retryIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
+                console.log(`✂️  SC pool curation (retry): ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected`);
+              } else {
+                console.warn(`⚠️  SC curation retry also unparseable, falling back to full pool`);
+                vibePassedTracks = _sonnetInputPool;
+              }
+            } catch (_retryParseErr) {
+              console.warn(`⚠️  SC curation retry failed: ${_retryParseErr.message}, falling back to full pool`);
+              vibePassedTracks = _sonnetInputPool;
+            }
           }
         } catch (_scVibeErr) {
           console.log(`⚠️  SC pool curation failed, using capped pool: ${_scVibeErr.message}`);
@@ -8999,8 +9018,8 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             const _suppVocalGender = genreData.artistConstraints?.vocalGender;
             const _suppConstraintRules = [];
             if (_suppUseCase && _useCaseVibeRules[_suppUseCase]) _suppConstraintRules.push(_useCaseVibeRules[_suppUseCase]);
-            if (_suppVocalGender === 'female') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
-            if (_suppVocalGender === 'male') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            if (_suppVocalGender === 'female') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
+            if (_suppVocalGender === 'male') _suppConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track.');
             {
               const _suppPgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
               const _suppGenreRuleMap = {
@@ -9168,8 +9187,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
             const _gfVocalGender = genreData.artistConstraints?.vocalGender;
             const _gfConstraintRules = [];
             if (_gfUseCase && _useCaseVibeRules[_gfUseCase]) _gfConstraintRules.push(_useCaseVibeRules[_gfUseCase]);
-            if (_gfVocalGender === 'female') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
-            if (_gfVocalGender === 'male') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed.');
+            if (_gfVocalGender === 'female') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female artists allowed. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track. Examples to REMOVE: The Weeknd, Drake, GIVĒON, James Blake, dvsn, J. Cole.');
+            if (_gfVocalGender === 'male') _gfConstraintRules.push('GENDER HARD RULE: REMOVE any track by a female solo artist or female-fronted band. Only male artists allowed. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track.');
             {
               const _gfPgNorm = (genreData.primaryGenre || '').toLowerCase().replace(/-/g, ' ');
               const _gfGenreRuleMap = {
@@ -9858,9 +9877,9 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
       // Gender constraint
       const _vocalGender = genreData.artistConstraints?.vocalGender;
       if (_vocalGender === 'female') {
-        _vibeHardRules.push('GENDER — HARD RULE: The user requested FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female solo artists, female rappers, and female-fronted groups are allowed. Examples to REMOVE: The Weeknd, Drake, J. Cole, dvsn, Big Sean, James Blake, Metro Boomin, Kendrick Lamar — ALL must be removed. No exceptions even if the song sounds perfect for the vibe.');
+        _vibeHardRules.push('GENDER — HARD RULE: The user requested FEMALE artists only. REMOVE any track by a male solo artist, male rapper, or male-fronted band. Only female solo artists, female rappers, and female-fronted groups are allowed. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track — err on the side of caution. Examples to REMOVE: The Weeknd, Drake, J. Cole, dvsn, Big Sean, James Blake, Metro Boomin, Kendrick Lamar — ALL must be removed. No exceptions even if the song sounds perfect for the vibe.');
       } else if (_vocalGender === 'male') {
-        _vibeHardRules.push('GENDER — HARD RULE: The user requested MALE artists only. REMOVE any track by a female solo artist, female rapper, or female-fronted band. No exceptions.');
+        _vibeHardRules.push('GENDER — HARD RULE: The user requested MALE artists only. REMOVE any track by a female solo artist, female rapper, or female-fronted band. If you don\'t recognize an artist and cannot determine their gender, REMOVE the track — err on the side of caution. No exceptions.');
       }
 
       // Cohesion / smooth-transitions request
