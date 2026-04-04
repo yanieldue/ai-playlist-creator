@@ -1762,6 +1762,45 @@ const TRACK_CONTEXT_OVERRIDES = {
     blockedUseCases: ['chill', 'background', 'sleep', 'focus', 'morning'],
     reason: 'Brooklyn rap — contextually wrong for any low-energy or calm context; enters via Macy Gray depth-2',
   },
+  // Added 2026-04-04. Classic punk (1979). Popularity: ~70.
+  // False positives: Prompt 134 runs 2, 3, and now — recurring workout/running false positive.
+  // Iconic rock anthem but lacks consistent rhythmic drive for physical exercise.
+  'the clash::london calling': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout'],
+    reason: 'classic punk anthem — performative energy, not rhythmic drive for running/workout',
+  },
+  'the clash::rock the casbah': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout'],
+    reason: 'classic rock — sing-along energy, not rhythmic drive for running/workout',
+  },
+  // Added 2026-04-04. Moana soundtrack (2016). Popularity: ~75.
+  // False positive: Prompt 134 running playlist. Disney movie soundtrack, not exercise music.
+  'dwayne johnson::you\'re welcome': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout'],
+    reason: 'Disney movie soundtrack — novelty/comedy, wrong for running/workout',
+  },
+  // Added 2026-04-04. Mid-tempo pop (2013). Popularity: ~72.
+  // False positive: Prompt 134 running playlist. Mid-tempo, not enough rhythmic drive for running.
+  'sam smith::money on my mind': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout'],
+    reason: 'mid-tempo pop — Sam Smith catalog skews slow, wrong for running/workout',
+  },
+  // Added 2026-04-04. Christmas song (2010). Popularity: ~65.
+  // False positive: Prompt 143 flow state. Seasonal Christmas content, wrong for any non-holiday context.
+  'coldplay::christmas lights': {
+    requiredMoods: [],
+    requiredEnergies: [],
+    blockedUseCases: ['workout', 'party', 'summer', 'morning', 'focus', 'chill', 'background', 'driving'],
+    reason: 'Christmas song — seasonal content, wrong for any non-holiday context',
+  },
 };
 
 // Build a SoundCharts query from Claude-extracted genreData.
@@ -2128,6 +2167,7 @@ const SOUNDCHARTS_AUDIO_FEATURE_MAP = {
   'hype':      { energy: { min: 0.80 } },
   'intense':   { energy: { min: 0.78 } },
   'workout':   { energy: { min: 0.75 } },
+  'running':   { energy: { min: 0.80 }, tempo: { min: 140 }, danceability: { min: 0.65 } },
   'powerful':  { energy: { min: 0.72 } },
   'chill':     { energy: { max: 0.45 } },
   'relaxed':   { energy: { max: 0.45 } },
@@ -6458,7 +6498,8 @@ USE CASE → GENRE/MOOD DEFAULTS (only when no explicit genre is given):
 When the user describes a task or activity with NO genre keywords, also infer mood/energy/atmosphere from the use case:
 - useCase "party" (clean my apartment, chores): mood: "positive", energyTarget: "medium", atmosphere: ["upbeat", "fun"], suggestedSeedArtists: ["Dua Lipa", "Lizzo", "Carly Rae Jepsen", "Paramore", "Katy Perry"]
 - useCase "party" (pregame/banger/going out): mood: "positive", energyTarget: "high", atmosphere: ["hype", "energetic"], suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Travis Scott, Drake, Metro Boomin, 21 Savage, Calvin Harris (upbeat era), David Guetta, Cardi B, Megan Thee Stallion, Kendrick Lamar. DO NOT pick artists whose catalogs skew soft — no Ed Sheeran, no Sia, no Olly Alexander, no Sam Smith, no OneRepublic, no Swae Lee ballads, no Khalid.
-- useCase "workout": mood: "positive", energyTarget: "high", suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents.
+- useCase "workout" (general gym/lifting): mood: "positive", energyTarget: "high", atmosphere: ["workout", "energetic"], suggestedSeedArtists: pick ONLY demonstrably high-energy artists — e.g. Eminem, Kendrick Lamar, Travis Scott, The Prodigy, Rage Against the Machine, Calvin Harris, Lil Uzi Vert, 21 Savage, Ski Mask the Slump God, or genre-appropriate equivalents.
+- useCase "workout" (running/jogging/5K/10K/marathon/cardio): mood: "positive", energyTarget: "high", atmosphere: ["running", "energetic"], suggestedSeedArtists: pick ONLY artists with driving, rhythmic, high-BPM catalogs — e.g. Calvin Harris, Tiësto, David Guetta, Eminem, Kendrick Lamar, Marshmello, The Chainsmokers, Dua Lipa (upbeat era), or genre-appropriate equivalents. Running playlists need CONSISTENT rhythmic drive (140+ BPM feel) — not just "upbeat" songs. Classic rock sing-alongs (The Clash, Gloria Gaynor) and novelty hits do NOT work for running even if they feel energetic.
 - useCase "focus": mood: "neutral", energyTarget: "low"
 - useCase "chill" (drive/road trip): mood: "positive", energyTarget: "medium"
 - useCase "chill" (relax/wind down): mood: "positive", energyTarget: "low"
@@ -6471,6 +6512,11 @@ When the user describes a task or activity with NO genre keywords, also infer mo
   NOTE: the summer seed cluster should cover multiple flavors — indie-summer (Harry Styles, Summer Salt), pop-summer (Doja Cat, Lizzo), latin-summer (Bad Bunny, J Balvin), throwback-summer (Outkast, Missy Elliott). Pick seeds that match any genre or era hints in the prompt; if no hints, spread across the flavors.
 NOTE: if the user says "I need a summer playlist, it's freezing outside" — they are requesting escapism. The "freezing" explains WHY they want summer music — it does NOT change the output. Deliver summer music.
 These mood/energy/atmosphere/suggestedSeedArtists defaults only apply when the user did NOT specify a genre. If the user said "r&b" or another genre, use that genre and skip these defaults — but ALWAYS keep the useCase value that was set above.
+
+SPECIAL ATMOSPHERE KEYWORDS (include these exact strings in the atmosphere array when applicable):
+- "running" — ALWAYS include when the prompt mentions running, jogging, 5K, 10K, marathon, or cardio. This triggers BPM and energy filters specific to running pace. Do NOT use generic "workout" for running — the two have different energy profiles.
+- "workout" — include for general gym, lifting, or exercise that is NOT running/cardio specific.
+- "sensual" — include for intimate, romantic, or bedroom contexts.
 
 LANGUAGE (culturalContext.language):
 - "I want Spanish songs", "Spanish music", "songs in Spanish" → prefer: ["Spanish"], exclude: []
@@ -6976,14 +7022,20 @@ DO NOT include any text outside the JSON.`
             max_tokens: 512,
             messages: [{
               role: 'user',
-              content: `For each artist below, list all known aliases, stage names, side projects, and supergroups they are a primary member of. Return ONLY a JSON object mapping each artist name to an array of strings. Include the original name as the first element. If none exist, return an empty array for that key.\n\nArtists: ${JSON.stringify(_toExpand)}\n\nDO NOT include any text outside the JSON.`
+              content: `For each artist below, list all known aliases, stage names, side projects, and supergroups they are a primary member of. Do NOT include album titles, EP titles, mixtape titles, or song titles — only names the artist actually performs under. Return ONLY a JSON object mapping each artist name to an array of strings. Include the original name as the first element. If none exist, return an empty array for that key.\n\nArtists: ${JSON.stringify(_toExpand)}\n\nDO NOT include any text outside the JSON.`
             }]
           });
           let _aliasText = _aliasResp.content[0].text.trim();
           if (_aliasText.startsWith('```')) _aliasText = _aliasText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
           const _aliasMap = JSON.parse(_aliasText);
           for (const artist of _toExpand) {
-            const aliases = Array.isArray(_aliasMap[artist]) ? _aliasMap[artist] : [];
+            const _rawAliases = Array.isArray(_aliasMap[artist]) ? _aliasMap[artist] : [];
+            // Filter out aliases that are too short (≤2 chars after normalization) — they cause
+            // mass false exclusions (e.g. SZA's EP "Z" matching any artist containing "z")
+            const aliases = _rawAliases.filter(a => {
+              const norm = a.toLowerCase().replace(/[^a-z0-9]/g, '');
+              return norm.length > 2;
+            });
             _artistAliasCache.set(artist.toLowerCase(), aliases);
             if (aliases.length > 0) {
               console.log(`[ALIAS] "${artist}" → [${aliases.join(', ')}]`);
@@ -8160,7 +8212,7 @@ ${(() => {
 })()}
 ${(() => {
   const _useCaseRules = {
-    workout: 'USE CASE: WORKOUT/RUNNING — Every song must have genuine, sustained pump-up energy suitable for physical exercise. Ask yourself: would this song keep someone moving on a treadmill or during a run? The beat should make you want to MOVE, not just tap your foot. Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real rhythmic drive (Billy Joel, The Clash "London Calling" — classic rock anthems but wrong BPM feel for running), classic rock storytelling songs (John Mellencamp, Gloria Estefan — the energy is performative, not physical), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, anything with inconsistent energy or comedic tone, and old-school tracks whose energy comes from crowd sing-along rather than rhythmic drive (Gloria Gaynor "I Will Survive"). Keep: songs with strong, steady, modern-feeling rhythmic pulse — EDM, pop bangers, hip hop with hard beats, and high-energy tracks where the production drives the energy (not just the lyrics or crowd appeal).',
+    workout: `USE CASE: ${(genreData.atmosphere || []).includes('running') ? 'RUNNING/CARDIO' : 'WORKOUT/GYM'} — Every song must have genuine, sustained pump-up energy suitable for physical exercise.${(genreData.atmosphere || []).includes('running') ? ' RUNNING SPECIFIC: Songs need a DRIVING, CONSISTENT rhythmic pulse that matches a running cadence (~140-180 BPM feel). The beat must propel forward motion. Reject anything that lacks steady rhythmic drive even if it feels "energetic" — running playlists are about RHYTHM, not just energy.' : ''} Ask yourself: would this song keep someone moving ${(genreData.atmosphere || []).includes('running') ? 'during a run' : 'at the gym'}? The beat should make you want to MOVE, not just tap your foot. Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real rhythmic drive (Billy Joel, The Clash "London Calling" — classic rock anthems but wrong BPM feel for running), classic rock storytelling songs (John Mellencamp, Gloria Estefan — the energy is performative, not physical), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, anything with inconsistent energy or comedic tone, old-school tracks whose energy comes from crowd sing-along rather than rhythmic drive (Gloria Gaynor "I Will Survive"), and mid-tempo pop from artists who skew soft (Sam Smith, Ed Sheeran — even their upbeat tracks lack the rhythmic punch for exercise). Keep: songs with strong, steady, modern-feeling rhythmic pulse — EDM, pop bangers, hip hop with hard beats, and high-energy tracks where the production drives the energy (not just the lyrics or crowd appeal).`,
     focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
     sleep: 'USE CASE: SLEEP — Only ultra-calm, minimal, soothing tracks suitable for falling asleep. Reject: anything with a noticeable beat, energy above whisper-level, vocals that demand attention, or dynamic range that could wake someone up.',
     party: 'USE CASE: PARTY/PREGAME — Every song must work on a dancefloor or at a party. Reject: ballads, slow jams, emotional/introspective tracks, and mid-tempo songs that kill momentum — even from otherwise upbeat artists. Keep: high-energy, danceable, crowd-pleasing tracks.',
@@ -8263,6 +8315,47 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
         } catch (_scVibeErr) {
           console.log(`⚠️  SC pool curation failed, using capped pool: ${_scVibeErr.message}`);
           vibePassedTracks = _scPoolFiltered.slice(0, songCount * 5);
+        }
+      }
+
+      // ── Batch gender filter (post-curation) ───────────────────────────────────
+      // Depth-2 SC graph expansion can pull in wrong-gender artists that slip past
+      // seed selection and curation (Sonnet may not know every underground artist's gender).
+      // One cheap Haiku call classifies all unique artists and removes wrong-gender tracks.
+      const _postCurationGender = genreData.artistConstraints?.vocalGender;
+      if (_postCurationGender && _postCurationGender !== 'any' && vibePassedTracks.length > 0) {
+        const _uniqueArtists = [...new Set(vibePassedTracks.map(t => t.artist))];
+        if (_uniqueArtists.length > 0) {
+          try {
+            const _genderResp = await anthropic.messages.create({
+              model: 'claude-sonnet-4-6-20250514',
+              max_tokens: 1024,
+              messages: [{
+                role: 'user',
+                content: `Classify each artist below as "male", "female", or "unknown" based on the lead vocalist's gender. For bands, use the lead singer's gender. Return ONLY a JSON object mapping each artist name to "male", "female", or "unknown". No explanation.\n\nArtists: ${JSON.stringify(_uniqueArtists)}`
+              }]
+            });
+            let _genderText = _genderResp.content[0].text.trim();
+            if (_genderText.startsWith('```')) _genderText = _genderText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+            const _genderMap = JSON.parse(_genderText);
+            const _wrongGender = _postCurationGender === 'female' ? 'male' : 'female';
+            const _beforeCount = vibePassedTracks.length;
+            const _removedArtists = [];
+            vibePassedTracks = vibePassedTracks.filter(t => {
+              const g = (_genderMap[t.artist] || 'unknown').toLowerCase();
+              if (g === _wrongGender || g === 'unknown') {
+                _removedArtists.push(`${t.artist} (${g})`);
+                return false;
+              }
+              return true;
+            });
+            if (_removedArtists.length > 0) {
+              const _uniqueRemoved = [...new Set(_removedArtists)];
+              console.log(`🚻 [GENDER-FILTER] Post-curation: ${_beforeCount} → ${vibePassedTracks.length} tracks (removed ${_uniqueRemoved.length} artists: ${_uniqueRemoved.join(', ')})`);
+            }
+          } catch (_genderErr) {
+            console.log(`⚠️  [GENDER-FILTER] Batch gender check failed: ${_genderErr.message} — continuing without filter`);
+          }
         }
       }
 
