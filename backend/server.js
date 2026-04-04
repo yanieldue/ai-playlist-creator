@@ -8179,7 +8179,7 @@ ${(() => {
 ${(() => {
   const _vocalGender = genreData.artistConstraints?.vocalGender;
   if (!_vocalGender || _vocalGender === 'any') return '';
-  return `\nVOCAL GENDER FILTER — The user wants ${_vocalGender} vocalists ONLY. This is a HARD constraint — reject ANY song where the lead vocalist is not ${_vocalGender}, regardless of how well it fits the genre or vibe. Use your knowledge of each artist's gender. If you don't recognize an artist and can't determine their gender, include the song (benefit of the doubt). But if you DO know the artist is ${_vocalGender === 'female' ? 'male' : 'female'}, reject it.\n`;
+  return `\nVOCAL GENDER FILTER — The user wants ${_vocalGender} vocalists ONLY. This is a HARD constraint — reject ANY song where the lead vocalist is not ${_vocalGender}, regardless of how well it fits the genre or vibe. Use your knowledge of each artist's gender. If you KNOW the artist is ${_vocalGender}, include the song. If you KNOW the artist is ${_vocalGender === 'female' ? 'male' : 'female'}, reject it. If you don't recognize the artist and can't determine their gender, REJECT the song — err on the side of caution rather than polluting the playlist with wrong-gender artists.\n`;
 })()}
 ${_scUseCase
   ? `IMPORTANT — Your USE CASE rules above are the HIGHEST priority filter. A song that violates the use-case rules MUST be rejected regardless of genre match, popularity, or how many songs you have left. Quality over quantity: it is better to return ${Math.ceil(_targetCount * 0.3)} excellent picks than ${_targetCount} mediocre ones. After enforcing use-case rules, aim to select close to ${_targetCount} songs from the remaining candidates — but NEVER pad by including tracks that violate the use case.`
