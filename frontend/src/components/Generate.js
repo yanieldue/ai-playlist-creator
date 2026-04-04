@@ -263,7 +263,7 @@ export default function Generate() {
         const resetDate = resetsAt
           ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
           : 'next week';
-        setError(`You've hit your weekly limit. Come back on ${resetDate}.`);
+        setError(`You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations, or try again after ${resetDate}.`);
         setWeeklyLimitReached(true);
         isGeneratingRef.current = false;
         setLoading(false);

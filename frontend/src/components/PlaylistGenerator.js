@@ -1250,7 +1250,7 @@ const PlaylistGenerator = () => {
         const resetsAt = err.response.data.resetsAt;
         if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
-        setGeneratingError(`You've hit your weekly limit! Free accounts get 1 playlist per week. Come back on ${resetDate} to generate again.`);
+        setGeneratingError(`You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations, or try again after ${resetDate}.`);
         setWeeklyLimitReached(true);
         isGeneratingRef.current = false;
         setLoading(false);
@@ -2363,7 +2363,7 @@ const PlaylistGenerator = () => {
         const resetsAt = err.response.data.resetsAt;
         if (resetsAt) setWeeklyLimitResetsAt(resetsAt);
         const resetDate = resetsAt ? new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'next week';
-        setGeneratingError(`You've hit your weekly limit! Free accounts get 1 playlist per week. Come back on ${resetDate} to generate again.`);
+        setGeneratingError(`You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations, or try again after ${resetDate}.`);
         setWeeklyLimitReached(true);
         // Keep modal open to show the error + Upgrade button
       } else {
@@ -3612,7 +3612,7 @@ const PlaylistGenerator = () => {
 
                 {isWeeklyLimitActive() && (
                   <div style={{ padding: '0 20px 12px', textAlign: 'center', fontSize: '13px', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                    <Icons.Lock size={13} /><span>You've hit your weekly limit. Free accounts get 1 playlist per week — come back on {getWeeklyLimitResetDate()} to generate again.</span>
+                    <Icons.Lock size={13} /><span>You've reached your 1 playlist per week limit. Upgrade to Pro for unlimited generations, or try again after {getWeeklyLimitResetDate()}.</span>
                   </div>
                 )}
                 <div className="modal-footer">
