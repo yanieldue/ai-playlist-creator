@@ -55,7 +55,7 @@ const FAQ = ({ onBack }) => {
     {
       id: 7,
       question: "Can I refine playlists after they're created?",
-      answer: "Yes. Go to 'My Playlists', tap a playlist, then tap 'Edit Playlist'. From there you can add refinement instructions to adjust the vibe, genres, tempo, and more. Refinements carry over to future auto-updates."
+      answer: "Yes. Go to 'My Playlists', tap the ⋮ menu on any playlist, and select 'Edit Playlist'. From there you can add refinement instructions to adjust the vibe, genres, tempo, and more. Refinements carry over to future auto-updates."
     },
     {
       id: 8,
@@ -65,12 +65,12 @@ const FAQ = ({ onBack }) => {
     {
       id: 9,
       question: "How do I remove songs from a playlist?",
-      answer: "In 'My Playlists', tap a playlist then tap 'Edit Playlist'. You'll see a remove button next to each song. You can also thumbs-down a song to remove it and avoid similar songs in future updates."
+      answer: "In 'My Playlists', tap the ⋮ menu on a playlist and select 'Edit Playlist'. You'll see a remove button next to each song. You can also thumbs-down a song to remove it and avoid similar songs in future updates."
     },
     {
       id: 10,
       question: "What is manual refresh and how does it work?",
-      answer: "Manual refresh updates your playlist with new songs on demand. Tap 'Edit Playlist' on any playlist, go to the Manual Refresh section, specify how many new songs you want, and the playlist updates immediately."
+      answer: "Manual refresh updates your playlist with new songs on demand. Tap the ⋮ menu on any playlist and select 'Edit Playlist', go to the Manual Refresh section, specify how many new songs you want, and the playlist updates immediately."
     },
     {
       id: 11,
