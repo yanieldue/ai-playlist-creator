@@ -2642,6 +2642,22 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       // Defined here (before depth-1 loop) so both phases share the same value.
       const _primaryNorm = query?.primaryGenre ? normalizeGenre(query.primaryGenre) : null;
 
+      // Umbrella genre → known artist-level subgenres map.
+      // SC assigns specific subgenres to artists (e.g. "bossa nova", "mpb") but the
+      // extraction may return the umbrella genre ("brasilian music"). Without this map,
+      // the strict primary-genre check rejects every legitimate artist.
+      const _genreFamilies = {
+        'brasilianmusic': ['bossanova', 'mpb', 'samba', 'tropicalia', 'sambaderoda', 'axe', 'pagode', 'forro', 'novampb', 'sambarock', 'brazilianjazz', 'brazilianrock', 'brazilianindie', 'violao', 'musicapopularmineira', 'velhaguarda'],
+        'latin': ['reggaeton', 'salsa', 'bachata', 'cumbia', 'merengue', 'latinpop', 'latintrap', 'latinjazz', 'latinrock', 'otherlatinmusic', 'bossanova', 'mpb', 'samba'],
+        'african': ['afrobeats', 'afropop', 'afrohouse', 'afrofusion', 'highlife', 'amapiano', 'gqom', 'afrosoul'],
+        'asian': ['kpop', 'jpop', 'cpop', 'koreanpop', 'kpopboygroup', 'kpopgirlgroup', 'asianpop', 'mandopop', 'cantopop'],
+        'electronicmusic': ['techno', 'house', 'trance', 'dubstep', 'drumandbass', 'ambient', 'idm', 'electro', 'newfrenchtouch'],
+      };
+      // Expand _primaryNorm to include family members for the strict check
+      const _primaryNormFamily = _primaryNorm && _genreFamilies[_primaryNorm]
+        ? [_primaryNorm, ..._genreFamilies[_primaryNorm]]
+        : null;
+
       if (allGenreBearingInconsistent && !hasConfirmedSeeds) {
         console.log(`⛔ Every genre-bearing seed is genre-inconsistent — skipping SC graph traversal entirely. Supplement flow will find correct artists.`);
         allArtistInfos = [];
@@ -2664,9 +2680,15 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           // primaryGenre is set, require at least one of the artist's genres to contain
           // the primary genre slug. Prevents e.g. Italian neo-soul artists entering an
           // R&B playlist because they have 'soul' but not 'r&b' in their SC genres.
-          if (_primaryNorm && artistGenres.length > 0 && !artistGenres.some(g => normalizeGenre(g).includes(_primaryNorm))) {
-            console.log(`⏭️  Skipping "${simInfo.name}" (depth-1) — missing primary genre "${query.primaryGenre}" in genres [${artistGenres.join(', ')}]`);
-            continue;
+          if (_primaryNorm && artistGenres.length > 0) {
+            const _artistNorms = artistGenres.map(g => normalizeGenre(g));
+            const _matchesFamily = _primaryNormFamily
+              ? _artistNorms.some(an => _primaryNormFamily.some(fn => an.includes(fn)))
+              : _artistNorms.some(an => an.includes(_primaryNorm));
+            if (!_matchesFamily) {
+              console.log(`⏭️  Skipping "${simInfo.name}" (depth-1) — missing primary genre "${query.primaryGenre}" in genres [${artistGenres.join(', ')}]`);
+              continue;
+            }
           }
           // 1b. If the artist has NO genre data, check whether their own SC similar artists
           // overlap with our seed pool. A legitimate underground artist in this genre will
@@ -2730,7 +2752,13 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
           // artist's genres to contain the primary genre slug. This prevents secondary genres
           // from seeds (e.g. 'hip hop' on an R&B artist) from admitting pure hip-hop artists
           // like Tyler, the Creator into an R&B playlist via depth-2 graph drift.
-          if (_primaryNorm && artistGenres.length > 0 && !artistGenres.some(g => normalizeGenre(g).includes(_primaryNorm))) continue;
+          if (_primaryNorm && artistGenres.length > 0) {
+            const _d2ArtistNorms = artistGenres.map(g => normalizeGenre(g));
+            const _d2Matches = _primaryNormFamily
+              ? _d2ArtistNorms.some(an => _primaryNormFamily.some(fn => an.includes(fn)))
+              : _d2ArtistNorms.some(an => an.includes(_primaryNorm));
+            if (!_d2Matches) continue;
+          }
           // Same unknown-genre pool-overlap check as depth-1: if no genre data, require that
           // at least one of this artist's similar artists overlaps with the known seed pool.
           if (expectedGenres.length > 0 && artistGenres.length === 0) {
@@ -8183,16 +8211,17 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
             console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
             // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool.
-            // EXCEPTION: when a useCase is present, Sonnet has strict use-case rules and is
-            // explicitly told quality > quantity. Trust its judgment — overriding it produces
-            // wrong playlists (e.g. Chainsmokers in a focus playlist, comedy hits in a workout).
+            // EXCEPTIONS that TRUST Sonnet's strict curation:
+            //   1. A useCase is present — Sonnet has strict use-case rules (quality > quantity).
+            //   2. Sonnet still returned >= songCount tracks — enough to fill the playlist
+            //      (supplement can cover the rest). Overriding here floods the pool with junk.
             const _trustSonnetUseCases = ['focus', 'sleep', 'workout', 'party', 'sensual', 'heartbreak', 'morning', 'summer', 'chill', 'background', 'driving', 'rage', 'wedding'];
-            const _trustSonnet = _trustSonnetUseCases.includes(_scUseCase);
+            const _trustSonnet = _trustSonnetUseCases.includes(_scUseCase) || vibePassedTracks.length >= songCount;
             if (vibePassedTracks.length < _targetCount * 0.4 && !_trustSonnet) {
               console.warn(`⚠️  Sonnet curation too aggressive (${vibePassedTracks.length}/${_targetCount}), falling back to full pool`);
               vibePassedTracks = _sonnetInputPool;
             } else if (vibePassedTracks.length < _targetCount * 0.4 && _trustSonnet) {
-              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) but useCase="${_scUseCase}" — trusting Sonnet's picks`);
+              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) but trusted (useCase="${_scUseCase || 'none'}", ${vibePassedTracks.length} >= songCount=${songCount}) — keeping Sonnet's picks`);
             }
           } else {
             vibePassedTracks = _sonnetInputPool;
