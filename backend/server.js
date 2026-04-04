@@ -8230,18 +8230,13 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
             console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
-            // Safeguard: if Sonnet was too aggressive (< 40% of target), fall back to full pool.
-            // EXCEPTIONS that TRUST Sonnet's strict curation:
-            //   1. A useCase is present — Sonnet has strict use-case rules (quality > quantity).
-            //   2. Sonnet still returned >= songCount tracks — enough to fill the playlist
-            //      (supplement can cover the rest). Overriding here floods the pool with junk.
-            const _trustSonnetUseCases = ['focus', 'sleep', 'workout', 'party', 'sensual', 'heartbreak', 'morning', 'summer', 'chill', 'background', 'driving', 'rage', 'wedding'];
-            const _trustSonnet = _trustSonnetUseCases.includes(_scUseCase) || vibePassedTracks.length >= songCount;
-            if (vibePassedTracks.length < _targetCount * 0.4 && !_trustSonnet) {
-              console.warn(`⚠️  Sonnet curation too aggressive (${vibePassedTracks.length}/${_targetCount}), falling back to full pool`);
-              vibePassedTracks = _sonnetInputPool;
-            } else if (vibePassedTracks.length < _targetCount * 0.4 && _trustSonnet) {
-              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) but trusted (useCase="${_scUseCase || 'none'}", ${vibePassedTracks.length} >= songCount=${songCount}) — keeping Sonnet's picks`);
+            // Always trust Sonnet's curation — the curation prompt has genre context,
+            // vocal gender hard constraints, and vibe rules. When Sonnet selects few tracks
+            // it's because the SC pool was degraded (e.g. 500 filter-stripping). Overriding
+            // with the full pool floods the playlist with off-genre/off-vibe garbage.
+            // Supplement and gap fill will backfill if the curated set is too small.
+            if (vibePassedTracks.length < _targetCount * 0.4) {
+              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) — trusting Sonnet's picks (supplement will backfill)`);
             }
           } else {
             vibePassedTracks = _sonnetInputPool;
