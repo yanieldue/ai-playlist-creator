@@ -2647,11 +2647,27 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       // extraction may return the umbrella genre ("brasilian music"). Without this map,
       // the strict primary-genre check rejects every legitimate artist.
       const _genreFamilies = {
-        'brasilianmusic': ['bossanova', 'mpb', 'samba', 'tropicalia', 'sambaderoda', 'axe', 'pagode', 'forro', 'novampb', 'sambarock', 'brazilianjazz', 'brazilianrock', 'brazilianindie', 'violao', 'musicapopularmineira', 'velhaguarda'],
-        'latin': ['reggaeton', 'salsa', 'bachata', 'cumbia', 'merengue', 'latinpop', 'latintrap', 'latinjazz', 'latinrock', 'otherlatinmusic', 'bossanova', 'mpb', 'samba'],
-        'african': ['afrobeats', 'afropop', 'afrohouse', 'afrofusion', 'highlife', 'amapiano', 'gqom', 'afrosoul'],
-        'asian': ['kpop', 'jpop', 'cpop', 'koreanpop', 'kpopboygroup', 'kpopgirlgroup', 'asianpop', 'mandopop', 'cantopop'],
-        'electronicmusic': ['techno', 'house', 'trance', 'dubstep', 'drumandbass', 'ambient', 'idm', 'electro', 'newfrenchtouch'],
+        // Regional / cultural umbrellas → artist-level subgenres
+        'brasilianmusic': ['bossanova', 'mpb', 'samba', 'tropicalia', 'sambaderoda', 'axe', 'pagode', 'forro', 'novampb', 'sambarock', 'brazilianjazz', 'brazilianrock', 'brazilianindie', 'violao', 'musicapopularmineira', 'velhaguarda', 'bossa'],
+        'latin': ['reggaeton', 'salsa', 'bachata', 'cumbia', 'merengue', 'latinpop', 'latintrap', 'latinjazz', 'latinrock', 'otherlatinmusic', 'bossanova', 'mpb', 'samba', 'tropicalia', 'urbanolatino', 'corridos', 'norteno', 'traditionalmexicano', 'bandagrupero', 'bolero', 'popinspanish', 'flamenco'],
+        'african': ['afrobeats', 'afropop', 'afrohouse', 'afrofusion', 'highlife', 'amapiano', 'gqom', 'afrosoul', 'afrikaans'],
+        'asian': ['kpop', 'jpop', 'cpop', 'koreanpop', 'kpopboygroup', 'kpopgirlgroup', 'asianpop', 'mandopop', 'cantopop', 'koreanrnb', 'koreanoldschoolhiphop', 'bollywood', 'indianmusic'],
+        'mena': ['middleeastern', 'arabic', 'arabesque', 'turkish'],
+        // Broad genre umbrellas → artist-level subgenres
+        'electro': ['techno', 'house', 'trance', 'dubstep', 'drumandbass', 'ambient', 'idm', 'electronic', 'electronicmusic', 'newfrenchtouch', 'electropopelectrorock', 'synthpop', 'edm', 'deephouse', 'progressivehouse', 'technohouse', 'chillouttriphiplounge'],
+        'electronicmusic': ['techno', 'house', 'trance', 'dubstep', 'drumandbass', 'ambient', 'idm', 'electro', 'electronic', 'newfrenchtouch', 'synthpop', 'edm'],
+        'hiphop': ['trap', 'rap', 'hiphoprap', 'eastcoast', 'westcoast', 'dirtysouth', 'alternativehiphop', 'conscioushiphop', 'oldschoolhiphop', 'grime', 'frenchrap'],
+        'rb': ['rnb', 'contemporaryrnb', 'contemporarysoul', 'soul', 'trapsoul', 'neosoul', 'oldschoolrnb', 'rbfunksoul', 'rbsoul'],
+        'rock': ['indierock', 'punkrock', 'alternativerock', 'hardrock', 'poprock', 'indierockpoprock', 'rockrollrockabilly', 'classicrock', 'postpunk', 'grunge', 'progressiverock', 'psychedelicrock', 'garagerock', 'shoegaze'],
+        'metal': ['heavymetal', 'deathmetal', 'blackmetal', 'thrashmetal', 'metalcore', 'progressivemetal', 'numetal', 'doommetal', 'symphonicmetal', 'powermetal'],
+        'folk': ['indiefolk', 'folkrock', 'americanfolk', 'indiepopfolk', 'internationalfolklore', 'singersongwriter', 'bluegrass', 'celtic'],
+        'jazz': ['latinjazz', 'smoothjazz', 'bebop', 'bigband', 'jazzfusion', 'jazzinstrumental', 'jazzvocal', 'brazilianjazz', 'freeimprovisation', 'swing'],
+        'blues': ['chicagoblues', 'deltablues', 'electricblues', 'acousticblues', 'countryblues'],
+        'country': ['altcountry', 'countrypop', 'bluegrass', 'americana', 'countryrock', 'outlaw'],
+        'classical': ['baroque', 'romantic', 'classicalperiod', 'opera', 'neoclassical', 'modernclassical', 'orchestral', 'chambermusic'],
+        'reggae': ['dancehall', 'dub', 'ska', 'dancehallragga', 'reggaeton'],
+        'religious': ['gospel', 'christian', 'worship', 'ccm', 'devotional', 'hymns'],
+        'soundtrack': ['filmost', 'ost', 'videogamemusic', 'musicaltheater', 'scoremusic'],
       };
       // Expand _primaryNorm to include family members for the strict check
       const _primaryNormFamily = _primaryNorm && _genreFamilies[_primaryNorm]
