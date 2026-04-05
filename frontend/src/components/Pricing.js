@@ -10,7 +10,7 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const FREE_FEATURES = [
   { label: 'Generate playlists', detail: '1 per week — from a prompt or a mix' },
-  { label: 'Chat refinement', detail: 'Adjust genre, tempo, or mood via AI chat' },
+  { label: 'Chat refinement', detail: 'Adjust genre, tempo, or mood via chat' },
   { label: 'Dis/liked songs', detail: 'Like or skip songs to improve future playlists' },
 ];
 
@@ -21,7 +21,7 @@ const PAID_FEATURES = [
   { label: 'Import playlists', detail: 'Bring in existing playlists from Spotify' },
   { label: 'Auto-update playlists', detail: 'Get new songs added daily, weekly, or monthly' },
   { label: 'Manual refresh', detail: 'Refresh a playlist with new songs on demand' },
-  { label: 'Saved refinement instructions', detail: 'AI remembers your preferences on every refresh' },
+  { label: 'Saved refinement instructions', detail: 'Your preferences are remembered on every refresh' },
 ];
 
 const Pricing = ({ isOnboarding = false, onContinueFree }) => {
