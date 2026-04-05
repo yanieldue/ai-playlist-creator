@@ -40,7 +40,7 @@ const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 const ArtistImage = ({ src, name }) => {
   const [failed, setFailed] = React.useState(false);
   return (
-    <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       {src && !failed
         ? <img src={src} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={() => setFailed(true)} />
         : <Icons.Microphone size={22} color="#636366" />
@@ -54,9 +54,9 @@ const ArtistsDiagram = ({ artistImages = {} }) => (
     <div style={{ padding: '12px', overflowX: 'hidden' }}>
       <div className="tour-diag-highlight" style={{ borderRadius: 12, display: 'flex', gap: 10, padding: '8px', overflow: 'hidden' }}>
         {DIAGRAM_ARTIST_NAMES.map(name => (
-          <div key={name} className="artist-card-apple" style={{ flex: '1 1 0', minWidth: 0, cursor: 'default' }}>
+          <div key={name} style={{ flex: '1 1 0', minWidth: 0, cursor: 'default', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <ArtistImage src={artistImages[name]} name={name} />
-            <div className="artist-card-name" style={{ fontSize: 10, marginTop: 4 }}>{name.split(' ')[0]}</div>
+            <div style={{ fontSize: 10, marginTop: 4, textAlign: 'center' }}>{name.split(' ')[0]}</div>
           </div>
         ))}
       </div>
