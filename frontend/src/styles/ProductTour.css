@@ -587,11 +587,15 @@
 
 /* Tour dropdown menu (EditDiagram step 8) */
 .tour-dropdown-menu {
-  background: #f2f2f7;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  border: 1px solid #e0e0e0;
 }
 :root.dark-mode .tour-dropdown-menu {
   background: #2c2c2e;
   color: #ffffff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+  border-color: #3a3a3c;
 }
 
 /* Demo Playlist Container */
