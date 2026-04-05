@@ -953,19 +953,9 @@
   }
 
   .tracks-list .track-actions {
-    display: grid;
-    grid-template-columns: 24px 24px 24px;
-    gap: 4px;
+    display: flex;
     align-items: center;
-    justify-items: center;
-  }
-
-  .tracks-list .track-reaction-button,
-  .tracks-list .track-lock-button {
-    padding: 0;
-    width: auto;
-    height: auto;
-    min-width: unset;
+    justify-content: flex-end;
   }
 }
 
