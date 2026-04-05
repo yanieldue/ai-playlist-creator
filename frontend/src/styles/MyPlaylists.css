@@ -675,8 +675,7 @@
 
 .tracks-list {
   width: 100%;
-  margin: var(--space-lg) 0 0 0;
-  border-top: 1px solid #e0e0e0;
+  margin: 0;
 }
 
 .tracks-list .track-actions {
@@ -1927,7 +1926,6 @@
 }
 
 :root.dark-mode .tracks-list {
-  border-color: #424245;
   background: transparent;
 }
 

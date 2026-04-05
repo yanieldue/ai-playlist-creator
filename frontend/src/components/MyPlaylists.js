@@ -961,10 +961,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
 
               {expandedPlaylistId === playlist.playlistId && (
                 <div className="playlist-details">
-                  <div className="playlist-controls">
-                    {editingPlaylistId !== playlist.playlistId ? (
-                      null
-                    ) : (
+                  {editingPlaylistId === playlist.playlistId && (
+                    <div className="playlist-controls">
                       <div className="edit-controls">
                         <button onClick={() => { setEditingPlaylistId(null); setSelectedTracksToRemove(new Set()); }} className="cancel-button">
                           Cancel
@@ -977,8 +975,8 @@ IMPORTANT: Pay close attention to the original request and description to unders
                           Remove Selected ({selectedTracksToRemove.size})
                         </button>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
 
                   <div className="tracks-list">
