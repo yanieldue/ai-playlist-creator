@@ -2624,7 +2624,7 @@ const PlaylistGenerator = () => {
                         <div className="section-header">
                           <div>
                             <h2 className="section-title">Your Top Artists</h2>
-                            <p className="section-subtitle">Create a new playlist based on your last 4 weeks listening history</p>
+                            <p className="section-subtitle">Create a new playlist based on your monthly listening history</p>
                           </div>
                         </div>
                         <div className="horizontal-scroll-container" ref={topArtistsScrollRef}>
