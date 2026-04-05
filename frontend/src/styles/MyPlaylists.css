@@ -676,6 +676,23 @@
 .tracks-list {
   width: 100%;
   margin: 0;
+  max-height: 600px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #a0aec0 transparent;
+}
+
+.tracks-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tracks-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tracks-list::-webkit-scrollbar-thumb {
+  background: #a0aec0;
+  border-radius: 4px;
 }
 
 .tracks-list .track-actions {
