@@ -62,7 +62,7 @@ const SongReactions = ({ userId, onBack, showToast }) => {
         <button className="reactions-back-btn" onClick={onBack}>
           <Icons.ChevronLeft size={20} />
         </button>
-        <h1>Song Reactions</h1>
+        <h1>Dis/liked Songs</h1>
       </div>
 
       <div className="reactions-segment">

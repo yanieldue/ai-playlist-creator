@@ -2494,7 +2494,7 @@ const PlaylistGenerator = () => {
                         <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                       </svg>
                     </span>
-                    Song Reactions
+                    Dis/liked Songs
                   </button>
                   <button className="dropdown-item" onClick={() => {
                     setShowProfileDropdown(false);
