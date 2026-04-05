@@ -29,8 +29,25 @@ const ChatInputDiagram = () => (
 );
 
 const DIAGRAM_ARTIST_NAMES = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
-const HARDCODED_ARTIST_IMAGES = {};
+const HARDCODED_ARTIST_IMAGES = {
+  'Kendrick Lamar': 'https://i.scdn.co/image/ab6761610000517439ba6dcd4355c03de0b50918',
+  'SZA': 'https://i.scdn.co/image/ab67616d00001e023e5e82855f1cf77c1659919b',
+  'Drake': 'https://i.scdn.co/image/ab676161000051744293385d324db8558179afd9',
+  'Rihanna': 'https://i.scdn.co/image/ab67616100005174cb565a8e684e3be458d329ac',
+};
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+const ArtistImage = ({ src, name }) => {
+  const [failed, setFailed] = React.useState(false);
+  return (
+    <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {src && !failed
+        ? <img src={src} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={() => setFailed(true)} />
+        : <Icons.Microphone size={22} color="#636366" />
+      }
+    </div>
+  );
+};
 
 const ArtistsDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
@@ -38,12 +55,7 @@ const ArtistsDiagram = ({ artistImages = {} }) => (
       <div className="tour-diag-highlight" style={{ borderRadius: 12, display: 'flex', gap: 10, padding: '8px', overflow: 'hidden' }}>
         {DIAGRAM_ARTIST_NAMES.map(name => (
           <div key={name} className="artist-card-apple" style={{ flex: '1 1 0', minWidth: 0, cursor: 'default' }}>
-            <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {artistImages[name]
-                ? <img src={artistImages[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
-                : <Icons.Microphone size={22} color="#636366" />
-              }
-            </div>
+            <ArtistImage src={artistImages[name]} name={name} />
             <div className="artist-card-name" style={{ fontSize: 10, marginTop: 4 }}>{name.split(' ')[0]}</div>
           </div>
         ))}
