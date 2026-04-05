@@ -29,12 +29,7 @@ const ChatInputDiagram = () => (
 );
 
 const DIAGRAM_ARTIST_NAMES = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
-const HARDCODED_ARTIST_IMAGES = {
-  'Kendrick Lamar': '/tour-artist-kendrick.jpg',
-  'SZA': '/tour-artist-sza.jpg',
-  'Drake': '/tour-artist-drake.jpg',
-  'Rihanna': '/tour-artist-rihanna.jpg',
-};
+const HARDCODED_ARTIST_IMAGES = {};
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 const ArtistsDiagram = ({ artistImages = {} }) => (
@@ -45,7 +40,7 @@ const ArtistsDiagram = ({ artistImages = {} }) => (
           <div key={name} className="artist-card-apple" style={{ flex: '1 1 0', minWidth: 0, cursor: 'default' }}>
             <div className="artist-card-image" style={{ width: 70, height: 70, borderRadius: 8, background: '#d1d1d6', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {artistImages[name]
-                ? <img src={artistImages[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                ? <img src={artistImages[name]} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={e => { e.target.style.display = 'none'; }} />
                 : <Icons.Microphone size={22} color="#636366" />
               }
             </div>
@@ -309,7 +304,12 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
       setArtistImages(HARDCODED_ARTIST_IMAGES);
       fetch(`${API_BASE}/api/artist-images?artists=${encodeURIComponent(DIAGRAM_ARTIST_NAMES.join(','))}`)
         .then(r => r.json())
-        .then(data => { if (data.images) setArtistImages(prev => ({ ...prev, ...data.images })); })
+        .then(data => {
+          if (data.images) {
+            const valid = Object.fromEntries(Object.entries(data.images).filter(([, v]) => v));
+            setArtistImages(prev => ({ ...prev, ...valid }));
+          }
+        })
         .catch(() => {});
       fetch(`${API_BASE}/api/track-images?tracks=${encodeURIComponent(DIAGRAM_TRACK_KEYS.join(','))}`)
         .then(r => r.json())
