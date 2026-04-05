@@ -31,7 +31,7 @@ const ChatInputDiagram = () => (
 const DIAGRAM_ARTIST_NAMES = ['Kendrick Lamar', 'SZA', 'Drake', 'Rihanna'];
 const HARDCODED_ARTIST_IMAGES = {
   'Kendrick Lamar': 'https://i.scdn.co/image/ab6761610000517439ba6dcd4355c03de0b50918',
-  'SZA': 'https://i.scdn.co/image/ab67616d00001e023e5e82855f1cf77c1659919b',
+  'SZA': 'https://i.scdn.co/image/ab67616100005174fd0a9fb6c252a3ba44079acf',
   'Drake': 'https://i.scdn.co/image/ab676161000051744293385d324db8558179afd9',
   'Rihanna': 'https://i.scdn.co/image/ab67616100005174cb565a8e684e3be458d329ac',
 };
