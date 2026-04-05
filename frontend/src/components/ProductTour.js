@@ -119,7 +119,7 @@ const EditDiagram = ({ artistImages = {} }) => (
             <span style={{ fontSize: 18, color: '#8e8e93', cursor: 'default' }}>⋮</span>
           </div>
         </div>
-        <div style={{ background: '#f2f2f7', borderRadius: 8, padding: '4px 0', fontSize: 12 }}>
+        <div className="tour-dropdown-menu" style={{ borderRadius: 8, padding: '4px 0', fontSize: 12 }}>
           <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -307,6 +307,10 @@ const ProductTour = ({ isOpen, onClose, onComplete }) => {
       mp.track('Product Tour Started');
       document.body.style.overflow = 'hidden';
       setArtistImages(HARDCODED_ARTIST_IMAGES);
+      fetch(`${API_BASE}/api/artist-images?artists=${encodeURIComponent(DIAGRAM_ARTIST_NAMES.join(','))}`)
+        .then(r => r.json())
+        .then(data => { if (data.images) setArtistImages(prev => ({ ...prev, ...data.images })); })
+        .catch(() => {});
       fetch(`${API_BASE}/api/track-images?tracks=${encodeURIComponent(DIAGRAM_TRACK_KEYS.join(','))}`)
         .then(r => r.json())
         .then(data => setTrackImages(data.images || {}))

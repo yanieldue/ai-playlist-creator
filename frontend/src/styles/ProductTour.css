@@ -585,6 +585,15 @@
   color: #000000;
 }
 
+/* Tour dropdown menu (EditDiagram step 8) */
+.tour-dropdown-menu {
+  background: #f2f2f7;
+}
+:root.dark-mode .tour-dropdown-menu {
+  background: #2c2c2e;
+  color: #ffffff;
+}
+
 /* Demo Playlist Container */
 .tour-demo-playlist-container {
   background: #f5f5f7;

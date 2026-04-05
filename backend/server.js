@@ -12604,6 +12604,30 @@ app.get('/api/track-images', async (req, res) => {
   }
 });
 
+// Get artist images using client credentials (no user auth needed — for product tour)
+app.get('/api/artist-images', async (req, res) => {
+  const { artists } = req.query; // "Kendrick Lamar,SZA,Drake,Rihanna"
+  if (!artists) return res.json({ images: {} });
+  const artistList = artists.split(',').map(a => a.trim()).filter(Boolean);
+  try {
+    const token = await getSpotifyClientToken();
+    const images = {};
+    await Promise.all(artistList.map(async (name) => {
+      try {
+        const resp = await axios.get('https://api.spotify.com/v1/search', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { q: `artist:${name}`, type: 'artist', limit: 1 }
+        });
+        const artist = resp.data.artists?.items?.[0];
+        images[name] = artist?.images?.[0]?.url || null;
+      } catch { images[name] = null; }
+    }));
+    res.json({ images });
+  } catch {
+    res.json({ images: {} });
+  }
+});
+
 // Get trending playlists
 app.get('/api/trending', async (req, res) => {
   try {
