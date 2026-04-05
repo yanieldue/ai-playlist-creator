@@ -148,34 +148,41 @@ const EditDiagram = ({ artistImages = {} }) => (
 );
 
 const DIAGRAM_TRACKS = [
-  { name: 'Blinding Lights', artist: 'The Weeknd', highlight: false },
-  { name: 'Levitating', artist: 'Dua Lipa', highlight: true },
+  { name: 'Levitating', artist: 'Dua Lipa' },
 ];
 
-const LikeDislikeDiagram = ({ trackImages = {} }) => (
-  <div className="tour-diagram">
-    <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-      {DIAGRAM_TRACKS.map(track => {
-        const key = `${track.name}|${track.artist}`;
-        return (
-          <div key={track.name} className="tour-diag-track-row" style={{ borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 4, background: '#d1d1d6', flexShrink: 0, overflow: 'hidden' }}>
-              {trackImages[key] && <img src={trackImages[key]} alt={track.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-            </div>
-            <div className="track-info" style={{ flex: 1, minWidth: 0 }}>
-              <div className="track-name" style={{ fontSize: 12 }}>{track.name}</div>
-              <div className="track-artist" style={{ fontSize: 11 }}>{track.artist}</div>
-            </div>
-            <div className={track.highlight ? 'tour-diag-highlight' : ''} style={{ display: 'flex', gap: 6, borderRadius: 8, padding: '2px 4px' }}>
-              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.Heart size={14} /></button>
-              <button className="track-reaction-button" style={{ pointerEvents: 'none' }}><Icons.Close size={14} /></button>
-            </div>
+const LikeDislikeDiagram = ({ trackImages = {} }) => {
+  const track = DIAGRAM_TRACKS[0];
+  const key = `${track.name}|${track.artist}`;
+  return (
+    <div className="tour-diagram">
+      <div style={{ padding: '10px 12px' }}>
+        <div className="tour-diag-track-row" style={{ borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 4, background: '#d1d1d6', flexShrink: 0, overflow: 'hidden' }}>
+            {trackImages[key] && <img src={trackImages[key]} alt={track.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
           </div>
-        );
-      })}
+          <div className="track-info" style={{ flex: 1, minWidth: 0 }}>
+            <div className="track-name" style={{ fontSize: 12 }}>{track.name}</div>
+            <div className="track-artist" style={{ fontSize: 11 }}>{track.artist}</div>
+          </div>
+          <div className="tour-diag-highlight" style={{ borderRadius: 8, padding: '2px 4px' }}>
+            <Icons.MoreHorizontal size={16} />
+          </div>
+        </div>
+        <div className="tour-dropdown-menu" style={{ borderRadius: 8, padding: '4px 0', fontSize: 12, marginLeft: 'auto', width: '70%' }}>
+          <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icons.Heart size={14} />
+            Like
+          </div>
+          <div style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icons.Close size={14} />
+            Not for me
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const RefineDiagram = () => (
   <div className="tour-diagram">
