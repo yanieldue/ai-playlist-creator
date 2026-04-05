@@ -182,8 +182,12 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
         Secure payments · Cancel anytime · No hidden fees
       </p>
 
-      {isOnboarding && (
+      {isOnboarding ? (
         <button className="pricing-skip-btn" onClick={() => { mp.track('Continued with Free'); onContinueFree(); }}>
+          Continue with Free
+        </button>
+      ) : !alreadyPaid && (
+        <button className="pricing-skip-btn" onClick={() => navigate('/')}>
           Continue with Free
         </button>
       )}
