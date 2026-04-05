@@ -910,11 +910,6 @@ IMPORTANT: Pay close attention to the original request and description to unders
                       </div>
                     )}
                   </div>
-                  {!playlist.isReadOnly && (
-                    <span className="expand-icon" onClick={(e) => e.stopPropagation()}>
-                      {expandedPlaylistId === playlist.playlistId ? <Icons.ChevronDown size={16} /> : <Icons.ChevronRight size={16} />}
-                    </span>
-                  )}
                 </div>
                 <div className="playlist-header-content">
                   {playlist.image ? (
