@@ -68,7 +68,7 @@ const NavTabsDiagram = ({ artistImages = {} }) => (
         <button className="nav-tab-item active tour-diag-highlight" style={{ pointerEvents: 'none', fontSize: 13, borderRadius: 8, padding: '4px 12px' }}>My Playlists</button>
       </div>
       {[['Kendrick Lamar', 'Summer Vibes'], ['SZA', 'Late Night Mix']].map(([artist, name], i) => (
-        <div key={i} className="playlist-card" style={{ marginBottom: 8, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div key={i} className="playlist-card tour-playlist-card" style={{ marginBottom: 8, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <PlaylistCover img={artistImages[artist]} />
           <div>
             <div style={{ fontSize: 12, fontWeight: 600 }}>{name}</div>
@@ -89,7 +89,7 @@ const ImportDiagram = ({ artistImages = {} }) => (
           Import
         </button>
       </div>
-      <div className="playlist-card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="playlist-card tour-playlist-card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <PlaylistCover img={artistImages['Drake']} />
         <div>
           <div style={{ fontSize: 12, fontWeight: 600 }}>Rap Favorites</div>
@@ -103,7 +103,7 @@ const ImportDiagram = ({ artistImages = {} }) => (
 const EditDiagram = ({ artistImages = {} }) => (
   <div className="tour-diagram">
     <div style={{ padding: '12px' }}>
-      <div className="playlist-card" style={{ padding: '12px 14px' }}>
+      <div className="playlist-card tour-playlist-card" style={{ padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <PlaylistCover img={artistImages['Rihanna']} size={40} />
           <div style={{ flex: 1 }}>
