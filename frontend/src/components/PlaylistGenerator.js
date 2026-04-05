@@ -41,6 +41,7 @@ const PlaylistGenerator = () => {
   const [userId, setUserId] = useState(() => localStorage.getItem('userId') || null);
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('userId'));
   const [inSignupFlow, setInSignupFlow] = useState(false);
+  const [showPlatformConnect, setShowPlatformConnect] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [loading, setLoading] = useState(false);
   const [generatedPlaylist, setGeneratedPlaylist] = useState(null);
@@ -2551,19 +2552,30 @@ const PlaylistGenerator = () => {
 
                 {/* No platform connected */}
                 {!spotifyUserId && !appleMusicUserId ? (
+                  showPlatformConnect ? (
+                    <PlatformSelection
+                      email={localStorage.getItem('userEmail')}
+                      authToken={localStorage.getItem('authToken')}
+                      onComplete={() => {
+                        setShowPlatformConnect(false);
+                        window.location.reload();
+                      }}
+                    />
+                  ) : (
                   <div className="horizontal-scroll-section">
                     <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                       <h3 style={{ fontSize: '18px', color: '#ffffff', marginBottom: '12px', fontWeight: '600' }}>
-                        Get Started with AI Playlist Creator
+                        Get Started with Fins
                       </h3>
                       <p style={{ color: '#8e8e93', fontSize: '14px', marginBottom: '24px', lineHeight: '1.6' }}>
                         Connect your favorite music platform to discover personalized playlists.
                       </p>
-                      <button onClick={() => setActiveTab('account')} className="connect-platform-btn">
+                      <button onClick={() => setShowPlatformConnect(true)} className="connect-platform-btn">
                         Connect a Platform
                       </button>
                     </div>
                   </div>
+                  )
                 ) : loadingHomeContent && topArtists.length === 0 && draftPlaylists.length === 0 ? (
                   <div className="playlists-loading">
                     <div className="playlists-loading-spinner" />

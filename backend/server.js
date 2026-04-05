@@ -8000,6 +8000,13 @@ Return ONLY valid JSON:
             // Divergence check: reject if SC source artist is not the Spotify primary
             // (e.g. ISRC for "Bon Appétit" resolves to Katy Perry ft. Migos when SC source is Migos)
             const isrcTrack = items[0];
+            // If we know the expected Spotify artist ID (from DB), use it for an exact ID check
+            // to catch same-name collisions (e.g. two different "Sonya" artists on Spotify)
+            const _isrcKnownId = (opts.uuidSpotifyIdMap || new Map()).get(song.artistUuid) || null;
+            if (_isrcKnownId && isrcTrack.artists?.[0]?.id !== _isrcKnownId) {
+              console.log(`⚠️  [ISRC-ARTIST-ID-MISMATCH] "${isrcTrack.name}" — expected Spotify artist ID ${_isrcKnownId} but ISRC resolved to "${isrcTrack.artists?.[0]?.name}" (${isrcTrack.artists?.[0]?.id}) — falling through to text search`);
+              // fall through to text search below
+            } else {
             const isrcPrimary = (isrcTrack.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
             const srcTokens = artistName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
             const srcNorm = artistName.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -8016,6 +8023,7 @@ Return ONLY valid JSON:
             } else {
               console.log(`🔑 [ISRC] ${fLabel}`);
               return { track: isrcTrack, usedExact: true };
+            }
             }
           } else {
             console.log(`⚠️  [ISRC-MISS] ${fLabel} — ISRC ${song.isrc} returned no results, trying fallback`);
@@ -8366,12 +8374,38 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
         }
       }
 
-      // ── UUID → Spotify ID map: used to verify artist identity in text search ──
+      // ── UUID → Spotify ID map: used to verify artist identity in ISRC + text search ──
       // Batch-fetch from artist_details once per generation so all three search paths
       // (Phase B, supplement, gap fill) can do ID-based artist matching instead of
-      // the loose name-prefix check that caused false positives (e.g. "Mustard" → "Mustard Seed Faith").
+      // the loose name-prefix check that caused false positives (e.g. "Mustard" → "Mustard Seed Faith",
+      // or two different "Sonya" artists on Spotify).
       const _allPoolUuids = [...new Set(vibePassedTracks.map(t => t.artistUuid).filter(Boolean))];
       _uuidToSpotifyId = await db.getArtistSpotifyIdsByUuids(_allPoolUuids).catch(() => new Map());
+
+      // For pool artists missing from DB, resolve Spotify IDs via search.
+      // This prevents same-name collisions (e.g. ISRC for SC "Sonya" resolving to a different Spotify "Sonya").
+      const _poolArtistsByUuid = new Map(); // uuid → artist name (for artists missing Spotify ID)
+      for (const t of vibePassedTracks) {
+        if (t.artistUuid && !_uuidToSpotifyId.has(t.artistUuid) && !_poolArtistsByUuid.has(t.artistUuid)) {
+          _poolArtistsByUuid.set(t.artistUuid, t.artistName || t.artist || '');
+        }
+      }
+      if (_poolArtistsByUuid.size > 0 && platform === 'spotify') {
+        const _missingEntries = [..._poolArtistsByUuid.entries()];
+        const BATCH = 5;
+        for (let i = 0; i < _missingEntries.length; i += BATCH) {
+          const batch = _missingEntries.slice(i, i + BATCH);
+          await Promise.all(batch.map(async ([uuid, name]) => {
+            const data = await fetchSpotifyArtistData(name);
+            if (data?.id) {
+              _uuidToSpotifyId.set(uuid, data.id);
+              // Persist for future generations
+              db.upsertArtistDetail(uuid, { name, spotifyId: data.id }).catch(() => {});
+            }
+          }));
+        }
+        console.log(`🔗 Spotify artist ID resolution: ${_uuidToSpotifyId.size}/${_allPoolUuids.length} pool artists have Spotify IDs`);
+      }
 
       // ── Phase A: pre-fetch SoundCharts platform IDs for vibe-passed songs ──
       // Cap at songCount×3 (min 60) — SC top_songs returns no ISRCs, so every song needs a serial
@@ -8639,6 +8673,13 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
               // resolved to a feature version (e.g. "Bon Appétit" ISRC → Katy Perry ft. Migos
               // when SC source is Migos). Fall through to text search to find the right version.
               const isrcTrack = items[0];
+              // If we know the expected Spotify artist ID (from DB), use it for an exact ID check
+              // to catch same-name collisions (e.g. two different "Sonya" artists on Spotify)
+              const _isrcKnownId2 = _uuidToSpotifyId.get(recommendedSong.artistUuid) || null;
+              if (_isrcKnownId2 && isrcTrack.artists?.[0]?.id !== _isrcKnownId2) {
+                console.log(`⚠️  [ISRC-ARTIST-ID-MISMATCH] "${isrcTrack.name}" — expected Spotify artist ID ${_isrcKnownId2} but ISRC resolved to "${isrcTrack.artists?.[0]?.name}" (${isrcTrack.artists?.[0]?.id}) — falling through to text search`);
+                // fall through to text search below
+              } else {
               const isrcPrimary = (isrcTrack.artists?.[0]?.name || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
               const isrcSourceTokens = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(tok => tok.length > 2);
               const isrcSourceNorm = recommendedSong.artist.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -8655,6 +8696,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
               } else {
                 console.log(`🔑 [ISRC] ${label}`);
                 return { track: isrcTrack, usedExact: true };
+              }
               }
             } else {
               console.log(`⚠️  [ISRC-MISS] ${label} — ISRC ${recommendedSong.isrc} returned no results, trying fallback`);
