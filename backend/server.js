@@ -13596,6 +13596,10 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     const stripe = getStripe();
     const userRecord = await db.getUser(email);
     let stripeCustomerId = userRecord?.stripeCustomerId;
+    if (stripeCustomerId) {
+      try { await stripe.customers.retrieve(stripeCustomerId); }
+      catch { stripeCustomerId = null; }
+    }
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({ email, metadata: { email } });
       stripeCustomerId = customer.id;
@@ -13660,6 +13664,10 @@ app.post('/api/stripe/create-subscription', async (req, res) => {
     const stripe = getStripe();
     const userRecord = await db.getUser(email);
     let stripeCustomerId = userRecord?.stripeCustomerId;
+    if (stripeCustomerId) {
+      try { await stripe.customers.retrieve(stripeCustomerId); }
+      catch { stripeCustomerId = null; }
+    }
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({ email, metadata: { email } });
       stripeCustomerId = customer.id;
