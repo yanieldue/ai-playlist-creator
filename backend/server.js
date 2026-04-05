@@ -8156,7 +8156,7 @@ Return ONLY valid JSON:
 
         // Step 1: CATALOG-OVERRIDE filter (cheap dictionary lookup, no LLM)
         // Strip feat. clause from track title so 'khalid::location' matches 'location (feat. little simz)'
-        const _normTrackTitle = (title) => (title || '').toLowerCase().replace(/\s*[\(\[]feat\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]ft\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]featuring.*?[\)\]]/i, '').trim();
+        const _normTrackTitle = (title) => (title || '').toLowerCase().replace(/\s*[\(\[]feat\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]ft\.?.*?[\)\]]/i, '').replace(/\s*[\(\[]featuring.*?[\)\]]/i, '').replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim();
         let _scPoolFiltered = recommendedTracks.filter(song => {
           const key = `${(song.artist || '').toLowerCase()}::${_normTrackTitle(song.track)}`;
           const override = TRACK_CONTEXT_OVERRIDES[key];
@@ -8255,6 +8255,9 @@ Candidates:
 ${_scTrackLines.join('\n')}
 
 Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
+            }, {
+              role: 'assistant',
+              content: '['
             }]
           });
           // Retry with exponential backoff on overloaded errors
@@ -8274,10 +8277,14 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             }
           }
 
-          const _scVibeContent = _scVibeResp.content[0].text.trim()
+          const _scVibeContent = ('[' + _scVibeResp.content[0].text).trim()
             .replace(/^```json\n?/, '').replace(/\n?```$/, '')
             .replace(/^```\n?/, '').replace(/\n?```$/, '');
-          const _scKeepMatch = _scVibeContent.match(/\[[\d,\s]*\]/);
+          // Match JSON arrays with numbers — allow newlines, spaces, trailing commas; pick the longest match
+          const _scAllMatches = [..._scVibeContent.matchAll(/\[[\d,\s\n\r]*\]/g)];
+          const _scKeepMatch = _scAllMatches.length > 0
+            ? _scAllMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
+            : null;
           if (_scKeepMatch) {
             const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
             vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
@@ -8298,7 +8305,10 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
               const _retryContent = _retryResp.content[0].text.trim()
                 .replace(/^```json\n?/, '').replace(/\n?```$/, '')
                 .replace(/^```\n?/, '').replace(/\n?```$/, '');
-              const _retryMatch = _retryContent.match(/\[[\d,\s]*\]/);
+              const _retryAllMatches = [..._retryContent.matchAll(/\[[\d,\s\n\r]*\]/g)];
+              const _retryMatch = _retryAllMatches.length > 0
+                ? _retryAllMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
+                : null;
               if (_retryMatch) {
                 const _retryIndices = JSON.parse(_retryMatch[0]);
                 vibePassedTracks = _retryIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
@@ -8328,7 +8338,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
         if (_uniqueArtists.length > 0) {
           try {
             const _genderResp = await anthropic.messages.create({
-              model: 'claude-sonnet-4-6-20250514',
+              model: 'claude-sonnet-4-6',
               max_tokens: 1024,
               messages: [{
                 role: 'user',
@@ -8878,7 +8888,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
                   artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
                 }
                 // TRACK_CONTEXT_OVERRIDES
-                const _contOvKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                const _contOvKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase().replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim()}`;
                 const _contOverride = TRACK_CONTEXT_OVERRIDES[_contOvKey];
                 if (_contOverride) {
                   const _contMoodOk = !genreData.mood || _contOverride.requiredMoods.includes(genreData.mood);
@@ -9006,7 +9016,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
                     artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
                   }
                   // Apply catalog context overrides before accepting supplement track
-                  const _suppKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                  const _suppKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase().replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim()}`;
                   const _suppOverride = TRACK_CONTEXT_OVERRIDES[_suppKey];
                   if (_suppOverride) {
                     const _suppMoodOk = !genreData.mood || _suppOverride.requiredMoods.includes(genreData.mood);
@@ -9239,7 +9249,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                     artistTrackCount.set(ak, (artistTrackCount.get(ak) || 0) + 1);
                   }
                   // Apply catalog context overrides before accepting gap fill track
-                  const _gfKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+                  const _gfKey = `${(track.artists?.[0]?.name || track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase().replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim()}`;
                   const _gfOverride = TRACK_CONTEXT_OVERRIDES[_gfKey];
                   if (_gfOverride) {
                     const _gfMoodOk = !genreData.mood || _gfOverride.requiredMoods.includes(genreData.mood);
@@ -9875,7 +9885,7 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
       const _ctxUseCase = (genreData.contextClues?.useCase || '').toLowerCase();
       const beforeOverride = selectedTracks.length;
       selectedTracks = selectedTracks.filter(track => {
-        const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase()}`;
+        const key = `${(track.artist || '').toLowerCase()}::${(track.name || '').toLowerCase().replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim()}`;
         const override = TRACK_CONTEXT_OVERRIDES[key];
         if (!override) return true;
         const moodOk = !_ctxMood || override.requiredMoods.includes(_ctxMood);
@@ -10111,7 +10121,7 @@ DO NOT include any text outside the JSON.`;
               if (vibeCheckedIds.has(t.id)) return false;
               // Apply catalog context overrides — override-filtered tracks are not in vibeCheckedIds
               // so they would otherwise re-enter here from the full tracksForSelection pool.
-              const _bfKey = `${(t.artist || '').toLowerCase()}::${(t.name || '').toLowerCase()}`;
+              const _bfKey = `${(t.artist || '').toLowerCase()}::${(t.name || '').toLowerCase().replace(/\s+[-–—]\s+(remaster(ed)?|.*remaster(ed)?)\s*$/i, '').replace(/\s*[\(\[](remaster(ed)?|.*remaster(ed)?|deluxe.*|bonus.*|anniversary.*)[\)\]]\s*$/i, '').trim()}`;
               const _bfOverride = TRACK_CONTEXT_OVERRIDES[_bfKey];
               if (_bfOverride) {
                 const _bfMoodOk = !genreData.mood || _bfOverride.requiredMoods.includes(genreData.mood);
