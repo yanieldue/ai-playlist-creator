@@ -227,7 +227,7 @@ const AutoRefreshDiagram = () => (
 
 const STEPS = [
   {
-    emoji: '👋',
+    emoji: null,
     title: 'Welcome to Fins!',
     description: "Let's take a quick tour to help you get started. We'll show you everything you need to create amazing playlists.",
     diagram: null,
@@ -292,7 +292,7 @@ const STEPS = [
     diagram: <AutoRefreshDiagram />,
   },
   {
-    emoji: '🚀',
+    emoji: null,
     title: "You're All Set!",
     description: 'Connect Spotify or Apple Music from the profile menu to sync your playlists. Explore artist discovery, import your existing playlists, and start creating!',
     diagram: null,
