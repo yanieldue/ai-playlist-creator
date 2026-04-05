@@ -70,7 +70,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
   return (
     <div className="pricing-page">
       {!isOnboarding && (
-        <button className="pricing-back-btn" onClick={() => navigate(-1)}>
+        <button className="pricing-back-btn" onClick={() => navigate('/')}>
           <Icons.ChevronLeft size={18} /> Back
         </button>
       )}
