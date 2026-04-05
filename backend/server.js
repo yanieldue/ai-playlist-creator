@@ -8254,10 +8254,7 @@ ${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (match 
 Candidates:
 ${_scTrackLines.join('\n')}
 
-Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
-            }, {
-              role: 'assistant',
-              content: '['
+Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no commentary — just the array. Example: [1, 3, 5, ...]`
             }]
           });
           // Retry with exponential backoff on overloaded errors
@@ -8277,7 +8274,7 @@ Return ONLY a JSON array of 1-based indices. Example: [1, 3, 5, ...]`
             }
           }
 
-          const _scVibeContent = ('[' + _scVibeResp.content[0].text).trim()
+          const _scVibeContent = _scVibeResp.content[0].text.trim()
             .replace(/^```json\n?/, '').replace(/\n?```$/, '')
             .replace(/^```\n?/, '').replace(/\n?```$/, '');
           // Match JSON arrays with numbers — allow newlines, spaces, trailing commas; pick the longest match
