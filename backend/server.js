@@ -8750,6 +8750,18 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
           ? new Set(existingPlaylistData.tracks.map(t => (t.artist || '').toLowerCase()))
           : null;
 
+        // When platform is Apple Music, set up Apple Music API once for ISRC lookups
+        // so Spotify direct injection tracks get converted to Apple Music format.
+        let appleMusicApiForDirect = null;
+        let storefrontForDirect = 'us';
+        let platformSvcForDirect = null;
+        if (platform === 'apple') {
+          const devToken = generateAppleMusicToken();
+          if (devToken) appleMusicApiForDirect = new AppleMusicService(devToken);
+          storefrontForDirect = tokens?.storefront || 'us';
+          platformSvcForDirect = new PlatformService();
+        }
+
         for (const artistLower of nosimilarWithSpotify) {
           if (_isRefreshContext && _playlistArtistSet && !_playlistArtistSet.has(artistLower)) {
             console.log(`🔒 [SPOTIFY-DIRECT] Skipping "${artistLower}" in refresh context — reference artist, not in playlist`);
@@ -8763,13 +8775,48 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
             const topTracksRes = await spotifyForTopTracks.getArtistTopTracks(spotifyArtistId, 'US');
             const topTracks = (topTracksRes.body.tracks || []).slice(0, 5); // cap at 5 to preserve pool diversity
             console.log(`  → using ${topTracks.length} top tracks for "${artistDisplay}"`);
+
             for (const t of topTracks) {
+              const isrc = t.external_ids?.isrc || null;
               const syntheticSong = {
                 track: t.name, artist: artistDisplay,
-                isrc: t.external_ids?.isrc || null,
+                isrc,
                 releaseDate: t.album?.release_date || null,
               };
-              await validateAndAdd(t, syntheticSong, platform);
+
+              if (platform === 'apple' && appleMusicApiForDirect) {
+                // Convert Spotify track to Apple Music track via ISRC
+                let appleTrack = null;
+                if (isrc) {
+                  try {
+                    appleTrack = await appleMusicApiForDirect.lookupByIsrc(isrc, storefrontForDirect);
+                  } catch (e) {
+                    console.log(`⚠️  [SPOTIFY-DIRECT] ISRC lookup failed for "${t.name}" (${isrc}): ${e.message}`);
+                  }
+                }
+                if (!appleTrack) {
+                  // Fallback: text search on Apple Music
+                  try {
+                    const items = await platformSvcForDirect.searchTracks(null, `${t.name} ${artistDisplay}`, tokens, storefrontForDirect, 5);
+                    if (items?.length > 0) {
+                      const artistNorm = artistDisplay.toLowerCase().replace(/[^a-z0-9]/g, '');
+                      appleTrack = items.find(item => {
+                        const foundNorm = (item.artists?.[0]?.name || item.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return foundNorm === artistNorm || foundNorm.includes(artistNorm) || artistNorm.includes(foundNorm);
+                      }) || null;
+                    }
+                  } catch (e) {
+                    console.log(`⚠️  [SPOTIFY-DIRECT] Apple Music search failed for "${t.name}": ${e.message}`);
+                  }
+                }
+                if (appleTrack) {
+                  await validateAndAdd(appleTrack, syntheticSong, platform);
+                } else {
+                  console.log(`✗ [SPOTIFY-DIRECT] Could not find Apple Music equivalent for "${t.name}" by ${artistDisplay}`);
+                }
+              } else {
+                await validateAndAdd(t, syntheticSong, platform);
+              }
             }
           } catch (err) {
             console.log(`⚠️  [SPOTIFY-DIRECT] Failed for "${artistDisplay}": ${err.message}`);
@@ -8802,9 +8849,11 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
         return String(err);
       };
 
-      // Vibe check now runs on the SC pool before platform lookup, so no buffer needed here.
-      const _earlyStopTarget = songCount;
-      console.log(`🎯 Track collection target: ${_earlyStopTarget} (vibe check already applied to SC pool)`);
+      // Collect a small buffer beyond songCount to account for post-collection trimming
+      // (final dedup removes title variants, artist diversity enforcement caps per-artist tracks).
+      // Without this buffer, the pipeline returns fewer tracks than requested (e.g. 26 instead of 30).
+      const _earlyStopTarget = songCount + Math.ceil(songCount * 0.2);
+      console.log(`🎯 Track collection target: ${_earlyStopTarget} (includes 20% buffer for post-collection trimming)`);
 
       // Tracks the next unprocessed index in recommendedTracks after Phase B stops.
       // Pool continuation (after vibe check) resumes from here instead of going to supplement.
@@ -9026,9 +9075,10 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
         // Vibe check and CATALOG-OVERRIDE already applied to SC pool before platform lookup.
 
 
-        // Return the final tracks
-        selectedTracks = selectedTracks.slice(0, songCount);
-        console.log(`🎯 Returning ${selectedTracks.length} tracks`);
+        // Trim to buffer size — supplement/gap fill use _earlyStopTarget too so they
+        // top up to the buffer, giving diversity enforcement room to trim without going short.
+        selectedTracks = selectedTracks.slice(0, _earlyStopTarget);
+        console.log(`🎯 Pre-trim pool: ${selectedTracks.length} tracks (target: ${songCount}, buffer: ${_earlyStopTarget})`);
 
         // Only take the early return if we have enough tracks — otherwise fall through to fallback.
         if (selectedTracks.length >= Math.min(songCount, 15)) {
@@ -9052,8 +9102,8 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
           // SC pool before falling back to supplement. This keeps all original energy/valence/genre
           // filters intact and avoids pulling from unrelated artist catalogs (the source of leakage
           // like "Rollin" by Calvin Harris entering via Khalid's catalog).
-          if (selectedTracks.length < songCount && _phaseBStopAt < vibePassedTracks.length) {
-            const _contNeeded = songCount - selectedTracks.length;
+          if (selectedTracks.length < _earlyStopTarget && _phaseBStopAt < vibePassedTracks.length) {
+            const _contNeeded = _earlyStopTarget - selectedTracks.length;
             // Sort remaining pool: energy-data songs first (same as initial sort)
             const _contPool = vibePassedTracks.slice(_phaseBStopAt)
               .sort((a, b) => (a._scEnergy != null ? 0 : 1) - (b._scEnergy != null ? 0 : 1));
@@ -9064,7 +9114,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
             const _contStorefront = tokens?.storefront || 'us';
             const _contPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
-            for (let ci = 0; ci < _contPool.length && selectedTracks.length < songCount; ci += BATCH_SIZE) {
+            for (let ci = 0; ci < _contPool.length && selectedTracks.length < _earlyStopTarget; ci += BATCH_SIZE) {
               const batch = _contPool.slice(ci, ci + BATCH_SIZE).filter(song => song.name?.trim());
               const batchResults = await Promise.all(batch.map(song =>
                 withSearchRetry(
@@ -9075,7 +9125,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
                   .catch(() => ({ song, result: null }))
               ));
               for (const { song, result } of batchResults) {
-                if (selectedTracks.length >= songCount) break;
+                if (selectedTracks.length >= _earlyStopTarget) break;
                 if (!result) continue;
                 const { track } = result;
                 if (seenTrackIds.has(track.id)) continue;
@@ -9127,9 +9177,9 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
 
           // Supplement with more songs if short of target.
           const _preSupplementCount = selectedTracks.length;
-          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
-            const needed = songCount - selectedTracks.length;
-            console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${songCount}`);
+          if (selectedTracks.length < _earlyStopTarget && process.env.SOUNDCHARTS_APP_ID) {
+            const needed = _earlyStopTarget - selectedTracks.length;
+            console.log(`🔁 Supplementing: need ${needed} more tracks to reach ${_earlyStopTarget}`);
             try {
               // Re-run artist-similarity discovery with relaxed constraints (no mood/theme filters)
               // to pull in more songs that weren't surfaced by the stricter primary pass.
@@ -9185,7 +9235,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
               const suppPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
               // Phase B: parallel batches of 10
-              for (let si = 0; si < supplementPool.length && selectedTracks.length < songCount; si += BATCH_SIZE) {
+              for (let si = 0; si < supplementPool.length && selectedTracks.length < _earlyStopTarget; si += BATCH_SIZE) {
                 const batch = supplementPool.slice(si, si + BATCH_SIZE).filter(song => {
                   if (!song.name?.trim()) return false;
                   return true;
@@ -9196,7 +9246,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
                     .catch(() => ({ song, result: null }))
                 ));
                 for (const { song, result } of batchResults) {
-                  if (selectedTracks.length >= songCount) break;
+                  if (selectedTracks.length >= _earlyStopTarget) break;
                   if (!result) continue;
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
@@ -9380,8 +9430,8 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           // _gfUseCase hoisted here so the CATALOG-OVERRIDE/GAP check inside the loop can reference it
           const _gfUseCase = genreData.contextClues.useCase;
           const _preGapFillCount = selectedTracks.length;
-          if (selectedTracks.length < songCount && process.env.SOUNDCHARTS_APP_ID) {
-            const gapNeeded = songCount - selectedTracks.length;
+          if (selectedTracks.length < _earlyStopTarget && process.env.SOUNDCHARTS_APP_ID) {
+            const gapNeeded = _earlyStopTarget - selectedTracks.length;
             console.log(`🔄 Gap fill: need ${gapNeeded} more tracks from top_songs`);
             try {
               // Seed from artists already in the playlist — same logic as supplement.
@@ -9421,7 +9471,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               const gfAppleApi = gfAppleDevToken ? new AppleMusicService(gfAppleDevToken) : null;
               const gfPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
-              for (let gi = 0; gi < gapPool.length && selectedTracks.length < songCount; gi += BATCH_SIZE) {
+              for (let gi = 0; gi < gapPool.length && selectedTracks.length < _earlyStopTarget; gi += BATCH_SIZE) {
                 const batch = gapPool.slice(gi, gi + BATCH_SIZE).filter(s => s.name?.trim());
                 const results = await Promise.all(batch.map(song =>
                   findTrackOnPlatform(song, { storefront: gfStorefront, appleMusicApi: gfAppleApi, platformSvc: gfPlatformSvc, uuidSpotifyIdMap: _uuidToSpotifyId })
@@ -9429,7 +9479,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
                     .catch(() => ({ song, result: null }))
                 ));
                 for (const { result } of results) {
-                  if (selectedTracks.length >= songCount) break;
+                  if (selectedTracks.length >= _earlyStopTarget) break;
                   if (!result) continue;
                   const { track } = result;
                   if (seenTrackIds.has(track.id)) continue;
@@ -9596,6 +9646,10 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
               selectedTracks = _divLimited;
             }
           }
+
+          // Final trim to requested song count (buffer tracks served their purpose)
+          selectedTracks = selectedTracks.slice(0, songCount);
+          console.log(`🎯 Final track count: ${selectedTracks.length}/${songCount}`);
 
           // Update song history and playlist.tracks so future refreshes anchor to the new track list.
           // Skip for internal auto-update calls — processPlaylistUpdate's syncAfterPush handles it.

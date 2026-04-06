@@ -712,12 +712,14 @@ export default function Generate() {
 
       {phase === 'tracks' && generatedPlaylist && (
         <>
-          <div className="generate-settings-bar">
-            <button className="generate-settings-chip" onClick={() => { mp.track('Auto Update Sheet Opened'); setUpdateSheetOpen(true); }}>
-              <Icons.Refresh size={13} />
-              {updateFrequency === 'never' ? 'Set updates' : `${updateFrequency.charAt(0).toUpperCase() + updateFrequency.slice(1)} updates`}
-            </button>
-          </div>
+          {isPaid() && activePlatform === 'spotify' && (
+            <div className="generate-settings-bar">
+              <button className="generate-settings-chip" onClick={() => { mp.track('Auto Update Sheet Opened'); setUpdateSheetOpen(true); }}>
+                <Icons.Refresh size={13} />
+                {updateFrequency === 'never' ? 'Auto-update' : `${updateFrequency.charAt(0).toUpperCase() + updateFrequency.slice(1)} updates`}
+              </button>
+            </div>
+          )}
           <div className="generate-footer">
             <button className="generate-refine-btn" onClick={() => setPhase('refine')}>
               ✦ Refine
