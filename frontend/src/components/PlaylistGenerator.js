@@ -138,7 +138,10 @@ const PlaylistGenerator = () => {
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
   const [spotifyUserId, setSpotifyUserId] = useState(localStorage.getItem('spotifyUserId'));
   const [appleMusicUserId, setAppleMusicUserId] = useState(localStorage.getItem('appleMusicUserId'));
-  const [activePlatform, setActivePlatform] = useState(null); // 'spotify', 'apple', or 'spotify_manual'
+  const [activePlatform, setActivePlatform] = useState(() => {
+    const stored = localStorage.getItem('activePlatform');
+    return stored === 'spotify_manual' ? 'spotify_manual' : null;
+  }); // 'spotify', 'apple', or 'spotify_manual'
 
   // Artist settings modal
   const [showArtistSettingsModal, setShowArtistSettingsModal] = useState(false);
