@@ -2682,7 +2682,7 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
       if (claudeNorms.length > 0) {
         // Only include genres from seeds that have at least one genre overlapping with Claude's
         const consistentSeeds = seedInfos.filter(s => {
-          if (!s.genres || s.genres.length === 0) return false; // no SC genre data — neutral
+          if (!s.genres || s.genres.length === 0) return true; // no SC genre data — treat as consistent (no evidence of mismatch)
           const sNorms = s.genres.map(g => normalizeGenreEarly(g));
           return sNorms.some(sg => claudeNorms.some(cg => sg === cg || sg.startsWith(cg) || cg.startsWith(sg)));
         });
@@ -2776,12 +2776,15 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         ? [_primaryNorm, ..._genreFamilies[_primaryNorm]]
         : null;
 
-      if (allGenreBearingInconsistent && !hasConfirmedSeeds) {
+      // Genre-less seeds (no SC genre data) are NOT inconsistent — they should still be traversed
+      const hasGenrelessSeeds = seedInfos.some(s => !s.genres || s.genres.length === 0);
+      if (allGenreBearingInconsistent && !hasConfirmedSeeds && !hasGenrelessSeeds) {
         console.log(`⛔ Every genre-bearing seed is genre-inconsistent — skipping SC graph traversal entirely. Supplement flow will find correct artists.`);
         allArtistInfos = [];
       } else {
         if (allGenreBearingInconsistent) {
-          console.log(`⚠️  All genre-bearing seeds inconsistent but confirmed reference artist(s) present — traversing their similarity graph with Claude's genre filter.`);
+          const reason = hasConfirmedSeeds ? 'confirmed reference artist(s) present' : 'genre-less seeds present (no evidence of mismatch)';
+          console.log(`⚠️  All genre-bearing seeds inconsistent but ${reason} — traversing their similarity graph with Claude's genre filter.`);
         }
         for (const { name: simName, uuid: simUuid } of similarNames) {
         try {
