@@ -6298,7 +6298,7 @@ Rules:
 - If user says "soul" → primaryGenre: "soul" (subgenre)
 - If user says "trap" → primaryGenre: "hip-hop & rap" (subgenre), subgenre: null (trap is not a standalone SC slug)
 - Always prefer the most specific matching slug. Use a subgenre slug when it exists, genre slug as fallback.
-- ALWAYS set primaryGenre — even for genre-agnostic prompts. When the user doesn't name a genre, pick the broadest genre that fits. Prefer top-level genres with large catalogs (pop 13M, rock 9.8M, alternative 6.9M, hip hop 13M, electro 10.3M, r&b 3.4M, folk 3.2M) — the scMoods, scThemes, and audio filters will narrow the results to the right vibe. Subgenres are smaller and more niche than their names suggest (e.g. "chill out/trip-hop/lounge" is 260K trip-hop songs, NOT generic chill; "dance" is 6.5M EDM, NOT general danceable music). Only set null if truly impossible to determine.
+- ALWAYS set primaryGenre — even for genre-agnostic prompts. When the user doesn't name a genre, pick the genre that best matches the described mood, setting, and intent — NOT necessarily the largest catalog. A dinner party prompt should map to jazz or r&b, not pop. A cinematic prompt should map to soundtrack or classical, not alternative. Trust the context clues. Subgenres are smaller and more niche than their names suggest (e.g. "chill out/trip-hop/lounge" is 260K trip-hop songs, NOT generic chill; "dance" is 6.5M EDM, NOT general danceable music). Only set null if truly impossible to determine.
 - USE CASE → GENRE OVERRIDES (when user did NOT name a genre):
   * useCase "workout" / "running" / "gym" → primaryGenre: "pop" — workout playlists need cross-genre energy (pop, hip hop, rock, electronic all have high-energy songs). The "pop" catalog is broadest (13M) and the energy/valence/danceability filters will select only high-energy tracks. Do NOT pick "electro" — it locks out hip hop bangers, rock anthems, and pop hits that are essential for running/gym playlists.
   * useCase "focus" with "instrumental" / "no lyrics" → primaryGenre: "electro" — SC's "instrumental" genre (300K songs) is dominated by jazz with complex solos and rhythmic structures that are distracting, not focus-appropriate. Use "electro" (10.3M) with a high instrumentalness audio filter (≥0.8) to find ambient, neoclassical, and electronic instrumentals suited for deep work. Add secondaryGenres: ["classical", "instrumental"] so the mood/theme filters can still pull in neoclassical tracks.
@@ -8216,6 +8216,9 @@ ${(() => {
   if (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any') _ctx.push(`Vocal preference: ${genreData.artistConstraints.vocalGender}`);
   if (genreData.trackConstraints?.artistDiversity?.maxPerArtist) _ctx.push(`Max per artist: ${genreData.trackConstraints.artistDiversity.maxPerArtist}`);
   if (genreData.trackConstraints?.popularity?.preference) _ctx.push(`Popularity: ${genreData.trackConstraints.popularity.preference}`);
+  const _famHits = genreData.discoveryBalance?.familiarityRatio?.hits;
+  const _famDeep = genreData.discoveryBalance?.familiarityRatio?.deepCuts;
+  if (_famHits && _famDeep) _ctx.push(`Familiarity balance: ${Math.round(_famHits * 100)}% widely-known hits, ${Math.round(_famDeep * 100)}% deep cuts — prioritize songs most people would recognize`);
   return _ctx.length > 0 ? `\nPlaylist context:\n${_ctx.map(c => `- ${c}`).join('\n')}\n` : '';
 })()}
 ${(() => {
