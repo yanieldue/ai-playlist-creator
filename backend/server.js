@@ -8219,6 +8219,8 @@ ${(() => {
   const _famHits = genreData.discoveryBalance?.familiarityRatio?.hits;
   const _famDeep = genreData.discoveryBalance?.familiarityRatio?.deepCuts;
   if (_famHits && _famDeep) _ctx.push(`Familiarity balance: ${Math.round(_famHits * 100)}% widely-known hits, ${Math.round(_famDeep * 100)}% deep cuts — prioritize songs most people would recognize`);
+  if (genreData.genreAccessibility === 'curious') _ctx.push(`Genre accessibility: curious — the user already knows the obvious names and wants to go deeper. Deprioritize the most ubiquitous, household-name tracks in favor of acclaimed but less obvious picks. Mix some recognizable names with artists one tier deeper.`);
+  if (genreData.genreAccessibility === 'enthusiast') _ctx.push(`Genre accessibility: enthusiast — the user is a deep listener who knows the classics. Prioritize deep cuts, obscure artists, and non-obvious picks. Avoid the tracks that appear on every "best of" playlist.`);
   return _ctx.length > 0 ? `\nPlaylist context:\n${_ctx.map(c => `- ${c}`).join('\n')}\n` : '';
 })()}
 ${(() => {
@@ -8232,7 +8234,7 @@ ${(() => {
     heartbreak: 'USE CASE: HEARTBREAK/SAD — Every song should resonate with emotional pain, loss, or longing. Reject: upbeat, happy, or motivational tracks. Keep: melancholic, vulnerable, emotionally raw songs.',
     chill: 'USE CASE: CHILL/RELAXATION — Songs should be laid-back and easy-going. Reject: high-energy, aggressive, or attention-demanding tracks. Keep: mellow, smooth, and relaxed-feeling music.',
     morning: 'USE CASE: MORNING/GETTING READY — Songs should feel fresh, optimistic, and gently energizing. Reject: dark, heavy, aggressive, or sad songs. Keep: bright, warm, positive tracks that ease into the day.',
-    background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant and unobtrusive. Reject: loud, attention-grabbing, or emotionally intense tracks. Keep: smooth, conversational-volume-friendly music.',
+    background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant, conversational-volume-friendly, and appropriate for the social setting. Reject: loud, attention-grabbing, or emotionally intense tracks. Also reject songs that belong to a different occasion (e.g. holiday/Christmas songs at a non-holiday gathering, lullabies/nursery songs at a dinner party, workout anthems at a calm gathering) even if they match the energy level. Keep: smooth, tasteful music that fits the specific social context the user described.',
     driving: 'USE CASE: DRIVING/ROAD TRIP — Every song must feel great in a car. The energy can range from cruising to anthemic depending on the user\'s request, but it must have forward momentum and a sense of movement. Reject: sleepy, ambient, or contemplative tracks with no groove or pulse. Reject novelty/comedy songs. Keep: songs with a driving beat, singalong quality, or open-road energy.',
     rage: 'USE CASE: RAGE/ANGER — Every song must channel real aggression, frustration, or intensity. Reject: soft, positive, uplifting, or chill tracks — even from otherwise edgy artists. Reject mid-tempo songs that lack genuine bite. Keep: high-energy, aggressive, raw, confrontational music with hard-hitting production.',
     wedding: 'USE CASE: WEDDING/CELEBRATION — Every song must be appropriate for a wedding celebration. Reject: breakup songs, songs about cheating/infidelity/loss even if they sound upbeat (e.g. "Before He Cheats"), sad ballads, explicit/crude lyrics, and songs with dark themes. Keep: love songs, celebration songs, feel-good anthems, and romantic tracks.',
@@ -10044,9 +10046,13 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
         _vibeHardRules.push('CLEAN/FAMILY/YOUTH CONTEXT — HARD RULE: REMOVE any songs or artists associated with dark themes, aggression, sexual content, explicit language, or inappropriate messaging. Keep it positive and safe for all ages.');
       }
 
-      // Genre accessibility — newcomer
+      // Genre accessibility
       if (genreData.genreAccessibility === 'newcomer') {
         _vibeHardRules.push(`GENRE NEWCOMER — HARD RULE: The user is new to this genre and asked to be eased in. REMOVE any artist or track that requires genre expertise to appreciate: avant-garde works, dense bebop, free jazz, atonal classical, extreme metal subgenres, or anything that would intimidate a first-time listener. Keep only approachable, melodic, widely-loved entry-point tracks.`);
+      } else if (genreData.genreAccessibility === 'curious') {
+        _vibeHardRules.push(`GENRE CURIOUS — HARD RULE: The user already knows the obvious names in this genre and wants to explore deeper. REMOVE the most ubiquitous, overplayed tracks that appear on every introductory playlist — the user has already heard these. Keep acclaimed artists and tracks that are one tier deeper than the household names. A mix of recognizable-but-not-obvious and genuinely deeper picks is ideal.`);
+      } else if (genreData.genreAccessibility === 'enthusiast') {
+        _vibeHardRules.push(`GENRE ENTHUSIAST — HARD RULE: The user is a deep listener who knows the classics inside out. REMOVE any track that would appear on a "best of" or "introduction to" playlist for this genre. Prioritize deep cuts, lesser-known albums, and artists that only dedicated fans would recognize.`);
       }
 
       const vibeCheckPrompt = `You are reviewing a playlist to ensure it has a COHERENT VIBE and emotional atmosphere.
