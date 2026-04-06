@@ -1316,15 +1316,16 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 )}
               </div>
 
-              {/* Auto-Update Settings Section */}
+              {/* Auto-Update Settings Section — Spotify only */}
+              {activePlatform === 'spotify' && (
               <div className="modal-section">
                 <h3 className="section-title">Auto-Update Settings {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
                 <p className="section-description">Automatically refresh your playlist on a set schedule</p>
 
-                {editOptionsPlaylist?.platform === 'apple' ? (
+                {editOptionsPlaylist?.platform !== 'spotify' ? (
                   <div className="apple-limit-notice">
                     <Icons.Lock size={13} />
-                    <span>Auto-update is not available for Apple Music. Use manual refresh ("Add Songs") to add new tracks. <a href="/faq#faq-14" className="apple-limit-link">Learn more</a></span>
+                    <span>Auto-update is only available for Spotify playlists. Use manual refresh ("Add Songs") to add new tracks.</span>
                   </div>
                 ) : (
                   <>
@@ -1405,11 +1406,12 @@ IMPORTANT: Pay close attention to the original request and description to unders
                 )}
 
               </div>
+              )}
 
               {/* Refinement Instructions Section */}
               <div className="modal-section">
                 <h3 className="section-title">Refine Playlist {!isPaid() && <span className="upgrade-locked-badge" style={{marginLeft: 6}}>Paid</span>}</h3>
-                <p className="section-description">Add instructions to customize future auto-updates</p>
+                <p className="section-description">Add instructions to customize future refreshes</p>
 
                 {!isPaid() && (
                   <button
