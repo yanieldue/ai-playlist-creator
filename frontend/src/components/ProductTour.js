@@ -268,7 +268,7 @@ const STEPS = [
   {
     emoji: null,
     title: 'Import Your Playlists',
-    description: 'Already have playlists on Spotify or Apple Music? Tap Import to bring them into Fins and manage them with refinements and auto-updates.',
+    description: 'Already have playlists on a connected platform? Tap Import to bring them into Fins and manage them with refinements and refreshes.',
     diagram: null,
     diagramComponent: ImportDiagram,
   },
@@ -295,13 +295,13 @@ const STEPS = [
   {
     emoji: null,
     title: 'Auto-Refresh and Manual Refresh',
-    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates at 5 AM in your local timezone. Or use Update Now to add new songs right now.',
+    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates (Spotify only). Or use Update Now to add new songs on demand.',
     diagram: <AutoRefreshDiagram />,
   },
   {
     emoji: null,
     title: "You're All Set!",
-    description: 'Connect Spotify or Apple Music from the profile menu to sync your playlists. Explore artist discovery, import your existing playlists, and start creating!',
+    description: 'Connect a music platform from the profile menu to sync your playlists. Explore artist discovery, import your existing playlists, and start creating!',
     diagram: null,
   },
 ];

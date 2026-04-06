@@ -25,7 +25,7 @@ const FAQ = ({ onBack }) => {
     {
       id: 1,
       question: "How do I connect my music platform?",
-      answer: "Tap 'Account' in the menu, then select 'Connected Music Platforms'. Tap 'Connect' next to Spotify or Apple Music and follow the steps to authorize. We currently support both platforms, with more coming in the future."
+      answer: "Tap 'Account' in the menu, then select 'Connected Music Platforms'. Tap 'Connect' next to your preferred platform and follow the steps to authorize. Apple Music is currently supported, with more platforms coming soon. You can also use Fins without connecting a platform — we'll generate your playlist and give you links to add each song."
     },
     {
       id: 2,
@@ -40,12 +40,12 @@ const FAQ = ({ onBack }) => {
     {
       id: 4,
       question: "How do automatic playlist refreshes work?",
-      answer: "When you enable auto-refresh for a playlist, it will automatically update with new songs at your chosen frequency (daily, weekly, or monthly). The playlist keeps its vibe while bringing in fresh songs. You can configure this in the playlist edit settings."
+      answer: "When you enable auto-refresh for a playlist, it will automatically update with new songs at your chosen frequency (daily, weekly, or monthly). The playlist keeps its vibe while bringing in fresh songs. Auto-refresh is currently available for Spotify-connected playlists. You can configure this in the playlist edit settings."
     },
     {
       id: 5,
       question: "What happens if I disconnect a music platform?",
-      answer: "Disconnecting a platform will prevent new playlists from being created on that service, but your existing playlists will remain on the platform. You can reconnect at any time to resume."
+      answer: "Disconnecting a platform will prevent new playlists from being synced to that service, but your existing playlists will remain on the platform. You can reconnect at any time to resume, or continue using Fins without a connected platform."
     },
     {
       id: 6,

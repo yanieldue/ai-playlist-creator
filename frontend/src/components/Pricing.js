@@ -18,8 +18,8 @@ const PAID_FEATURES = [
   { label: 'Unlimited generations', detail: 'Create as many playlists as you want' },
   { label: 'Add More Songs', detail: 'Expand any playlist with fresh songs anytime' },
   { label: 'Draft playlists', detail: 'Save unfinished playlists and come back later' },
-  { label: 'Import playlists', detail: 'Bring in existing playlists from Spotify' },
-  { label: 'Auto-update playlists', detail: 'Get new songs added daily, weekly, or monthly' },
+  { label: 'Import playlists', detail: 'Bring in existing playlists from your platform' },
+  { label: 'Auto-update playlists', detail: 'New songs added daily, weekly, or monthly (Spotify only)' },
   { label: 'Manual refresh', detail: 'Refresh a playlist with new songs on demand' },
   { label: 'Saved refinement instructions', detail: 'Your preferences are remembered on every refresh' },
 ];
