@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+dotenv.config();
+
 const SpotifyWebApi = require('spotify-web-api-node');
 const Anthropic = require('@anthropic-ai/sdk');
 const jwt = require('jsonwebtoken');
@@ -37,8 +39,6 @@ try {
   console.error('Stack:', error.stack);
   // Continue without services - some endpoints won't work but server will start
 }
-
-dotenv.config();
 
 // Use PostgreSQL if DATABASE_URL is set, otherwise use SQLite
 const usePostgres = !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
@@ -4775,7 +4775,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       // Apple Music: Use library-based recommendations
       console.log('[new-artists] Platform is Apple Music, generating recommendations from library...');
       console.log('[new-artists] User token available:', !!tokens.access_token);
-      console.log('[new-artists] Storefront:', tokens.storefront || 'us (default)');
+      console.log('[new-artists] Storefront:', tokens?.storefront || 'us (default)');
 
       const appleMusicDevToken = generateAppleMusicToken();
       if (!appleMusicDevToken) {
@@ -4787,7 +4787,7 @@ app.get('/api/new-artists/:userId', async (req, res) => {
       const appleMusicApi = new AppleMusicService(appleMusicDevToken);
 
       // Get storefront from tokens or detect it
-      const storefront = tokens.storefront || 'us';
+      const storefront = tokens?.storefront || 'us';
       console.log('[new-artists] Calling getRecommendedArtists...');
       newArtists = await appleMusicApi.getRecommendedArtists(tokens.access_token, storefront, 50);
 
@@ -5554,7 +5554,7 @@ app.post('/api/search', async (req, res) => {
     const platformService = new PlatformService();
 
     // Get user's storefront (for Apple Music)
-    const storefront = tokens.storefront || 'us';
+    const storefront = tokens?.storefront || 'us';
 
     // Search using platform service
     const trackResults = await platformService.searchTracks(platformUserId, query, tokens, storefront, 5);
@@ -5740,7 +5740,7 @@ app.get('/api/analyze-mix', async (req, res) => {
 
     // Platform search helper
     const platformSvc = new PlatformService();
-    const storefront  = tokens.storefront || 'us';
+    const storefront  = tokens?.storefront || 'us';
     const seenIds     = new Set();
 
     // Check if a result title is a plausible match for what we searched.
@@ -6047,24 +6047,28 @@ app.post('/api/generate-playlist', async (req, res) => {
       setTimeout(() => inFlightGenerations.delete(dedupKey), 30000);
     }
 
+    // Spotify manual mode — user skipped OAuth, use client credentials for search
+    const isManualSpotify = platform === 'spotify_manual';
+    if (isManualSpotify) platform = 'spotify'; // treat as spotify for SC/search logic
+
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
-    if (isEmailBasedUserId(userId)) {
+    if (!isManualSpotify && isEmailBasedUserId(userId)) {
       platformUserId = await resolvePlatformUserId(userId, platform);
       if (!platformUserId) {
         return res.status(404).json({ error: `${platform === 'spotify' ? 'Spotify' : 'Apple Music'} not connected` });
       }
     }
 
-    // Get user tokens
-    const tokens = await getUserTokens(platformUserId);
-    if (!tokens && platform === 'spotify') {
+    // Get user tokens (not needed for manual spotify)
+    const tokens = isManualSpotify ? null : await getUserTokens(platformUserId);
+    if (!tokens && platform === 'spotify' && !isManualSpotify) {
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
     // Create a new instance for this user to avoid conflicts
     let userSpotifyApi;
-    if (platform === 'spotify') {
+    if (platform === 'spotify' && !isManualSpotify) {
       userSpotifyApi = new SpotifyWebApi({
         clientId: process.env.SPOTIFY_CLIENT_ID,
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
@@ -6088,6 +6092,20 @@ app.post('/api/generate-playlist', async (req, res) => {
       } catch (refreshError) {
         console.log('Token refresh failed or not needed:', refreshError.message);
         // Continue anyway - token might still be valid
+      }
+    } else if (isManualSpotify) {
+      // Use client credentials — no user OAuth needed, no user cap
+      userSpotifyApi = new SpotifyWebApi({
+        clientId: process.env.SPOTIFY_CLIENT_ID,
+        clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+      });
+      try {
+        const ccData = await userSpotifyApi.clientCredentialsGrant();
+        userSpotifyApi.setAccessToken(ccData.body.access_token);
+        console.log('Using Spotify client credentials for manual mode');
+      } catch (ccErr) {
+        console.error('Failed to get client credentials:', ccErr.message);
+        return res.status(500).json({ error: 'Failed to connect to Spotify' });
       }
     }
 
@@ -8828,7 +8846,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
 
       } else if (platform === 'apple') {
         const platformService = new PlatformService();
-        const storefront = tokens.storefront || 'us';
+        const storefront = tokens?.storefront || 'us';
         const appleMusicDevTokenForSearch = generateAppleMusicToken();
         const appleMusicApiForSearch = appleMusicDevTokenForSearch ? new AppleMusicService(appleMusicDevTokenForSearch) : null;
 
@@ -8942,7 +8960,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
 
             const _contAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
             const _contAppleApi = _contAppleDevToken ? new AppleMusicService(_contAppleDevToken) : null;
-            const _contStorefront = tokens.storefront || 'us';
+            const _contStorefront = tokens?.storefront || 'us';
             const _contPlatformSvc = platform === 'apple' ? new PlatformService() : null;
 
             for (let ci = 0; ci < _contPool.length && selectedTracks.length < songCount; ci += BATCH_SIZE) {
@@ -9060,7 +9078,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
               await prefetchPlatformIds(supplementPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
               // Set up Apple Music instances once (reused across all batches)
-              const suppStorefront = tokens.storefront || 'us';
+              const suppStorefront = tokens?.storefront || 'us';
               const suppAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
               const suppAppleApi = suppAppleDevToken ? new AppleMusicService(suppAppleDevToken) : null;
               const suppPlatformSvc = platform === 'apple' ? new PlatformService() : null;
@@ -9297,7 +9315,7 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
 
               await prefetchPlatformIds(gapPool, platform === 'spotify' ? 'spotify' : 'applemusic');
 
-              const gfStorefront = tokens.storefront || 'us';
+              const gfStorefront = tokens?.storefront || 'us';
               const gfAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
               const gfAppleApi = gfAppleDevToken ? new AppleMusicService(gfAppleDevToken) : null;
               const gfPlatformSvc = platform === 'apple' ? new PlatformService() : null;
@@ -9680,7 +9698,7 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
         await prefetchPlatformIds(topSongs, platform === 'spotify' ? 'spotify' : 'applemusic');
 
         // Set up Apple Music instances once (reused across all batches)
-        const fbStorefront = tokens.storefront || 'us';
+        const fbStorefront = tokens?.storefront || 'us';
         const fbAppleDevToken = platform === 'apple' ? generateAppleMusicToken() : null;
         const fbAppleApi = fbAppleDevToken ? new AppleMusicService(fbAppleDevToken) : null;
         const fbPlatformSvc = platform === 'apple' ? new PlatformService() : null;
@@ -10480,7 +10498,7 @@ DO NOT include any text outside the JSON.`;
 // Create playlist on Spotify
 app.post('/api/create-playlist', async (req, res) => {
   try {
-    let { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs, genreData } = req.body;
+    let { userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs, genreData, tracks } = req.body;
 
     console.log('Create playlist request:', {
       userId,
@@ -10503,6 +10521,54 @@ app.post('/api/create-playlist', async (req, res) => {
     // If userId is email-based, resolve to platform userId
     let platformUserId = userId;
     let platform = null;
+
+    // Detect manual Spotify mode — user has no platform connected
+    const isManualMode = req.body.platform === 'spotify_manual' ||
+      (isEmailBasedUserId(userId) && !(await (async () => {
+        const u = await db.getUser(userId);
+        return u?.connectedPlatforms?.apple || u?.connectedPlatforms?.spotify;
+      })()));
+
+    if (isManualMode) {
+      // Manual mode — save playlist record locally without creating on any platform
+      const manualId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      console.log('Creating manual mode playlist:', manualId);
+
+      const playlistRecord = {
+        playlistId: manualId,
+        playlistName: playlistName,
+        description: description,
+        trackUris: trackUris,
+        trackCount: trackUris.length,
+        createdAt: new Date().toISOString(),
+        spotifyUrl: null,
+        appleMusicUrl: null,
+        platform: 'spotify_manual',
+        image: null,
+        updateFrequency: 'never',
+        updateMode: 'append',
+        isPublic: isPublic !== undefined ? isPublic : true,
+        originalPrompt: prompt,
+        genreData: genreData,
+        chatMessages: chatMessages || [],
+        refinementInstructions: [],
+        excludedSongs: excludedSongs || [],
+        excludedArtists: [],
+        lastUpdated: null,
+        nextUpdate: null,
+        tracks: tracks || []
+      };
+
+      await savePlaylist(userId, playlistRecord);
+      console.log('Manual mode playlist saved to history');
+
+      return res.json({
+        success: true,
+        playlistUrl: null,
+        playlistId: manualId,
+        platform: 'spotify_manual'
+      });
+    }
 
     if (isEmailBasedUserId(userId)) {
       // Check which platform is actively connected
@@ -10755,17 +10821,15 @@ app.get('/api/playlists/:userId', async (req, res) => {
         console.log('User has Spotify active, resolved to:', platformUserId);
       }
 
-      if (!platformUserId) {
-        // User doesn't have any platform connected — return stored playlists in read-only mode
-        console.log('No music platform connection found for email:', userId, '— returning stored playlists as read-only');
-        const readOnlyPlaylists = userPlaylistHistory.map(playlist => ({
+      if (!platformUserId || platformUserId === userId) {
+        // User doesn't have any platform connected (manual mode) — return stored playlists
+        console.log('No music platform connection found for email:', userId, '— returning stored playlists');
+        const manualPlaylists = userPlaylistHistory.map(playlist => ({
           ...playlist,
-          tracks: [],
-          trackCount: playlist.trackCount || 0,
-          isReadOnly: true,
-          readOnlyReason: 'Connect a music platform to view and manage this playlist.'
+          trackCount: playlist.trackCount || playlist.tracks?.length || 0,
+          isManualMode: true,
         }));
-        return res.json({ playlists: readOnlyPlaylists });
+        return res.json({ playlists: manualPlaylists });
       }
     } else {
       // Direct platform userId

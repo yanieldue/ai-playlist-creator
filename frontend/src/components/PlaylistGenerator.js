@@ -138,7 +138,7 @@ const PlaylistGenerator = () => {
   const [connectedPlatforms, setConnectedPlatforms] = useState({ spotify: false, apple: false });
   const [spotifyUserId, setSpotifyUserId] = useState(localStorage.getItem('spotifyUserId'));
   const [appleMusicUserId, setAppleMusicUserId] = useState(localStorage.getItem('appleMusicUserId'));
-  const [activePlatform, setActivePlatform] = useState(null); // 'spotify' or 'apple'
+  const [activePlatform, setActivePlatform] = useState(null); // 'spotify', 'apple', or 'spotify_manual'
 
   // Artist settings modal
   const [showArtistSettingsModal, setShowArtistSettingsModal] = useState(false);
@@ -211,6 +211,8 @@ const PlaylistGenerator = () => {
     return userId;
   };
 
+  const isManualMode = activePlatform === 'spotify_manual';
+
   // Handle playlist returned from /generate page
   useEffect(() => {
     if (location.state?.pendingPlaylist) {
@@ -270,7 +272,9 @@ const PlaylistGenerator = () => {
     if (storedAppleMusicUserId) setAppleMusicUserId(storedAppleMusicUserId);
 
     // Set active platform (prefer stored, otherwise use whichever is available)
-    if (storedActivePlatform && (
+    if (storedActivePlatform === 'spotify_manual') {
+      setActivePlatform('spotify_manual');
+    } else if (storedActivePlatform && (
       (storedActivePlatform === 'spotify' && storedSpotifyUserId) ||
       (storedActivePlatform === 'apple' && storedAppleMusicUserId)
     )) {
@@ -1368,11 +1372,14 @@ const PlaylistGenerator = () => {
         userId,
         generatedPlaylist.playlistName,
         generatedPlaylist.description,
-        trackUris
+        trackUris,
+        undefined, undefined, undefined, undefined, undefined, undefined,
+        isManualMode ? { platform: 'spotify_manual', tracks: generatedPlaylist.tracks } : {}
       );
 
       if (result.success) {
-        const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        const isManualResult = result.platform === 'spotify_manual';
+        const platformName = isManualResult ? 'Spotify' : result.platform === 'apple' ? 'Apple Music' : 'Spotify';
         const savedPlaylistName = generatedPlaylist.playlistName;
         mp.track('Playlist Saved', {
           playlist_name: generatedPlaylist.playlistName,
@@ -1407,9 +1414,12 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
+        const msg = isManualResult
+          ? 'Your playlist has been saved! Open each song\'s link to add it to your library.'
+          : `Your playlist has been created! Open your ${platformName} app to view it in your library.`;
         setCreationResult({
           success: true,
-          message: `Your playlist has been created! Open your ${platformName} app to view it in your library.`,
+          message: msg,
           playlistName: savedPlaylistName,
         });
       }
@@ -2120,17 +2130,19 @@ const PlaylistGenerator = () => {
           editedPlaylistName.trim(),
           editedDescription.trim(),
           trackUris,
-          updateFrequency,
-          updateMode,
+          isManualMode ? 'never' : updateFrequency,
+          isManualMode ? 'append' : updateMode,
           isPublic,
           promptToStore,
           chatMessagesToStore,
-          excludedSongsToStore
+          excludedSongsToStore,
+          isManualMode ? { platform: 'spotify_manual', tracks: generatedPlaylist.tracks } : {}
         );
       }
 
       if (result.success) {
-        const platformName = result.platform === 'apple' ? 'Apple Music' : 'Spotify';
+        const isManualResult = result.platform === 'spotify_manual';
+        const platformName = isManualResult ? 'Spotify' : result.platform === 'apple' ? 'Apple Music' : 'Spotify';
         const savedPlaylistName = editedPlaylistName.trim();
         mp.track('Playlist Saved', {
           playlist_name: editedPlaylistName.trim(),
@@ -2173,9 +2185,11 @@ const PlaylistGenerator = () => {
         setPrompt('');
         setCurrentDraftId(null);
 
-        const successMsg = isRefinementOfExisting
-          ? `Your playlist has been updated! Open your ${platformName} app to see the changes.`
-          : `Your playlist has been created! Open your ${platformName} app to view it in your library.`;
+        const successMsg = isManualResult
+          ? 'Your playlist has been saved! Open each song\'s link to add it to your library.'
+          : isRefinementOfExisting
+            ? `Your playlist has been updated! Open your ${platformName} app to see the changes.`
+            : `Your playlist has been created! Open your ${platformName} app to view it in your library.`;
         setCreationResult({
           success: true,
           message: successMsg,
@@ -2550,8 +2564,8 @@ const PlaylistGenerator = () => {
                 {/* Page Title */}
                 <h1 className="page-title">Home</h1>
 
-                {/* No platform connected */}
-                {!spotifyUserId && !appleMusicUserId ? (
+                {/* No platform connected and not in manual mode */}
+                {!spotifyUserId && !appleMusicUserId && !isManualMode ? (
                   showPlatformConnect ? (
                     <PlatformSelection
                       email={localStorage.getItem('userEmail')}
@@ -3244,71 +3258,76 @@ const PlaylistGenerator = () => {
                         />
                       </div>
 
-                      <div className="form-group">
-                        <label htmlFor="update-frequency">Auto-Update Frequency</label>
-                        {isPaid() ? (
-                          <select
-                            id="update-frequency"
-                            value={updateFrequency}
-                            onChange={(e) => setUpdateFrequency(e.target.value)}
-                            className="playlist-select"
-                          >
-                            <option value="never">Never - Keep playlist as is</option>
-                            <option value="daily">Daily - Update every day</option>
-                            <option value="weekly">Weekly - Update every week</option>
-                            <option value="monthly">Monthly - Update every month</option>
-                          </select>
-                        ) : (
-                          <button
-                            className="upgrade-locked-row"
-                            onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
-                          >
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
-                            <span className="upgrade-locked-badge">Upgrade</span>
-                          </button>
-                        )}
-                        <p className="form-help-text">
-                          Automatically update your playlist with fresh songs based on the same theme
-                        </p>
-                      </div>
+                      {activePlatform === 'spotify' && (
+                        <>
+                          <div className="form-group">
+                            <label htmlFor="update-frequency">Auto-Update Frequency</label>
+                            {isPaid() ? (
+                              <select
+                                id="update-frequency"
+                                value={updateFrequency}
+                                onChange={(e) => setUpdateFrequency(e.target.value)}
+                                className="playlist-select"
+                              >
+                                <option value="never">Never - Keep playlist as is</option>
+                                <option value="daily">Daily - Update every day</option>
+                                <option value="weekly">Weekly - Update every week</option>
+                                <option value="monthly">Monthly - Update every month</option>
+                              </select>
+                            ) : (
+                              <button
+                                className="upgrade-locked-row"
+                                onClick={() => setUpgradeModal({ open: true, feature: 'Auto-Update' })}
+                              >
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Icons.Lock size={14} /><span>Never (Free Plan)</span></span>
+                                <span className="upgrade-locked-badge">Upgrade</span>
+                              </button>
+                            )}
+                            <p className="form-help-text">
+                              Automatically update your playlist with fresh songs based on the same theme
+                            </p>
+                          </div>
 
-                      {isPaid() && updateFrequency !== 'never' && (
-                        <div className="form-group">
-                          <label htmlFor="update-mode">Update Mode</label>
-                          <select
-                            id="update-mode"
-                            value={updateMode}
-                            onChange={(e) => setUpdateMode(e.target.value)}
-                            className="playlist-select"
-                          >
-                            <option value="append">Append - Add new songs to existing ones</option>
-                            <option value="replace">Replace - Replace old songs with new ones</option>
-                          </select>
-                          <p className="form-help-text">
-                            {updateMode === 'append'
-                              ? 'New songs will be added to the end of your playlist'
-                              : 'Old songs will be removed and replaced with fresh ones'}
-                          </p>
-                        </div>
+                          {isPaid() && updateFrequency !== 'never' && (
+                            <div className="form-group">
+                              <label htmlFor="update-mode">Update Mode</label>
+                              <select
+                                id="update-mode"
+                                value={updateMode}
+                                onChange={(e) => setUpdateMode(e.target.value)}
+                                className="playlist-select"
+                              >
+                                <option value="append">Append - Add new songs to existing ones</option>
+                                <option value="replace">Replace - Replace old songs with new ones</option>
+                              </select>
+                              <p className="form-help-text">
+                                {updateMode === 'append'
+                                  ? 'New songs will be added to the end of your playlist'
+                                  : 'Old songs will be removed and replaced with fresh ones'}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="form-group">
+                            <label htmlFor="playlist-privacy">Privacy</label>
+                            <select
+                              id="playlist-privacy"
+                              value={isPublic ? 'public' : 'private'}
+                              onChange={(e) => setIsPublic(e.target.value === 'public')}
+                              className="playlist-select"
+                            >
+                              <option value="public">Public - Anyone can see this playlist</option>
+                              <option value="private">Private - Only you can see this playlist</option>
+                            </select>
+                            <p className="form-help-text">
+                              {isPublic
+                                ? 'This playlist will be visible to anyone with the link'
+                                : 'This playlist will only be visible to you'}
+                            </p>
+                          </div>
+                        </>
                       )}
 
-                      <div className="form-group">
-                        <label htmlFor="playlist-privacy">Privacy</label>
-                        <select
-                          id="playlist-privacy"
-                          value={isPublic ? 'public' : 'private'}
-                          onChange={(e) => setIsPublic(e.target.value === 'public')}
-                          className="playlist-select"
-                        >
-                          <option value="public">Public - Anyone can see this playlist</option>
-                          <option value="private">Private - Only you can see this playlist</option>
-                        </select>
-                        <p className="form-help-text">
-                          {isPublic
-                            ? 'This playlist will be visible to anyone with the link'
-                            : 'This playlist will only be visible to you'}
-                        </p>
-                      </div>
                     </div>
 
                     {error && <div className="modal-error-message">{error}</div>}
@@ -3326,10 +3345,10 @@ const PlaylistGenerator = () => {
                       {creatingPlaylist ? (
                         <>
                           <span className="spinner-small"></span>
-                          Creating...
+                          {isManualMode ? 'Saving...' : 'Creating...'}
                         </>
                       ) : (
-                        'Create'
+                        isManualMode ? 'Done' : 'Create'
                       )}
                     </button>
                   </div>

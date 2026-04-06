@@ -48,33 +48,6 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     }
   }, [email]);
 
-  const handleConnectSpotify = async () => {
-    if (connectedPlatforms.apple) {
-      setConfirmModal({
-        title: 'Switch to Spotify?',
-        message: 'Connecting Spotify will disconnect your Apple Music account. Your Apple Music playlists will no longer be accessible.',
-        onConfirm: () => { setConfirmModal(null); localStorage.removeItem('appleMusicUserId'); proceedConnectSpotify(); },
-      });
-      return;
-    }
-    proceedConnectSpotify();
-  };
-
-  const proceedConnectSpotify = async () => {
-    mp.track('Platform Connect Clicked', { platform: 'spotify' });
-    setIsConnecting('spotify');
-    setError('');
-    try {
-      const userEmail = email || localStorage.getItem('userEmail');
-      const authData = await playlistService.getSpotifyAuthUrl(userEmail);
-      if (authData?.url) { window.location.href = authData.url; }
-      else { setError('Failed to get Spotify authorization URL'); setIsConnecting(null); }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to connect to Spotify');
-      setIsConnecting(null);
-    }
-  };
-
   const handleConnectApple = async () => {
     if (connectedPlatforms.spotify) {
       setConfirmModal({
@@ -137,6 +110,27 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     }
   };
 
+  const handleSkipPlatform = async () => {
+    mp.track('Platform Skip - Manual Mode', { platform: 'spotify_manual' });
+    setLoading(true);
+    setError('');
+    try {
+      const userEmail = email || localStorage.getItem('userEmail');
+      localStorage.setItem('userId', userEmail);
+      localStorage.setItem('userEmail', userEmail);
+      localStorage.setItem('activePlatform', 'spotify_manual');
+      localStorage.setItem('connectedPlatforms', JSON.stringify({ spotify: false, apple: false }));
+      localStorage.removeItem('inSignupFlow');
+      localStorage.removeItem('connectingFromAccount');
+      await playlistService.updatePlatforms(userEmail, { spotify: false, apple: false });
+      window.location.href = '/';
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to continue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const anyConnected = connectedPlatforms.spotify || connectedPlatforms.apple;
 
   return (
@@ -165,22 +159,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
           {error && <div className="auth-error">{error}</div>}
 
           <div className="ps-options">
-            <div className={`ps-option${connectedPlatforms.spotify ? ' ps-option--connected' : ''}`}>
-              <img src="/spotify-logo.png" alt="Spotify" className="ps-platform-logo" />
-              <span className="ps-platform-name">Spotify</span>
-              {connectedPlatforms.spotify ? (
-                <span className="ps-badge ps-badge--connected">Connected</span>
-              ) : (
-                <button
-                  className="ps-connect-btn ps-connect-btn--spotify"
-                  onClick={handleConnectSpotify}
-                  disabled={isConnecting === 'spotify' || loading}
-                >
-                  {isConnecting === 'spotify' ? 'Connecting…' : 'Connect'}
-                </button>
-              )}
-            </div>
-
+            {/* Apple Music — supported */}
             <div className={`ps-option${connectedPlatforms.apple ? ' ps-option--connected' : ''}`}>
               <img src="/apple-music-logo.png" alt="Apple Music" className="ps-platform-logo" />
               <span className="ps-platform-name">Apple Music</span>
@@ -196,7 +175,18 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
                 </button>
               )}
             </div>
+
+            {/* Spotify — unsupported for now */}
+            <div className="ps-option ps-option--unsupported">
+              <img src="/spotify-logo.png" alt="Spotify" className="ps-platform-logo" />
+              <span className="ps-platform-name">Spotify</span>
+              <span className="ps-badge ps-badge--coming-soon">Coming Soon</span>
+            </div>
           </div>
+
+          <p className="ps-platform-note">
+            We're working on adding support for more platforms.
+          </p>
 
           {anyConnected && (
             <button
@@ -208,9 +198,21 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
             </button>
           )}
 
-          <p className="ps-note">
-            Connect one platform to continue. Switching platforms later will disconnect the previous one.
-          </p>
+          {!anyConnected && (
+            <div className="ps-skip-section">
+              <div className="ps-divider"><span>or</span></div>
+              <button
+                className="ps-skip-btn"
+                onClick={handleSkipPlatform}
+                disabled={loading}
+              >
+                {loading ? 'Continuing…' : 'Continue without connecting'}
+              </button>
+              <p className="ps-skip-note">
+                We'll generate your playlist and give you links to add each song to your preferred platform.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </>

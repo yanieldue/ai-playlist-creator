@@ -15,7 +15,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .ps-option {
@@ -32,6 +32,10 @@
 .ps-option--connected {
   border-color: rgba(52, 199, 89, 0.45);
   background: rgba(52, 199, 89, 0.07);
+}
+
+.ps-option--unsupported {
+  opacity: 0.45;
 }
 
 .ps-platform-logo {
@@ -81,6 +85,69 @@
   color: #34c759;
   background: rgba(52, 199, 89, 0.12);
 }
+.ps-badge--coming-soon {
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Platform note ────────────────────────────────────── */
+
+.ps-platform-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: center;
+  margin: 0 0 20px;
+}
+
+/* ── Skip section ─────────────────────────────────────── */
+
+.ps-skip-section {
+  margin-top: 8px;
+}
+
+.ps-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 13px;
+}
+.ps-divider::before,
+.ps-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ps-skip-btn {
+  width: 100%;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 500px;
+  cursor: pointer;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: inherit;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.ps-skip-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.ps-skip-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ps-skip-note {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+  text-align: center;
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
 
 /* ── Continue button ───────────────────────────────────── */
 
@@ -88,7 +155,7 @@
   margin-top: 4px;
 }
 
-/* ── Footer note ───────────────────────────────────────── */
+/* ── Footer note (legacy, kept for backwards compat) ──── */
 
 .ps-note {
   font-size: 12px;

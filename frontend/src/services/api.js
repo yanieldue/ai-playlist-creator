@@ -173,7 +173,7 @@ export const playlistService = {
   },
 
   // Create playlist on Spotify
-  createPlaylist: async (userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs) => {
+  createPlaylist: async (userId, playlistName, description, trackUris, updateFrequency, updateMode, isPublic, prompt, chatMessages, excludedSongs, { platform, tracks } = {}) => {
     const response = await api.post('/api/create-playlist', {
       userId,
       playlistName,
@@ -185,6 +185,8 @@ export const playlistService = {
       prompt,
       chatMessages,
       excludedSongs,
+      ...(platform && { platform }),
+      ...(tracks && { tracks }),
     });
     return response.data;
   },
