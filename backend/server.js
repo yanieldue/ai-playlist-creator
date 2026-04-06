@@ -1842,8 +1842,18 @@ function buildSoundchartsQuery(genreData, allowExplicit = true) {
   if (genreSlugSource) {
     const slug = genreSlugSource.toLowerCase().trim();
     if (SC_GENRES.includes(slug)) {
-      filters.push({ type: 'songGenres', data: { values: [slug], operator: 'in' } });
-      console.log(`🎵 SC genre resolution: "${genreSlugSource}" → songGenres=${slug}`);
+      // Include valid secondary genres in the SC query so "mix of hip hop and pop" queries both
+      const _genreValues = [slug];
+      if (Array.isArray(genreData.secondaryGenres)) {
+        for (const sg of genreData.secondaryGenres) {
+          const sgSlug = sg.toLowerCase().trim();
+          if (SC_GENRES.includes(sgSlug) && !_genreValues.includes(sgSlug)) {
+            _genreValues.push(sgSlug);
+          }
+        }
+      }
+      filters.push({ type: 'songGenres', data: { values: _genreValues, operator: 'in' } });
+      console.log(`🎵 SC genre resolution: "${genreSlugSource}" → songGenres=${_genreValues.join(', ')}${_genreValues.length > 1 ? ' (includes secondary genres)' : ''}`);
     } else if (SC_SUBGENRES.includes(slug)) {
       filters.push({ type: 'songSubGenres', data: { values: [slug], operator: 'in' } });
       // Add the closest parent songGenres so genre survives after the 500 ladder strips subgenres.
@@ -8179,78 +8189,66 @@ Return ONLY valid JSON:
           return true;
         });
 
-        // Step 2: Sonnet song selection — pick the best candidates from the SC pool
+        // Step 2: Sonnet song selection — paginated curation from the SC pool
+        // Process candidates in pages of songCount*5 (e.g. 150). If Sonnet doesn't find
+        // enough good matches on page 1 (due to use-case/accessibility filtering), it
+        // automatically looks at the next page of deeper/less-popular candidates.
         try {
-          // Cap candidates sent to Sonnet at 5x the requested song count (SC returns by popularity desc)
-          const _sonnetInputPool = _scPoolFiltered.slice(0, songCount * 5);
-          const _targetCount = Math.min(Math.ceil(songCount * 2.5), _sonnetInputPool.length);
-          const _scTrackLines = _sonnetInputPool.map((song, i) => {
-            const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
-            const moods = (song._scMoods || []).slice(0, 3).join(', ');
-            return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${moods ? ` [${moods}]` : ''}`;
-          });
-
+          const _pageSize = songCount * 5;
+          const _targetCount = Math.min(Math.ceil(songCount * 2.5), _scPoolFiltered.length);
+          const _maxPages = 3;
           const _curationGenre = genreData.primaryGenre || '';
           const _curationStyle = genreData.style || '';
           const _curationSecondary = (genreData.secondaryGenres || []).join(', ');
-          console.log(`🎵 SC pool curation: Sonnet selecting ${_targetCount} from ${_sonnetInputPool.length} candidates (${_scPoolFiltered.length} total in SC pool)...`);
-          const _scCurationCall = async () => anthropic.messages.create({
-            model: 'claude-sonnet-4-6',
-            max_tokens: 800,
-            messages: [{
-              role: 'user',
-              content: `You are curating a playlist. From the candidates below, select the ${_targetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks.
 
-Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
-${(() => {
-  // Build structured context block from extraction data so Sonnet sees all the signals
-  const _ctx = [];
-  if (genreData.energyTarget) _ctx.push(`Energy: ${genreData.energyTarget}`);
-  if (genreData.mood) _ctx.push(`Mood: ${genreData.mood}`);
-  if ((genreData.atmosphere || []).length > 0) _ctx.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
-  if ((genreData.contextClues?.avoidances || []).length > 0) _ctx.push(`User wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
-  if (genreData.era?.decade) _ctx.push(`Era: ${genreData.era.decade}`);
-  if (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) _ctx.push(`Year range: ${genreData.era.yearRange.min || 'any'}–${genreData.era.yearRange.max || 'any'}`);
-  if ((genreData.lyricalContent?.themes || []).length > 0) _ctx.push(`Lyrical themes: ${genreData.lyricalContent.themes.join(', ')}`);
-  if ((genreData.lyricalContent?.avoid || []).length > 0) _ctx.push(`Lyrical avoid: ${genreData.lyricalContent.avoid.join(', ')}`);
-  if (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any') _ctx.push(`Vocal preference: ${genreData.artistConstraints.vocalGender}`);
-  if (genreData.trackConstraints?.artistDiversity?.maxPerArtist) _ctx.push(`Max per artist: ${genreData.trackConstraints.artistDiversity.maxPerArtist}`);
-  if (genreData.trackConstraints?.popularity?.preference) _ctx.push(`Popularity: ${genreData.trackConstraints.popularity.preference}`);
-  const _famHits = genreData.discoveryBalance?.familiarityRatio?.hits;
-  const _famDeep = genreData.discoveryBalance?.familiarityRatio?.deepCuts;
-  if (_famHits && _famDeep) _ctx.push(`Familiarity balance: ${Math.round(_famHits * 100)}% widely-known hits, ${Math.round(_famDeep * 100)}% deep cuts — prioritize songs most people would recognize`);
-  if (genreData.genreAccessibility === 'curious') _ctx.push(`Genre accessibility: curious — the user already knows the obvious names and wants to go deeper. Deprioritize the most ubiquitous, household-name tracks in favor of acclaimed but less obvious picks. Mix some recognizable names with artists one tier deeper.`);
-  if (genreData.genreAccessibility === 'enthusiast') _ctx.push(`Genre accessibility: enthusiast — the user is a deep listener who knows the classics. Prioritize deep cuts, obscure artists, and non-obvious picks. Avoid the tracks that appear on every "best of" playlist.`);
-  return _ctx.length > 0 ? `\nPlaylist context:\n${_ctx.map(c => `- ${c}`).join('\n')}\n` : '';
-})()}
-${(() => {
-  const _useCaseRules = {
-    workout: `USE CASE: ${(genreData.atmosphere || []).includes('running') ? 'RUNNING/CARDIO' : 'WORKOUT/GYM'} — Every song must have genuine, sustained pump-up energy suitable for physical exercise.${(genreData.atmosphere || []).includes('running') ? ' RUNNING SPECIFIC: Songs need a DRIVING, CONSISTENT rhythmic pulse that matches a running cadence (~140-180 BPM feel). The beat must propel forward motion. Reject anything that lacks steady rhythmic drive even if it feels "energetic" — running playlists are about RHYTHM, not just energy.' : ''} Ask yourself: would this song keep someone moving ${(genreData.atmosphere || []).includes('running') ? 'during a run' : 'at the gym'}? The beat should make you want to MOVE, not just tap your foot. Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real rhythmic drive (Billy Joel, The Clash "London Calling" — classic rock anthems but wrong BPM feel for running), classic rock storytelling songs (John Mellencamp, Gloria Estefan — the energy is performative, not physical), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, anything with inconsistent energy or comedic tone, old-school tracks whose energy comes from crowd sing-along rather than rhythmic drive (Gloria Gaynor "I Will Survive"), and mid-tempo pop from artists who skew soft (Sam Smith, Ed Sheeran — even their upbeat tracks lack the rhythmic punch for exercise). Keep: songs with strong, steady, modern-feeling rhythmic pulse — EDM, pop bangers, hip hop with hard beats, and high-energy tracks where the production drives the energy (not just the lyrics or crowd appeal).`,
-    focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
-    sleep: 'USE CASE: SLEEP — Only ultra-calm, minimal, soothing tracks suitable for falling asleep. Reject: anything with a noticeable beat, energy above whisper-level, vocals that demand attention, or dynamic range that could wake someone up.',
-    party: 'USE CASE: PARTY/PREGAME — Every song must work on a dancefloor or at a party. Reject: ballads, slow jams, emotional/introspective tracks, and mid-tempo songs that kill momentum — even from otherwise upbeat artists. Keep: high-energy, danceable, crowd-pleasing tracks.',
-    summer: 'USE CASE: SUMMER — Every song must feel warm, bright, and carefree. Reject: winter-coded songs, breakup ballads, melancholic tracks, dark/moody songs, and anything emotionally heavy. Keep: upbeat, feel-good, sun-soaked tracks that belong on a beach or summer road trip.',
-    sensual: 'USE CASE: SENSUAL/INTIMATE — Every song must create a romantic, intimate atmosphere. Reject: breakup/heartbreak songs (even if slow and smooth), upbeat party tracks, and anything emotionally negative. Lyrical content matters more than production — a smooth-sounding song about loss or cheating does NOT belong here.',
-    heartbreak: 'USE CASE: HEARTBREAK/SAD — Every song should resonate with emotional pain, loss, or longing. Reject: upbeat, happy, or motivational tracks. Keep: melancholic, vulnerable, emotionally raw songs.',
-    chill: 'USE CASE: CHILL/RELAXATION — Songs should be laid-back and easy-going. Reject: high-energy, aggressive, or attention-demanding tracks. Keep: mellow, smooth, and relaxed-feeling music.',
-    morning: 'USE CASE: MORNING/GETTING READY — Songs should feel fresh, optimistic, and gently energizing. Reject: dark, heavy, aggressive, or sad songs. Keep: bright, warm, positive tracks that ease into the day.',
-    background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant, conversational-volume-friendly, and appropriate for the social setting. Reject: loud, attention-grabbing, or emotionally intense tracks. Also reject songs that belong to a different occasion (e.g. holiday/Christmas songs at a non-holiday gathering, lullabies/nursery songs at a dinner party, workout anthems at a calm gathering) even if they match the energy level. Keep: smooth, tasteful music that fits the specific social context the user described.',
-    driving: 'USE CASE: DRIVING/ROAD TRIP — Every song must feel great in a car. The energy can range from cruising to anthemic depending on the user\'s request, but it must have forward momentum and a sense of movement. Reject: sleepy, ambient, or contemplative tracks with no groove or pulse. Reject novelty/comedy songs. Keep: songs with a driving beat, singalong quality, or open-road energy.',
-    rage: 'USE CASE: RAGE/ANGER — Every song must channel real aggression, frustration, or intensity. Reject: soft, positive, uplifting, or chill tracks — even from otherwise edgy artists. Reject mid-tempo songs that lack genuine bite. Keep: high-energy, aggressive, raw, confrontational music with hard-hitting production.',
-    wedding: 'USE CASE: WEDDING/CELEBRATION — Every song must be appropriate for a wedding celebration. Reject: breakup songs, songs about cheating/infidelity/loss even if they sound upbeat (e.g. "Before He Cheats"), sad ballads, explicit/crude lyrics, and songs with dark themes. Keep: love songs, celebration songs, feel-good anthems, and romantic tracks.',
-  };
-  return _useCaseRules[_scUseCase] ? `\n${_useCaseRules[_scUseCase]}` : '';
-})()}
-${(() => {
-  const _vocalGender = genreData.artistConstraints?.vocalGender;
-  if (!_vocalGender || _vocalGender === 'any') return '';
-  return `\nVOCAL GENDER FILTER — The user wants ${_vocalGender} vocalists ONLY. This is a HARD constraint — reject ANY song where the lead vocalist is not ${_vocalGender}, regardless of how well it fits the genre or vibe. Use your knowledge of each artist's gender. If you KNOW the artist is ${_vocalGender}, include the song. If you KNOW the artist is ${_vocalGender === 'female' ? 'male' : 'female'}, reject it. If you don't recognize the artist and can't determine their gender, REJECT the song — err on the side of caution rather than polluting the playlist with wrong-gender artists.\n`;
-})()}
-${_scUseCase
-  ? `IMPORTANT — Your USE CASE rules above are the HIGHEST priority filter. A song that violates the use-case rules MUST be rejected regardless of genre match, popularity, or how many songs you have left. Quality over quantity: it is better to return ${Math.ceil(_targetCount * 0.3)} excellent picks than ${_targetCount} mediocre ones. After enforcing use-case rules, aim to select close to ${_targetCount} songs from the remaining candidates — but NEVER pad by including tracks that violate the use case.`
-  : `IMPORTANT — You MUST select close to ${_targetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.`}
+          // Build the context/rules block once (reused across pages)
+          const _curationContextBlock = (() => {
+            const _ctx = [];
+            if (genreData.energyTarget) _ctx.push(`Energy: ${genreData.energyTarget}`);
+            if (genreData.mood) _ctx.push(`Mood: ${genreData.mood}`);
+            if ((genreData.atmosphere || []).length > 0) _ctx.push(`Atmosphere: ${genreData.atmosphere.join(', ')}`);
+            if ((genreData.contextClues?.avoidances || []).length > 0) _ctx.push(`User wants to AVOID: ${genreData.contextClues.avoidances.join(', ')}`);
+            if (genreData.era?.decade) _ctx.push(`Era: ${genreData.era.decade}`);
+            if (genreData.era?.yearRange?.min || genreData.era?.yearRange?.max) _ctx.push(`Year range: ${genreData.era.yearRange.min || 'any'}–${genreData.era.yearRange.max || 'any'}`);
+            if ((genreData.lyricalContent?.themes || []).length > 0) _ctx.push(`Lyrical themes: ${genreData.lyricalContent.themes.join(', ')}`);
+            if ((genreData.lyricalContent?.avoid || []).length > 0) _ctx.push(`Lyrical avoid: ${genreData.lyricalContent.avoid.join(', ')}`);
+            if (genreData.artistConstraints?.vocalGender && genreData.artistConstraints.vocalGender !== 'any') _ctx.push(`Vocal preference: ${genreData.artistConstraints.vocalGender}`);
+            if (genreData.trackConstraints?.artistDiversity?.maxPerArtist) _ctx.push(`Max per artist: ${genreData.trackConstraints.artistDiversity.maxPerArtist}`);
+            if (genreData.trackConstraints?.popularity?.preference) _ctx.push(`Popularity: ${genreData.trackConstraints.popularity.preference}`);
+            const _famHits = genreData.discoveryBalance?.familiarityRatio?.hits;
+            const _famDeep = genreData.discoveryBalance?.familiarityRatio?.deepCuts;
+            if (_famHits && _famDeep) _ctx.push(`Familiarity balance: ${Math.round(_famHits * 100)}% widely-known hits, ${Math.round(_famDeep * 100)}% deep cuts — prioritize songs most people would recognize`);
+            if (genreData.genreAccessibility === 'curious') _ctx.push(`Genre accessibility: curious — the user already knows the obvious names and wants to go deeper. Deprioritize the most ubiquitous, household-name tracks in favor of acclaimed but less obvious picks. Mix some recognizable names with artists one tier deeper.`);
+            if (genreData.genreAccessibility === 'enthusiast') _ctx.push(`Genre accessibility: enthusiast — the user is a deep listener who knows the classics. Prioritize deep cuts, obscure artists, and non-obvious picks. Avoid the tracks that appear on every "best of" playlist.`);
+            return _ctx.length > 0 ? `\nPlaylist context:\n${_ctx.map(c => `- ${c}`).join('\n')}\n` : '';
+          })();
 
-CRITICAL — Genre accuracy is your PRIMARY filter. Reject songs whose actual genre doesn't match the target above. A chill pop song does NOT belong in an indie folk playlist. A mellow R&B track does NOT belong in an acoustic singer-songwriter playlist. An electronic/synth track does NOT belong in a folk playlist. Genre match comes FIRST — only then consider mood, era, and vibe among the genre-appropriate candidates. However, if the pool is already genre-appropriate (e.g. all hip hop candidates for a hip hop request), focus your filtering on the style/vibe/lyrical aspects instead.
+          const _useCaseBlock = (() => {
+            const _useCaseRules = {
+              workout: `USE CASE: ${(genreData.atmosphere || []).includes('running') ? 'RUNNING/CARDIO' : 'WORKOUT/GYM'} — Every song must have genuine, sustained pump-up energy suitable for physical exercise.${(genreData.atmosphere || []).includes('running') ? ' RUNNING SPECIFIC: Songs need a DRIVING, CONSISTENT rhythmic pulse that matches a running cadence (~140-180 BPM feel). The beat must propel forward motion. Reject anything that lacks steady rhythmic drive even if it feels "energetic" — running playlists are about RHYTHM, not just energy.' : ''} Ask yourself: would this song keep someone moving ${(genreData.atmosphere || []).includes('running') ? 'during a run' : 'at the gym'}? The beat should make you want to MOVE, not just tap your foot. Reject: novelty/comedy hits (Scatman John, Crazy Frog), retro curiosities that lack real rhythmic drive (Billy Joel, The Clash "London Calling" — classic rock anthems but wrong BPM feel for running), classic rock storytelling songs (John Mellencamp, Gloria Estefan — the energy is performative, not physical), sport event anthems (FIFA World Cup songs like "Waka Waka"), slow-burning tracks disguised as upbeat, anything with inconsistent energy or comedic tone, old-school tracks whose energy comes from crowd sing-along rather than rhythmic drive (Gloria Gaynor "I Will Survive"), and mid-tempo pop from artists who skew soft (Sam Smith, Ed Sheeran — even their upbeat tracks lack the rhythmic punch for exercise). Keep: songs with strong, steady, modern-feeling rhythmic pulse — EDM, pop bangers, hip hop with hard beats, and high-energy tracks where the production drives the energy (not just the lyrics or crowd appeal).`,
+              focus: 'USE CASE: FOCUS/DEEP WORK — Only include songs suitable for sustained concentration. The user needs unobtrusive background music, not entertainment. Reject: anything with prominent vocals or lyrics, high energy, catchy hooks that grab attention, party/dance music, and pop hits. Keep: ambient, neoclassical, lo-fi electronic, minimal piano, drone, and other tracks that fade into the background. If the user said "instrumental only" or "no lyrics," strictly enforce that — reject ANY song with vocals.',
+              sleep: 'USE CASE: SLEEP — Only ultra-calm, minimal, soothing tracks suitable for falling asleep. Reject: anything with a noticeable beat, energy above whisper-level, vocals that demand attention, or dynamic range that could wake someone up.',
+              party: 'USE CASE: PARTY/PREGAME — Every song must work on a dancefloor or at a party. Reject: ballads, slow jams, emotional/introspective tracks, and mid-tempo songs that kill momentum — even from otherwise upbeat artists. Keep: high-energy, danceable, crowd-pleasing tracks.',
+              summer: 'USE CASE: SUMMER — Every song must feel warm, bright, and carefree. Reject: winter-coded songs, breakup ballads, melancholic tracks, dark/moody songs, and anything emotionally heavy. Keep: upbeat, feel-good, sun-soaked tracks that belong on a beach or summer road trip.',
+              sensual: 'USE CASE: SENSUAL/INTIMATE — Every song must create a romantic, intimate atmosphere. Reject: breakup/heartbreak songs (even if slow and smooth), upbeat party tracks, and anything emotionally negative. Lyrical content matters more than production — a smooth-sounding song about loss or cheating does NOT belong here.',
+              heartbreak: 'USE CASE: HEARTBREAK/SAD — Every song should resonate with emotional pain, loss, or longing. Reject: upbeat, happy, or motivational tracks. Keep: melancholic, vulnerable, emotionally raw songs.',
+              chill: 'USE CASE: CHILL/RELAXATION — Songs should be laid-back and easy-going. Reject: high-energy, aggressive, or attention-demanding tracks. Keep: mellow, smooth, and relaxed-feeling music.',
+              morning: 'USE CASE: MORNING/GETTING READY — Songs should feel fresh, optimistic, and gently energizing. Reject: dark, heavy, aggressive, or sad songs. Keep: bright, warm, positive tracks that ease into the day.',
+              background: 'USE CASE: BACKGROUND/DINNER — Songs should be pleasant, conversational-volume-friendly, and appropriate for the social setting. Reject: loud, attention-grabbing, or emotionally intense tracks. Also reject songs that belong to a different occasion (e.g. holiday/Christmas songs at a non-holiday gathering, lullabies/nursery songs at a dinner party, workout anthems at a calm gathering) even if they match the energy level. Keep: smooth, tasteful music that fits the specific social context the user described.',
+              driving: 'USE CASE: DRIVING/ROAD TRIP — Every song must feel great in a car. The energy can range from cruising to anthemic depending on the user\'s request, but it must have forward momentum and a sense of movement. Reject: sleepy, ambient, or contemplative tracks with no groove or pulse. Reject novelty/comedy songs. Keep: songs with a driving beat, singalong quality, or open-road energy.',
+              rage: 'USE CASE: RAGE/ANGER — Every song must channel real aggression, frustration, or intensity. Reject: soft, positive, uplifting, or chill tracks — even from otherwise edgy artists. Reject mid-tempo songs that lack genuine bite. Keep: high-energy, aggressive, raw, confrontational music with hard-hitting production.',
+              wedding: 'USE CASE: WEDDING/CELEBRATION — Every song must be appropriate for a wedding celebration. Reject: breakup songs, songs about cheating/infidelity/loss even if they sound upbeat (e.g. "Before He Cheats"), sad ballads, explicit/crude lyrics, and songs with dark themes. Keep: love songs, celebration songs, feel-good anthems, and romantic tracks.',
+            };
+            return _useCaseRules[_scUseCase] ? `\n${_useCaseRules[_scUseCase]}` : '';
+          })();
+
+          const _vocalGenderBlock = (() => {
+            const _vocalGender = genreData.artistConstraints?.vocalGender;
+            if (!_vocalGender || _vocalGender === 'any') return '';
+            return `\nVOCAL GENDER FILTER — The user wants ${_vocalGender} vocalists ONLY. This is a HARD constraint — reject ANY song where the lead vocalist is not ${_vocalGender}, regardless of how well it fits the genre or vibe. Use your knowledge of each artist's gender. If you KNOW the artist is ${_vocalGender}, include the song. If you KNOW the artist is ${_vocalGender === 'female' ? 'male' : 'female'}, reject it. If you don't recognize the artist and can't determine their gender, REJECT the song — err on the side of caution rather than polluting the playlist with wrong-gender artists.\n`;
+          })();
+
+          const _staticRulesBlock = `CRITICAL — Genre accuracy is your PRIMARY filter. Reject songs whose actual genre doesn't match the target above. A chill pop song does NOT belong in an indie folk playlist. A mellow R&B track does NOT belong in an acoustic singer-songwriter playlist. An electronic/synth track does NOT belong in a folk playlist. Genre match comes FIRST — only then consider mood, era, and vibe among the genre-appropriate candidates. However, if the pool is already genre-appropriate (e.g. all hip hop candidates for a hip hop request), focus your filtering on the style/vibe/lyrical aspects instead.
 
 These candidates come from a music database whose genre tags are sometimes wrong. A song tagged "${_curationGenre || 'indie folk'}" might actually be synth-pop, a movie soundtrack song, electronic, devotional/kirtan, or mainstream pop. You MUST use your own knowledge of what each song actually sounds like to reject tracks that don't genuinely fit the target genre/style above. If you don't recognize a song, err on the side of including it — but if you DO recognize it and it doesn't match the genre, leave it out even if it's popular or matches the mood. The mood tags in brackets (e.g. [calm, reflective]) come from the database and can help you spot mismatches.
 
@@ -8260,77 +8258,122 @@ Language matching: When the user references artists who perform in a specific la
 
 Anchor artist interpretation: When the user says "like [Artist A] and [Artist B]", they want the specific SUBGENRE and STYLE those artists represent, not just the broad genre. For example, "like Kendrick Lamar and J. Cole" means conscious, lyrical, introspective hip hop — NOT commercial pop-rap, trap bangers, or party tracks from the same broad hip hop genre. Artists who share the same genre but have a fundamentally different style/approach should be deprioritized even if they're commercially associated with the named anchors.
 
-When the user's request references a specific brand, franchise, studio, or universe (e.g. "Disney", "Pixar", "Studio Ghibli", "DreamWorks", "Marvel"), ONLY select songs that actually belong to that brand. Do NOT include songs from competing or unrelated franchises — e.g. a DreamWorks song does NOT belong in a Disney playlist, a Fox movie song does NOT belong in a Pixar playlist. Use your knowledge of which studio/franchise each song or soundtrack belongs to.
+When the user's request references a specific brand, franchise, studio, or universe (e.g. "Disney", "Pixar", "Studio Ghibli", "DreamWorks", "Marvel"), ONLY select songs that actually belong to that brand. Do NOT include songs from competing or unrelated franchises — e.g. a DreamWorks song does NOT belong in a Disney playlist, a Fox movie song does NOT belong in a Pixar playlist. Use your knowledge of which studio/franchise each song or soundtrack belongs to.`;
+
+          // Helper: run one page of curation and parse the response
+          const _runCurationPage = async (pagePool, pageTargetCount) => {
+            const _trackLines = pagePool.map((song, i) => {
+              const yr = song.releaseDate ? parseInt(song.releaseDate.substring(0, 4)) : null;
+              const moods = (song._scMoods || []).slice(0, 3).join(', ');
+              return `${i + 1}. "${song.track}" by ${song.artist}${yr ? ` (${yr})` : ''}${moods ? ` [${moods}]` : ''}`;
+            });
+
+            const _importantBlock = _scUseCase
+              ? `IMPORTANT — Your USE CASE rules above are the HIGHEST priority filter. A song that violates the use-case rules MUST be rejected regardless of genre match, popularity, or how many songs you have left. Quality over quantity: it is better to return ${Math.ceil(pageTargetCount * 0.3)} excellent picks than ${pageTargetCount} mediocre ones. After enforcing use-case rules, aim to select close to ${pageTargetCount} songs from the remaining candidates — but NEVER pad by including tracks that violate the use case.`
+              : `IMPORTANT — You MUST select close to ${pageTargetCount} songs. Do not drastically undershoot. If most candidates are already the correct genre, be generous with inclusion — only reject clear mismatches. When in doubt, include rather than exclude.`;
+
+            const _curationCall = async () => anthropic.messages.create({
+              model: 'claude-sonnet-4-6',
+              max_tokens: 800,
+              messages: [{
+                role: 'user',
+                content: `You are curating a playlist. From the candidates below, select the ${pageTargetCount} songs that best match the user's request. Use your own knowledge of each song — sound, era, vibe, context, and lyrical content — to make the best picks.
+
+Target genre/style: ${_curationGenre}${_curationStyle ? ` — ${_curationStyle}` : ''}${_curationSecondary ? ` (related: ${_curationSecondary})` : ''}
+${_curationContextBlock}
+${_useCaseBlock}
+${_vocalGenderBlock}
+${_importantBlock}
+
+${_staticRulesBlock}
 
 User's request: "${prompt}"
 ${existingPlaylistTracks.length > 0 ? `\nExisting songs in this playlist (match this style):\n${existingPlaylistTracks.map(s => `- ${s}`).join('\n')}\n` : ''}
 Candidates:
-${_scTrackLines.join('\n')}
+${_trackLines.join('\n')}
 
 Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no commentary — just the array. Example: [1, 3, 5, ...]`
-            }]
-          });
-          // Retry with exponential backoff on overloaded errors
-          let _scVibeResp;
-          for (let _retry = 0; _retry < 3; _retry++) {
-            try {
-              _scVibeResp = await _scCurationCall();
-              break;
-            } catch (_retryErr) {
-              if (_retryErr.error?.type === 'overloaded_error' && _retry < 2) {
-                const _delay = Math.pow(2, _retry) * 1000; // 1s, 2s
-                console.log(`⏳ SC curation overloaded, retrying in ${_delay / 1000}s (attempt ${_retry + 2}/3)...`);
-                await new Promise(r => setTimeout(r, _delay));
-              } else {
-                throw _retryErr;
+              }]
+            });
+
+            // Retry with exponential backoff on overloaded errors
+            let _resp;
+            for (let _retry = 0; _retry < 3; _retry++) {
+              try {
+                _resp = await _curationCall();
+                break;
+              } catch (_retryErr) {
+                if (_retryErr.error?.type === 'overloaded_error' && _retry < 2) {
+                  const _delay = Math.pow(2, _retry) * 1000;
+                  console.log(`⏳ SC curation overloaded, retrying in ${_delay / 1000}s (attempt ${_retry + 2}/3)...`);
+                  await new Promise(r => setTimeout(r, _delay));
+                } else {
+                  throw _retryErr;
+                }
               }
             }
-          }
 
-          const _scVibeContent = _scVibeResp.content[0].text.trim()
-            .replace(/^```json\n?/, '').replace(/\n?```$/, '')
-            .replace(/^```\n?/, '').replace(/\n?```$/, '');
-          // Match JSON arrays with numbers — allow newlines, spaces, trailing commas; pick the longest match
-          const _scAllMatches = [..._scVibeContent.matchAll(/\[[\d,\s\n\r]*\]/g)];
-          const _scKeepMatch = _scAllMatches.length > 0
-            ? _scAllMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
-            : null;
-          if (_scKeepMatch) {
-            const _scKeepIndices = JSON.parse(_scKeepMatch[0]);
-            vibePassedTracks = _scKeepIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
-            console.log(`✂️  SC pool curation: ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected (${_scPoolFiltered.length} total in SC pool)`);
-            // Always trust Sonnet's curation — the curation prompt has genre context,
-            // vocal gender hard constraints, and vibe rules. When Sonnet selects few tracks
-            // it's because the SC pool was degraded (e.g. 500 filter-stripping). Overriding
-            // with the full pool floods the playlist with off-genre/off-vibe garbage.
-            // Supplement and gap fill will backfill if the curated set is too small.
-            if (vibePassedTracks.length < _targetCount * 0.4) {
-              console.log(`ℹ️  Sonnet curation strict (${vibePassedTracks.length}/${_targetCount}) — trusting Sonnet's picks (supplement will backfill)`);
+            const _content = _resp.content[0].text.trim()
+              .replace(/^```json\n?/, '').replace(/\n?```$/, '')
+              .replace(/^```\n?/, '').replace(/\n?```$/, '');
+            const _allMatches = [..._content.matchAll(/\[[\d,\s\n\r]*\]/g)];
+            const _match = _allMatches.length > 0
+              ? _allMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
+              : null;
+
+            if (_match) {
+              const _indices = JSON.parse(_match[0]);
+              return _indices.map(idx => pagePool[idx - 1]).filter(Boolean);
             }
-          } else {
-            // Curation response didn't parse — retry once before falling back
-            console.warn(`⚠️  SC curation response didn't parse as JSON array, retrying once... Response: ${_scVibeContent.substring(0, 200)}`);
+
+            // Parse failed — retry once
+            console.warn(`⚠️  SC curation response didn't parse as JSON array, retrying once... Response: ${_content.substring(0, 200)}`);
             try {
-              const _retryResp = await _scCurationCall();
+              const _retryResp = await _curationCall();
               const _retryContent = _retryResp.content[0].text.trim()
                 .replace(/^```json\n?/, '').replace(/\n?```$/, '')
                 .replace(/^```\n?/, '').replace(/\n?```$/, '');
-              const _retryAllMatches = [..._retryContent.matchAll(/\[[\d,\s\n\r]*\]/g)];
-              const _retryMatch = _retryAllMatches.length > 0
-                ? _retryAllMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
+              const _retryMatches = [..._retryContent.matchAll(/\[[\d,\s\n\r]*\]/g)];
+              const _retryMatch = _retryMatches.length > 0
+                ? _retryMatches.reduce((longest, m) => m[0].length > longest[0].length ? m : longest)
                 : null;
               if (_retryMatch) {
-                const _retryIndices = JSON.parse(_retryMatch[0]);
-                vibePassedTracks = _retryIndices.map(idx => _sonnetInputPool[idx - 1]).filter(Boolean);
-                console.log(`✂️  SC pool curation (retry): ${_sonnetInputPool.length} → ${vibePassedTracks.length} tracks selected`);
-              } else {
-                console.warn(`⚠️  SC curation retry also unparseable, falling back to full pool`);
-                vibePassedTracks = _sonnetInputPool;
+                return JSON.parse(_retryMatch[0]).map(idx => pagePool[idx - 1]).filter(Boolean);
               }
-            } catch (_retryParseErr) {
-              console.warn(`⚠️  SC curation retry failed: ${_retryParseErr.message}, falling back to full pool`);
-              vibePassedTracks = _sonnetInputPool;
+            } catch (_e) { /* fall through */ }
+
+            // Both attempts failed — return the full page pool as fallback
+            console.warn(`⚠️  SC curation unparseable after retry, falling back to full page pool`);
+            return pagePool;
+          };
+
+          // Paginated curation loop
+          vibePassedTracks = [];
+          for (let _page = 0; _page < _maxPages; _page++) {
+            const _offset = _page * _pageSize;
+            if (_offset >= _scPoolFiltered.length) break; // no more candidates
+
+            const _pagePool = _scPoolFiltered.slice(_offset, _offset + _pageSize);
+            if (_pagePool.length === 0) break;
+
+            const _stillNeeded = _targetCount - vibePassedTracks.length;
+            console.log(`🎵 SC pool curation page ${_page + 1}: Sonnet selecting ${_stillNeeded} from ${_pagePool.length} candidates (positions ${_offset + 1}–${_offset + _pagePool.length} of ${_scPoolFiltered.length})...`);
+
+            const _pageResults = await _runCurationPage(_pagePool, _stillNeeded);
+            vibePassedTracks.push(..._pageResults);
+            console.log(`✂️  SC pool curation page ${_page + 1}: ${_pagePool.length} → ${_pageResults.length} tracks selected (${vibePassedTracks.length} total so far)`);
+
+            if (vibePassedTracks.length >= _targetCount) {
+              // Got enough — stop paginating
+              break;
             }
+
+            // If Sonnet found very few on this page, the next page might help
+            console.log(`ℹ️  Curation has ${vibePassedTracks.length}/${_targetCount} after page ${_page + 1} — checking next page for deeper candidates...`);
+          }
+
+          if (vibePassedTracks.length < _targetCount * 0.4) {
+            console.log(`ℹ️  Sonnet curation strict after all pages (${vibePassedTracks.length}/${_targetCount}) — trusting Sonnet's picks (supplement will backfill)`);
           }
         } catch (_scVibeErr) {
           console.log(`⚠️  SC pool curation failed, using capped pool: ${_scVibeErr.message}`);
