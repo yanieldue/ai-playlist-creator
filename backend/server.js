@@ -644,8 +644,55 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null, knownUu
         }
       }
 
-      // If only one viable candidate, return it directly
+      // If only one viable candidate, check genre before accepting.
+      // If the single result doesn't match the expected genre, try name variations
+      // (e.g. "elle." vs "Elle") before falling back to the wrong artist.
       if (viableCandidates.length === 1) {
+        if (expectedGenre) {
+          const genreLower = expectedGenre.toLowerCase();
+          const artistGenres = (viableCandidates[0].genres || []).map(g => (g.root || '').toLowerCase());
+          const artistSubgenres = (viableCandidates[0].genres || []).flatMap(g => (g.sub || []).map(s => s.toLowerCase()));
+          const allGenres = [...artistGenres, ...artistSubgenres];
+          const hasGenreMatch = allGenres.some(g => g.includes(genreLower) || genreLower.includes(g) ||
+            g.replace(/[-\s]/g, '').includes(genreLower.replace(/[-\s]/g, '')));
+          if (!hasGenreMatch) {
+            console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" is only result but genre mismatch (${allGenres.join(', ')} vs expected ${expectedGenre}) — trying name variations...`);
+            // Try variations: with period, with period+space, lowercase
+            const variations = [
+              artistName + '.',           // "Elle" → "Elle."
+              artistName.toLowerCase(),   // "Elle" → "elle"
+              artistName.toLowerCase() + '.', // "Elle" → "elle."
+            ].filter(v => v.toLowerCase() !== artistName.toLowerCase()); // skip if same as original
+            for (const variation of variations) {
+              try {
+                await throttleSoundCharts();
+                const varResp = await axios.get(
+                  `https://customer.api.soundcharts.com/api/v2/artist/search/${encodeURIComponent(variation)}`,
+                  {
+                    headers: { 'x-app-id': appId, 'x-api-key': apiKey },
+                    params: { offset: 0, limit: 10 },
+                    timeout: 10000
+                  }
+                );
+                const varItems = varResp.data?.items || [];
+                // Look for a result that matches the expected genre
+                for (const item of varItems) {
+                  const itemGenres = (item.genres || []).map(g => (g.root || '').toLowerCase());
+                  const itemSubgenres = (item.genres || []).flatMap(g => (g.sub || []).map(s => s.toLowerCase()));
+                  const itemAllGenres = [...itemGenres, ...itemSubgenres];
+                  const itemMatchesGenre = itemAllGenres.some(g => g.includes(genreLower) || genreLower.includes(g) ||
+                    g.replace(/[-\s]/g, '').includes(genreLower.replace(/[-\s]/g, '')));
+                  if (itemMatchesGenre) {
+                    console.log(`🔍 SoundCharts: Found "${item.name}" via variation "${variation}" (genres: ${itemAllGenres.join(', ')})`);
+                    setSCCache(cacheKey, item); db.setCachedSC(cacheKey, item);
+                    return item;
+                  }
+                }
+              } catch (_) { /* ignore variation search errors */ }
+            }
+            console.log(`🔍 SoundCharts: No genre-matching variation found for "${artistName}" — using original result`);
+          }
+        }
         console.log(`🔍 SoundCharts: "${viableCandidates[0].name}" matched (genres: ${(viableCandidates[0].genres || []).map(g => g.root).join(', ') || 'unknown'})`);
         setSCCache(cacheKey, viableCandidates[0]); db.setCachedSC(cacheKey, viableCandidates[0]);
         return viableCandidates[0];
@@ -2565,9 +2612,12 @@ async function executeSoundChartsStrategy(query, fetchCount, confirmedArtistUuid
         confirmedUuid = confirmedUuid.slice('NOSIMILAR:'.length);
       }
       try {
+        // Extract genre hint from query filters for SC artist disambiguation
+        const _genreFilter = (query.filters || []).find(f => f.type === 'songGenres');
+        const _genreHint = _genreFilter?.data?.values?.[0] || null;
         const artistInfo = confirmedUuid
           ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
-          : await getSoundChartsArtistInfo(artistName);
+          : await getSoundChartsArtistInfo(artistName, _genreHint);
         if (artistInfo?.uuid) {
           if (skipSimilarAndGenres) {
             // Don't let this artist's wrong SC genres/similar artists affect the pool filter
