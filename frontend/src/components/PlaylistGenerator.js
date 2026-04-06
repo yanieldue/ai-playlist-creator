@@ -1189,8 +1189,8 @@ const PlaylistGenerator = () => {
       // Store the original prompt and requested song count with the playlist
       const playlistWithPrompt = { ...result, originalPrompt: prompt.trim(), requestedSongCount: songCount, chatMessages: [], excludedSongs: [] };
 
-      // Auto-save draft to database for cross-device sync (paid users only, only once per generation)
-      if (retryCount === 0 && isPaid()) {
+      // Auto-save draft to database for cross-device sync (only once per generation)
+      if (retryCount === 0) {
         try {
           console.log('Saving draft to database for userId:', userId, 'activePlatform:', activePlatform);
           const draftResponse = await playlistService.saveDraft(userId, playlistWithPrompt);
@@ -2609,8 +2609,8 @@ const PlaylistGenerator = () => {
                 ) : (
                   /* All home content renders at once */
                   <div className="home-sections-ready">
-                    {/* Draft Playlists - paid only */}
-                    {isPaid() && draftPlaylists.length > 0 && (
+                    {/* Draft Playlists */}
+                    {draftPlaylists.length > 0 && (
                       <div className="unfinished-playlists-section">
                         <div className="section-header">
                           <div>
