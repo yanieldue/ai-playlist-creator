@@ -8738,7 +8738,11 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
       // ── Spotify-direct top tracks for reference artists with wrong/missing SC profile ──
       // These artists were filtered out of recommendedTracks above; we fetch their actual
       // top tracks from Spotify instead of relying on the mismatched SC artist profile.
-      if (platform === 'spotify' && nosimilarWithSpotify.size > 0) {
+      // Use app-level Spotify credentials for top tracks lookup — works for ALL platforms
+      // (Apple Music, manual mode, Spotify) since we just need to discover the songs,
+      // not add them to a user's library.
+      const spotifyForTopTracks = appSpotify || userSpotifyApi;
+      if (nosimilarWithSpotify.size > 0 && spotifyForTopTracks) {
         // In refresh context, reference artists (e.g. Keffer) are style hints, not playlist members.
         // Only inject their top tracks if they're actually in the playlist being refreshed.
         const _isRefreshContext = existingPlaylistData?.tracks?.length > 0;
@@ -8756,7 +8760,7 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
           const artistDisplay = referenceSongs0.find(r => r.artist.toLowerCase() === artistLower)?.artist || artistLower;
           try {
             console.log(`🎵 [SPOTIFY-DIRECT] Fetching top tracks for "${artistDisplay}" (${spotifyArtistId})...`);
-            const topTracksRes = await userSpotifyApi.getArtistTopTracks(spotifyArtistId, 'US');
+            const topTracksRes = await spotifyForTopTracks.getArtistTopTracks(spotifyArtistId, 'US');
             const topTracks = (topTracksRes.body.tracks || []).slice(0, 5); // cap at 5 to preserve pool diversity
             console.log(`  → using ${topTracks.length} top tracks for "${artistDisplay}"`);
             for (const t of topTracks) {
@@ -9653,15 +9657,15 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           console.log(`🔄 Fallback: querying genre "${_fbGenre}"...`);
           const fallbackGenreData = {
             primaryGenre: _fbGenre,
-            atmosphere: [],
+            atmosphere: genreData.atmosphere || [],
             era: genreData.era,
-            trackConstraints: {},
-            artistConstraints: { exclusiveMode: false, requestedArtists: [] }
+            trackConstraints: genreData.trackConstraints || {},
+            artistConstraints: { exclusiveMode: false, requestedArtists: [] },
+            // Preserve mood/energy/valence filters so fallback matches the vibe
+            scMoods: genreData.scMoods || [],
+            soundchartsFilters: (genreData.soundchartsFilters || [])
+              .filter(f => ['energy', 'valence', 'instrumentalness', 'speechiness'].includes(f.type)),
           };
-          if (_scUseCase === 'focus' || _scUseCase === 'sleep') {
-            fallbackGenreData.soundchartsFilters = (genreData.soundchartsFilters || [])
-              .filter(f => f.type === 'instrumentalness' || f.type === 'speechiness');
-          }
           const fallbackQuery = buildSoundchartsQuery(fallbackGenreData, false, allowExplicit);
           return executeSoundChartsStrategy(fallbackQuery, songCount * 2)
             .then(raw => ({ genre: _fbGenre, songs: raw }))
