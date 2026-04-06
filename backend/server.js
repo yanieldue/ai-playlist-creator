@@ -9761,7 +9761,9 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
     }
 
     // Fallback: SoundCharts + Spotify found too few songs — use SoundCharts top songs by genre
-    let needsFallback = allTracks.length < 5;
+    // Use songCount/2 as threshold so the fallback runs when we're significantly short
+    // (e.g. only have 5 elle. tracks but need 30 total for a full playlist).
+    let needsFallback = allTracks.length < Math.max(5, Math.floor(songCount / 2));
 
     if (needsFallback && process.env.SOUNDCHARTS_APP_ID) {
       console.log(`🔄 Fallback: Only ${allTracks.length} songs resolved. Expanding with SoundCharts top songs...`);
@@ -9983,6 +9985,7 @@ Return ONLY a JSON array of 1-based indices, nothing else. Example: [1, 3, 5, ..
         .toLowerCase()
         .normalize('NFD') // Decompose accented characters (ē -> e + combining accent)
         .replace(/[\u0300-\u036f]/g, '') // Remove diacritics/accents
+        .replace(/[^a-z0-9\s]/g, '') // Remove punctuation (e.g. "elle." → "elle")
         .trim();
     };
 
