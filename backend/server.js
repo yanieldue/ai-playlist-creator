@@ -8754,12 +8754,10 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
         // so Spotify direct injection tracks get converted to Apple Music format.
         let appleMusicApiForDirect = null;
         let storefrontForDirect = 'us';
-        let platformSvcForDirect = null;
         if (platform === 'apple') {
           const devToken = generateAppleMusicToken();
           if (devToken) appleMusicApiForDirect = new AppleMusicService(devToken);
           storefrontForDirect = tokens?.storefront || 'us';
-          platformSvcForDirect = new PlatformService();
         }
 
         for (const artistLower of nosimilarWithSpotify) {
@@ -8794,10 +8792,10 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
                     console.log(`⚠️  [SPOTIFY-DIRECT] ISRC lookup failed for "${t.name}" (${isrc}): ${e.message}`);
                   }
                 }
-                if (!appleTrack) {
+                if (!appleTrack && appleMusicApiForDirect) {
                   // Fallback: text search on Apple Music
                   try {
-                    const items = await platformSvcForDirect.searchTracks(null, `${t.name} ${artistDisplay}`, tokens, storefrontForDirect, 5);
+                    const items = await appleMusicApiForDirect.searchTracks(`${t.name} ${artistDisplay}`, storefrontForDirect, 5);
                     if (items?.length > 0) {
                       const artistNorm = artistDisplay.toLowerCase().replace(/[^a-z0-9]/g, '');
                       appleTrack = items.find(item => {
@@ -9683,6 +9681,82 @@ IMPORTANT: Output ONLY comma-separated numbers or "NONE". No explanations, no tr
           return; // Done
         }
         console.log(`⚠️ Only ${selectedTracks.length}/${songCount} tracks found, trying fallback...`);
+      }
+    }
+
+    // ── Spotify-direct injection for requested artists when SC pool was empty ──
+    // When SC returned 0 songs (all seeds genre-inconsistent), the Spotify direct injection
+    // inside the recommendedTracks>0 block was skipped. Run it here so the requested artist's
+    // songs get added before the fallback check.
+    if (allTracks.length === 0 && nosimilarWithSpotify.size > 0) {
+      const spotifyForTopTracks = appSpotify || userSpotifyApi;
+      if (spotifyForTopTracks) {
+        // Apple Music conversion setup
+        let appleMusicApiForDirect = null;
+        let storefrontForDirect = 'us';
+        if (platform === 'apple') {
+          const devToken = generateAppleMusicToken();
+          if (devToken) appleMusicApiForDirect = new AppleMusicService(devToken);
+          storefrontForDirect = tokens?.storefront || 'us';
+        }
+
+        for (const artistLower of nosimilarWithSpotify) {
+          const spotifyArtistId = confirmedSpotifyArtistIds[artistLower];
+          if (!spotifyArtistId) continue;
+          const artistDisplay = referenceSongs0.find(r => r.artist.toLowerCase() === artistLower)?.artist || artistLower;
+          try {
+            console.log(`🎵 [SPOTIFY-DIRECT-FB] Fetching top tracks for "${artistDisplay}" (${spotifyArtistId})...`);
+            const topTracksRes = await spotifyForTopTracks.getArtistTopTracks(spotifyArtistId, 'US');
+            const topTracks = (topTracksRes.body.tracks || []).slice(0, 5);
+            console.log(`  → using ${topTracks.length} top tracks for "${artistDisplay}"`);
+            for (const t of topTracks) {
+              const isrc = t.external_ids?.isrc || null;
+              let trackToAdd = t;
+              // Convert Spotify track to Apple Music format when needed
+              if (platform === 'apple' && appleMusicApiForDirect) {
+                let appleTrack = null;
+                if (isrc) {
+                  try { appleTrack = await appleMusicApiForDirect.lookupByIsrc(isrc, storefrontForDirect); } catch (_) {}
+                }
+                if (!appleTrack && appleMusicApiForDirect) {
+                  try {
+                    const items = await appleMusicApiForDirect.searchTracks(`${t.name} ${artistDisplay}`, storefrontForDirect, 5);
+                    if (items?.length > 0) {
+                      const norm = artistDisplay.toLowerCase().replace(/[^a-z0-9]/g, '');
+                      appleTrack = items.find(item => {
+                        const fn = (item.artists?.[0]?.name || item.artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return fn === norm || fn.includes(norm) || norm.includes(fn);
+                      }) || null;
+                    }
+                  } catch (_) {}
+                }
+                if (!appleTrack) {
+                  console.log(`✗ [SPOTIFY-DIRECT-FB] Could not find Apple Music equivalent for "${t.name}" by ${artistDisplay}`);
+                  continue;
+                }
+                trackToAdd = appleTrack;
+              }
+              // Simplified validateAndAdd — just dedup and push
+              if (seenTrackIds.has(trackToAdd.id)) continue;
+              seenTrackIds.add(trackToAdd.id);
+              const externalUrl = trackToAdd.url || trackToAdd.external_urls?.spotify ||
+                (platform === 'apple' ? `https://music.apple.com/us/song/${trackToAdd.id}` : null);
+              allTracks.push({
+                ...trackToAdd,
+                artist: trackToAdd.artists?.[0]?.name || trackToAdd.artist || 'Unknown Artist',
+                album: trackToAdd.album?.name || (typeof trackToAdd.album === 'string' ? trackToAdd.album : null),
+                image: trackToAdd.album?.images?.[0]?.url || null,
+                externalUrl,
+              });
+              console.log(`✓ [SPOTIFY-DIRECT-FB] "${trackToAdd.name}" by ${trackToAdd.artists?.[0]?.name || trackToAdd.artist}`);
+            }
+          } catch (err) {
+            console.log(`⚠️  [SPOTIFY-DIRECT-FB] Failed for "${artistDisplay}": ${err.message}`);
+          }
+        }
+        if (allTracks.length > 0) {
+          console.log(`🎵 [SPOTIFY-DIRECT-FB] Added ${allTracks.length} tracks from requested artists`);
+        }
       }
     }
 
