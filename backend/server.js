@@ -576,7 +576,9 @@ async function searchSoundChartsArtist(artistName, expectedGenre = null, knownUu
     return null;
   }
 
-  const cacheKey = `search:${artistName.toLowerCase()}`;
+  // Include genre hint in cache key so different genre contexts can return different artists
+  // (e.g. "elle" + "r&b" → R&B Elle, "elle" + null → first SC result)
+  const cacheKey = `search:${artistName.toLowerCase()}${expectedGenre ? ':' + expectedGenre.toLowerCase() : ''}`;
   // L1: in-memory cache
   const cached = getSCCache(cacheKey);
   if (cached !== undefined) return cached;
@@ -7296,67 +7298,133 @@ DO NOT include any text outside the JSON.`
         console.log('🔍 Checking SoundCharts for artist info and similar artists...');
         const artistCareerStages = [];
         const artistSCInfoMap = {}; // { nameLower: soundChartsInfo }
+
+        // Pre-resolve requested artists on Spotify to get confirmed IDs.
+        // This helps both SC disambiguation (genre hint) and the cross-check below.
+        if (appSpotify) {
+          const allClaudeGenresForLookup = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])].map(g => (g || '').toLowerCase()).filter(Boolean);
+          for (const artistName of genreData.artistConstraints.requestedArtists) {
+            if (confirmedSpotifyArtistIds[artistName.toLowerCase()]) continue; // already have it from reference songs
+            try {
+              const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
+              const items = searchRes.body.artists?.items || [];
+              // Prefer exact name match; for short/ambiguous names, also match genres
+              const exactMatches = items.filter(a => a.name.toLowerCase() === artistName.toLowerCase());
+              let bestMatch = null;
+              if (exactMatches.length === 1) {
+                bestMatch = exactMatches[0];
+              } else if (exactMatches.length > 1 && allClaudeGenresForLookup.length > 0) {
+                // Multiple exact matches — pick the one whose genres overlap with Claude's extraction
+                bestMatch = exactMatches.find(a => {
+                  const aGenres = (a.genres || []).map(g => g.toLowerCase());
+                  return aGenres.some(g => allClaudeGenresForLookup.some(cg => g.includes(cg) || cg.includes(g)));
+                }) || exactMatches[0];
+              } else if (exactMatches.length > 1) {
+                bestMatch = exactMatches[0]; // most popular
+              } else if (items.length > 0) {
+                bestMatch = items[0];
+              }
+              if (bestMatch?.id) {
+                confirmedSpotifyArtistIds[artistName.toLowerCase()] = bestMatch.id;
+                console.log(`✓ Pre-resolved Spotify artist "${artistName}" → "${bestMatch.name}" (${bestMatch.id}), genres: [${(bestMatch.genres || []).slice(0,3).join(', ')}]`);
+              }
+            } catch (err) { /* ignore — SC lookup will proceed without Spotify hint */ }
+          }
+        }
+
+        // Claude's genre extraction gives us a strong hint for SC disambiguation
+        const scGenreHint = genreData.primaryGenre || null;
+
         for (const artistName of genreData.artistConstraints.requestedArtists) {
           const confirmedUuid = confirmedArtistUuids[artistName.toLowerCase()];
           try {
             const soundChartsInfo = confirmedUuid
               ? await getSoundChartsArtistInfoByUuid(confirmedUuid, artistName)
-              : await getSoundChartsArtistInfo(artistName);
+              : await getSoundChartsArtistInfo(artistName, scGenreHint);
             if (soundChartsInfo) artistSCInfoMap[artistName.toLowerCase()] = soundChartsInfo;
           } catch (err) { /* ignore individual lookup errors */ }
         }
 
-        // Cross-check confirmed UUIDs against Spotify genres.
-        // appSpotify was already initialized above with client credentials — works for all platforms.
-        // SoundCharts sometimes tags artists with the wrong genre (e.g. an R&B artist tagged as electro).
-        // When SC and Spotify disagree:
-        //   - Keep the UUID (the reference-song confirmation means we have the RIGHT artist)
-        //   - Discard SC's similar artists for this artist (they'll be wrong-genre too)
+        // Cross-check SC artist against Spotify genres AND Claude's genre extraction.
+        // SoundCharts sometimes matches the wrong artist for ambiguous names (e.g. "Elle" →
+        // j-rap artist instead of R&B singer). When SC genres don't overlap with what the user
+        // asked for (Claude's extraction) AND Spotify's genres for that name:
+        //   - Mark as NOSIMILAR so we skip SC's wrong similar artists
         //   - Use Spotify's genres instead for genre inference
         if (appSpotify) {
-          const ELECTRO = ['electro', 'electronic', 'techno', 'house', 'edm', 'dance', 'trance', 'dubstep'];
-          const RNB_HH  = ['r&b', 'rnb', 'soul', 'hip-hop', 'hip hop', 'rap', 'trap'];
+          // Genre family groups — genres within the same family are considered compatible
+          const GENRE_FAMILIES = {
+            'electronic': ['electro', 'electronic', 'techno', 'house', 'edm', 'dance', 'trance', 'dubstep', 'drum and bass', 'dnb', 'ambient'],
+            'rnb_soul': ['r&b', 'rnb', 'soul', 'neo-soul', 'neo soul', 'contemporary r&b'],
+            'hiphop': ['hip-hop', 'hip hop', 'rap', 'trap', 'drill', 'grime'],
+            'pop': ['pop', 'synth-pop', 'synth pop', 'indie pop', 'dream pop', 'art pop'],
+            'rock': ['rock', 'alternative', 'indie', 'punk', 'metal', 'grunge', 'post-punk'],
+            'country': ['country', 'americana', 'bluegrass', 'folk'],
+            'latin': ['latin', 'reggaeton', 'bachata', 'salsa', 'cumbia', 'dembow'],
+            'jazz': ['jazz', 'bossa nova', 'swing'],
+            'classical': ['classical', 'orchestra', 'opera'],
+            'kpop_jpop': ['k-pop', 'kpop', 'j-pop', 'jpop', 'j-rap', 'j-rock'],
+          };
+
+          // Given a genre string, return which families it belongs to
+          const getGenreFamilies = (genreStr) => {
+            const g = genreStr.toLowerCase();
+            const families = new Set();
+            for (const [family, keywords] of Object.entries(GENRE_FAMILIES)) {
+              if (keywords.some(k => g.includes(k))) families.add(family);
+            }
+            return families;
+          };
+
+          const allClaudeGenres = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])].map(g => (g || '').toLowerCase()).filter(Boolean);
+          const claudeFamilies = new Set();
+          allClaudeGenres.forEach(g => getGenreFamilies(g).forEach(f => claudeFamilies.add(f)));
+
           for (const artistName of genreData.artistConstraints.requestedArtists) {
             const scInfo = artistSCInfoMap[artistName.toLowerCase()];
             const scGenres = (scInfo?.genres || []).map(g => g.toLowerCase());
             if (scGenres.length === 0) continue; // nothing to validate
             try {
-              // Prefer direct artist ID lookup (exact artist, no ambiguity) over name search
+              // Get Spotify genres — prefer pre-resolved ID from the Spotify lookup above
               let spotifyGenres = [];
               const confirmedSpotifyId = confirmedSpotifyArtistIds[artistName.toLowerCase()];
               if (confirmedSpotifyId) {
                 const artistRes = await appSpotify.getArtist(confirmedSpotifyId);
                 spotifyGenres = (artistRes.body.genres || []).map(g => g.toLowerCase());
-              } else {
-                const searchRes = await appSpotify.searchArtists(artistName, { limit: 5 });
-                const items = searchRes.body.artists?.items || [];
-                const match = items.find(a => a.name.toLowerCase() === artistName.toLowerCase()) || items[0];
-                if (match?.genres?.length) spotifyGenres = match.genres.map(g => g.toLowerCase());
-                // No continue — still run the SC vs Claude check even if Spotify has no genre data
               }
-              const scIsElectroOnly = scGenres.some(g => ELECTRO.some(e => g.includes(e)))
-                                   && !scGenres.some(g => RNB_HH.some(r => g.includes(r)));
-              // When Spotify has no genre data for an obscure artist, fall back to Claude's
-              // genre extraction as the tiebreaker (e.g. "Trap Soul" prompt → claudeIsRnbHh=true).
-              const spotifyIsRnbHh = spotifyGenres.some(g => RNB_HH.some(r => g.includes(r)));
-              const allClaudeGenres = [genreData.primaryGenre, ...(genreData.secondaryGenres || [])].map(g => (g || '').toLowerCase());
-              const claudeIsRnbHh = allClaudeGenres.some(g => RNB_HH.some(r => g.includes(r)));
-              if (scIsElectroOnly && (spotifyIsRnbHh || claudeIsRnbHh)) {
-                const mismatchSource = spotifyIsRnbHh ? `Spotify=[${spotifyGenres.slice(0,2).join(',')}]` : `Claude=[${allClaudeGenres.slice(0,2).join(',')}]`;
-                console.log(`⚠️  "${artistName}" SC genre mismatch: SC=[${scGenres.slice(0,2).join(',')}] vs ${mismatchSource} — keeping UUID for song fetch, dropping SC similar artists`);
-                // Don't invalidate UUID — we confirmed the right artist via reference song.
-                // Mark as NOSIMILAR so executeSoundChartsStrategy fetches songs but skips their
-                // wrong-genre SC similar artists and genres when building the artist pool.
+
+              // Determine genre families for each source
+              const scFamilies = new Set();
+              scGenres.forEach(g => getGenreFamilies(g).forEach(f => scFamilies.add(f)));
+              const spotifyFamilies = new Set();
+              spotifyGenres.forEach(g => getGenreFamilies(g).forEach(f => spotifyFamilies.add(f)));
+
+              // Check if SC's genre families overlap with what the user asked for (Claude) or Spotify
+              const scOverlapsWithClaude = claudeFamilies.size === 0 || [...scFamilies].some(f => claudeFamilies.has(f));
+              const scOverlapsWithSpotify = spotifyFamilies.size === 0 || [...scFamilies].some(f => spotifyFamilies.has(f));
+
+              // Mismatch: SC disagrees with BOTH Claude's extraction AND Spotify
+              // This means SC likely matched the wrong artist (e.g. j-rap "Elle" vs R&B "Elle")
+              if (!scOverlapsWithClaude && !scOverlapsWithSpotify && (claudeFamilies.size > 0 || spotifyFamilies.size > 0)) {
+                const mismatchDetail = `SC=[${scGenres.slice(0,3).join(',')}] vs Claude=[${allClaudeGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,3).join(',')}]`;
+                console.log(`⚠️  "${artistName}" SC genre mismatch (wrong artist?): ${mismatchDetail} — dropping SC similar artists, using Spotify genres`);
+                // Mark as NOSIMILAR — skip SC's wrong-genre similar artists
                 const existingUuid = confirmedArtistUuids[artistName.toLowerCase()];
-                if (existingUuid && existingUuid !== 'INVALID') {
-                  confirmedArtistUuids[artistName.toLowerCase()] = 'NOSIMILAR:' + existingUuid;
+                const scUuid = scInfo?.uuid || (existingUuid && !existingUuid.startsWith('NOSIMILAR:') && existingUuid !== 'INVALID' ? existingUuid : null);
+                if (scUuid) {
+                  confirmedArtistUuids[artistName.toLowerCase()] = 'NOSIMILAR:' + scUuid;
                 }
                 // Remove from artistSCInfoMap so their wrong-genre similar artists don't pollute the pool.
                 delete artistSCInfoMap[artistName.toLowerCase()];
                 // Inject Spotify's correct genres directly into artistGenres for inference.
-                artistGenres.push(...spotifyGenres);
+                if (spotifyGenres.length > 0) {
+                  artistGenres.push(...spotifyGenres);
+                } else {
+                  // No Spotify genres either — inject Claude's genres as last resort
+                  artistGenres.push(...allClaudeGenres);
+                }
               } else {
-                console.log(`✓ "${artistName}" genre validated: SC=[${scGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,2).join(',')}]`);
+                console.log(`✓ "${artistName}" genre validated: SC=[${scGenres.slice(0,2).join(',')}] / Spotify=[${spotifyGenres.slice(0,3).join(',')}]`);
               }
             } catch (err) { /* ignore per-artist errors — don't discard on uncertainty */ }
           }
