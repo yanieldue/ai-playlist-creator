@@ -214,7 +214,8 @@ const PlaylistGenerator = () => {
     return userId;
   };
 
-  const isManualMode = activePlatform === 'spotify_manual';
+  const isManualMode = activePlatform === 'spotify_manual' ||
+    (isAuthenticated && !spotifyUserId && !appleMusicUserId && !connectedPlatforms.spotify && !connectedPlatforms.apple);
 
   // Handle playlist returned from /generate page
   useEffect(() => {
@@ -544,6 +545,14 @@ const PlaylistGenerator = () => {
               }
               // Don't clear displayed artist data here — let the fetch naturally
               // return empty so cached data isn't wiped on every mount
+            }
+
+            // If no platform is connected at all, set manual mode
+            if (!backendPlatforms.spotify && !backendPlatforms.apple) {
+              if (activePlatform !== 'spotify_manual') {
+                setActivePlatform('spotify_manual');
+                localStorage.setItem('activePlatform', 'spotify_manual');
+              }
             }
           }
         })
