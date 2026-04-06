@@ -3732,6 +3732,35 @@ app.get('/api/account/:email', async (req, res) => {
     // Also check in-memory registeredUsers for additional data
     const memUser = registeredUsers.get(normalizedEmail);
 
+    // Stripe sync fallback — if user has a Stripe customer ID but plan is still 'free',
+    // check Stripe directly in case webhooks were missed (e.g. webhook not configured yet).
+    let resolvedPlan = isAdminUser(normalizedEmail) ? 'paid' : (dbUser.plan || 'free');
+    if (resolvedPlan !== 'paid' && dbUser.stripeCustomerId && !isAdminUser(normalizedEmail)) {
+      try {
+        const stripe = getStripe();
+        const subs = await stripe.subscriptions.list({
+          customer: dbUser.stripeCustomerId,
+          status: 'all',
+          limit: 1,
+        });
+        const activeSub = subs.data.find(s => s.status === 'active' || s.status === 'trialing');
+        if (activeSub) {
+          console.log(`⚠️  Stripe sync: ${normalizedEmail} has active subscription ${activeSub.id} (${activeSub.status}) but plan was '${dbUser.plan}' — upgrading to paid`);
+          const endsAt = activeSub.current_period_end ? new Date(activeSub.current_period_end * 1000).toISOString() : null;
+          await db.updateSubscription(normalizedEmail, {
+            subscriptionId: activeSub.id,
+            status: activeSub.status,
+            endsAt,
+            plan: 'paid',
+          });
+          resolvedPlan = 'paid';
+        }
+      } catch (stripeErr) {
+        // Don't block account info if Stripe check fails
+        console.error(`Stripe sync check failed for ${normalizedEmail}:`, stripeErr.message);
+      }
+    }
+
     // Combine data from both sources, preferring database for connectedPlatforms and platform userIds
     res.json({
       success: true,
@@ -3744,7 +3773,7 @@ app.get('/api/account/:email', async (req, res) => {
       userId: memUser?.userId || dbUser.userId,
       spotifyUserId: platformUserIds?.spotify_user_id || memUser?.spotifyUserId,
       appleMusicUserId: platformUserIds?.apple_music_user_id || memUser?.appleMusicUserId,
-      plan: isAdminUser(normalizedEmail) ? 'paid' : (dbUser.plan || 'free'),
+      plan: resolvedPlan,
       isAdmin: isAdminUser(normalizedEmail),
       trialUsed: dbUser.trialUsed || false,
       productTourCompleted: dbUser.productTourCompleted || false,
