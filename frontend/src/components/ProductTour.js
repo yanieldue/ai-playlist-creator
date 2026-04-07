@@ -281,18 +281,6 @@ const STEPS = [
   },
   {
     emoji: null,
-    title: 'Refine Your Playlists',
-    description: 'Add instructions to shape your playlist. Change genres, adjust tempo, shift the mood, and more. Refinements carry over to future refreshes.',
-    diagram: <RefineDiagram />,
-  },
-  {
-    emoji: null,
-    title: 'Keep Your Playlists Fresh',
-    description: 'Use Update Now to refresh your playlist with new songs that match your vibe. Your locked tracks stay put while the rest gets refreshed.',
-    diagram: <AutoRefreshDiagram />,
-  },
-  {
-    emoji: null,
     title: "You're All Set!",
     description: 'Connect a music platform from the profile menu to sync your playlists. Explore artist discovery, import your existing playlists, and start creating!',
     diagram: null,
