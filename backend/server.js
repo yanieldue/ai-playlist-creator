@@ -1159,6 +1159,17 @@ async function searchSoundChartsSong(title, artist, preferredGenres = null, spot
           try {
             const scSpotifyId = await getSoundChartsArtistPlatformId(artistUuid, 'spotify');
             if (!scSpotifyId) {
+              // SC has no Spotify link — can't verify via platform ID. But ISRC is already a
+              // strong signal (unique song identifier → artist). If the artist name also matches,
+              // treat as a weak confirmation rather than discarding entirely.
+              const _isrcArtistNorm = (artistName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const _searchArtistNorm = (artist || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (_isrcArtistNorm && _searchArtistNorm && _isrcArtistNorm === _searchArtistNorm) {
+                console.log(`✓ SC ISRC lookup: "${artistName}" (${artistUuid}) has no Spotify link but name matches "${artist}" — confirming via ISRC + name [weak]`);
+                const result = { songUuid: isrcSong.uuid, artistUuid, artistName, _confirmedStrong: false };
+                setSCCache(cacheKey, result);
+                return result;
+              }
               console.log(`⚠️  SC ISRC lookup: "${artistName}" (${artistUuid}) has no Spotify link in SC — cannot verify against expected ${confirmedSpotifyArtistId}, falling through to by-platform`);
               // Don't return — fall through to by-platform / name-search
             } else if (scSpotifyId !== confirmedSpotifyArtistId) {
