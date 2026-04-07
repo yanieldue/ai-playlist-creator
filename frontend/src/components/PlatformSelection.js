@@ -48,6 +48,18 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     }
   }, [email]);
 
+  // Pre-configure MusicKit on page load so authorize() can run synchronously
+  // on button click. Mobile browsers block popups if async work (fetch token +
+  // configure) happens between the tap and the authorize() call.
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await playlistService.getAppleMusicDeveloperToken();
+        await musicKitService.configure(token);
+      } catch (_) { /* will retry on connect click */ }
+    })();
+  }, []);
+
   const handleConnectApple = async () => {
     if (connectedPlatforms.spotify) {
       setConfirmModal({
@@ -67,8 +79,13 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
     try {
       const userEmail = email || localStorage.getItem('userEmail');
       if (!userEmail) throw new Error('Email not found. Please sign up or log in first.');
-      const developerToken = await playlistService.getAppleMusicDeveloperToken();
-      await musicKitService.configure(developerToken);
+      // Only fetch token + configure if not already done by the preload effect.
+      // Keeping this minimal so authorize() runs as close to the user tap as
+      // possible — mobile browsers block popups after async delays.
+      if (!musicKitService.configured) {
+        const developerToken = await playlistService.getAppleMusicDeveloperToken();
+        await musicKitService.configure(developerToken);
+      }
       const userMusicToken = await musicKitService.authorize();
       const result = await playlistService.connectAppleMusicWithToken(userMusicToken, userEmail);
       if (result.userId) {

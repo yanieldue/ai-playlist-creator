@@ -212,20 +212,13 @@ const RefineDiagram = () => (
 
 const AutoRefreshDiagram = () => (
   <div className="tour-diagram">
-    <div style={{ padding: '12px' }}>
-      <div className="form-group" style={{ marginBottom: 10 }}>
-        <label style={{ fontSize: 12 }}>Auto-Update Frequency</label>
-        <div className="option-items-grid tour-diag-highlight" style={{ borderRadius: 10, marginTop: 6 }}>
-          {['Never', 'Daily', 'Weekly', 'Monthly'].map((label, i) => (
-            <div key={label} className={`refresh-option-item option-item-compact${i === 1 ? ' active' : ''}`} style={{ pointerEvents: 'none', fontSize: 12 }}>
-              <div className="option-checkbox">
-                {i === 1 && <span className="checkmark" style={{ fontSize: 12 }}>✓</span>}
-              </div>
-              <span className="option-label">{label}</span>
-            </div>
-          ))}
-        </div>
+    <div style={{ padding: '12px', textAlign: 'center' }}>
+      <div className="tour-diag-highlight" style={{ borderRadius: 10, padding: '14px 18px', display: 'inline-block' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Update Now</span>
       </div>
+      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8, marginBottom: 0 }}>
+        Tap to refresh your playlist with new songs
+      </p>
     </div>
   </div>
 );
@@ -289,13 +282,13 @@ const STEPS = [
   {
     emoji: null,
     title: 'Refine Your Playlists',
-    description: 'Add instructions to shape your playlist. Change genres, adjust tempo, shift the mood, and more. Refinements carry over to future auto-updates.',
+    description: 'Add instructions to shape your playlist. Change genres, adjust tempo, shift the mood, and more. Refinements carry over to future refreshes.',
     diagram: <RefineDiagram />,
   },
   {
     emoji: null,
-    title: 'Auto-Refresh and Manual Refresh',
-    description: 'Keep playlists fresh automatically. Choose daily, weekly, or monthly updates (Spotify only). Or use Update Now to add new songs on demand.',
+    title: 'Keep Your Playlists Fresh',
+    description: 'Use Update Now to refresh your playlist with new songs that match your vibe. Your locked tracks stay put while the rest gets refreshed.',
     diagram: <AutoRefreshDiagram />,
   },
   {

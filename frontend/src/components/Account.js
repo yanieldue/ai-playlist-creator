@@ -169,6 +169,17 @@ const Account = ({ onBack, showToast }) => {
     }
   }, []);
 
+  // Pre-configure MusicKit so authorize() runs immediately on button click.
+  // Mobile browsers block popups if async work happens between tap and authorize().
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await playlistService.getAppleMusicDeveloperToken();
+        await musicKitService.configure(token);
+      } catch (_) { /* will retry on connect click */ }
+    })();
+  }, []);
+
   const openEditEmailModal = () => {
     setNewEmail('');
     setEmailPassword('');
@@ -399,8 +410,10 @@ const Account = ({ onBack, showToast }) => {
       }
       console.log('Connecting to Apple Music with MusicKit for:', emailToUse);
 
-      const developerToken = await playlistService.getAppleMusicDeveloperToken();
-      await musicKitService.configure(developerToken);
+      if (!musicKitService.configured) {
+        const developerToken = await playlistService.getAppleMusicDeveloperToken();
+        await musicKitService.configure(developerToken);
+      }
       const userMusicToken = await musicKitService.authorize();
       const result = await playlistService.connectAppleMusicWithToken(userMusicToken, emailToUse);
       console.log('Apple Music connected successfully:', result);
@@ -573,26 +586,27 @@ const Account = ({ onBack, showToast }) => {
           {/* Platforms Dropdown */}
           {showPlatformsDropdown && (
             <div className="account-platforms-dropdown">
+              {/* Only show Spotify if already connected (for disconnect). New Spotify connections not yet supported. */}
+              {connectedPlatforms.spotify && (
               <div className="platform-card">
                 <div className="platform-card-header">
                   <div className="platform-card-info">
                     <img src="/spotify-logo.png" alt="Spotify" className="platform-logo" />
                     <div className="platform-card-text">
                       <span className="platform-card-name">Spotify</span>
-                      <span className="platform-card-status">
-                        {connectedPlatforms.spotify ? 'Connected' : 'Not connected'}
-                      </span>
+                      <span className="platform-card-status">Connected</span>
                     </div>
                   </div>
                   <button
-                    className={`platform-toggle-btn ${connectedPlatforms.spotify ? 'connected' : ''}`}
+                    className="platform-toggle-btn connected"
                     onClick={() => handleTogglePlatform('spotify')}
                     disabled={accountLoading}
                   >
-                    {connectedPlatforms.spotify ? 'Disconnect' : 'Connect'}
+                    Disconnect
                   </button>
                 </div>
               </div>
+              )}
 
               <div className="platform-card">
                 <div className="platform-card-header">
