@@ -432,25 +432,30 @@
 /* Continue with Free (onboarding paywall) */
 .pricing-skip-btn {
   display: block;
-  margin: 8px auto 0;
+  margin: 16px auto 0;
   background: none;
-  border: none;
-  color: #8e8e93;
-  font-size: 15px;
+  border: 1.5px solid #d1d1d6;
+  border-radius: 12px;
+  color: #1c1c1e;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
-  padding: 10px 20px;
+  padding: 14px 32px;
   font-family: inherit;
-  transition: color 0.2s;
+  transition: all 0.2s;
 }
 
 .pricing-skip-btn:hover {
-  color: #1c1c1e;
+  background: #f2f2f7;
+  border-color: #8e8e93;
 }
 
 :root.dark-mode .pricing-skip-btn {
-  color: #aeaeb2;
+  color: #ffffff;
+  border-color: #48484a;
 }
 
 :root.dark-mode .pricing-skip-btn:hover {
-  color: #ffffff;
+  background: #2c2c2e;
+  border-color: #636366;
 }
