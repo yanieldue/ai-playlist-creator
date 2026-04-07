@@ -8914,8 +8914,8 @@ Return ONLY a JSON array of 1-based indices. No explanation, no reasoning, no co
       // Collect a small buffer beyond songCount to account for post-collection trimming
       // (final dedup removes title variants, artist diversity enforcement caps per-artist tracks).
       // Without this buffer, the pipeline returns fewer tracks than requested (e.g. 26 instead of 30).
-      const _earlyStopTarget = songCount + Math.ceil(songCount * 0.2);
-      console.log(`🎯 Track collection target: ${_earlyStopTarget} (includes 20% buffer for post-collection trimming)`);
+      const _earlyStopTarget = songCount + Math.ceil(songCount * 0.5);
+      console.log(`🎯 Track collection target: ${_earlyStopTarget} (includes 50% buffer for post-collection trimming)`);
 
       // Tracks the next unprocessed index in recommendedTracks after Phase B stops.
       // Pool continuation (after vibe check) resumes from here instead of going to supplement.
