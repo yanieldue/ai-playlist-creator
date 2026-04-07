@@ -187,7 +187,7 @@ const Pricing = ({ isOnboarding = false, onContinueFree }) => {
           Continue with Free
         </button>
       ) : !alreadyPaid && (
-        <button className="pricing-skip-btn" onClick={() => navigate('/')}>
+        <button className="pricing-skip-btn" onClick={() => { mp.track('Continued with Free'); navigate('/'); }}>
           Continue with Free
         </button>
       )}

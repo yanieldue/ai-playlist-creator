@@ -76,8 +76,10 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
         localStorage.setItem('appleMusicUserId', result.userId);
       }
       setConnectedPlatforms(prev => ({ ...prev, apple: true }));
+      mp.track('Platform Connected', { platform: 'apple' });
       setIsConnecting(null);
     } catch (err) {
+      mp.track('Platform Connect Failed', { platform: 'apple', error: err.response?.data?.error || err.message });
       setError(err.response?.data?.error || err.message || 'Failed to connect to Apple Music');
       setIsConnecting(null);
     }
@@ -85,6 +87,7 @@ const PlatformSelection = ({ email, authToken, onComplete }) => {
 
   const handleFinishSignup = async () => {
     if (!anyConnected) mp.track('Platform Selection Skipped');
+    else mp.track('Platform Selection Completed', { platforms: connectedPlatforms });
     setLoading(true);
     setError('');
     try {
