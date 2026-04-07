@@ -95,6 +95,7 @@ const SignupForm = ({ onSignupComplete }) => {
   }, [bgArtists]);
 
   const openForm = (loginMode) => {
+    mp.track(loginMode ? 'Login Button Clicked' : 'Signup Button Clicked');
     setMode(loginMode ? 'login' : 'signup');
     setError('');
     setShowPassword(false);
@@ -145,6 +146,7 @@ const SignupForm = ({ onSignupComplete }) => {
     if (!isLoginMode && password.length < 6) { setError('Password must be at least 6 characters long'); return; }
     if (!isLoginMode && !confirmPassword) { setError('Please confirm your password'); return; }
     if (!isLoginMode && password !== confirmPassword) { setError('Passwords do not match'); return; }
+    mp.track(isLoginMode ? 'Login Submitted' : 'Signup Submitted');
     if (isLoginMode) { await handleLogin(); } else { await handleSpotifySignup(); }
   };
 
